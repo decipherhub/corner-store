@@ -23,4 +23,20 @@ Corner Store repository.
 
 ## Local Changes
 
-None at import time.
+- Split the fixed migration list into exported Corner Store and upstream step
+  sets while keeping the CLI on the original upstream sequence.
+- Added unit coverage for the contents and dependency order of both step sets.
+- Documented the Corner Store profile decisions, excluded upstream features,
+  reintroduction conditions, compliance limitations, and future integration
+  direction in `CORNER_STORE_PROFILE.md`.
+
+## Corner Store Profile Maintenance
+
+- Treat `CORNER_STORE_PROFILE.md` as the decision record for profile scope.
+- When importing upstream changes, compare both exported step sets against the
+  pinned upstream sequence.
+- Do not assume that omitting `SwapRouter02` prevents direct interaction with a
+  standard Uniswap v3 pool. Compliance enforcement must also exist in an
+  unavoidable token or venue boundary.
+- Record the requirement and tests before adding an optional upstream step to
+  `CORNER_STORE_MIGRATION_STEPS`.
