@@ -54,6 +54,26 @@ Options:
 The script runs a set of migrations, each migration deploying a contract or executing a transaction. Migration state is
 saved in a JSON file at the supplied path (by default `./state.json`).
 
+## Deployment Step Sets
+
+The vendored Corner Store version separates deployment steps into two exported
+sets in `src/deployment-steps.ts`:
+
+- `CORNER_STORE_MIGRATION_STEPS` contains the infrastructure needed for the
+  Corner Store Uniswap v3 venue: the factory, interface multicall, tick lens,
+  NFT position descriptor dependencies, position manager, quoter, and ownership
+  transfers.
+- `UPSTREAM_MIGRATION_STEPS` preserves the original full deployment scope and
+  order, including the 1 bp fee tier, V3 migrator, V3 staker, and SwapRouter02.
+
+See [`CORNER_STORE_PROFILE.md`](./CORNER_STORE_PROFILE.md) for the inclusion
+criteria, reasons each optional upstream step is excluded, reintroduction
+conditions, current guarantees, and future product-integration boundary.
+
+The CLI continues to use `UPSTREAM_MIGRATION_STEPS`, preserving the upstream
+behavior. Selecting the Corner Store step set from the CLI is intentionally
+outside the current change.
+
 To use the script, you must fund an address, and pass the private key of that address to the script so that it can construct
 and broadcast the deployment transactions.
 
