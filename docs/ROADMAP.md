@@ -83,6 +83,8 @@ Blocker:
 - mock Recipe로 허용과 거부를 재현한다.
 - `UNKNOWN`, `SUSPENDED`, delisted 상태는 fail-closed다.
 - decision을 다른 actor, token, amount, venue, version에 재사용할 수 없다.
+- exact venue 또는 허용 venue 집합이 decision에 바인딩된다.
+- policy 변경 후 오래된 order/quote를 fill하면 최신 평가 결과에 따라 거부된다.
 
 Blocker:
 
@@ -106,6 +108,7 @@ Blocker:
 
 - 미등록·중단 Adapter와 venue 실행이 불가능하다.
 - 만료·재사용·parameter mismatch 요청이 거부된다.
+- 실제 execution/fill 트랜잭션에서 최신 policy version과 actor 상태를 평가한다.
 - Router에 의도하지 않은 자산 잔액이 남지 않는다.
 
 Blocker:
@@ -132,11 +135,13 @@ Blocker:
 - V3와 Corner Store 컴포넌트를 반복 배포할 수 있다.
 - 허용, execution 거부, transfer 거부 swap이 자동 테스트된다.
 - spoof callback과 미등록 pool이 거부된다.
+- 지원 진입점과 직접 pool 호출 각각의 compliance enforcement 결과가 자동 테스트된다.
 - Adapter 잔액 불변성이 유지된다.
 
 Blocker:
 
 - fee tier와 Pool IdentityRegistry 등록 절차 합의
+- 직접 pool 호출을 허용·제한하는 enforcement boundary 결정
 - deploy-v3 호출 API는 이 phase의 실제 orchestrator와 함께 설계
 
 ## Phase 4 - RFQ

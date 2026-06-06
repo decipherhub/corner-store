@@ -1,66 +1,58 @@
-## Foundry
+# Corner Store
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+Corner Store is a compliance-aware multi-venue execution system for tokenized
+assets. It separates token/identity enforcement, versioned compliance policy,
+execution routing, and venue-specific settlement across AMM, RFQ, and future
+Order Book adapters.
 
-Foundry consists of:
-
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+The repository currently contains the architecture and development plan, a
+vendored Uniswap v3 deployment tool, and the initial Foundry project scaffold.
+Product Solidity contracts are not implemented yet.
 
 ## Documentation
 
-https://book.getfoundry.sh/
+- [`docs/README.md`](./docs/README.md): documentation map and source-of-truth rules
+- [`docs/MVP-v2-multi-venue.md`](./docs/MVP-v2-multi-venue.md): current product scope
+- [`docs/architecture/README.md`](./docs/architecture/README.md): responsibility boundaries
+- [`docs/ROADMAP.md`](./docs/ROADMAP.md): implementation phases and completion criteria
+- [`tools/deploy-v3/UPSTREAM.md`](./tools/deploy-v3/UPSTREAM.md): vendored upstream provenance
 
-## Usage
+## Development
+
+The product contracts use Foundry. The template `Counter` files remain only
+until Roadmap Phase 0 replaces them with the product structure and fixtures.
 
 ### Build
 
 ```shell
-$ forge build
+forge build
 ```
 
 ### Test
 
 ```shell
-$ forge test
+forge test
 ```
 
 ### Format
 
 ```shell
-$ forge fmt
+forge fmt
 ```
 
-### Gas Snapshots
+### Local Node
 
 ```shell
-$ forge snapshot
+anvil
 ```
 
-### Anvil
+The vendored Uniswap deployment tool has its own commands and scope:
 
 ```shell
-$ anvil
+cd tools/deploy-v3
+yarn test
 ```
 
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+Read
+[`tools/deploy-v3/CORNER_STORE_PROFILE.md`](./tools/deploy-v3/CORNER_STORE_PROFILE.md)
+before changing the deployment profile.

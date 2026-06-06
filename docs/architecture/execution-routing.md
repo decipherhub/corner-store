@@ -53,6 +53,8 @@ decision 범위에 포함되는지 검증하거나 결정적인 단일 선택만
 
 - 미등록·중단된 adapter, venue, operator로 실행할 수 없다.
 - decision의 actor, token, amount, venue, version, expiry를 다시 검증한다.
+- Router는 실제 execution/fill 트랜잭션에서 `ComplianceEngine`의 최신 평가 결과를
+  얻은 뒤 Adapter를 호출한다.
 - nonce 재사용과 deadline 초과 요청을 거부한다.
 - Router는 matching 로직과 법률 규칙을 포함하지 않는다.
 - Router에 의도하지 않은 사용자 자산 잔액이 남지 않는다.
@@ -65,11 +67,13 @@ decision 범위에 포함되는지 검증하거나 결정적인 단일 선택만
 - 자산마다 허용 venue가 다를 수 있으므로 단순 `token -> pool` 매핑을 사용하지
   않는다.
 - MVP에서는 자동 최적 체결과 multi-venue order splitting을 구현하지 않는다.
+- 주문·견적 생성 시점의 평가는 사용자 피드백과 사전 검증에 사용할 수 있지만,
+  실제 settlement 권한은 fill 트랜잭션의 최신 평가에서만 생성한다.
 
 ## Open Decisions
 
 - exact venue 지정과 deterministic selector의 최종 API
-- decision을 Router가 직접 생성할지 별도 호출 결과로 받을지
+- 외부 preview decision과 Router 내부 execution decision의 최종 API
 - nonce scope와 batch execution
 - adapter upgrade/replace governance
 - 일반 ERC-20의 public venue fast path 범위

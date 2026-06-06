@@ -47,10 +47,15 @@ struct ComplianceDecision {
     uint64 validUntil;
     uint256 maxAmount;
     uint256 allowedVenueTypes;
+    bytes32 allowedVenuesHash;
     bytes32 reasonCode;
     bytes32 decisionHash;
 }
 ```
+
+`allowedVenueTypes`는 venue 종류의 허용 범위를 나타내고, `allowedVenuesHash`는 정확한
+venue 주소 또는 허용 venue 집합을 execution context에 바인딩한다. 집합의 encoding과
+검증 API는 Phase 1에서 인터페이스 테스트와 함께 확정한다.
 
 ## Policy Model
 
@@ -76,7 +81,8 @@ reference로 주입한다.
 - decision은 actor, token, amount, venue, policy version, expiry에 바인딩된다.
 - `maxAmount`와 `validUntil`을 초과한 실행은 거부한다.
 - 평가 결과와 reason code를 감사 가능한 event로 남긴다.
-- settlement 시점 재평가가 필요한 venue는 오래된 decision만으로 실행하지 않는다.
+- 실제 execution/fill 트랜잭션은 최신 policy version과 actor/operator 상태를
+  평가한다. 주문·견적 생성 시점의 decision만으로 settlement하지 않는다.
 
 ## Current Decisions
 
@@ -90,7 +96,8 @@ reference로 주입한다.
 
 - 초기 production Element와 Recipe 목록
 - Reg D 및 유통규제 규칙의 정확한 enforcement point
-- policy update와 기존 order/quote의 유효성
+- 허용 venue 집합의 encoding과 검증 API
+- policy update 후 기존 order/quote의 취소·표시 UX
 - operator/dealer 승인 기준
 - 필수 reason code, reporting, surveillance event
 - pause, policy update, delist 권한의 최종 governance
