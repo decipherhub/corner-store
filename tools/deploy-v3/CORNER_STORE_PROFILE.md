@@ -30,6 +30,127 @@ Addresses produced by earlier steps are stored in the migration state and used
 as constructor arguments by later steps. Ownership transfers therefore remain
 last unless a new owner-controlled configuration step is intentionally added.
 
+## Dependency Diagrams
+
+The arrows below point from a required input or controlling contract to the
+contract or action that consumes it. Independent utilities such as
+`UniswapInterfaceMulticall` and `TickLens` have no constructor dependency on the
+other deployed contracts.
+
+### Before: Upstream Full Deployment
+
+```mermaid
+flowchart LR
+  WETH9["Existing WETH9"]
+  V2Factory["Existing V2 Factory"]
+  NativeLabel["Native Currency Label"]
+  FinalOwner["Final Owner"]
+
+  V3Factory["UniswapV3Factory"]
+  FeeTier["Enable 0.01% Fee Tier"]
+  Multicall["UniswapInterfaceMulticall"]
+  ProxyAdmin["ProxyAdmin"]
+  TickLens["TickLens"]
+  NFTLibrary["NFTDescriptor Library"]
+  Descriptor["NonfungibleTokenPositionDescriptor"]
+  DescriptorProxy["TransparentUpgradeableProxy"]
+  PositionManager["NonfungiblePositionManager"]
+  Migrator["V3Migrator"]
+  Staker["UniswapV3Staker"]
+  Quoter["QuoterV2"]
+  Router["SwapRouter02"]
+
+  V3Factory -->|owner-only configuration| FeeTier
+
+  NFTLibrary -->|library link| Descriptor
+  WETH9 -->|constructor| Descriptor
+  NativeLabel -->|constructor| Descriptor
+
+  Descriptor -->|implementation| DescriptorProxy
+  ProxyAdmin -->|proxy admin| DescriptorProxy
+
+  V3Factory -->|constructor| PositionManager
+  WETH9 -->|constructor| PositionManager
+  DescriptorProxy -->|descriptor| PositionManager
+
+  V3Factory -->|constructor| Migrator
+  WETH9 -->|constructor| Migrator
+  PositionManager -->|constructor| Migrator
+
+  V3Factory -->|constructor| Staker
+  PositionManager -->|constructor| Staker
+
+  V3Factory -->|constructor| Quoter
+  WETH9 -->|constructor| Quoter
+
+  V2Factory -->|constructor| Router
+  V3Factory -->|constructor| Router
+  PositionManager -->|constructor| Router
+  WETH9 -->|constructor| Router
+
+  FinalOwner -.->|ownership transfer| V3Factory
+  FinalOwner -.->|ownership transfer| ProxyAdmin
+
+  classDef external fill:#f5f5f5,stroke:#666,color:#222;
+  classDef utility fill:#eef6ff,stroke:#4b78a8,color:#222;
+  class WETH9,V2Factory,NativeLabel,FinalOwner external;
+  class Multicall,TickLens utility;
+```
+
+### After: Corner Store Minimal Profile
+
+```mermaid
+flowchart LR
+  WETH9["Existing WETH9"]
+  NativeLabel["Native Currency Label"]
+  FinalOwner["Final Owner"]
+
+  V3Factory["UniswapV3Factory"]
+  Multicall["UniswapInterfaceMulticall"]
+  ProxyAdmin["ProxyAdmin"]
+  TickLens["TickLens"]
+  NFTLibrary["NFTDescriptor Library"]
+  Descriptor["NonfungibleTokenPositionDescriptor"]
+  DescriptorProxy["TransparentUpgradeableProxy"]
+  PositionManager["NonfungiblePositionManager"]
+  Quoter["QuoterV2"]
+
+  NFTLibrary -->|library link| Descriptor
+  WETH9 -->|constructor| Descriptor
+  NativeLabel -->|constructor| Descriptor
+
+  Descriptor -->|implementation| DescriptorProxy
+  ProxyAdmin -->|proxy admin| DescriptorProxy
+
+  V3Factory -->|constructor| PositionManager
+  WETH9 -->|constructor| PositionManager
+  DescriptorProxy -->|descriptor| PositionManager
+
+  V3Factory -->|constructor| Quoter
+  WETH9 -->|constructor| Quoter
+
+  FinalOwner -.->|ownership transfer| V3Factory
+  FinalOwner -.->|ownership transfer| ProxyAdmin
+
+  subgraph Excluded["Excluded Optional Upstream Features"]
+    FeeTier["0.01% Fee Tier"]
+    Migrator["V3Migrator"]
+    Staker["UniswapV3Staker"]
+    Router["SwapRouter02"]
+  end
+
+  classDef external fill:#f5f5f5,stroke:#666,color:#222;
+  classDef utility fill:#eef6ff,stroke:#4b78a8,color:#222;
+  classDef excluded fill:#fff1f1,stroke:#b44,stroke-dasharray: 5 5,color:#666;
+  class WETH9,NativeLabel,FinalOwner external;
+  class Multicall,TickLens utility;
+  class FeeTier,Migrator,Staker,Router excluded;
+```
+
+The second diagram describes the current deployment profile, not the final
+Corner Store product architecture. The compliance layer, product router, and
+matching-engine adapters have not yet been added to this tool.
+
 ## Deliberately Excluded Steps
 
 ### `ADD_1BP_FEE_TIER`
