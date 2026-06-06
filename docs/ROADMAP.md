@@ -41,6 +41,12 @@ Phase 0~3이 첫 번째 end-to-end delivery path다. RFQ와 Order Book은 Execut
 기반을 공유하지만 서로 독립적으로 진행한다. 결정되지 않은 venue는 등록하거나
 활성화하지 않는다.
 
+이 첫 번째 delivery path가 **MVP v1**이다. 종료점은 AMM 거래가 허용된 illustrative
+mock policy의 방향별 성공과, 금지된 방향 또는 ERC-3643/Layer 1~2 policy 거부
+시나리오의 원자적 실패다.
+RFQ schema와 Adapter interface는 다음 릴리스의 interface-only 범위다. RFQ
+settlement, Order Book과 Layer 3 운영체계는 후속 범위다.
+
 ## Phase 0 - Foundation
 
 목표:
@@ -75,7 +81,9 @@ Blocker:
 - TokenPolicy, Recipe, Element, Operator Registry
 - ComplianceEngine
 - `ComplianceDecision`과 context binding
-- pause, suspend, delist lifecycle
+- illustrative Legal-to-Technical Matrix
+- 최소 관리 capability와 권한 분리 경계
+- registration, activation, suspension, emergency pause lifecycle
 - compliance audit events
 
 완료 조건:
@@ -84,11 +92,24 @@ Blocker:
 - `UNKNOWN`, `SUSPENDED`, delisted 상태는 fail-closed다.
 - decision을 다른 actor, token, amount, venue, version에 재사용할 수 없다.
 - exact venue 또는 허용 venue 집합이 decision에 바인딩된다.
-- policy 변경 후 오래된 order/quote를 fill하면 최신 평가 결과에 따라 거부된다.
+- policy 변경 후 이전 version의 preview/decision은 실행 권한으로 사용할 수 없다.
+- mixed pair에서 한쪽이라도 `ACTIVE`면 전체 거래 context가 해당 policy로 평가된다.
+- illustrative Recipe의 각 requirement가 evidence, Element, data source,
+  enforcement point, failure action과 연결된다.
+- policy 변경, venue/operator 관리, emergency pause capability가 실행 권한과
+  구분된다.
 
 Blocker:
 
 - production Element와 법률 기준값은 법률 승인 전 활성화하지 않는다.
+- MVP v1의 Layer 2 보장은 `ExecutionRouter` 지원 경로에 한정한다. 표준 pool 직접
+  호출에는 ERC-3643 transfer enforcement만 적용되며 Corner Store policy 적용을
+  보장하지 않는다.
+- 비우회 Layer 2 enforcement가 법률상 필요한 production RWA venue는 enforcement
+  방식과 외부 승인이 확정되기 전 활성화하지 않는다.
+- 실제 법률 책임자, 운영조직과 관리자 구성은 Layer 3 외부 협업 범위로 둔다.
+- 최종 delist 판단과 권한은 Layer 3 운영 범위로 두며 MVP에서는 suspension과
+  신규 실행 거부만 구현한다.
 
 ## Phase 2 - Execution & Routing
 
@@ -119,7 +140,8 @@ Blocker:
 
 목표:
 
-- 첫 번째 실제 venue로 Uniswap v3를 연결하고 ERC-3643 mock swap을 E2E 검증한다.
+- 첫 번째 실제 venue로 Uniswap v3를 연결하고 mock ERC-3643과 일반 ERC-20 거래를
+  E2E 검증한다.
 
 산출물:
 
@@ -133,15 +155,19 @@ Blocker:
 완료 조건:
 
 - V3와 Corner Store 컴포넌트를 반복 배포할 수 있다.
+- mock ERC-3643/ERC-20 Pool에서 policy가 허용한 매수·매도 방향은 성공하고 금지한
+  방향은 거부된다.
+- 명시적 `UNREGULATED` 일반 ERC-20 경로의 AMM swap이 성공한다.
 - 허용, execution 거부, transfer 거부 swap이 자동 테스트된다.
+- 미검증 사용자의 mock ERC-3643 수신이 거부되고 전체 swap이 롤백된다.
 - spoof callback과 미등록 pool이 거부된다.
-- 지원 진입점과 직접 pool 호출 각각의 compliance enforcement 결과가 자동 테스트된다.
+- 지원 진입점에서는 Layer 2 policy가 적용되고, 직접 pool 호출에서는 Layer 2
+  보장이 없으며 ERC-3643 transfer 결과만 적용된다는 경계가 자동 테스트된다.
 - Adapter 잔액 불변성이 유지된다.
 
 Blocker:
 
 - fee tier와 Pool IdentityRegistry 등록 절차 합의
-- 직접 pool 호출을 허용·제한하는 enforcement boundary 결정
 - deploy-v3 호출 API는 이 phase의 실제 orchestrator와 함께 설계
 
 ## Phase 4 - RFQ
@@ -223,11 +249,12 @@ Blocker:
 1. `chore: Foundry 제품 구조와 CI 검증 기반 구성`
 2. `feat: execution 및 compliance 공통 타입과 인터페이스 정의`
 3. `test: mock ERC-3643 identity와 compliance fixture 구성`
-4. `feat: TokenPolicyRegistry 상태와 버전 관리 구현`
-5. `feat: Recipe 및 Element 실행 경계 구현`
-6. `feat: Operator 및 Venue Registry 구현`
-7. `feat: ComplianceEngine과 구조화된 decision 구현`
-8. `feat: ExecutionRouter와 Adapter dispatch 구현`
+4. `docs: illustrative Legal-to-Technical Matrix와 Layer 2 보장 범위 정의`
+5. `feat: TokenPolicyRegistry 상태와 버전 관리 구현`
+6. `feat: Recipe 및 Element 실행 경계 구현`
+7. `feat: Operator 및 Venue Registry 구현`
+8. `feat: ComplianceEngine과 구조화된 decision 구현`
+9. `feat: ExecutionRouter와 Adapter dispatch 구현`
 
 AMM 세부 이슈는 Phase 2 인터페이스가 안정화된 후 생성한다. RFQ와 Order Book은
 각 blocker가 해결된 뒤 issue scope를 확정한다.
@@ -237,8 +264,10 @@ AMM 세부 이슈는 Phase 2 인터페이스가 안정화된 후 생성한다. R
 | 결정                           | 영향 Phase | 결정 전 기본값              |
 | ------------------------------ | ---------- | --------------------------- |
 | production Element와 규제 기준 | 1          | mock만 사용, policy 비활성  |
-| pause/delist/policy 관리자     | 1, 6       | production 활성화 보류      |
+| pause/policy 관리자            | 1, 6       | production 활성화 보류      |
+| 최종 delist 판단과 권한        | 6          | suspension과 신규 실행 거부 |
 | 일반 ERC-20 fast path          | 1, 2       | 명시적 `UNREGULATED`만 허용 |
+| production AMM 비우회 enforcement | 3, 6    | 외부 승인 전 RWA venue 비활성 |
 | AMM fee tier                   | 3          | 승인된 기본 tier만          |
 | Pool identity 등록 절차        | 3          | 등록 확인 전 venue 비활성   |
 | RFQ dealer와 custody           | 4          | 미등록 거부, 구현 보류      |
@@ -254,5 +283,6 @@ AMM 세부 이슈는 Phase 2 인터페이스가 안정화된 후 생성한다. R
 - 각 phase의 코드, 테스트, 문서를 같은 PR 또는 연결된 PR에서 완료한다.
 - 실패한 검증이 있으면 phase를 완료로 표시하지 않는다.
 - 미확정 정책을 permissive placeholder로 활성화하지 않는다.
+- Layer 2 기술 capability를 Layer 3 운영·법률 책임의 구현으로 표현하지 않는다.
 - 아키텍처 책임이 바뀌면 먼저 관련 레이어 문서와 `MVP-v2`를 갱신한다.
 - 배포 범위가 바뀌면 `CORNER_STORE_PROFILE.md`와 manifest schema를 갱신한다.

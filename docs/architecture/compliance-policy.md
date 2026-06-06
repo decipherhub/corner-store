@@ -64,6 +64,13 @@ venue 주소 또는 허용 venue 집합을 execution context에 바인딩한다.
 - Token Policy: token/program에 적용할 Recipe, venue, operator, 기간, 상태
 - Operator Policy: operator 활성 상태와 venue 연결
 
+pair 또는 다중 자산 context에서는 각 토큰 상태를 모두 확인한다.
+
+- 모든 토큰이 명시적 `UNREGULATED`면 허용된 public venue fast path를 사용할 수 있다.
+- 하나라도 `ACTIVE`면 해당 regulated token/program policy로 전체 거래 context와
+  counterparty asset, 방향, venue를 평가한다.
+- 하나라도 `UNKNOWN`, `SUSPENDED` 또는 delisted면 신규 실행을 거부한다.
+
 법률 규칙은 Router나 Adapter에 하드코딩하지 않고 Element/Recipe 및 versioned
 reference로 주입한다.
 
@@ -91,6 +98,8 @@ reference로 주입한다.
 - 미확정 정책은 permissive default가 아니라 fail-closed로 처리한다.
 - policy를 token 하나가 아니라 token/program/context 기준으로 versioning한다.
 - 최소 `OperatorRegistry`를 초기 아키텍처에 포함한다.
+- Layer 2는 policy 변경, venue/operator 상태 변경, emergency pause capability와
+  감사 이벤트를 제공하되 실제 법률·운영 권한자는 결정하지 않는다.
 
 ## Open Decisions
 
@@ -100,7 +109,9 @@ reference로 주입한다.
 - policy update 후 기존 order/quote의 취소·표시 UX
 - operator/dealer 승인 기준
 - 필수 reason code, reporting, surveillance event
-- pause, policy update, delist 권한의 최종 governance
+- capability별 최소 권한 분리와 겸임 가능 여부
+- pause와 policy update 권한의 Layer 3 최종 governance
+- 최종 delist 판단, 승인 절차와 권한
 
 ## References
 

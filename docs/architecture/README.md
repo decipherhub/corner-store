@@ -53,3 +53,21 @@ flowchart TD
 - 기존 결정을 대체하며 별도 이력 보존이 필요하다.
 
 ADR 번호를 먼저 만드는 것보다 결정의 범위와 영향이 충분히 커졌을 때 분리한다.
+
+## Product Boundary
+
+Corner Store의 현재 구현 범위는 3-Layer Compliance 모델의 Layer 1~2와 이를
+실행하기 위한 routing/venue 인프라다. ERC-3643 Token & Identity는 번호가 붙은
+Compliance Layer가 아니라 연동하는 외부 trust boundary다.
+
+- Token & Identity boundary: 발행자가 제공하는 ERC-3643 identity와 transfer
+  enforcement를 연동한다.
+- Layer 1: atomic Element와 검증 인터페이스를 구현한다.
+- Layer 2: Recipe/Policy, ComplianceEngine과 versioned decision을 구현한다.
+- Execution infrastructure: ExecutionRouter, Registry와 Venue Adapter를 구현한다.
+- Layer 3: 라이선스, 시장감시, AML 운영, 공시, 분쟁 처리와 실제 운영주체의 책임은
+  Corner Store가 단독으로 구현하지 않는다.
+
+Layer 2는 외부 법률 검토자와 운영주체가 제공한 결정을 policy로 반영할 수 있도록
+최소한의 등록, 중단, 감사 이벤트 경계만 제공한다. 실제 법률 판단, 운영조직,
+multisig 구성과 규제기관 대응 절차는 외부 협업 및 후속 운영 범위다.

@@ -48,12 +48,14 @@ Uniswap v3는 Corner Store의 첫 번째 AMM venue다. 전체 DEX가 아니라
 - RWA Pool은 필요한 IdentityRegistry 등록 후 활성화한다.
 - `ExecutionRouter`는 지원 진입점이지만 표준 pool의 직접 호출을 그 자체로 차단하지
   않는다.
+- MVP v1의 Layer 2 보장은 `ExecutionRouter`를 통한 swap에 한정한다. 직접 pool
+  호출에는 ERC-3643 transfer enforcement만 적용될 수 있다.
 
 ### Open Decisions
 
 - 허용 fee tier
 - 초기 liquidity와 LP 운영 정책
-- 직접 pool 호출에 적용할 추가 enforcement
+- production RWA venue에 적용할 비우회 Layer 2 enforcement와 외부 승인 조건
 - RWA-RWA pair onboarding 절차
 
 ## RFQ

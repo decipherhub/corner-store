@@ -3,6 +3,10 @@
 > 이 문서는 초기 AMM 중심 v1 설계 기록이다. 현재 제품 범위와 아키텍처는
 > [`MVP-v2-multi-venue.md`](./MVP-v2-multi-venue.md)를 참조하고, 구현 순서는
 > [`ROADMAP.md`](./ROADMAP.md)를 참조한다.
+>
+> 이 문서의 법률 Recipe, 기간·기준값, 권한 모델, Phase 번호와 컴포넌트 이름은
+> 현재 구현 기준이 아니다. 현재 결정에는 `MVP-v2`, `architecture/`,
+> `ROADMAP.md`만 사용한다.
 
 ## 1. 전체 아키텍처
 
