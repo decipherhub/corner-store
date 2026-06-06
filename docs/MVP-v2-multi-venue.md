@@ -1,5 +1,10 @@
 # Corner Store MVP v2 - Multi-Venue Execution
 
+> **Status: Current Product and Architecture Baseline**
+>
+> 책임 레이어별 요약과 열린 결정은 [`architecture/README.md`](./architecture/README.md),
+> 구현 순서와 완료 조건은 [`ROADMAP.md`](./ROADMAP.md)를 참조한다.
+>
 > 이 문서는 기존 `MVP.md`의 ERC-3643 재사용, Element/Recipe 조합, Uniswap v3
 > AMM 설계를 계승하면서 AMM, Order Book, RFQ를 자산별로 선택할 수 있도록
 > 확장한 설계안이다. 기존 `MVP.md`는 v1 설계 기록으로 유지한다.
@@ -469,16 +474,25 @@ src/
 
 ## 13. 배포 도구
 
-`tools/deploy-v3`는 Uniswap v3 AMM 인프라 전용 배포 도구로 사용한다.
+`tools/deploy-v3`는 Uniswap v3 AMM 인프라 전용 배포 도구로 사용한다. 실제 포함
+범위와 제외 결정은
+[`CORNER_STORE_PROFILE.md`](../tools/deploy-v3/CORNER_STORE_PROFILE.md)를 기준으로
+한다.
 
 배포 대상:
 
 - UniswapV3Factory
 - NonfungiblePositionManager와 descriptor 의존성
 - QuoterV2
-- SwapRouter02
 - TickLens와 interface multicall
-- 선택적으로 Staker, Migrator, 추가 fee tier
+- Factory와 ProxyAdmin ownership transfer
+
+현재 기본 배포에서 제외:
+
+- SwapRouter02
+- V3Migrator
+- UniswapV3Staker
+- 1bp fee tier
 
 개별 Pool은 deploy-v3가 미리 배포하는 것이 아니라 이후
 `UniswapV3VenueFactory`의 등록 흐름에서 생성한다.

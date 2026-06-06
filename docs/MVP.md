@@ -1,3 +1,9 @@
+> **Status: Superseded**
+>
+> 이 문서는 초기 AMM 중심 v1 설계 기록이다. 현재 제품 범위와 아키텍처는
+> [`MVP-v2-multi-venue.md`](./MVP-v2-multi-venue.md)를 참조하고, 구현 순서는
+> [`ROADMAP.md`](./ROADMAP.md)를 참조한다.
+
 ## 1. 전체 아키텍처
 
 ```mermaid
