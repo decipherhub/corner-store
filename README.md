@@ -9,7 +9,27 @@ The repository currently contains the architecture and development plan, a
 vendored Uniswap v3 deployment tool, and the initial Foundry project scaffold.
 Product Solidity contracts are not implemented yet.
 
-## Documentation
+## Main Use Cases
+
+- 규제 자산의 거래 가능 여부를 실행 전에 평가한다.
+- 허용된 venue adapter로 거래를 전달한다.
+- ERC-3643 token transfer enforcement와 Corner Store 거래 정책의 실패를
+  원자적으로 처리한다.
+- SDK/reference execution architecture의 다음 개정 방향은 active documentation
+  feature에서 반영한다.
+
+## Repository Guide
+
+- [`AGENTS.md`](./AGENTS.md): 세션 운영 규칙과 필수 명령
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md): 시스템 경계와 디렉터리 라우터
+- [`FEATURES.md`](./FEATURES.md): feature behavior, verification과 state
+- [`PROGRESS.md`](./PROGRESS.md): 현재 상태와 다음 작업
+- [`DECISIONS.md`](./DECISIONS.md): 주요 결정과 이유
+- [`QUALITY.md`](./QUALITY.md): 모듈별 품질 상태
+- [`docs/testing.md`](./docs/testing.md): 테스트와 완료 기준
+- [`docs/security.md`](./docs/security.md): 보안 규칙
+
+## Product Documentation
 
 - [`docs/README.md`](./docs/README.md): documentation map and source-of-truth rules
 - [`docs/MVP-v2-multi-venue.md`](./docs/MVP-v2-multi-venue.md): current product scope
@@ -17,7 +37,28 @@ Product Solidity contracts are not implemented yet.
 - [`docs/ROADMAP.md`](./docs/ROADMAP.md): implementation phases and completion criteria
 - [`tools/deploy-v3/UPSTREAM.md`](./tools/deploy-v3/UPSTREAM.md): vendored upstream provenance
 
-## Development
+## Tech Stack
+
+- Contracts: Solidity + Foundry
+- Tests: Forge
+- Local chain: Anvil
+- Vendored deployment tooling: TypeScript, Yarn, ethers v5
+
+## Local Setup
+
+Required tools:
+
+- Foundry (`forge`, `anvil`)
+- Node.js and Yarn for `tools/deploy-v3`
+
+Install or refresh the vendored tool dependencies when needed:
+
+```shell
+cd tools/deploy-v3
+yarn install --frozen-lockfile
+```
+
+## Development Commands
 
 The product contracts use Foundry. The template `Counter` files remain only
 until Roadmap Phase 0 replaces them with the product structure and fixtures.
@@ -31,7 +72,7 @@ forge build
 ### Test
 
 ```shell
-forge test
+forge test --offline
 ```
 
 ### Format
@@ -46,6 +87,12 @@ forge fmt
 anvil
 ```
 
+### Check All
+
+```shell
+scripts/check.sh
+```
+
 The vendored Uniswap deployment tool has its own commands and scope:
 
 ```shell
@@ -56,3 +103,9 @@ yarn test
 Read
 [`tools/deploy-v3/CORNER_STORE_PROFILE.md`](./tools/deploy-v3/CORNER_STORE_PROFILE.md)
 before changing the deployment profile.
+
+## Runtime Notes
+
+- 제품 runtime과 자동 E2E 환경은 아직 구성되지 않았다.
+- `tools/deploy-v3`는 제품 배포 orchestrator가 아니라 독립 vendored module이다.
+- 현재 작업 상태와 다음 feature는 `PROGRESS.md`와 `FEATURES.md`를 기준으로 한다.
