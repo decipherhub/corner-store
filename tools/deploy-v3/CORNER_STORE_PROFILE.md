@@ -201,9 +201,10 @@ This is the upstream general-purpose router across Uniswap v2 and v3.
 Omitting `SwapRouter02` does **not** make a standard Uniswap v3 pool compliant
 or prevent direct pool calls. Enforcement must exist at a boundary that cannot
 be bypassed, such as the regulated token transfer rules, venue/pool
-allowlisting, or modified execution contracts. A `ComplianceRouter` alone is
-an orchestration and supported-entry-point layer unless the underlying assets
-or venue also enforce the same policy.
+allowlisting, or modified execution contracts. The product-owned
+`ExecutionRouter` and `ComplianceEngine` form an orchestration and
+supported-entry-point layer unless the underlying assets or venue also enforce
+the same policy.
 
 ## Current Guarantees
 
