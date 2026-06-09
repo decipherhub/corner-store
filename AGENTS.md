@@ -2,10 +2,9 @@
 
 ## Project Overview
 
-Corner Store는 ERC-3643 위에 거래 시점 compliance와 venue 실행을 제공하는
-Solidity 프로젝트다. 현재 저장소에는 제품 문서, Foundry scaffold와 독립적인
-Uniswap v3 배포 도구가 있다. 제품 아키텍처는 migration 중이므로 공식 문서와
-active feature를 먼저 확인한다.
+Corner Store는 ERC-3643 위에 DEX-level compliance를 제공하는 Solidity SDK와
+reference execution 프로젝트다. 현재 저장소에는 제품 문서, Foundry scaffold와
+독립적인 Uniswap v3 배포 도구가 있다. 공식 문서와 active feature를 먼저 확인한다.
 
 ## Must Read First
 

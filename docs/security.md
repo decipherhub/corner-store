@@ -19,15 +19,21 @@
 
 ## Authorization
 
-- 정책, venue, operator와 emergency 상태 변경은 실행 권한과 분리한다.
+- Element/Recipe 등록, Manifest proposal/approval, venue/operator와 emergency 상태
+  변경은 실행 권한과 분리한다.
 - privileged action은 명시적인 owner/role 검사를 가져야 한다.
 - production multisig와 governance는 외부 운영 결정 전 임의로 확정하지 않는다.
 
 ## Input Validation
 
 - 외부 주소, amount, deadline, nonce, policy version과 venue context를 검증한다.
-- 미등록 또는 불완전한 규제 상태는 현재 공식 정책에 따라 처리하며, 정책 변경은
-  source-of-truth 문서와 테스트를 함께 갱신한다.
+- 명시적 `UNREGULATED` public path와 `ACTIVE` Manifest regulated path를 명시적으로
+  구분한다.
+- `ACTIVE` Manifest의 invalid Recipe/reference, unsupported engine와 version
+  mismatch는 fail-closed로 처리한다.
+- Manifest와 `UNREGULATED` 분류가 모두 없는 자산은 `UNKNOWN`으로 거부한다.
+- `tokenIn`과 `tokenOut` 양쪽을 분류하며, 양쪽 모두 명시적 `UNREGULATED`인
+  경우에만 regulated evaluation을 생략한다.
 - 외부 callback과 pool identity는 계산된 주소 또는 registry로 검증한다.
 
 ## Asset Safety
@@ -40,6 +46,8 @@
 
 - 민감한 identity 자료와 법률 문서를 온체인 event나 일반 로그에 기록하지 않는다.
 - audit event에는 필요한 식별자와 상태 변경만 남긴다.
+- 성공한 regulated evaluation은 Manifest version과 applied Recipe set을 추적할 수
+  있어야 한다.
 - revert 시 event가 사라지는 특성을 고려한 reject logging 정책은 별도 설계
   결정으로 관리한다.
 
@@ -64,3 +72,6 @@ scripts/check.sh
 - callback spoof test
 - balance invariant
 - direct venue bypass boundary test
+- Manifest lifecycle과 cumulative multi-Recipe test
+- `UNKNOWN`, explicit `UNREGULATED`와 regulated path 구분 test
+- unregulated-regulated와 regulated-regulated pair의 양쪽 Manifest 적용 test

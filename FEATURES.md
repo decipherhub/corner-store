@@ -38,8 +38,9 @@ passing
 ### Behavior
 
 - imported 문서에서 확정된 제품 방향과 변경 요청을 구분한다.
-- 공식 제품 명세가 SDK/reference execution system과 4-Layer 모델을 일관되게
-  설명한다.
+- 공식 제품 명세가 Compliance Core, Execution Integration Kit, reference DEX와
+  4-Layer 모델을 일관되게 설명한다.
+- pair 거래에서 양쪽 자산의 classification과 Manifest를 누락하지 않는다.
 - 기존 문서의 충돌하는 용어와 가정을 정리한다.
 - 열린 설계 결정은 확정된 구현처럼 표현하지 않는다.
 
@@ -52,12 +53,13 @@ passing
 
 ### State
 
-not-started
+passing
 
 ### Notes
 
-- 입력 자료: `importedDouments/`
-- HE-001 완료 후 시작한다.
+- 입력 분류: 완료 Exec Plan의 `Input Classification`
+- 완료 계획: `docs/exec-plans/completed/DOC-001-imported-architecture-alignment.md`
+- 확정 방향과 개발팀이 결정해야 할 change request를 구분해 반영한다.
 
 ## FND-001 — Foundry Product Foundation
 

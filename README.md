@@ -1,9 +1,14 @@
 # Corner Store
 
-Corner Store is a compliance-aware multi-venue execution system for tokenized
-assets. It separates token/identity enforcement, versioned compliance policy,
-execution routing, and venue-specific settlement across AMM, RFQ, and future
-Order Book adapters.
+Corner Store is a Solidity SDK and reference execution system for DEX-level
+compliance of tokenized assets. The SDK models market access with reusable
+Element, Recipe, Manifest, and Operator boundaries. The Corner Store reference
+DEX proves the model across AMM, RFQ, and future Order Book adapters.
+
+The SDK has two extension axes: policies are registered through
+Element/Recipe/Manifest, while execution venues or external DEX integrations
+are registered through a generic Router/Adapter boundary. Concrete Corner Store
+adapters and deployment configuration are reference implementations.
 
 The repository currently contains the architecture and development plan, a
 vendored Uniswap v3 deployment tool, and the initial Foundry project scaffold.
@@ -11,12 +16,14 @@ Product Solidity contracts are not implemented yet.
 
 ## Main Use Cases
 
-- 규제 자산의 거래 가능 여부를 실행 전에 평가한다.
+- 제3의 DEX가 재사용할 수 있는 compliance interface와 registry 모델을 제공한다.
+- Router를 수정하지 않고 정책과 execution Adapter를 등록·교체한다.
+- 자산 Manifest와 거래 context로 applicable Recipe를 식별한다.
+- 여러 Recipe의 Element를 cumulative AND로 실행 전에 평가한다.
 - 허용된 venue adapter로 거래를 전달한다.
 - ERC-3643 token transfer enforcement와 Corner Store 거래 정책의 실패를
   원자적으로 처리한다.
-- SDK/reference execution architecture의 다음 개정 방향은 active documentation
-  feature에서 반영한다.
+- Corner Store DEX로 SDK의 testnet 실행 흐름을 증명한다.
 
 ## Repository Guide
 
