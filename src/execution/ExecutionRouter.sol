@@ -69,6 +69,9 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
         // 8. dispatch to adapter (performs the swap; non-custodial)
         ExecutionResult memory r = IExecutionAdapter(cfg.adapter).execute(req, d);
 
+        // 8a. slippage bound — the realized output must meet the caller's minimum.
+        if (r.amountOut < req.amountOutMin) revert Errors.SlippageExceeded();
+
         // 9. post-trade commit hook (stateful element updates)
         engine.commit(req.context);
 

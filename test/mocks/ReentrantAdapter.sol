@@ -11,8 +11,19 @@ import {ComplianceDecision} from "../../src/types/ComplianceTypes.sol";
 contract ReentrantAdapter is IExecutionAdapter {
     IExecutionRouter public immutable router;
 
+    /// @dev When true, the reentrant call uses {reentrantNonce} instead of the incoming nonce,
+    /// so the guard — not NonceUsed — is proven to be the sole cause of the revert.
+    bool public useDistinctNonce;
+    uint256 public reentrantNonce;
+
     constructor(IExecutionRouter _router) {
         router = _router;
+    }
+
+    /// @notice Make the reentrant call carry a different (fresh) nonce.
+    function setReentrantNonce(uint256 nonce) external {
+        useDistinctNonce = true;
+        reentrantNonce = nonce;
     }
 
     function execute(ExecutionRequest calldata req, ComplianceDecision calldata)
@@ -20,7 +31,13 @@ contract ReentrantAdapter is IExecutionAdapter {
         returns (ExecutionResult memory)
     {
         // Re-enter — should revert via ReentrancyGuard, bubbling up to the original call.
-        router.execute(req);
+        if (useDistinctNonce) {
+            ExecutionRequest memory reentrant = req;
+            reentrant.nonce = reentrantNonce;
+            router.execute(reentrant);
+        } else {
+            router.execute(req);
+        }
         return ExecutionResult({amountOut: 0, executionId: bytes32(0)});
     }
 }

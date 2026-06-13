@@ -30,6 +30,13 @@ contract UniswapV3Adapter is IAMMAdapter, Governed {
         emit PoolSet(pool, registered);
     }
 
+    /// @notice Executes the swap for a single request.
+    /// @dev SECURITY: this function is permissionless by the {IExecutionAdapter} interface, but it
+    /// MUST only be reached through {ExecutionRouter}. The router runs the compliance/selector gates
+    /// and binds `req.context.buyer` to the trade context. A direct caller could invoke this with an
+    /// arbitrary `buyer` and pull `tokenIn` from any address that has approved this adapter, up to that
+    /// approval. A production deployment MUST add an authorized-caller (onlyRouter) gate; it is omitted
+    /// here only because this is skeleton scope. Do not rely on this adapter as a standalone entry point.
     function execute(ExecutionRequest calldata req, ComplianceDecision calldata)
         external
         returns (ExecutionResult memory)

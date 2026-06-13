@@ -13,6 +13,7 @@ library Errors {
     error DecisionExpired();
     error DecisionMismatch(); // decisionHash != recomputed
     error MaxAmountExceeded();
+    error SlippageExceeded();
     error ElementNotRegistered(bytes32 elementId);
     error LooseningForbidden(); // strengthen-only override
 }

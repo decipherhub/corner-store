@@ -221,7 +221,54 @@ contract RouterTest is Test {
         req.context.venue = evilVenue;
 
         vm.prank(BUYER);
-        vm.expectRevert(); // ReentrancyGuard: reentrant call (string revert bubbles up)
+        // Pin the guard's exact revert string (OZ v4.8) so this cannot pass via NonceUsed.
+        vm.expectRevert("ReentrancyGuard: reentrant call");
         router.execute(req);
+    }
+
+    function test_revert_reentrancy_distinctNonce() public {
+        ReentrantAdapter evil = new ReentrantAdapter(router);
+        // Re-enter with a DIFFERENT nonce so NonceUsed cannot be the cause; only the guard remains.
+        evil.setReentrantNonce(999);
+        address evilVenue = address(0xE712);
+        venueReg.registerVenue(
+            evilVenue,
+            VenueConfig({
+                venueType: VenueType.AMM,
+                adapter: address(evil),
+                target: address(0),
+                operator: address(0),
+                custody: CustodyModel.POOL,
+                active: true
+            })
+        );
+        ExecutionRequest memory req = _defaultReq();
+        req.context.venue = evilVenue;
+
+        vm.prank(BUYER);
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        router.execute(req);
+    }
+
+    // ---- slippage ----
+
+    function test_revert_slippage() public {
+        ExecutionRequest memory req = _defaultReq();
+        req.amountOutMin = 778; // require more than the adapter will return
+        adapter.setAmountOut(777);
+
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.SlippageExceeded.selector);
+        router.execute(req);
+    }
+
+    function test_execute_slippage_boundMet() public {
+        ExecutionRequest memory req = _defaultReq();
+        req.amountOutMin = 777; // exactly meets the returned amount
+        adapter.setAmountOut(777);
+
+        vm.prank(BUYER);
+        ExecutionResult memory r = router.execute(req);
+        assertEq(r.amountOut, 777, "amountOut forwarded when bound met");
     }
 }
