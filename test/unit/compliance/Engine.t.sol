@@ -77,6 +77,17 @@ contract EngineTest is Test {
 
     function _registerRWA(uint16 fundRecipeId, uint256 factsPacked) internal {
         policyReg.registerManifest(RWA, _activeManifest(fundRecipeId, factsPacked));
+        _registerCashUnregulated();
+    }
+
+    /// @dev Under fail-closed pair-status rules, an ACTIVE RWA trade only proceeds
+    ///      if the counterparty (quote/cash) token is EXPLICITLY UNREGULATED. The
+    ///      engine never infers UNREGULATED from an absent manifest, so every
+    ///      ACTIVE-side test must register CASH as UNREGULATED.
+    function _registerCashUnregulated() internal {
+        ManifestCore memory unreg;
+        unreg.status = PolicyStatus.UNREGULATED;
+        policyReg.registerManifest(CASH, unreg);
     }
 
     function _ctxBuy() internal pure returns (ComplianceContext memory c) {
@@ -199,6 +210,7 @@ contract EngineTest is Test {
         ManifestCore memory m = _activeManifest(0, 0);
         m.issuanceRecipeId = 3; // point issuance at the bad recipe
         policyReg.registerManifest(RWA, m);
+        _registerCashUnregulated();
 
         vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, bytes32("Z-99-v1")));
         engine.evaluate(_ctxBuy());
@@ -215,6 +227,7 @@ contract EngineTest is Test {
         ManifestCore memory m = _activeManifest(0, 0);
         m.issuanceRecipeId = 4;
         policyReg.registerManifest(RWA, m);
+        _registerCashUnregulated();
 
         accredited.setAccredited(BUYER, true);
         surveillance.setThreshold(0); // first onTransfer triggers
@@ -256,30 +269,32 @@ contract EngineTest is Test {
     }
 
     // (b) Mixed UNREGULATED/UNKNOWN status. tokenOut (RWA) is UNREGULATED,
-    // tokenIn (CASH) left UNKNOWN (unregistered).
-    //
-    // FINDING / DISCREPANCY: the task brief expected this to fail-closed (only
-    // BOTH-UNREGULATED passing through), but the current engine does NOT do that.
-    // `_regulatedToken` returns the FIRST side whose status != UNKNOWN, and the
-    // `status == UNREGULATED` branch in `evaluate` passes through immediately —
-    // it never inspects the other (UNKNOWN) side. So a single UNREGULATED side is
-    // sufficient to pass through, regardless of the counterparty token's status.
-    // The both-UNREGULATED check only ever runs when BOTH sides are UNKNOWN
-    // (token == address(0)), which this case is not.
-    //
-    // This test pins the engine's ACTUAL behavior (documenting, not endorsing it).
-    // See the report: changing this to fail-closed would require an engine change,
-    // which is explicitly out of scope for this test-coverage-only task.
-    function test_mixed_unregulated_unknown_passes_through_current_behavior() public {
+    // tokenIn (CASH) left UNKNOWN (unregistered). Per fail-closed pair-status
+    // rules, ONLY both-UNREGULATED passes through; a single UNKNOWN side must
+    // reject — we never infer UNREGULATED from an absent manifest.
+    function test_mixed_unregulated_unknown_fails_closed() public {
         ManifestCore memory unreg;
         unreg.status = PolicyStatus.UNREGULATED;
         policyReg.registerManifest(RWA, unreg);
         // CASH intentionally NOT registered → UNKNOWN.
 
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
-        // Current behavior: a single UNREGULATED side short-circuits to pass-through.
-        assertTrue(d.allowed, "current engine passes through when EITHER side is UNREGULATED");
-        assertEq(d.reasonCode, bytes32(0));
+        assertFalse(d.allowed, "a single UNKNOWN side must fail-closed");
+        assertTrue(d.reasonCode != bytes32(0));
+    }
+
+    // (b2) ACTIVE RWA (tokenOut) traded against an UNKNOWN cash token (tokenIn
+    // not registered). The previously fail-OPEN path: an ACTIVE side must NOT
+    // pass merely because its recipes would pass — the UNKNOWN counterparty
+    // makes the pair fail-closed before any recipe runs.
+    function test_active_against_unknown_cash_fails_closed() public {
+        policyReg.registerManifest(RWA, _activeManifest(0, 0));
+        // CASH intentionally NOT registered → UNKNOWN.
+        accredited.setAccredited(BUYER, true); // would otherwise satisfy RegD506c.
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertFalse(d.allowed, "ACTIVE side with UNKNOWN counterparty must fail-closed");
+        assertTrue(d.reasonCode != bytes32(0));
     }
 
     // (c) Lockup through the engine end-to-end, exercising the IAcquisitionSource
@@ -303,6 +318,7 @@ contract EngineTest is Test {
         ManifestCore memory m = _activeManifest(0, 0);
         m.issuanceRecipeId = 6; // point issuance at the lockup-only recipe
         policyReg.registerManifest(RWA, m);
+        _registerCashUnregulated();
 
         // Before lockup elapses → reject.
         ComplianceDecision memory dBefore = engine.evaluate(_ctxBuy());

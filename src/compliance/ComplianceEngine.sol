@@ -34,52 +34,40 @@ contract ComplianceEngine is IComplianceEngine {
     }
 
     // ---------------------------------------------------------------------
-    // Regulated-token identification rule (documented, deterministic):
-    // The RWA token is whichever side has a non-UNKNOWN manifest. We check
-    // tokenOut first, then tokenIn; the first with statusOf != UNKNOWN is the
-    // regulated asset. If neither is registered (both UNKNOWN) we treat the
-    // trade as involving no regulated token (handled by status branch below).
+    // Regulated-token selection rule (two-sided, documented, deterministic):
+    // We read BOTH sides' status and decide the pair outcome fail-closed:
+    //   * EITHER side SUSPENDED → reject.
+    //   * EITHER side UNKNOWN (unregistered) → reject; quote/cash tokens must be
+    //     EXPLICITLY registered UNREGULATED, we never infer an absent manifest.
+    //   * BOTH UNREGULATED → pass through (fast path).
+    //   * At least one ACTIVE → the regulated token is the ACTIVE side. Prefer
+    //     tokenOut when it is ACTIVE, else tokenIn; that side's manifest/recipes
+    //     are evaluated against the full context.
+    // This selection is inlined in `evaluate` (see below); status reads are done
+    // once there for both sides.
     // ---------------------------------------------------------------------
-    function _regulatedToken(ComplianceContext calldata ctx)
-        internal
-        view
-        returns (address token, PolicyStatus status)
-    {
-        PolicyStatus outStatus = policyReg.statusOf(ctx.tokenOut);
-        if (outStatus != PolicyStatus.UNKNOWN) {
-            return (ctx.tokenOut, outStatus);
-        }
-        PolicyStatus inStatus = policyReg.statusOf(ctx.tokenIn);
-        if (inStatus != PolicyStatus.UNKNOWN) {
-            return (ctx.tokenIn, inStatus);
-        }
-        return (address(0), PolicyStatus.UNKNOWN);
-    }
-
     function evaluate(ComplianceContext calldata ctx) external view override returns (ComplianceDecision memory) {
-        (address token, PolicyStatus status) = _regulatedToken(ctx);
+        PolicyStatus statusIn = policyReg.statusOf(ctx.tokenIn);
+        PolicyStatus statusOut = policyReg.statusOf(ctx.tokenOut);
 
-        // Both sides unregistered (UNKNOWN). Pass through ONLY if both are
-        // explicitly UNREGULATED; otherwise fail-closed below.
-        if (token == address(0)) {
-            bool bothUnregulated = policyReg.statusOf(ctx.tokenOut) == PolicyStatus.UNREGULATED
-                && policyReg.statusOf(ctx.tokenIn) == PolicyStatus.UNREGULATED;
-            if (bothUnregulated) {
-                return _passThrough(ctx);
-            }
-            // UNKNOWN on both → fail-closed.
-            return _rejectPolicy(ctx, status);
+        // (1) EITHER side SUSPENDED → fail-closed.
+        if (statusIn == PolicyStatus.SUSPENDED || statusOut == PolicyStatus.SUSPENDED) {
+            return _rejectPolicy(ctx, PolicyStatus.SUSPENDED);
         }
-
-        if (status == PolicyStatus.UNREGULATED) {
+        // (2) EITHER side UNKNOWN (unregistered) → fail-closed. We never infer
+        //     UNREGULATED from an absent manifest.
+        if (statusIn == PolicyStatus.UNKNOWN || statusOut == PolicyStatus.UNKNOWN) {
+            return _rejectPolicy(ctx, PolicyStatus.UNKNOWN);
+        }
+        // (3) Both sides ∈ {UNREGULATED, ACTIVE}.
+        //     Both UNREGULATED → fast path pass-through.
+        if (statusOut == PolicyStatus.UNREGULATED && statusIn == PolicyStatus.UNREGULATED) {
             return _passThrough(ctx);
         }
-        if (status != PolicyStatus.ACTIVE) {
-            // UNKNOWN / SUSPENDED → fail-closed.
-            return _rejectPolicy(ctx, status);
-        }
+        //     At least one ACTIVE → the ACTIVE side is the regulated token,
+        //     preferring tokenOut when it is ACTIVE.
+        address token = statusOut == PolicyStatus.ACTIVE ? ctx.tokenOut : ctx.tokenIn;
 
-        // ACTIVE: evaluate recipes.
         ManifestCore memory m = policyReg.manifestOf(token);
         return _evaluateActive(ctx, token, m);
     }
@@ -221,8 +209,19 @@ contract ComplianceEngine is IComplianceEngine {
     /// @dev commit: post-trade hook. Recompute applicable element set; for each
     ///      STATEFUL element call onTransfer(seller, buyer, rwaAmount).
     function commit(ComplianceContext calldata ctx) external override {
-        (address token, PolicyStatus status) = _regulatedToken(ctx);
-        if (token == address(0) || status != PolicyStatus.ACTIVE) return;
+        // Mirror evaluate's two-sided selection: a STATEFUL post-trade hook runs
+        // only when there is an ACTIVE regulated side (prefer tokenOut). Any
+        // SUSPENDED/UNKNOWN side or both-UNREGULATED → nothing to commit.
+        PolicyStatus statusIn = policyReg.statusOf(ctx.tokenIn);
+        PolicyStatus statusOut = policyReg.statusOf(ctx.tokenOut);
+        address token;
+        if (statusOut == PolicyStatus.ACTIVE) {
+            token = ctx.tokenOut;
+        } else if (statusIn == PolicyStatus.ACTIVE) {
+            token = ctx.tokenIn;
+        } else {
+            return;
+        }
 
         ManifestCore memory m = policyReg.manifestOf(token);
         uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
