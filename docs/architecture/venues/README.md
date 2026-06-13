@@ -3,14 +3,15 @@
 ## Responsibility
 
 Venue Layer는 AMM, RFQ, Order Book의 고유한 검증과 settlement를 Adapter로
-캡슐화한다.
+캡슐화한다. 공통 Adapter interface는 SDK의 Execution Integration Kit에 속하고,
+이 문서의 구체 Adapter는 Corner Store reference DEX 구현에 속한다.
 
 핵심 질문은 다음과 같다.
 
 > 선택된 venue에서 요청을 어떻게 안전하게 검증하고 결제할 것인가?
 
-각 Adapter는 Compliance Policy를 정의하지 않고, `ExecutionRouter`가 전달한 request와
-decision을 venue 고유 parameter에 바인딩한다.
+각 Adapter는 Recipe나 Manifest를 정의하지 않고, `ExecutionRouter`가 전달한
+request와 Manifest-bound decision을 venue 고유 parameter에 바인딩한다.
 
 ## Common Adapter Contract
 
@@ -48,15 +49,18 @@ Uniswap v3는 Corner Store의 첫 번째 AMM venue다. 전체 DEX가 아니라
 - RWA Pool은 필요한 IdentityRegistry 등록 후 활성화한다.
 - `ExecutionRouter`는 지원 진입점이지만 표준 pool의 직접 호출을 그 자체로 차단하지
   않는다.
-- MVP v1의 Layer 2 보장은 `ExecutionRouter`를 통한 swap에 한정한다. 직접 pool
+- Corner Store 4-Layer 보장은 `ExecutionRouter`를 통한 swap에 한정한다. 직접 pool
   호출에는 ERC-3643 transfer enforcement만 적용될 수 있다.
+- AMM 허용 여부는 Adapter 코드가 아니라 Asset Manifest와 applicable Recipe가
+  결정한다.
 
 ### Open Decisions
 
 - 허용 fee tier
 - 초기 liquidity와 LP 운영 정책
-- production RWA venue에 적용할 비우회 Layer 2 enforcement와 외부 승인 조건
+- production RWA venue에 적용할 비우회 4-Layer enforcement와 외부 승인 조건
 - RWA-RWA pair onboarding 절차
+- 초기 compliance 시나리오에서 AMM이 허용되는 자산·거래 조건
 
 ## RFQ
 
@@ -121,6 +125,5 @@ matching과 custody 모델이 결정되기 전에는 구현하지 않는다.
 
 ## References
 
-- [`MVP-v2-multi-venue.md` - Venue별 실행 모델](../../MVP-v2-multi-venue.md#7-venue별-실행-모델)
-- [`MVP-v2-multi-venue.md` - Factory와 등록 흐름](../../MVP-v2-multi-venue.md#9-factory와-등록-흐름)
+- [`MVP-v2-multi-venue.md` - Venue Execution](../../MVP-v2-multi-venue.md#8-venue-execution)
 - [`CORNER_STORE_PROFILE.md`](../../../tools/deploy-v3/CORNER_STORE_PROFILE.md)
