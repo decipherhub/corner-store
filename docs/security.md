@@ -26,7 +26,7 @@
 
 ## Input Validation
 
-- 외부 주소, amount, deadline, nonce, policy version과 venue context를 검증한다.
+- 외부 주소, amount, deadline, nonce, manifest version과 venue context를 검증한다.
 - 명시적 `UNREGULATED` public path와 `ACTIVE` Manifest regulated path를 명시적으로
   구분한다.
 - `ACTIVE` Manifest의 invalid Recipe/reference, unsupported engine와 version
