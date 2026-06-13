@@ -52,6 +52,17 @@ contract SwapFlowTest is IntegrationBase {
     // Seller (ctx.buyer for engine purposes) sends RWA in, receives quote out.
     // tokenIn=RWA (ACTIVE regulated side), tokenOut=quote. The RWA transfer leg
     // pulls RWA from a VERIFIED holder → the VERIFIED pool; both legs are real.
+    //
+    // ROLE-vs-DIRECTION (read before copying this test): `ctx.buyer` and
+    // `ctx.seller` are ENGINE-ROLE labels, NOT trade-direction labels.
+    // `ctx.buyer` is the party the engine validates — investor elements
+    // (accredited / sanctioned / qp) all check `ctx.buyer`, regardless of which
+    // token leg that party sends or receives. `ctx.seller` is the counterparty
+    // and the surveillance `from`. The engine is NOT direction-aware (see the
+    // direction note in {IntegrationBase}), so a maintainer must NOT assume
+    // `ctx.buyer == token-receiver`: here the engine-"buyer" alice is actually
+    // the one SENDING RWA. Direction is expressed only via tokenIn/tokenOut and
+    // which real address holds/receives RWA.
     function test_sell_shaped_success() public {
         // alice is the verified, accredited party the engine validates.
         setupBuyer(alice);

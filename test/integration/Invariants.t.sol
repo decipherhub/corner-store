@@ -12,6 +12,22 @@ import {MockComplianceEngine} from "../mocks/MockComplianceEngine.sol";
 ///         harness needed). These pin the router's safety gates against the
 ///         fully-wired real stack, plus one router-level maxAmount check using a
 ///         MockComplianceEngine (see the note on that test for why).
+///
+/// Two spec §9 invariants are intentionally NOT asserted as standalone tests:
+///
+///   1. "operator cannot directly write the surveillance counter" — NOT asserted.
+///      `SurveillanceFlag.onTransfer` is currently unguarded in the skeleton
+///      (any address can call it and bump `transferCount`). Access control
+///      (e.g. onlyEngine) is documented future work, so there is no honest
+///      negative case to assert yet. We deliberately do NOT add a fake passing
+///      test that pretends the guard exists.
+///
+///   2. "decision reuse forbidden" (spec §9 `decisionHash` reuse) — covered BY
+///      CONSTRUCTION, not by a dedicated test. The router recomputes
+///      `engine.evaluate` on every call and never stores or replays a prior
+///      ComplianceDecision, so a stale `decisionHash` can never be presented and
+///      re-accepted. The actual replay protection is therefore the per-caller
+///      nonce gate, which `test_nonceReplay_nonceUsed` below covers.
 contract InvariantsTest is IntegrationBase {
     function setUp() public {
         deployStack();

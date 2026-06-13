@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 
 import {IntegrationBase} from "./IntegrationBase.sol";
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
-import {ManifestCore, PolicyStatus} from "../../src/types/ComplianceTypes.sol";
+import {ManifestCore} from "../../src/types/ComplianceTypes.sol";
 import {Events} from "../../src/libraries/Events.sol";
 import {ReasonCodes} from "../../src/libraries/ReasonCodes.sol";
 
@@ -52,6 +52,39 @@ contract SurveillanceTest is IntegrationBase {
         // swap actually settled (flag never blocks) and the counter advanced.
         assertEq(rwaToken.balanceOf(alice), 100 ether, "swap settled despite flag");
         assertEq(surveillance.transferCount(), 1, "onTransfer ran via router commit");
+    }
+
+    // --- STATEFUL: the counter accumulates ACROSS trades -----------------
+    // Two successful router.execute swaps must drive transferCount 1 → 2,
+    // proving F-02-v1 is genuinely STATEFUL (persists across trades). A
+    // stateless impl would reset and fail the `2` assertion. Both legs go
+    // through the real engine.commit → onTransfer; distinct nonces come for
+    // free from buildBuyRequest's `nextNonce++`, and the pool's 1_000e18 RWA
+    // covers both 100e18 deliveries. Threshold is high so the flag never even
+    // fires — we isolate the counter accumulation from the flag/block behavior.
+    function test_statefulCounter_accumulatesAcrossSwaps() public {
+        setupBuyer(alice);
+        fundPoolRWA(1_000 ether);
+        fundBuyerQuote(alice, 1_000 ether);
+
+        // high threshold → flag never fires; both swaps settle either way
+        // (flag-not-block), so this isolates pure counter accumulation.
+        surveillance.setThreshold(type(uint256).max);
+
+        // swap 1: counter 0 → 1
+        ExecutionRequest memory req1 = buildBuyRequest(alice, 100 ether, 100 ether);
+        vm.prank(alice);
+        router.execute(req1);
+        assertEq(surveillance.transferCount(), 1, "count after first swap");
+
+        // swap 2 (fresh nonce): counter accumulates 1 → 2
+        ExecutionRequest memory req2 = buildBuyRequest(alice, 100 ether, 100 ether);
+        vm.prank(alice);
+        router.execute(req2);
+        assertEq(surveillance.transferCount(), 2, "STATEFUL element accumulated across trades");
+
+        // both deliveries actually settled through the real RWA token leg.
+        assertEq(rwaToken.balanceOf(alice), 200 ether, "both swaps delivered RWA");
     }
 }
 
