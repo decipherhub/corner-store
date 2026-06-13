@@ -158,6 +158,11 @@ contract ComplianceEngine is IComplianceEngine {
         returns (ComplianceDecision memory d)
     {
         d.allowed = allowed;
+        // policyId derivation is a SKELETON PLACEHOLDER: it currently encodes only
+        // issuanceRecipeId and is therefore LOSSY — it ignores fundRecipeId (and
+        // recipe versions / factsPacked). Two manifests sharing an issuance recipe
+        // but differing in fund recipe collapse to the same policyId. A real
+        // implementation must derive policyId from the full applicable policy set.
         d.policyId = bytes32(uint256(m.issuanceRecipeId));
         d.policyVersion = m.issuanceRecipeVersion;
         d.validUntil = uint64(block.timestamp + 1 days);
@@ -173,6 +178,12 @@ contract ComplianceEngine is IComplianceEngine {
 
     /// @dev Compute decisionHash from the assembled decision. Isolated to keep
     ///      stack depth low (avoids spilling many locals at the call site).
+    ///      NOTE: the hash binds INPUTS ONLY — the context plus the decision's
+    ///      parameters (maxAmount, allowedVenueTypes, allowedVenuesHash,
+    ///      policyVersion, validUntil). It deliberately does NOT cover the
+    ///      outcome (allowed / reasonCode). It is a context-replay guard, not an
+    ///      attestation of the verdict: the same inputs must hash the same way
+    ///      regardless of whether the trade was allowed or rejected.
     function _hash(ComplianceContext calldata ctx, ComplianceDecision memory d) private pure returns (bytes32) {
         return DecisionHashLib.compute(
             ctx, d.maxAmount, d.allowedVenueTypes, d.allowedVenuesHash, d.policyVersion, d.validUntil
@@ -239,6 +250,12 @@ contract ComplianceEngine is IComplianceEngine {
     /// @dev Upper bound on distinct elements: sum of required-element counts of
     ///      all candidate recipes. We don't know counts statically, so use a
     ///      generous fixed cap; dedup keeps the live count correct.
+    ///      FAIL-CLOSED INVARIANT: if the union of required elements ever exceeds
+    ///      this cap, `elementIds[count] = ...` in `_applicableElements` reverts
+    ///      with an array out-of-bounds panic. That is intentional — it never
+    ///      silently drops a required check. A future maintainer MUST NOT add a
+    ///      `count < cap` guard around the write: truncating the element set
+    ///      would let a trade skip a required compliance check (fail-open).
     function _maxElements(ManifestCore memory) private pure returns (uint256) {
         return 32;
     }

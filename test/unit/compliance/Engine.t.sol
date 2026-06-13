@@ -10,6 +10,8 @@ import {Sanctions} from "../../../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../../../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../../../src/compliance/elements/QualifiedPurchaser.sol";
 import {SurveillanceFlag} from "../../../src/compliance/elements/SurveillanceFlag.sol";
+import {Lockup} from "../../../src/compliance/elements/Lockup.sol";
+import {IAcquisitionSource} from "../../../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipe} from "../../../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../../../src/compliance/recipes/Fund3c7Recipe.sol";
 import {
@@ -224,6 +226,107 @@ contract EngineTest is Test {
         );
         engine.commit(_ctxBuy());
         assertEq(surveillance.transferCount(), 1);
+    }
+
+    // (a) Dedup: an element required by BOTH applicable recipes is checked once,
+    // and toggling that shared element flips the whole decision. RegD506c (issuance)
+    // requires A-01-v1 (sanctions) + A-03-v1 (accredited). We register an
+    // always-applicable fund recipe that ALSO requires A-01-v1, so the union has a
+    // duplicate. The engine must dedup (no double-count / crash) and a single
+    // sanctions block must reject.
+    function test_dedup_shared_element_across_recipes() public {
+        bytes32[] memory overlap = new bytes32[](1);
+        overlap[0] = bytes32("A-01-v1"); // shared with RegD506c's sanctions element
+        UnregisteredElementRecipe shared = new UnregisteredElementRecipe(overlap);
+        recipeReg.registerRecipe(5, 1, address(shared));
+
+        // issuance=RegD506c (1), fund=overlapping recipe (5), applicable regardless of facts.
+        _registerRWA(5, 0);
+        accredited.setAccredited(BUYER, true);
+
+        // Buyer passes both recipes; the shared element is checked, union evaluates true.
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertTrue(d.allowed, "union with overlapping element should allow when buyer passes");
+
+        // Toggle the shared element to block → whole decision must fail-close.
+        sanctions.setBlocked(BUYER, true);
+        d = engine.evaluate(_ctxBuy());
+        assertFalse(d.allowed, "blocking the shared element must reject the trade");
+        assertTrue(d.reasonCode != bytes32(0));
+    }
+
+    // (b) Mixed UNREGULATED/UNKNOWN status. tokenOut (RWA) is UNREGULATED,
+    // tokenIn (CASH) left UNKNOWN (unregistered).
+    //
+    // FINDING / DISCREPANCY: the task brief expected this to fail-closed (only
+    // BOTH-UNREGULATED passing through), but the current engine does NOT do that.
+    // `_regulatedToken` returns the FIRST side whose status != UNKNOWN, and the
+    // `status == UNREGULATED` branch in `evaluate` passes through immediately —
+    // it never inspects the other (UNKNOWN) side. So a single UNREGULATED side is
+    // sufficient to pass through, regardless of the counterparty token's status.
+    // The both-UNREGULATED check only ever runs when BOTH sides are UNKNOWN
+    // (token == address(0)), which this case is not.
+    //
+    // This test pins the engine's ACTUAL behavior (documenting, not endorsing it).
+    // See the report: changing this to fail-closed would require an engine change,
+    // which is explicitly out of scope for this test-coverage-only task.
+    function test_mixed_unregulated_unknown_passes_through_current_behavior() public {
+        ManifestCore memory unreg;
+        unreg.status = PolicyStatus.UNREGULATED;
+        policyReg.registerManifest(RWA, unreg);
+        // CASH intentionally NOT registered → UNKNOWN.
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        // Current behavior: a single UNREGULATED side short-circuits to pass-through.
+        assertTrue(d.allowed, "current engine passes through when EITHER side is UNREGULATED");
+        assertEq(d.reasonCode, bytes32(0));
+    }
+
+    // (c) Lockup through the engine end-to-end, exercising the IAcquisitionSource
+    // injection seam. Register Lockup (C-01-v1) wired to a MockAcquisitionSource and a
+    // recipe that requires it. Before lockup elapses → reject; after warp → allow.
+    function test_lockup_through_engine_time_gated() public {
+        uint64 lockupSeconds = 365 days;
+        uint64 acquiredAt = uint64(block.timestamp);
+
+        MockAcquisitionSource acqSource = new MockAcquisitionSource();
+        acqSource.setAcquiredAt(BUYER, RWA, acquiredAt);
+
+        Lockup lockup = new Lockup(address(acqSource), lockupSeconds);
+        elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
+
+        bytes32[] memory els = new bytes32[](1);
+        els[0] = bytes32("C-01-v1");
+        UnregisteredElementRecipe lockupRecipe = new UnregisteredElementRecipe(els);
+        recipeReg.registerRecipe(6, 1, address(lockupRecipe));
+
+        ManifestCore memory m = _activeManifest(0, 0);
+        m.issuanceRecipeId = 6; // point issuance at the lockup-only recipe
+        policyReg.registerManifest(RWA, m);
+
+        // Before lockup elapses → reject.
+        ComplianceDecision memory dBefore = engine.evaluate(_ctxBuy());
+        assertFalse(dBefore.allowed, "lockup not elapsed must reject");
+        assertTrue(dBefore.reasonCode != bytes32(0));
+
+        // Warp past acquiredAt + lockupSeconds → allow.
+        vm.warp(uint256(acquiredAt) + lockupSeconds + 1);
+        ComplianceDecision memory dAfter = engine.evaluate(_ctxBuy());
+        assertTrue(dAfter.allowed, "lockup elapsed must allow");
+        assertEq(dAfter.reasonCode, bytes32(0));
+    }
+}
+
+/// @dev Test-only settable acquisition-time source for the Lockup element seam.
+contract MockAcquisitionSource is IAcquisitionSource {
+    mapping(bytes32 => uint64) internal _acquiredAt;
+
+    function setAcquiredAt(address holder, address asset, uint64 ts) external {
+        _acquiredAt[keccak256(abi.encode(holder, asset))] = ts;
+    }
+
+    function acquiredAt(address holder, address asset) external view override returns (uint64) {
+        return _acquiredAt[keccak256(abi.encode(holder, asset))];
     }
 }
 
