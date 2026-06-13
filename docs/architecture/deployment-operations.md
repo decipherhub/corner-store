@@ -3,7 +3,7 @@
 ## Responsibility
 
 이 레이어는 Uniswap v3 인프라와 Corner Store 컨트랙트를 반복 가능하게 배포하고,
-주소·설정·권한·policy version을 검증 가능한 **deployment manifest**로 관리한다.
+주소·설정·권한·Asset Compliance Manifest snapshot hash를 검증 가능한 **deployment manifest**로 관리한다.
 이 문서의 deployment manifest는 Asset Compliance Manifest와 다른 배포 산출물이다.
 
 핵심 질문은 다음과 같다.
