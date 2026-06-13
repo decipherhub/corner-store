@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FOUNDRY_PROFILE: default
+
+jobs:
+  test:
+    name: forge fmt / build / test
+    runs-on: ubuntu-latest
+    steps:
+      # Dependencies live vendored under lib/ (committed, not git submodules),
+      # so no submodule checkout or `forge install` is needed.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Check formatting
+        run: forge fmt --check
+
+      - name: Build
+        run: forge build
+
+      - name: Run tests
+        run: forge test -vv
