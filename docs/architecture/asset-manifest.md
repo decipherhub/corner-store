@@ -13,7 +13,7 @@ engine, version과 발행 측 compliance coverage를 하나의 검증 가능한 
 
 ## Owned Data
 
-- manifest ID, schema version과 policy version
+- manifest ID, schema version과 manifest version
 - asset 또는 asset×venue scope
 - Recipe set/reference
 - enabled resale paths
