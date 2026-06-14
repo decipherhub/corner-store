@@ -119,6 +119,11 @@ abstract contract IntegrationBase is TREXSuite {
         adapter = new UniswapV3Adapter();
         router = new ExecutionRouter(engine, venueReg, selector, operatorReg);
 
+        // Authenticate the post-trade write path (spec §6): only the router may
+        // drive engine.commit, and only the engine may drive element.onTransfer.
+        engine.setRouter(address(router));
+        surveillance.setEngine(address(engine));
+
         // 6. quote token (UNREGULATED manifest) + pool (token0=QUOTE, token1=RWA)
         quote = new MockERC20("Quote USD", "qUSD");
         pool = new MockPool(IERC20(address(quote)), IERC20(address(rwaToken)));

@@ -8,6 +8,12 @@ enum PolicyStatus {
     SUSPENDED
 } // 0 = UNKNOWN, fail-closed
 
+// LOAD-BEARING ORDER: ManifestCore.supportedEngines is a bitmask indexed by
+// VenueType value (bit i == VenueType(i): AMM=0, ORDER_BOOK=1, RFQ=2).
+// ComplianceEngine._buildDecision maps supportedEngines 1:1 into
+// allowedVenueTypes, and VenueSelector reads those bits against ctx.venueType.
+// Reordering this enum silently changes manifest semantics — the order is a
+// convention shared across the engine, the manifest, and the selector.
 enum VenueType {
     AMM,
     ORDER_BOOK,

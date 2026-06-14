@@ -50,7 +50,7 @@ contract SurveillanceFlag is BaseStatefulElement {
         return (true, bytes32(0));
     }
 
-    function onTransfer(address from, address, uint256) external override {
+    function onTransfer(address from, address, uint256) external override onlyEngine {
         transferCount += 1;
         if (transferCount > threshold) {
             emit Events.SurveillanceFlag(ELEMENT_ID, from, ReasonCodes.encode(0, ELEMENT_ID, 1));

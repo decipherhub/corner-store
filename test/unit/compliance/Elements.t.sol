@@ -112,6 +112,7 @@ contract ElementsTest is Test {
 
     function test_surveillance_never_blocks_and_flags_over_threshold() public {
         SurveillanceFlag f = new SurveillanceFlag();
+        f.setEngine(address(this)); // authorize this test as the onTransfer caller
         (bool passed, bytes32 rc) = f.check(user, address(0), asset, 0, "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
@@ -138,6 +139,7 @@ contract ElementsTest is Test {
 
     function test_surveillance_does_not_flag_below_threshold() public {
         SurveillanceFlag f = new SurveillanceFlag();
+        f.setEngine(address(this)); // authorize this test as the onTransfer caller
         f.setThreshold(2);
         // count 1 -> not > 2, count 2 -> not > 2. No emit expected (would fail recordLogs check otherwise).
         vm.recordLogs();

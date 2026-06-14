@@ -62,6 +62,12 @@ contract EngineTest is Test {
         recipeReg.registerRecipe(2, 1, address(fund));
 
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
+
+        // This test contract calls engine.commit(...) directly, so authorize it
+        // as the router. The engine drives surveillance.onTransfer from commit,
+        // so wire the surveillance element's engine to the engine address.
+        engine.setRouter(address(this));
+        surveillance.setEngine(address(engine));
     }
 
     // --- manifest helpers ---
@@ -239,6 +245,29 @@ contract EngineTest is Test {
         );
         engine.commit(_ctxBuy());
         assertEq(surveillance.transferCount(), 1);
+    }
+
+    // Auth: a non-router caller cannot drive the post-trade write path. The
+    // engine only accepts commit from the wired router (here the test contract);
+    // any stranger must revert NotAuthorized.
+    function test_commit_revertsForNonRouter() public {
+        _registerRWA(0, 0);
+        accredited.setAccredited(BUYER, true);
+
+        vm.prank(address(0xDEAD));
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        engine.commit(_ctxBuy());
+    }
+
+    // Auth: a non-engine caller cannot forge a stateful element's runtime
+    // counter. SurveillanceFlag.onTransfer is gated to its wired engine.
+    function test_onTransfer_revertsForNonEngine() public {
+        SurveillanceFlag s = new SurveillanceFlag();
+        s.setEngine(address(engine)); // only the engine is authorized
+
+        vm.prank(address(0xDEAD));
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        s.onTransfer(SELLER, BUYER, 1);
     }
 
     // (a) Dedup: an element required by BOTH applicable recipes is checked once,

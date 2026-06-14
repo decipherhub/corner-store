@@ -18,19 +18,40 @@ import {
 import {DecisionHashLib} from "../libraries/DecisionHashLib.sol";
 import {ReasonCodes} from "../libraries/ReasonCodes.sol";
 import {Errors} from "../libraries/Errors.sol";
+import {Governed} from "../auth/Governed.sol";
 
 /// @dev Multi-recipe cumulative-AND compliance engine. Resolves the regulated
 ///      token from a context, collects applicable recipes, unions their required
 ///      elements, and ANDs every element's check. Fail-closed on UNKNOWN/SUSPENDED.
-contract ComplianceEngine is IComplianceEngine {
+contract ComplianceEngine is IComplianceEngine, Governed {
     ITokenPolicyRegistry public immutable policyReg;
     IElementRegistry public immutable elementReg;
     IRecipeRegistry public immutable recipeReg;
+
+    /// @dev The sole authorized caller of `commit` (the post-trade write path).
+    ///      Set once by the owner after the router is deployed (the router takes
+    ///      the engine in its constructor, so the engine cannot know it at
+    ///      construction time). Gating `commit` enforces spec §6: runtime counters
+    ///      are written only via engine commit driven by the router, never forged
+    ///      directly by an operator/EOA.
+    address public router;
+
+    /// @dev `commit` mutates stateful elements; only the router may drive it.
+    modifier onlyRouter() {
+        if (msg.sender != router) revert Errors.NotAuthorized();
+        _;
+    }
 
     constructor(ITokenPolicyRegistry policyReg_, IElementRegistry elementReg_, IRecipeRegistry recipeReg_) {
         policyReg = policyReg_;
         elementReg = elementReg_;
         recipeReg = recipeReg_;
+    }
+
+    /// @dev One-time/owner-gated router wiring. Concrete-only (not on
+    ///      IComplianceEngine): `evaluate`/`commit` signatures are unchanged.
+    function setRouter(address r) external onlyOwner {
+        router = r;
     }
 
     // ---------------------------------------------------------------------
@@ -161,6 +182,13 @@ contract ComplianceEngine is IComplianceEngine {
         d.allowedVenuesHash = bytes32(0); // 0 = any registered venue (skeleton)
         d.reasonCode = reasonCode;
         d.reliedClaims = bytes32(0); // mock
+        // decisionHash is a FORWARD-LOOKING SEAM, not the live replay guard. The
+        // router calls engine.evaluate(ctx) fresh on every execute and never
+        // stores or verifies a decision, so REUSE IS STRUCTURALLY IMPOSSIBLE; the
+        // live replay guard is the per-caller `usedNonce` nonce gate in the
+        // router. decisionHash (and Errors.DecisionMismatch/DecisionExpired) exist
+        // for a future flow where a signed/pre-computed decision is passed in and
+        // verified against a recompute. Kept intentionally; do not remove.
         d.decisionHash = _hash(ctx, d);
     }
 
@@ -208,7 +236,10 @@ contract ComplianceEngine is IComplianceEngine {
 
     /// @dev commit: post-trade hook. Recompute applicable element set; for each
     ///      STATEFUL element call onTransfer(seller, buyer, rwaAmount).
-    function commit(ComplianceContext calldata ctx) external override {
+    ///      onlyRouter: this is the authenticated runtime-counter write path
+    ///      (spec §6). Only the wired router may record post-trade state; an
+    ///      EOA/operator cannot forge surveillance counters by calling commit.
+    function commit(ComplianceContext calldata ctx) external override onlyRouter {
         // Mirror evaluate's two-sided selection: a STATEFUL post-trade hook runs
         // only when there is an ACTIVE regulated side (prefer tokenOut). Any
         // SUSPENDED/UNKNOWN side or both-UNREGULATED → nothing to commit.

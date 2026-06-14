@@ -49,11 +49,22 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
         if (usedNonce[msg.sender][req.nonce]) revert Errors.NonceUsed();
         usedNonce[msg.sender][req.nonce] = true;
 
-        // 3. compliance evaluation
+        // 3. compliance evaluation. The router evaluates FRESH on every execute
+        //    and never stores or verifies a prior decision, so a decision cannot be
+        //    replayed — REUSE IS STRUCTURALLY IMPOSSIBLE. The live replay guard is
+        //    the `usedNonce` gate above; d.decisionHash (and
+        //    Errors.DecisionMismatch/DecisionExpired) are a forward-looking seam for
+        //    a future flow where a signed/pre-computed decision is passed in and
+        //    verified here, not the current replay defense.
         ComplianceDecision memory d = engine.evaluate(req.context);
         if (!d.allowed) revert Errors.ComplianceRejected(d.reasonCode);
 
-        // 4. amount bound — the decision constrains the input notional (RWA-side amountIn).
+        // 4. amount bound. NOTE (open decision): this bounds the INPUT (quote-side)
+        //    notional `amountIn`, whereas the engine reasons about the RWA-side
+        //    amount (see _runChecks). The mismatch is latent only because the engine
+        //    returns maxAmount = type(uint256).max today. When a real recipe returns
+        //    a finite cap, decide which axis maxAmount binds — RWA quantity vs quote
+        //    notional — and align this check with that choice.
         if (req.context.amountIn > d.maxAmount) revert Errors.MaxAmountExceeded();
 
         // 5. operator venue-suspension kill switch
