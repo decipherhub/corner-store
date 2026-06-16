@@ -3,6 +3,8 @@
 > 제품 범위는 [`MVP-v2-multi-venue.md`](./MVP-v2-multi-venue.md), 책임과
 > trust boundary는 [`architecture/`](./architecture/README.md)를 기준으로 한다.
 > 이 문서는 구현 순서와 완료 판단만 관리한다.
+> Phase 1 Compliance의 Element/Recipe 정의와 법적 근거는
+> [`compliance/`](./compliance/README.md)와 [`methodology/`](./methodology/legal-to-code-general-principles.md)를 출처로 한다.
 
 ## Current State
 
