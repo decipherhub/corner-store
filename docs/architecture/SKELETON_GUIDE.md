@@ -43,66 +43,7 @@
 
 한 거래의 흐름(①~⑨)과 4개 레이어, 그리고 실제/mock 구분을 한 장에 담았다.
 
-```mermaid
-flowchart TB
-  User([User / Institution])
-
-  subgraph EXEC["실행 레이어 — 허가된 거래만 체결"]
-    direction TB
-    Router["ExecutionRouter<br/>게이트: deadline·nonce·재진입·슬리피지"]
-    Selector["VenueSelector"]
-    VReg[("VenueRegistry")]
-    Adapter["UniswapV3Adapter<br/>(non-custodial)"]
-    Pool[("MockPool")]
-  end
-
-  Eng["⚙️ ComplianceEngine<br/>evaluate() / commit()<br/>— 4개 레이어를 묶는 두뇌"]
-
-  subgraph L3["3층 · Manifest — 토큰별 적용 설정"]
-    TPR[("TokenPolicyRegistry<br/>ManifestCore: status·recipe·facts·승인자")]
-  end
-  subgraph L2["2층 · Recipe — 검사들을 묶은 규제"]
-    RReg[("RecipeRegistry")]
-    R1["RegD506cRecipe<br/>(제재+적격투자자)"]
-    R2["Fund3c7Recipe<br/>(펀드일 때 적격매수자)"]
-  end
-  subgraph L1["1층 · Element — 검사 한 개 (통과/사유)"]
-    EReg[("ElementRegistry")]
-    E1["Sanctions A-01"]
-    E2["AccreditedInvestor A-03"]
-    E3["QualifiedPurchaser A-13"]
-    E4["Lockup C-01"]
-    E5["SurveillanceFlag F-02<br/>(차단X·표시)"]
-  end
-  subgraph L4["4층 · Operator — 사람 운영(상태 입력만)"]
-    OReg[("OperatorRegistry<br/>긴급정지·감시")]
-  end
-
-  ERC["🔒 외부 ERC-3643 / T-REX 토큰<br/>isVerified · canTransfer"]
-
-  User -->|"execute(request)"| Router
-  Router -->|"① evaluate(ctx)"| Eng
-  Router -. "venue 정지 여부 읽기" .-> OReg
-  Eng -->|"② 토큰 설정 조회"| TPR
-  Eng -->|"③ 규제 해석"| RReg
-  RReg --> R1 & R2
-  Eng -->|"④ 검사 실행(AND)"| EReg
-  EReg --> E1 & E2 & E3 & E4 & E5
-  Eng -->|"⑤ ComplianceDecision<br/>(허용/거부 + 사유)"| Router
-  Router -->|"⑥ 허용 시 venue 검증"| Selector
-  Selector --> VReg
-  Router -->|"⑦ 체결 위임"| Adapter
-  Adapter --> Pool
-  Pool -->|"⑧ tokenOut 전송"| ERC
-  Router -. "⑨ commit(ctx) 거래 후 감시갱신" .-> Eng
-
-  classDef real fill:#e8f5e9,stroke:#43a047,color:#1b5e20;
-  classDef mock fill:#fff8e1,stroke:#f9a825,color:#795548;
-  classDef ext  fill:#eceff1,stroke:#90a4ae,color:#37474f;
-  class Router,Selector,VReg,Eng,TPR,RReg,EReg,OReg,Adapter real;
-  class R1,R2,E1,E2,E3,E4,E5,Pool mock;
-  class ERC ext;
-```
+![Corner Store 아키텍처 — 거래 흐름과 4개 레이어](./image.png)
 
 **색 범례**
 - 🟢 초록 = **실제 동작하는 배선/구조** (라우팅·엔진·레지스트리·어댑터 콜백)
