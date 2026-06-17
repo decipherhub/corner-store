@@ -1,288 +1,332 @@
 # Corner Store Development Roadmap
 
-> 제품 범위는 [`MVP-v2-multi-venue.md`](./MVP-v2-multi-venue.md), 책임과
-> trust boundary는 [`architecture/`](./architecture/README.md)를 기준으로 한다.
-> 이 문서는 구현 순서와 완료 판단만 관리한다.
+> 제품 범위는 [`MVP-v2-multi-venue.md`](./MVP-v2-multi-venue.md), 책임과 trust
+> boundary는 [`architecture/`](./architecture/README.md)를 기준으로 한다.
+> 이 문서는 구현 순서, 검증 기준과 blocker만 관리한다.
 
 ## Current State
 
 완료:
 
-- AMM 중심 v1에서 multi-venue v2로 아키텍처 전환
-- Token/Identity, Compliance, Execution, Venue 책임 경계 정의
-- Uniswap `deploy-v3` vendoring
-- upstream 전체 단계와 Corner Store 최소 배포 profile 분리
-- 최소 profile 단위 테스트 및 수동 Anvil 배포 검증
+- SDK를 주 제품, Corner Store를 reference DEX로 정의
+- Element, Recipe, Manifest, Operator 이름 기반 4-Layer 모델 확정
+- cumulative multi-Recipe와 Asset Compliance Manifest 아키텍처 반영
+- ERC-3643/ONCHAINID 외부 trust boundary 정의
+- AMM, RFQ와 Order Book Adapter 경계 정의
+- Uniswap v3 vendored deployment profile 분리와 단위 테스트
 
 미구현:
 
-- 제품 Solidity 컨트랙트
-- mock ERC-3643/identity/compliance test fixture
-- CI와 정적 분석
-- 자동 통합 배포 및 manifest
-- AMM/RFQ/Order Book Adapter
-- end-to-end compliance execution test
+- 제품 Solidity contracts/interfaces
+- mock ERC-3643/identity/compliance fixture
+- Element/Recipe/Manifest registry와 evaluation
+- generic ExecutionRouter/VenueRegistry와 공통 Adapter interface
+- Corner Store reference Adapter
+- 자동 integration/E2E
+- CI와 static analysis
 
-## Delivery Path
+## Delivery Strategy
 
 ```mermaid
 flowchart LR
-  P0["Phase 0<br/>Foundation"] --> P1["Phase 1<br/>Compliance"]
-  P1 --> P2["Phase 2<br/>Execution"]
-  P2 --> P3["Phase 3<br/>AMM"]
-  P2 --> P4["Phase 4<br/>RFQ"]
-  P2 --> P5["Phase 5<br/>Order Book"]
-  P3 --> P6["Phase 6<br/>Operations"]
-  P4 --> P6
-  P5 --> P6
+  P0["Phase 0<br/>Foundation"] --> P1["Phase 1<br/>SDK Contracts"]
+  P1 --> P2["Phase 2<br/>Manifest & Multi-Recipe"]
+  P2 --> P3["Phase 3<br/>Execution Integration Kit"]
+  P3 --> P4["Phase 4<br/>Reference Venue Proof"]
+  P4 --> P5["Phase 5<br/>Operations"]
 ```
 
-Phase 0~3이 첫 번째 end-to-end delivery path다. RFQ와 Order Book은 Execution
-기반을 공유하지만 서로 독립적으로 진행한다. 결정되지 않은 venue는 등록하거나
-활성화하지 않는다.
+첫 testnet proof의 종료점:
 
-이 첫 번째 delivery path가 **MVP v1**이다. 종료점은 AMM 거래가 허용된 illustrative
-mock policy의 방향별 성공과, 금지된 방향 또는 ERC-3643/Layer 1~2 policy 거부
-시나리오의 원자적 실패다.
-RFQ schema와 Adapter interface는 다음 릴리스의 interface-only 범위다. RFQ
-settlement, Order Book과 Layer 3 운영체계는 후속 범위다.
+1. mock ERC-3643 자산에 `ACTIVE` Manifest를 등록한다.
+2. transaction context에 따라 복수 Recipe가 활성화된다.
+3. Element 합집합이 cumulative AND로 평가된다.
+4. 허용된 engine의 Adapter로만 실행된다.
+5. Corner Store 또는 ERC-3643 거부 시 전체 settlement가 원자적으로 실패한다.
+6. 명시적 `UNREGULATED` 일반 ERC-20 public path에는 4-Layer 보장이 없고,
+   `UNKNOWN` 자산은 거부됨을 테스트한다.
+7. mixed pair와 regulated-regulated pair에서 양쪽 Manifest의 적용 정책을 모두
+   평가한다.
 
-## Phase 0 - Foundation
+법률 연구의 41개 Element 전체 구현은 첫 proof의 완료 조건이 아니다. 첫 proof는
+법적 정확성을 주장하지 않는 **축약 시뮬레이션 Recipe**로 구조를 증명한다.
 
-목표:
+## Phase 0 — Foundation
 
-- Foundry template를 제품 개발 기반으로 교체한다.
+### Goal
 
-산출물:
+Foundry Counter template를 SDK와 reference integration 개발 기반으로 교체한다.
 
-- 제품 디렉터리 구조
-- 공통 execution/compliance types, interfaces, errors, events
-- mock token, identity, compliance, adapter fixture
-- format, build, test, CI 명령
+### Deliverables
 
-완료 조건:
+- 디렉터리와 dependency direction
+- 공통 context, IDs, errors와 events
+- interface-only SDK package boundary
+- mock token, identity, claim, Element와 Adapter fixture
+- CI, formatter, build와 test command
+
+### Completion
 
 - template 코드 없이 컴파일된다.
-- mock 허용·거부 시나리오를 재사용할 수 있다.
-- `forge fmt`, `forge build`, `forge test`가 CI에서 통과한다.
+- SDK 공통 컴포넌트가 Uniswap 또는 Corner Store-specific implementation에
+  의존하지 않는다.
+- mock 허용·거부와 external transfer failure를 재사용할 수 있다.
+- `scripts/check.sh`와 CI가 통과한다.
 
-Blocker:
+### Blockers
 
-- upgradeability를 도입하지 않는다. 필요 시 별도 결정 후 진행한다.
+- upgradeability는 별도 결정 전 도입하지 않는다.
+- package 배포 형식은 Solidity source/library 형태를 우선하고 TypeScript SDK는
+  실제 소비자 요구가 생길 때 결정한다.
 
-## Phase 1 - Compliance Policy
+## Phase 1 — SDK Contracts
 
-목표:
+### Goal
 
-- 자산·프로그램 정책을 versioning하고 구조화된 decision을 생성한다.
+Element와 Recipe의 portable interface, registry와 version semantics를 구현한다.
 
-산출물:
+### Deliverables
 
-- TokenPolicy, Recipe, Element, Operator Registry
-- ComplianceEngine
-- `ComplianceDecision`과 context binding
-- illustrative Legal-to-Technical Matrix
-- 최소 관리 capability와 권한 분리 경계
-- registration, activation, suspension, emergency pause lifecycle
-- compliance audit events
+- `IElement`와 immutable/versioned Element reference
+- `IRecipe`와 Recipe metadata/activation interface
+- `ElementRegistry`와 `RecipeRegistry`
+- transaction compliance context
+- reason code와 deterministic evaluation result
+- illustrative Element/Recipe fixture
 
-완료 조건:
+### Completion
 
-- mock Recipe로 허용과 거부를 재현한다.
-- `UNKNOWN`, `SUSPENDED`, delisted 상태는 fail-closed다.
-- decision을 다른 actor, token, amount, venue, version에 재사용할 수 없다.
-- exact venue 또는 허용 venue 집합이 decision에 바인딩된다.
-- policy 변경 후 이전 version의 preview/decision은 실행 권한으로 사용할 수 없다.
-- mixed pair에서 한쪽이라도 `ACTIVE`면 전체 거래 context가 해당 policy로 평가된다.
-- illustrative Recipe의 각 requirement가 evidence, Element, data source,
-  enforcement point, failure action과 연결된다.
-- policy 변경, venue/operator 관리, emergency pause capability가 실행 권한과
-  구분된다.
+- 하나의 Element는 하나의 사실만 평가한다.
+- Recipe는 하나의 법률효과와 Element subset을 표현한다.
+- 기존 Element를 여러 Recipe가 재사용할 수 있다.
+- invalid, inactive 또는 unknown version은 regulated evaluation에서 거부된다.
+- 연구에서 제안된 Element 수나 법률 기준값을 production truth로 하드코딩하지
+  않는다.
 
-Blocker:
+### Interface Decision Gate
 
-- production Element와 법률 기준값은 법률 승인 전 활성화하지 않는다.
-- MVP v1의 Layer 2 보장은 `ExecutionRouter` 지원 경로에 한정한다. 표준 pool 직접
-  호출에는 ERC-3643 transfer enforcement만 적용되며 Corner Store policy 적용을
-  보장하지 않는다.
-- 비우회 Layer 2 enforcement가 법률상 필요한 production RWA venue는 enforcement
-  방식과 외부 승인이 확정되기 전 활성화하지 않는다.
-- 실제 법률 책임자, 운영조직과 관리자 구성은 Layer 3 외부 협업 범위로 둔다.
-- 최종 delist 판단과 권한은 Layer 3 운영 범위로 두며 MVP에서는 suspension과
-  신규 실행 거부만 구현한다.
+IElement 최초 확정 전에 stateful Element commit hook을 결정한다.
 
-## Phase 2 - Execution & Routing
+선택지:
 
-목표:
+- check-only interface 후 별도 state transition contract
+- `check`와 `commit` 분리
+- optional capability interface
 
-- 유효한 decision만 등록 Adapter로 전달한다.
+어떤 선택이든 failed settlement가 누적 상태를 남기면 안 된다.
 
-산출물:
+## Phase 2 — Manifest and Multi-Recipe
 
-- ExecutionRouter
-- VenueRegistry와 최소 VenueSelector
+### Goal
+
+자산별 규제·engine binding과 cumulative multi-Recipe evaluation을 구현한다.
+
+### Deliverables
+
+- `ManifestCore`와 Manifest registry/resolver
+- proposal, approval, activation, suspension, retirement lifecycle
+- Recipe set, resale path, supported engine과 version binding
+- issuer-side coverage representation
+- applicable Recipe identification
+- Element union/deduplication과 cumulative AND
+- structured `ComplianceDecision`
+- preview/evaluate API와 audit events
+
+### Completion
+
+- 한 Manifest에 복수 Recipe를 binding할 수 있다.
+- transaction context에 따라 Recipe subset이 활성화된다.
+- 모든 applicable Recipe의 활성 Element가 cumulative AND로 평가된다.
+- duplicate Element 최적화가 결과 의미를 바꾸지 않는다.
+- decision이 actor, asset, amount, engine/venue, Manifest version, nonce와 expiry에
+  바인딩된다.
+- `ACTIVE` Manifest의 invalid reference와 unsupported engine은 거부된다.
+- `UNKNOWN`, `UNREGULATED` pass-through와 regulated evaluation 결과를 API와
+  event에서 구분한다.
+- 양쪽 모두 명시적 `UNREGULATED`일 때만 pass-through하고, 하나 이상의 regulated
+  자산이 있으면 양쪽 regulated Manifest의 applicable Recipe를 합쳐 평가한다.
+- full off-chain manifest hash와 on-chain core의 version 변경이 추적된다.
+
+### Blocking Design Decisions
+
+1. Rule 144 holding period를 위한 acquisition/lot data source
+2. Manifest scope: token 또는 token×venue
+3. Recipe set와 issuer coverage encoding
+4. reject audit trail
+
+acquisition data가 필요한 Recipe는 data source가 결정되기 전 활성화하지 않는다.
+
+## Phase 3 — Execution Integration Kit
+
+### Goal
+
+제3의 DEX도 재사용할 수 있는 generic Router와 Adapter 등록·dispatch 경계를
+구현한다.
+
+### Deliverables
+
+- `ExecutionRouter`
+- `VenueRegistry`와 최소 deterministic selector
+- 공통 Adapter interface
 - Adapter registration/dispatch
-- nonce, deadline, replay protection
+- nonce, deadline와 replay protection
 - execution events
+- `UNKNOWN`, explicit `UNREGULATED`와 regulated path의 명시적 분기
 
-완료 조건:
+### Completion
 
-- 미등록·중단 Adapter와 venue 실행이 불가능하다.
-- 만료·재사용·parameter mismatch 요청이 거부된다.
-- 실제 execution/fill 트랜잭션에서 최신 policy version과 actor 상태를 평가한다.
+- 미등록·중단 Adapter, venue와 operator로 실행할 수 없다.
+- settlement 직전에 Manifest와 actor/operator 상태를 평가한다.
+- preview decision을 실행 권한으로 재사용할 수 없다.
+- request와 decision mismatch, expiry와 nonce reuse가 거부된다.
 - Router에 의도하지 않은 자산 잔액이 남지 않는다.
+- 직접 venue 호출에는 Corner Store 4-Layer 보장이 없음을 테스트한다.
+- mock Adapter를 교체·등록·중단해도 Router와 compliance policy 코드를 수정하지
+  않는다.
 
-Blocker:
+### Non-goals
 
-- best execution, order splitting, venue matching을 이 phase에 포함하지 않는다.
+- best execution
+- order splitting
+- venue-native matching
+- production operator governance
 
-## Phase 3 - Uniswap v3 AMM
+## Phase 4 — Reference Venue Proof
 
-목표:
+Corner Store reference DEX의 구체 Venue는 공통 SDK/Router 기반 위에서 독립적으로
+구현한다.
 
-- 첫 번째 실제 venue로 Uniswap v3를 연결하고 mock ERC-3643과 일반 ERC-20 거래를
-  E2E 검증한다.
+### 4A. Uniswap v3 AMM
 
-산출물:
+Deliverables:
 
-- UniswapV3Adapter
-- factory, pool, callback 검증
-- CREATE2 pool identity preflight와 venue onboarding
-- deploy-v3 Corner Store profile 호출 경로
-- versioned deployment manifest
-- 자동 Anvil 배포 및 swap test
+- `UniswapV3Adapter`
+- factory, pool과 callback verification
+- Manifest engine/venue binding
+- CREATE2 pool identity preflight
+- Corner Store deploy-v3 profile integration
+- automated Anvil deployment and swap test
 
-완료 조건:
+Completion:
 
-- V3와 Corner Store 컴포넌트를 반복 배포할 수 있다.
-- mock ERC-3643/ERC-20 Pool에서 policy가 허용한 매수·매도 방향은 성공하고 금지한
-  방향은 거부된다.
-- 명시적 `UNREGULATED` 일반 ERC-20 경로의 AMM swap이 성공한다.
-- 허용, execution 거부, transfer 거부 swap이 자동 테스트된다.
-- 미검증 사용자의 mock ERC-3643 수신이 거부되고 전체 swap이 롤백된다.
+- 허용 Manifest/Recipe scenario의 swap이 성공한다.
+- unsupported engine, failing Element와 ERC-3643 transfer가 전체 swap을 되돌린다.
 - spoof callback과 미등록 pool이 거부된다.
-- 지원 진입점에서는 Layer 2 policy가 적용되고, 직접 pool 호출에서는 Layer 2
-  보장이 없으며 ERC-3643 transfer 결과만 적용된다는 경계가 자동 테스트된다.
-- Adapter 잔액 불변성이 유지된다.
+- Adapter balance invariant가 유지된다.
+- 명시적 `UNREGULATED` 일반 ERC-20 public path가 별도 보장 수준으로 성공한다.
+- unregulated-regulated mixed pair와 regulated-regulated pair가 양쪽 Manifest
+  규칙을 모두 적용한다.
 
-Blocker:
+Blockers:
 
-- fee tier와 Pool IdentityRegistry 등록 절차 합의
-- deploy-v3 호출 API는 이 phase의 실제 orchestrator와 함께 설계
+- initial testnet asset/scenario
+- fee tier와 Pool IdentityRegistry onboarding
+- 해당 시나리오의 AMM 허용에 대한 법률 검토
 
-## Phase 4 - RFQ
+### 4B. RFQ
 
-목표:
+Deliverables:
 
-- signed quote를 settlement 시점 compliance와 함께 실행한다.
+- EIP-712 quote
+- signature, nonce, expiry와 taker binding
+- partial fill policy
+- RFQ Adapter와 latest compliance evaluation
 
-산출물:
+Completion:
 
-- EIP-712 quote schema
-- signature, nonce, expiry, taker 검증
-- RFQAdapter와 settlement
-- operator/dealer validation
+- invalid signer, replay와 expired quote가 거부된다.
+- Manifest/Recipe 또는 operator 변경이 fill에 반영된다.
+- total fill이 quote amount를 초과하지 않는다.
 
-완료 조건:
+Blockers:
 
-- invalid signer, replay, 만료 quote가 거부된다.
-- policy 변경과 operator suspension이 fill에 반영된다.
-- 허용된 fill 총합이 quote amount를 초과하지 않는다.
+- dealer/operator approval
+- exact taker 또는 taker class
+- custody와 partial fill 모델
 
-Blocker:
+### 4C. Order Book
 
-- dealer 승인, partial fill, custody 모델 결정
+Deliverables:
 
-## Phase 5 - Order Book
-
-목표:
-
-- 결정된 matching/custody 모델로 order lifecycle과 settlement를 구현한다.
-
-산출물:
-
-- order schema, nonce, expiry, cancellation
+- signed order, cancellation, expiry와 fill accounting
 - matcher/operator validation
-- partial fill accounting
-- OrderBookAdapter와 surveillance events
+- Order Book Adapter와 settlement event
 
-완료 조건:
+Completion:
 
-- 취소·만료 order를 fill할 수 없다.
+- cancelled/expired order를 fill할 수 없다.
+- 각 fill 직전에 최신 Manifest evaluation을 수행한다.
 - total fill이 order amount를 초과하지 않는다.
-- 각 fill 직전에 maker/taker compliance를 재검증한다.
 
-Blocker:
+Blockers:
 
-- on-chain/off-chain matching과 escrow/custody 모델 결정 전 구현 보류
+- on-chain/off-chain matching
+- custody/escrow
+- surveillance responsibility
 
-## Phase 6 - Deployment & Operations
+## Phase 5 — Deployment and Operations
 
-목표:
+### Goal
 
-- 출시 범위의 컴포넌트를 반복 배포하고 운영할 수 있게 한다.
+SDK와 reference DEX를 반복 배포하고 Manifest/권한 상태를 검증 가능하게 운영한다.
 
-산출물:
+### Deliverables
 
-- 통합 deployment orchestrator와 immutable manifest
-- preflight/post-deploy verification
-- multisig/role handoff
-- source verification
-- indexer, monitoring, incident runbook
-- production security review scope
+- integrated deployment orchestrator
+- deployment manifest와 schema validation
+- source/code/config verification
+- role handoff와 multisig integration
+- indexer, monitoring와 incident runbook
+- Manifest proposal/approval workflow
 
-완료 조건:
+### Completion
 
-- clean environment 배포와 부분 실패 복구가 재현된다.
-- manifest와 on-chain code/config/owner가 일치한다.
+- clean environment 배포와 partial failure recovery가 재현된다.
+- deployment manifest와 on-chain code/config/roles가 일치한다.
 - deployer 임시 권한이 제거된다.
-- pause/delist incident drill을 수행한다.
+- Manifest activation/suspension incident drill을 수행한다.
+- reject logging 결정에 따른 audit path를 검증한다.
 
-Blocker:
+### Blockers
 
-- production chain, governance, key management, 법률 출시 조건 결정
+- production chain
+- operator와 legal responsibility
+- governance/key management
+- production security and legal review
 
 ## Near-Term Issues
 
-가까운 작업만 구체적인 이슈로 생성한다.
+구현 전에 생성할 가까운 이슈:
 
-1. `chore: Foundry 제품 구조와 CI 검증 기반 구성`
-2. `feat: execution 및 compliance 공통 타입과 인터페이스 정의`
-3. `test: mock ERC-3643 identity와 compliance fixture 구성`
-4. `docs: illustrative Legal-to-Technical Matrix와 Layer 2 보장 범위 정의`
-5. `feat: TokenPolicyRegistry 상태와 버전 관리 구현`
-6. `feat: Recipe 및 Element 실행 경계 구현`
-7. `feat: Operator 및 Venue Registry 구현`
-8. `feat: ComplianceEngine과 구조화된 decision 구현`
-9. `feat: ExecutionRouter와 Adapter dispatch 구현`
-
-AMM 세부 이슈는 Phase 2 인터페이스가 안정화된 후 생성한다. RFQ와 Order Book은
-각 blocker가 해결된 뒤 issue scope를 확정한다.
+1. `chore: SDK와 reference DEX용 Foundry 제품 구조 구성`
+2. `feat: compliance context와 Element/Recipe interface 정의`
+3. `test: mock ERC-3643 identity와 adapter fixture 구성`
+4. `design: stateful Element commit hook 결정`
+5. `design: acquisition data source 결정`
+6. `feat: Asset Compliance Manifest lifecycle 구현`
+7. `feat: cumulative multi-Recipe evaluation 구현`
+8. `feat: structured decision과 ExecutionRouter dispatch 구현`
+9. `test: regulated/public path와 direct venue boundary E2E`
 
 ## Decision Backlog
 
-| 결정                           | 영향 Phase | 결정 전 기본값              |
-| ------------------------------ | ---------- | --------------------------- |
-| production Element와 규제 기준 | 1          | mock만 사용, policy 비활성  |
-| pause/policy 관리자            | 1, 6       | production 활성화 보류      |
-| 최종 delist 판단과 권한        | 6          | suspension과 신규 실행 거부 |
-| 일반 ERC-20 fast path          | 1, 2       | 명시적 `UNREGULATED`만 허용 |
-| production AMM 비우회 enforcement | 3, 6    | 외부 승인 전 RWA venue 비활성 |
-| AMM fee tier                   | 3          | 승인된 기본 tier만          |
-| Pool identity 등록 절차        | 3          | 등록 확인 전 venue 비활성   |
-| RFQ dealer와 custody           | 4          | 미등록 거부, 구현 보류      |
-| RFQ partial fill               | 4          | exact fill                  |
-| Order Book matching/custody    | 5          | 구현 보류                   |
-| upgradeability와 governance    | 0, 6       | immutable 우선              |
-| production chain과 signer      | 6          | Anvil/testnet만 지원        |
+| 결정 | 영향 Phase | 결정 전 기본값 |
+| --- | --- | --- |
+| acquisition/lot source | 2 | 해당 holding-period Recipe 비활성 |
+| Element commit hook | 1 | stateful Element 구현 보류 |
+| Manifest scope | 2 | 결정 전 external API와 storage 확정 금지 |
+| Manifest 공개 범위 | 2, 5 | full document는 off-chain, 공개 필드는 미정 |
+| reject audit trail | 2, 5 | 방식 확정 전 production claim 금지 |
+| initial engine/scenario | 4 | 법률 검토된 illustrative scenario만 활성 |
+| production operator/governance | 5 | test-only admin, production 배포 금지 |
 
-결정은 해당 아키텍처 레이어 문서의 `Open Decisions`와 함께 갱신한다.
+## Definition of Done
 
-## Global Completion Rules
+각 phase는 다음 조건을 모두 만족해야 완료다.
 
-- 각 phase의 코드, 테스트, 문서를 같은 PR 또는 연결된 PR에서 완료한다.
-- 실패한 검증이 있으면 phase를 완료로 표시하지 않는다.
-- 미확정 정책을 permissive placeholder로 활성화하지 않는다.
-- Layer 2 기술 capability를 Layer 3 운영·법률 책임의 구현으로 표현하지 않는다.
-- 아키텍처 책임이 바뀌면 먼저 관련 레이어 문서와 `MVP-v2`를 갱신한다.
-- 배포 범위가 바뀌면 `CORNER_STORE_PROFILE.md`와 manifest schema를 갱신한다.
+- 관련 interface와 invariant가 문서화됨
+- unit/integration/E2E 중 해당 layer 검증 통과
+- 보안·권한·replay·failure path 검증
+- current source-of-truth와 구현 용어가 일치
+- 열린 법률 결정을 확정된 코드 규칙처럼 표현하지 않음
+- `scripts/check.sh` 통과

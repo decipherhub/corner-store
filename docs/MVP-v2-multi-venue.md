@@ -1,129 +1,311 @@
-# Corner Store MVP v2 - Multi-Venue Execution
+# Corner Store Product and Architecture Baseline
 
 > **Status: Current Product and Architecture Baseline**
 >
-> 책임 레이어별 요약과 열린 결정은 [`architecture/README.md`](./architecture/README.md),
+> 세부 책임과 trust boundary는 [`architecture/README.md`](./architecture/README.md),
 > 구현 순서와 완료 조건은 [`ROADMAP.md`](./ROADMAP.md)를 참조한다.
 >
-> 이 문서는 기존 `MVP.md`의 ERC-3643 재사용, Element/Recipe 조합, Uniswap v3
-> AMM 설계를 계승하면서 AMM, Order Book, RFQ를 자산별로 선택할 수 있도록
-> 확장한 설계안이다. 기존 `MVP.md`는 v1 설계 기록으로 유지한다.
->
-> 미국 증권법 관련 세부 요건은 법률 검토 중이다. 이 문서는 법률 결론이 아니라
-> 변경되는 규제 요건을 수용할 기술적 구조와 MVP 구현 순서를 정의한다.
+> 이 문서는 [`DECISIONS.md`](../DECISIONS.md)의 D003-D005에서 채택한 제품 방향을
+> 반영한다. 법률 사례와 Element 목록은 연구 입력이며 production 법률 결론이나
+> 활성 정책으로 간주하지 않는다.
 
-## 1. 변경 배경
+## 1. Product Identity
 
-v1은 모든 거래가 Uniswap v3 Pool을 통과하는 AMM 중심 구조였다. 추가 법률 검토에
-따르면 발행 방식, 유통 제한, 투자자 유형, 거래 규모, 상대방 및 운영자 요건에 따라
-허용 가능한 매칭 엔진이 달라질 수 있다.
+Corner Store 프로젝트의 주 제품은 **DEX-level compliance 표준과 Solidity SDK**다.
+Corner Store DEX는 이 SDK가 실제 실행 환경에서 작동함을 증명하는 reference
+implementation이다.
 
-따라서 Uniswap v3를 전체 거래 시스템으로 취급하지 않고, Corner Store가 지원하는
-여러 실행 venue 중 첫 번째 AMM 구현체로 재정의한다.
+| 구분 | 역할 |
+| --- | --- |
+| 주 제품 | 정책 등록 모델과 교체 가능한 execution venue 경계를 제공하는 Solidity SDK |
+| Reference 구현 | SDK에 구체 Adapter와 배포 구성을 결합한 multi-venue Corner Store DEX |
+| 외부 기반 | ERC-3643 / ONCHAINID token·identity enforcement |
+| 초기 검증 영역 | 미국 Reg D 계열 RWA secondary 거래를 모사한 testnet 시나리오 |
 
-```text
-v1: ComplianceRouter -> Uniswap v3 Pool
+핵심 정체성:
 
-v2: ExecutionRouter
-      -> ComplianceEngine
-      -> VenueRegistry / VenueSelector
-      -> AMM | Order Book | RFQ Adapter
-```
+> ERC-3643이 token transfer eligibility의 기반이라면, Corner Store SDK는 market
+> access eligibility를 실행 시점에 표현하고 집행하는 기반이다.
 
-핵심 원칙:
+장기 성공 기준은 Corner Store DEX 하나의 완성이 아니라, 제3의 DEX나 운영주체가
+SDK의 interface와 등록 모델을 재사용할 수 있는가에 있다.
 
-- 법률·컴플라이언스 판단과 매칭 엔진 실행을 분리한다.
-- 규제가 불확실한 RWA 거래 경로는 기본 거부한다.
-- 거래 가능 여부를 단순 boolean이 아닌 구조화된 결정으로 표현한다.
-- 주문 생성 시점뿐 아니라 실제 체결·결제 시점에도 컴플라이언스를 재검증한다.
-- 각 venue의 custody, settlement, operator 모델을 개별적으로 등록한다.
+SDK의 확장성은 두 축으로 구성한다.
 
----
+- compliance plugin: Element, Recipe와 Manifest를 등록·활성화·중단해 정책을
+  교체한다.
+- execution plugin: 공통 Adapter interface를 구현하고 VenueRegistry에 등록해
+  AMM, RFQ, Order Book 또는 외부 DEX 연결을 교체한다.
 
-## 2. 전체 아키텍처
+두 축 모두 새 정책이나 venue를 추가할 때 공통 Router와 evaluation semantics를
+수정하지 않는 것을 목표로 한다. 단, 등록과 활성화는 권한 통제와 검토 절차를
+통과해야 한다.
+
+## 2. Product Principles
+
+### G1. Compliance by Construction
+
+위반 거래를 사후 탐지하는 데 그치지 않고, 실행 직전의 누적 검사를 통과하지 못한
+거래는 체결되지 않아야 한다.
+
+### G2. Build On, Don't Rebuild
+
+ERC-3643이 이미 검증한 수신자 identity나 claim 사실은 가능한 한 재사용한다.
+Corner Store는 매도자 상태, resale path, engine, amount, operator처럼 발행 측
+transfer 검사만으로 알 수 없는 거래 context를 보완한다.
+
+사실을 재사용하는 것과 운영주체의 독립적인 법률 의무가 사라지는 것은 다르다.
+책임 주체별 승인과 기록은 별도로 남아야 한다.
+
+### G3. Regulation as Data
+
+새 규제와 자산은 Router를 수정하는 대신 Element, Recipe와 Manifest를 등록해
+확장한다. 새 실행 방식이나 외부 DEX 연결은 공통 Adapter interface를 구현하고
+VenueRegistry에 등록해 확장한다.
+
+- Element: 재사용 가능한 사실 검증 단위
+- Recipe: 하나의 법률효과를 구성하는 규제 조합
+- Manifest: 특정 자산에 적용되는 Recipe와 실행 조건의 binding
+
+법 개정은 version으로 관리하며 기존 listing의 migration 또는 grandfather 정책을
+명시한다.
+
+### G4. Hybrid by Design
+
+온체인은 결정적 검증, 권한 게이팅과 집행을 담당한다. 다음 정보는 오프체인에서
+처리하고 승인된 결과나 hash만 온체인에 연결한다.
+
+- 법률 해석이나 시세조종처럼 코드가 판정할 수 없는 판단
+- 대량 연산과 고성능 분석
+- 민감 identity 정보와 법률 문서
+
+### G5. Self-Responsibility by Design
+
+발행자는 토큰과 transfer eligibility를, DEX 운영주체는 시장 접근과 실행을
+책임진다. Manifest는 발행자 선언, DEX 검토·승인, 발행 측 coverage와 version을
+연결하는 책임 경계다.
+
+### G6. Declining Cost of Compliance
+
+검증된 Element, Recipe와 Manifest template를 재사용해 후속 listing과 integration의
+비용이 낮아져야 한다. SDK interface는 특정 자산이나 운영주체에 종속되지 않는다.
+
+## 3. System Shape
 
 ```mermaid
-graph TD
-    User([User / Institution])
-    ER[ExecutionRouter]
-    CE[ComplianceEngine]
-    TPR[TokenPolicyRegistry]
-    RR[RecipeRegistry]
-    EL[ElementRegistry]
-    VR[VenueRegistry]
-    VS[VenueSelector]
+flowchart TD
+  Integrator["DEX / Operator Integration"]
+  Router["ExecutionRouter"]
+  Engine["ComplianceEngine"]
+  Manifest["Asset Compliance Manifest"]
+  Recipe["Recipe Registry"]
+  Element["Element Registry"]
+  Operator["Operator State / Approved Inputs"]
+  Venue["AMM | RFQ | Order Book Adapter"]
+  Token["ERC-3643 / ONCHAINID"]
 
-    AMM[AMM Adapter<br/>Uniswap v3]
-    OB[Order Book Adapter]
-    RFQ[RFQ Adapter]
-
-    OP[OperatorRegistry]
-    CL[ComplianceLogger]
-    XL[ExecutionLogger]
-
-    User --> ER
-    ER --> CE
-    CE --> TPR
-    TPR --> RR
-    RR --> EL
-    CE --> OP
-    CE --> CL
-
-    ER --> VR
-    ER --> VS
-    VS --> AMM
-    VS --> OB
-    VS --> RFQ
-
-    AMM --> XL
-    OB --> XL
-    RFQ --> XL
+  Integrator --> Router
+  Router --> Engine
+  Engine --> Manifest
+  Engine --> Recipe
+  Recipe --> Element
+  Engine --> Operator
+  Router --> Venue
+  Venue --> Token
 ```
 
-`ExecutionRouter`가 모든 거래 요청의 진입점이다. `ComplianceEngine`은 거래 조건과
-정책을 평가해 허용 venue, 최대 수량, 유효기간 등이 포함된 결정을 반환한다.
-`ExecutionRouter`는 그 결정 안에서만 venue를 선택하거나 사용자가 지정한 venue를
-검증한 뒤 해당 Adapter로 실행을 위임한다.
+Solidity SDK는 두 개의 재사용 가능한 surface를 제공한다.
 
-MVP에서는 자동 최적 체결이나 주문 분할을 구현하지 않는다. 사용자가 venue를
-명시하고 Router가 허용 여부를 검증하는 방식으로 시작한다.
+- Compliance Core: context, Element/Recipe/Manifest, registry, evaluation과 decision
+- Execution Integration Kit: `ExecutionRouter`, `VenueRegistry`, 공통 Adapter
+  interface, dispatch와 replay protection
 
----
+Corner Store reference DEX는 이 SDK에 Uniswap v3/RFQ/Order Book의 구체 Adapter,
+testnet policy fixture와 배포·운영 구성을 조합한다. SDK의 공통 Router와 interface는
+특정 DEX에 종속되지 않으며, reference Adapter 구현은 SDK integrator에게 강제되지
+않는다.
 
-## 3. ERC-3643 재사용 범위
+## 4. ERC-3643 Boundary
 
-ERC-3643은 발행 측 보유 자격과 transfer-level compliance를 담당한다.
-Corner Store는 그 위에서 거래 시점, venue, 상대방, 운영자 및 주문 조건을 검사한다.
+ERC-3643은 외부 token/identity trust boundary다.
 
-| ERC-3643 발행 측 | Corner Store 거래·실행 측 |
+| ERC-3643 발행 측 | Corner Store 거래 측 |
 | --- | --- |
-| ONCHAINID · Identity Registry | 재사용 |
-| Trusted Issuers · Claim Topics | 재사용 |
-| Compliance Modules | 재사용 |
-| `isVerified` · `canTransfer` | 최종 transfer 시 재사용 |
-| 없음 | TokenPolicyRegistry |
-| 없음 | ElementRegistry + Elements |
-| 없음 | RecipeRegistry + Recipes |
-| 없음 | ComplianceEngine |
-| 없음 | ExecutionRouter |
-| 없음 | VenueRegistry + Adapters |
-| 없음 | OperatorRegistry |
+| ONCHAINID와 Identity Registry | 기존 identity/claim 사실 재사용 |
+| Trusted Issuer와 Claim Topic | 발행 측 coverage로 기록 |
+| ModularCompliance와 transfer rule | seller, context, resale, engine 조건 보완 |
+| token transfer 허용 또는 revert | 실행 전 decision과 venue 제한 |
 
-ERC-3643 transfer 검사는 Corner Store 사전 검증을 대체하지 않는다. 사전 검증에서
-거래 규칙과 venue 허용 여부를 검사하고, 실제 토큰 이동 시 ERC-3643이 발행자 측
-규칙을 다시 검사한다.
+실제 token movement에서 ERC-3643 transfer가 실패하면 전체 실행은 원자적으로
+실패한다. Corner Store의 사전 검사가 ERC-3643을 우회하거나 완화하지 않는다.
 
----
+### Coverage Delta
 
-## 4. Compliance Decision
+Manifest는 발행 측 ModularCompliance가 어떤 사실을 이미 검사하는지 표현할 수
+있어야 한다. ComplianceEngine은 같은 claim을 무조건 재조회하기보다 다음 차이만
+검사하는 방향을 우선한다.
 
-컴플라이언스 결과는 `true/false`가 아니라 실행 조건이 포함된 구조체로 반환한다.
+- 발행 측이 보지 않는 seller 상태
+- secondary resale path와 holding period
+- amount, direction, venue와 engine
+- operator/dealer 상태
+- transaction-specific 제한
+
+정확한 coverage encoding은 구현 feature에서 확정한다.
+
+## 5. Named 4-Layer Compliance Stack
+
+Layer는 순번이 아니라 이름으로 부른다.
+
+### Element
+
+Element는 하나의 구성요건 사실을 판정하는 최소 단위다.
+
+예:
+
+- sanctions 또는 jurisdiction
+- accredited investor 또는 qualified purchaser
+- affiliate 여부
+- holding period
+- amount 또는 direction
+- approved engine, venue 또는 operator
+
+Element는 특정 Recipe에 종속되지 않는 공유 라이브러리다. 기존 Element 재사용을
+우선하며 새로운 사실 유형이 필요할 때만 추가한다.
+
+법률 연구에서 제안된 41개 Element 분류는 backlog와 시나리오 입력이다. 개별
+Element의 법적 정확성, data source와 enforcement point가 검토되기 전에는 production
+정책으로 활성화하지 않는다.
+
+### Recipe
+
+Recipe는 **법률효과 하나**를 표현하는 Element 집합과 활성화 조건이다.
+
+예:
+
+- Reg D 506(c) 발행 면제
+- Rule 144 resale safe harbor
+- Investment Company Act §3(c)(7) 적용
+- engine 또는 market-conduct 조건
+
+한 거래에는 발행, 재판매, 펀드, 행위와 관할 관련 Recipe가 동시에 적용될 수 있다.
+활성화된 Recipe는 선택적으로 하나만 통과하는 것이 아니라 **누적 AND**로
+평가한다.
+
+### Manifest
+
+Asset Compliance Manifest는 자산별 적용 규제와 실행 조건을 묶는 binding layer다.
+기존 `token -> single recipe` 또는 광범위한 Token Policy 개념을 다음 정보로
+확장한다.
+
+- issuance, fund와 resale 관련 Recipe reference와 version
+- 허용 resale path
+- 지원 engine/venue type
+- manifest state와 scope
+- Recipe 활성화에 필요한 asset facts
+- 발행 측 compliance coverage
+- off-chain full manifest의 hash anchor
+
+개념 예시:
+
+```solidity
+struct ManifestCore {
+    bytes32 manifestId;
+    uint64 version;
+    uint256 supportedEngines;
+    uint256 enabledResalePaths;
+    bytes32 recipeSetHash;
+    bytes32 issuerCoverageHash;
+    bytes32 fullManifestHash;
+    ManifestState state;
+}
+```
+
+이는 ABI 확정안이 아니다. packing, ID 체계, inline storage 여부와 token 단위 또는
+token×venue 단위 scope는 구현 전 결정한다.
+
+Manifest lifecycle은 최소 `PROPOSED`, `ACTIVE`, `SUSPENDED`, `RETIRED`를 구분해야 한다.
+`ACTIVE` Manifest의 불완전한 Recipe/reference는 fail-closed다.
+
+일반 ERC-20 public execution은 자산이 명시적으로 `UNREGULATED`로 분류된 경우에만
+pass-through로 처리한다. Manifest와 `UNREGULATED` 분류가 모두 없는 자산은
+`UNKNOWN`으로 fail-closed한다. public path에는 Corner Store의 4-Layer 보장이 없다.
+
+### Operator
+
+Operator는 코드가 스스로 결정할 수 없는 승인, 판단, 감시와 시장 운영을 담당한다.
+
+- listing과 Manifest 승인
+- Element/Recipe 등록 심사
+- market surveillance와 보고
+- emergency suspension
+- off-chain 판단 결과의 권한 통제된 입력
+
+SDK는 role, registry, state와 audit hook을 제공할 수 있지만 실제 라이선스,
+법률 책임자, multisig 구성과 운영 절차를 대신 결정하지 않는다.
+
+## 6. Multi-Recipe Evaluation
+
+```text
+request
+  -> tokenIn/tokenOut classification과 Manifest 조회
+  -> 양쪽 자산의 Manifest facts와 transaction context로 applicable Recipes 식별
+  -> Recipe별 Element reference를 합집합으로 구성
+  -> 중복 Element는 동일 context에서 한 번만 평가
+  -> 활성 Element를 cumulative AND로 검사
+  -> 허용 engine, venue, amount, version을 decision에 binding
+  -> 등록된 Adapter 실행
+  -> ERC-3643 transfer enforcement
+```
+
+개념적 의사코드:
+
+```text
+inputPolicy = manifestRegistry.resolve(tokenIn, venueContext)
+outputPolicy = manifestRegistry.resolve(tokenOut, venueContext)
+
+if inputPolicy.classification == UNREGULATED
+   and outputPolicy.classification == UNREGULATED:
+    return publicPassThrough()
+
+require(inputPolicy.classification != UNKNOWN)
+require(outputPolicy.classification != UNKNOWN)
+requireActiveIfRegulated(inputPolicy)
+requireActiveIfRegulated(outputPolicy)
+
+manifests = regulatedManifests(inputPolicy, outputPolicy)
+recipes = identifyApplicableRecipes(manifests, transactionContext)
+elements = union(recipes.elementSubset)
+
+for element in elements:
+    require(element.check(transactionContext))
+
+return bindDecision(manifests, recipes, transactionContext)
+```
+
+양쪽 자산이 모두 명시적 `UNREGULATED`일 때만 public pass-through를 허용한다.
+한쪽이라도 `UNKNOWN`이면 거부하며, 한쪽 이상이 regulated이면 해당하는 모든
+`ACTIVE` Manifest의 Recipe를 거래 전체 context에 누적 적용한다. 따라서
+unregulated-regulated mixed pair와 regulated-regulated pair 모두 regulated 자산의
+정책을 우회할 수 없다.
+
+Router와 ComplianceEngine의 정확한 함수 분리는 구현 단계에서 정하지만 다음
+책임은 유지한다.
+
+- ComplianceEngine: Manifest 해석, Recipe orchestration, Element 평가와 decision
+- ExecutionRouter: request/decision binding, replay 방지와 Adapter dispatch
+- Adapter: venue-specific validation과 settlement
+
+## 7. Compliance Decision
+
+평가 결과는 boolean 하나가 아니라 실행 가능한 context를 구조화해 반환한다.
 
 ```solidity
 struct ComplianceDecision {
     bool allowed;
-    bytes32 policyId;
-    uint64 policyVersion;
+    bytes32 manifestId;
+    uint64 manifestVersion;
+    bytes32 appliedRecipesHash;
     uint64 validUntil;
     uint256 maxAmount;
     uint256 allowedVenueTypes;
@@ -133,513 +315,113 @@ struct ComplianceDecision {
 }
 ```
 
-`allowedVenuesHash`의 encoding과 검증 API는 구현 Phase 1에서 확정한다. 이 필드는
-허용 venue type만 맞으면 임의의 venue에서 실행할 수 있는 모호성을 제거하기 위한
-context binding이다.
+`decisionHash`는 최소 actor, token, amount, direction, venue/engine, order 또는
+quote, manifest version, nonce와 expiry에 바인딩되어야 한다. preview 결과는
+표시용이며 settlement 권한으로 재사용하지 않는다.
 
-`decisionHash`는 최소한 다음 값에 바인딩되어야 한다.
+## 8. Venue Execution
 
-- buyer, seller, initiator
-- tokenIn, tokenOut
-- 거래 방향과 최대 수량
-- offering 또는 program 식별자
-- order 또는 quote 식별자
-- 허용 venue 종류 또는 정확한 venue 주소
-- 정책 버전과 만료 시각
+Corner Store reference DEX는 실행 엔진을 Adapter로 분리한다.
 
-다른 사용자, 수량, 토큰, venue에 결정을 재사용할 수 없어야 한다.
+### AMM
 
----
+Uniswap v3는 첫 AMM reference adapter다. Pool identity onboarding, factory/pool과
+callback origin 검증, request binding, callback payment와 잔액 불변성을 요구한다.
 
-## 5. 3-Layer Compliance 구조
+AMM 허용 여부는 자산 이름이나 Router 코드에 하드코딩하지 않고 Manifest와 활성
+Recipe가 결정한다.
 
-### Layer 1 - Element
+### RFQ
 
-Element는 하나의 검증 책임만 가진다. 법률 검토 결과에 따라 기존 4종보다 종류가
-늘어날 수 있으므로 카테고리를 고정하지 않는다.
+RFQ는 기관·대량·지정 상대방 거래를 위한 경로다. 견적 탐색은 오프체인에서,
+signature/nonce/expiry와 최신 compliance 검사는 settlement 트랜잭션에서 수행한다.
 
-초기 후보:
+### Order Book
 
-| 카테고리 | Element 예시 |
-| --- | --- |
-| 신원·상태 | Sanctions, Jurisdiction, AccreditedInvestor |
-| 발행·프로그램 | OfferingEligibility, InvestorLimit |
-| 유통 | Lockup, HoldingPeriod, ResaleRestriction |
-| 거래 | Counterparty, AmountLimit, Direction |
-| Venue | VenueType, ApprovedVenue, Custody |
-| 운영자 | ApprovedOperator, DealerEligibility |
-| 보고 | ReportingRequired, SurveillanceRequired |
+Order Book은 지정가, 취소, 부분 체결과 matcher/operator가 필요한 경우를 위한
+adapter다. matching의 온체인/오프체인 위치와 custody 모델은 아직 열린 결정이다.
 
-Element 로직은 가능한 한 immutable로 배포한다. 외부 데이터 주소와 기준값은
-versioned reference로 관리한다.
+어떤 engine이 특정 규제 시나리오에 적합한지는 법률 검토와 Manifest 승인 결과로
+결정한다. 연구 입력의 BUIDL/affiliate 사례는 multi-Recipe와 engine gating을
+설명하는 예시이지 production 법률 판정이 아니다.
 
-### Layer 2 - Recipe / Policy
+## 9. On-chain / Off-chain Boundary
 
-Recipe는 Element를 조합해 규제 프로그램을 표현한다. `TokenPolicyRegistry`는 단순한
-`token -> recipe`를 넘어 다음 정보를 관리한다.
-
-- recipe 및 버전
-- offering 또는 distribution program
-- 허용 거래 방향
-- 허용 venue type 및 주소
-- 허용 operator
-- 금액 및 보유 한도
-- custody와 settlement 조건
-- 정책 효력 기간과 긴급 중단 상태
-
-법률 검토 중인 조건은 permissive default로 두지 않고 `UNKNOWN` 또는 비활성
-정책으로 관리한다.
-
-### Layer 3 - Operator
-
-라이선스, 시장감시, AML 모니터링, 공시, 분쟁처리와 실제 운영조직은 Corner Store의
-현재 구현 범위가 아니다. 이 영역은 외부 법률 검토자와 향후 운영주체의 입력 및
-운영이 필요하다.
-
-Layer 2 연동을 위해 MVP에 포함하는 기술적 경계:
-
-- OperatorRegistry
-- operator와 venue 연결
-- operator 활성·중단 상태
-- venue 긴급 중단
-- 감시·보고 이벤트 hook
-
-이 기능은 Layer 3 운영을 대체하지 않는다. 법률상 필요한 라이선스, 책임 주체,
-승인 절차와 실제 관리자 구성은 코드가 아니라 외부 법률 검토와 운영 설계가
-결정한다.
-
----
-
-## 6. Venue Registry와 선택 정책
-
-```solidity
-enum VenueType {
-    AMM,
-    ORDER_BOOK,
-    RFQ
-}
-```
-
-`VenueRegistry`는 다음 메타데이터를 관리한다.
-
-- venue type과 adapter
-- 실제 pool, market 또는 settlement 주소
-- operator
-- custody 모델
-- settlement 모델
-- 지원 token 또는 pair
-- 활성·중단 상태
-
-단순한 `token -> pool` 매핑은 사용하지 않는다.
-
-```text
-token/pair
-  + policy scope
-  + transaction context
-  + venue type
-  + approved implementation
-```
-
-선택 예시:
-
-```text
-RWA-A 소액 거래          -> AMM 허용
-RWA-A 기준액 초과 거래   -> RFQ만 허용
-RWA-B 지정가 거래        -> Order Book 허용
-RWA-C 기관 간 거래       -> 승인된 RFQ dealer만 허용
-RWA-D 법률 검토 미완료    -> 모든 venue 거부
-```
-
----
-
-## 7. Venue별 실행 모델
-
-### 7.1 AMM - Uniswap v3
-
-Uniswap v3는 첫 번째 AMM venue다. 집중 유동성과 기존 SDK·subgraph 생태계를
-재사용한다.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant ER as ExecutionRouter
-    participant CE as ComplianceEngine
-    participant A as UniswapV3Adapter
-    participant Pool
-    participant Token as ERC-3643 Token
-
-    User->>ER: execute(AMM request)
-    ER->>CE: evaluate(context)
-    CE-->>ER: AMM/pool 허용 decision
-    ER->>A: executeSwap(request, decision)
-    A->>Pool: swap()
-    Pool->>A: uniswapV3SwapCallback()
-    A->>Pool: transferFrom(user -> pool)
-    Pool->>Token: transfer(pool -> user)
-    Note over Token: isVerified + canTransfer
-```
-
-AMM Adapter 책임:
-
-- 등록된 Uniswap factory와 pool 검증
-- callback origin 검증
-- decision과 정확한 pool·swap parameter 바인딩
-- callback 결제
-- 잔여 토큰 비보관
-
-#### Pool Identity 등록
-
-ERC-3643 토큰을 Pool이 보유하려면 Pool 주소가 IdentityRegistry에 venue로 등록되어야
-한다. Uniswap v3 CREATE2 주소를 사전 계산해 발행자가 등록한 후 Pool을 생성한다.
-RWA-RWA pair는 양쪽 IdentityRegistry 등록이 필요하다.
-
-### 7.2 RFQ
-
-RFQ는 기관·대량·승인 상대방 거래를 위한 실행 경로다. 견적 탐색과 협상은 오프체인,
-검증과 결제는 온체인으로 시작한다.
-
-필수 모델:
-
-- EIP-712 maker 서명
-- 지정 taker 또는 taker class
-- token, amount, price 바인딩
-- quote 만료
-- nonce와 replay 방지
-- 부분 체결 허용 여부
-- dealer/operator 권한
-- fill 시점 양 당사자 컴플라이언스 재검증
-
-```mermaid
-sequenceDiagram
-    participant Maker
-    participant Taker
-    participant ER as ExecutionRouter
-    participant CE as ComplianceEngine
-    participant RFQ as RFQAdapter
-
-    Maker-->>Taker: signed quote
-    Taker->>ER: fillQuote(quote, signature)
-    ER->>CE: evaluate(fill context)
-    CE-->>ER: RFQ/dealer 허용 decision
-    ER->>RFQ: settle quote
-    RFQ->>RFQ: signature/nonce/expiry 검증
-    RFQ-->>Maker: settlement
-    RFQ-->>Taker: settlement
-```
-
-### 7.3 Order Book
-
-Order Book은 지정가, 부분 체결, 가격·시간 우선순위 또는 승인 matcher가 필요한
-시장에 사용한다.
-
-필수 모델:
-
-- signed order
-- 취소와 nonce 무효화
-- 만료
-- 부분 체결과 잔여 수량
-- matcher/operator 권한
-- maker/taker 체결 시점 재검증
-- market 식별자
-- 감시·보고 이벤트
-
-주문 등록 시점 검증만으로는 부족하다. 제재, 신원, lockup 또는 정책이 변경될 수
-있으므로 각 fill 트랜잭션에서 최신 정책과 actor/operator 상태를 평가한다.
-
-온체인 matching과 오프체인 matching + 온체인 settlement 중 어느 방식을 사용할지는
-법률·성능·운영자 요구사항이 확정된 후 결정한다.
-
----
-
-## 8. Custody와 Identity 등록
-
-v1의 "Pool만 등록하면 된다"는 가정은 AMM에만 적용된다. v2에서는 실제 토큰을
-수신하거나 보유하는 주소를 venue별로 판단한다.
-
-| 구성요소 | 등록 가능성 | 판단 기준 |
+| 유형 | 처리 위치 | 온체인 책임 |
 | --- | --- | --- |
-| Uniswap v3 Pool | 필요 | RWA 유동성 보유 |
-| UniswapV3Adapter | 일반적으로 불필요 | callback 중 경유만 하고 잔액 미보유 |
-| Order Book settlement | 구조에 따라 필요 | escrow 또는 토큰 수신 여부 |
-| RFQ settlement | 구조에 따라 필요 | settlement가 토큰을 수신하는지 |
-| Operator custody wallet | 필요 가능 | 실제 custody 역할 여부 |
-| 투자자·dealer 주소 | 필요 | 발행자 정책과 ERC-3643 등록 상태 |
+| 결정적 사실 검증 | 온체인 또는 승인된 claim 조회 | 직접 차단 |
+| 전문가 attestation | 오프체인 발급 | issuer, scope, expiry 검증 |
+| 재량 판단 | 운영주체/법률 전문가 | 승인된 상태 입력과 거래 게이팅 |
+| 민감·대량 자료 | 오프체인 저장·연산 | hash와 승인 주체 검증 |
 
-각 venue 등록 시 custody 및 settlement metadata를 명시하고, 배포·활성화 전에 필요한
-IdentityRegistry 등록을 preflight로 검사한다.
+권한 있는 입력 함수와 거래 시점 reference 함수는 분리한다. hot path에는 bounded
+조회와 검증만 남기고 법률 문서나 대량 데이터를 저장하지 않는다.
 
----
+## 10. State and Audit
 
-## 9. Factory와 등록 흐름
+상태 변경은 registration, activation, version update, suspension과 retirement를
+구분한다. 권한은 가능한 한 다음 capability로 분리한다.
 
-`CornerStoreFactory` 하나가 모든 matching engine을 직접 배포하지 않는다. 공통
-오케스트레이션과 venue별 factory를 분리한다.
+- Element/Recipe 등록
+- Manifest 제안·승인·활성화
+- venue/operator 등록
+- emergency suspension
+- execution
 
-```text
-CornerStoreFactory / VenueOnboarding
-├── TokenPolicyRegistry 등록
-├── VenueRegistry 등록
-├── Operator 연결
-└── venue-specific factory 호출
-    ├── UniswapV3VenueFactory
-    ├── OrderBookMarketFactory
-    └── RFQ settlement 등록
-```
+성공한 평가와 실행은 manifest version, applied Recipe set와 reason code를 추적할
+수 있어야 한다.
 
-AMM 등록 흐름:
+실패 거래는 revert 시 event도 사라지므로 reject audit trail 방식은 아직 열린
+결정이다. `(success, reason)` 반환, 상위 try/catch event 또는 off-chain indexer
+중 하나를 구현 전 선택하며, 현재 문서는 특정 방식을 확정하지 않는다.
 
-1. Uniswap v3 Pool 주소 계산
-2. 발행자 IdentityRegistry venue 등록
-3. 등록 상태 preflight
-4. Pool 생성
-5. UniswapV3Adapter와 VenueRegistry 등록
-6. TokenPolicyRegistry에서 AMM 허용 정책 활성화
+## 11. Open Design Decisions
 
-Order Book과 RFQ는 구현체 주소, operator, custody, settlement 등록을 완료한 후
-정책을 활성화한다.
+### Blocking
 
-`delistToken`이 단순히 compliance 검사를 제거해 일반 토큰 경로로 통과시키면 안 된다.
-규제 토큰의 delist는 정책과 venue를 중단하고 신규 실행을 거부해야 한다.
+- Rule 144 holding period를 위한 acquisition/lot data source
+- Manifest 적용 단위: token 또는 token×venue
+- 초기 testnet 시나리오와 engine
 
----
+### Interface Decisions
 
-## 10. Early Exit와 일반 ERC-20
+- stateful Element용 commit hook signature와 호출 시점
+- ManifestCore packing, recipe set representation과 issuer coverage encoding
+- duplicate Element evaluation key와 context schema
+- decision/preview API
 
-일반 ERC-20은 `TokenPolicyRegistry`에 명시적으로 `UNREGULATED`로 등록된 경우에만
-등록된 public venue로 빠르게 통과시킬 수 있다. policy mapping 부재로 RWA 여부나
-규제 상태를 추론하지 않는다.
+### Operations and Legal
 
-```text
-TokenPolicyRegistry status
-├── UNREGULATED -> public venue 실행
-├── ACTIVE      -> ComplianceEngine 평가
-├── SUSPENDED   -> 실행 거부
-└── UNKNOWN     -> 실행 거부
-```
+- reject logging과 기록 보존
+- Manifest 공개 범위
+- KYC/claim provider
+- production operator, governance와 key management
+- 규제별 engine 허용 조건과 production legal approval
 
-pair 거래에서는 양쪽 토큰 상태를 모두 해석한다. 양쪽 모두 `UNREGULATED`일 때만
-fast path를 사용하고, 한쪽이라도 `ACTIVE`이면 regulated token/program policy가
-counterparty asset, 방향과 venue를 포함한 전체 거래 context를 평가한다.
+## 12. Product Scope
 
-이 구분은 규제 토큰을 delist한 뒤 실수로 unrestricted path로 보내는 문제를 방지한다.
+### Current Implementation Scope
 
----
+- Compliance Core SDK: context, Element/Recipe/Manifest registry와 evaluation
+- Execution Integration Kit: structured decision, generic `ExecutionRouter`,
+  `VenueRegistry`와 공통 Adapter interface
+- 양쪽 자산 Manifest를 결합하는 cumulative multi-Recipe orchestration
+- Corner Store reference DEX: Uniswap v3 reference adapter, RFQ/Order Book 예제
+  확장점과 testnet 구성
+- mock ERC-3643 기반 testnet E2E
 
-## 11. 컨트랙트별 책임
+### External Collaboration Scope
 
-| 컨트랙트 | 책임 | 책임 아닌 것 |
-| --- | --- | --- |
-| ExecutionRouter | 결정 검증, adapter dispatch, nonce·deadline | 법률 규칙 구현, matching |
-| ComplianceEngine | context 평가, Recipe 실행, decision 생성 | venue 실행 |
-| TokenPolicyRegistry | token/program별 정책과 상태 관리 | Recipe 실행 |
-| VenueRegistry | venue, adapter, operator, custody metadata | 가격 선택 |
-| VenueSelector | 허용된 venue 검증·결정적 선택 | 법률 판단 |
-| Elements | 단일 규칙 검증 | 다른 규칙과 execution |
-| Recipes | Element 조합 | matching engine 실행 |
-| UniswapV3Adapter | swap, callback, pool 검증 | RFQ·Order Book |
-| RFQAdapter | quote 검증과 settlement | quote negotiation |
-| OrderBookAdapter | order lifecycle와 fill settlement | 법률 정책 정의 |
-| OperatorRegistry | operator 권한·상태·venue 연결 | 라이선스 판정 |
-| ComplianceLogger | 정책 평가 audit event | 실행 상태 관리 |
-| ExecutionLogger | 공통 execution event | compliance 판단 |
+- production Element의 법률 승인
+- 발행자와 DEX의 실제 책임 계약
+- Reg ATS, broker-dealer 또는 관할별 라이선스
+- 운영조직, monitoring, reporting와 dispute process
+- production identity/KYC provider
 
----
+### Non-goals
 
-## 12. 컨트랙트 구조
-
-```text
-src/
-├── execution/
-│   ├── ExecutionRouter.sol
-│   ├── VenueRegistry.sol
-│   ├── VenueSelector.sol
-│   ├── ExecutionTypes.sol
-│   └── adapters/
-│       ├── IExecutionAdapter.sol
-│       ├── amm/
-│       │   ├── IAMMAdapter.sol
-│       │   └── UniswapV3Adapter.sol
-│       ├── rfq/
-│       │   ├── IRFQAdapter.sol
-│       │   └── RFQAdapter.sol
-│       └── orderbook/
-│           ├── IOrderBookAdapter.sol
-│           └── OrderBookAdapter.sol
-├── compliance/
-│   ├── ComplianceEngine.sol
-│   ├── ComplianceTypes.sol
-│   ├── elements/
-│   └── recipes/
-├── registry/
-│   ├── TokenPolicyRegistry.sol
-│   ├── RecipeRegistry.sol
-│   ├── ElementRegistry.sol
-│   └── OperatorRegistry.sol
-├── factory/
-│   ├── CornerStoreFactory.sol
-│   └── UniswapV3VenueFactory.sol
-└── logging/
-    ├── ComplianceLogger.sol
-    └── ExecutionLogger.sol
-```
-
----
-
-## 13. 배포 도구
-
-`tools/deploy-v3`는 Uniswap v3 AMM 인프라 전용 배포 도구로 사용한다. 실제 포함
-범위와 제외 결정은
-[`CORNER_STORE_PROFILE.md`](../tools/deploy-v3/CORNER_STORE_PROFILE.md)를 기준으로
-한다.
-
-배포 대상:
-
-- UniswapV3Factory
-- NonfungiblePositionManager와 descriptor 의존성
-- QuoterV2
-- TickLens와 interface multicall
-- Factory와 ProxyAdmin ownership transfer
-
-현재 기본 배포에서 제외:
-
-- SwapRouter02
-- V3Migrator
-- UniswapV3Staker
-- 1bp fee tier
-
-개별 Pool은 deploy-v3가 미리 배포하는 것이 아니라 이후
-`UniswapV3VenueFactory`의 등록 흐름에서 생성한다.
-
-Order Book과 RFQ는 별도 배포 스크립트와 manifest를 사용한다. 모든 배포 결과는
-`deployments/<chain-id>/`의 versioned JSON manifest로 연결한다. 사람이 읽는 network
-이름은 manifest 내부 metadata에 기록한다.
-
----
-
-## 14. 구현 순서
-
-구현 Phase와 완료 조건은 [`ROADMAP.md`](./ROADMAP.md)를 단일 기준으로 사용한다.
-이 문서는 제품 범위와 아키텍처 요구사항을 정의하며 별도의 Phase 번호를 부여하지
-않는다.
-
-첫 번째 end-to-end delivery path는 공통 Policy/Execution 기반과 Uniswap v3 AMM이다.
-RFQ는 공통 기반 위에서 별도로 진행하고, Order Book은 matching/custody 모델이
-결정되기 전에는 구현하지 않는다.
-
----
-
-## 15. MVP 스코프
-
-### MVP v1 - 현재 구현 범위
-
-- 외부 법률 검토 결과를 policy와 enforcement point로 변환하는 illustrative
-  Legal-to-Technical Matrix
-- TokenPolicyRegistry, VenueRegistry, OperatorRegistry
-- ComplianceEngine과 구조화된 ComplianceDecision
-- ExecutionRouter와 Adapter 등록 구조
-- Uniswap v3 AMM 배포 및 UniswapV3Adapter
-- 법률 결론으로 사용하지 않는 illustrative/mock Element와 Recipe
-- mock ERC-3643 토큰과 일반 ERC-20 quote token
-- mock ERC-3643/ERC-20 Pool의 방향별 AMM 허용·거부 E2E
-- 명시적 `UNREGULATED` 일반 ERC-20 경로
-- 허용, policy 거부, identity 거부, ERC-3643 transfer 거부 E2E 테스트
-
-MVP v1은 AMM 거래가 허용된 illustrative mock policy에서 매수·매도 방향별 허용
-시나리오가 성공하고, 금지된 방향이나 ERC-3643 transfer enforcement 또는 Corner
-Store Layer 1~2 policy가 거부한 swap이 원자적으로 실패할 때 완료된다. 실제 자산은
-정책에 따라 한 방향 또는 양쪽 방향 모두 금지될 수 있다.
-
-### Next Release - Interface Only
-
-- RFQ request/quote schema와 Adapter interface
-
-### Future RFQ Implementation
-
-- 최소 RFQ settlement 구현
-- RFQ UI 또는 institution API
-- threshold 기반 AMM/RFQ venue 정책
-
-### Compatibility Target
-
-- RFQ와 Order Book을 추가할 수 있는 공통 Adapter 경계
-- venue별 custody, operator, settlement metadata
-
-### Out Of Scope / Future
-
-- 완전한 Order Book 구현
-- 자동 best execution과 smart order routing
-- multi-venue order splitting
-- 실제 KYC·sanctions provider
-- 프로덕션 Oracle
-- 전체 operator business workflow
-- Layer 3 라이선스, 시장감시, AML 운영, 공시와 분쟁 처리
-- 실제 관리자 조직, multisig 구성과 법률 승인 절차
-- 보안 감사와 프로덕션 배포
-
----
-
-## 16. 검증 기준
-
-### Unit
-
-- policy 상태와 버전
-- decision hash parameter binding
-- allowed venue type 및 주소 검증
-- venue/operator suspension
-- AMM callback origin
-- 일반 ERC-20의 명시적 `UNREGULATED` 처리
-- ERC-3643 identity와 transfer 거부 전파
-
-### Integration
-
-- illustrative policy가 허용한 mock ERC-3643 매도 방향 swap
-- illustrative policy가 허용한 mock ERC-3643 매수 방향 swap
-- 정책상 금지된 매수 또는 매도 방향 swap 거부
-- 일반 ERC-20 pair의 허용된 AMM swap
-- 미검증 주소가 mock ERC-3643을 수신하는 swap 거부
-- Layer 2 policy가 거부한 swap
-- ERC-3643 `canTransfer`가 거부한 swap의 전체 롤백
-- venue 생성 후 긴급 중단
-
-### Invariant
-
-- 미등록 Adapter를 통한 실행 불가
-- decision의 maxAmount 초과 불가
-- 다른 사용자·토큰·venue에 decision 재사용 불가
-- Router와 Adapter에 의도하지 않은 잔액이 남지 않음
-- suspended venue 신규 실행 불가
-- ERC-3643 transfer enforcement 또는 Layer 1~2 policy 거부 시 Pool과 사용자
-  잔액 변경 없음
-
----
-
-## 17. 기술 스택
-
-| 항목 | 선택 |
-| --- | --- |
-| 체인 | GIWA, OP Stack L2, EVM 호환 |
-| AMM | Uniswap v3 |
-| RFQ | EIP-712 signed quote + on-chain settlement |
-| Order Book | 방식 미정, on-chain settlement 필수 |
-| 컴플라이언스 | Corner Store ComplianceEngine |
-| 신원/ID | ERC-3643 · ONCHAINID 재사용 |
-| 컨트랙트 개발 | Solidity, Foundry |
-| Uniswap 배포 | vendored `tools/deploy-v3` |
-| 인덱싱 | The Graph 또는 동등한 event indexer |
-| 프론트엔드 | TypeScript, wagmi, viem |
-
----
-
-## 18. v1 대비 주요 변경
-
-| v1 | v2 |
-| --- | --- |
-| ComplianceRouter 단일 진입 | ExecutionRouter + ComplianceEngine |
-| token -> Recipe | token/program -> versioned Policy |
-| token -> Pool | context -> permitted venue set |
-| Uniswap v3가 DEX 전체 | Uniswap v3는 AMM Adapter |
-| synchronous swap 중심 | swap, quote fill, order fill lifecycle |
-| Pool만 custody 등록 | venue별 custody/settlement 등록 |
-| Layer 3 Phase 3 placeholder | 최소 OperatorRegistry를 초기 포함 |
-| delist 후 early exit | regulated token은 suspend 후 실행 거부 |
-| boolean compliance | 조건이 포함된 ComplianceDecision |
+- ERC-3643 또는 ONCHAINID 구현을 저장소에 복제
+- 모든 규제를 하나의 hardcoded Recipe로 구현
+- Router 내부에서 matching 또는 법률 해석 수행
+- 명시적 `UNREGULATED` 분류 없이 public path를 허용
+- reference DEX의 구현 선택을 SDK integrator에게 강제
