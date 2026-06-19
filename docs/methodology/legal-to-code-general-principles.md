@@ -1,7 +1,7 @@
 ---
 type: core-methodology
 title: 법률 코드화 일반원리 (Legal-to-Code Mapping — General Principles)
-status: v1.0 — core 자료
+status: v1.1 — core 자료
 audience: 개발팀·법무팀·외부 consultant·업계 publication 후보
 created: 2026-06-14
 related-external-sources:
