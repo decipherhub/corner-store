@@ -49,6 +49,9 @@ Corner Store의 Manifest, `ComplianceDecision` 또는 venue를 생성·선택하
   원자적으로 실패해야 한다.
 - ERC-3643 검사를 통과했다고 해서 venue, 거래 규모, 상대방, 운영자 조건이
   자동으로 허용되는 것은 아니다.
+- ERC-3643 직접 전송은 Corner Store `ExecutionRouter`, 4-Layer evaluation과
+  stateful `commit()`을 자동으로 실행하지 않는다. 직접 전송 경로의 제한은 발행자
+  token-level policy에 위임되거나 제품 범위 밖으로 명시되어야 한다.
 - RWA-RWA pair는 양쪽 토큰의 identity/compliance 조건을 각각 만족해야 한다.
 - 규제 토큰을 delist해도 일반 ERC-20 경로로 자동 전환하지 않는다.
 
@@ -72,6 +75,8 @@ Corner Store의 Manifest, `ComplianceDecision` 또는 venue를 생성·선택하
 - ERC-3643의 identity와 발행자 compliance 모듈을 재사용한다.
 - Corner Store는 발행 측 coverage를 중복하지 않는 execution-level compliance를
   추가한다.
+- Corner Store는 router-mediated trade에 대한 DEX-level compliance layer이며,
+  모든 ERC-3643 token movement의 전역 enforcement layer로 표현하지 않는다.
 - AMM Pool처럼 자산을 보유하는 주소는 venue identity 등록 대상으로 본다.
 - Adapter가 토큰을 보관하지 않는 구조를 우선한다.
 

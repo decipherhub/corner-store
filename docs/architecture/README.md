@@ -61,6 +61,11 @@ ERC-3643 Token & Identity는 이 네 layer 중 하나가 아니라 그 아래에
 - Manifest와 `UNREGULATED` 분류가 모두 없는 자산은 `UNKNOWN`으로 fail-closed한다.
 - `ACTIVE` Manifest의 누락·불완전 reference는 fail-closed다.
 - settlement 직전 최신 Manifest, actor와 operator 상태를 평가한다.
+- Corner Store의 4-Layer compliance 보장은 `ExecutionRouter`를 통한
+  router-mediated trade에 한정한다.
+- ERC-3643 직접 전송, 직접 pool/venue 호출, wrapper/vault/custodian 이전과
+  offchain beneficial ownership 이전은 별도 제한·위임·out-of-scope 결정 없이는
+  Corner Store 보장으로 표현하지 않는다.
 - non-custodial Router와 Adapter에는 의도하지 않은 자산 잔액이 남지 않는다.
 - 무거운 자료와 재량 판단은 오프체인에 두고 승인된 결과만 온체인에 입력한다.
 
@@ -79,6 +84,10 @@ ERC-3643 Token & Identity는 이 네 layer 중 하나가 아니라 그 아래에
 SDK 공통 컴포넌트는 특정 venue나 Corner Store 배포 구성에 의존하지 않는다.
 구체 Adapter는 reference 구현이며, 제3의 DEX는 같은 interface를 구현해 자체
 venue를 등록할 수 있다.
+
+현재 skeleton의 보안 보장은 limited-scope model이다. Router를 거치지 않는 RWA
+이동 또는 경제적 노출 이전은 발행자 token-level enforcement, controlled
+venue/settlement 또는 명시적 out-of-scope 선언으로 별도 처리해야 한다.
 
 외부 협업 범위:
 
