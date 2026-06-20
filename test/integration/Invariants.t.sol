@@ -122,6 +122,7 @@ contract InvariantsTest is IntegrationBase {
         mockRouter.execute(req);
 
         // and within the cap it passes the gate (reaches the adapter & settles).
+        adapter.setRouter(address(mockRouter));
         ExecutionRequest memory ok = buildBuyRequest(alice, 5 ether, 5 ether);
         vm.prank(alice);
         mockRouter.execute(ok);

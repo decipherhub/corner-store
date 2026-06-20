@@ -7,6 +7,7 @@ import {MockERC20} from "../../mocks/MockERC20.sol";
 import {MockPool} from "../../mocks/MockPool.sol";
 import {ExecutionRequest, ExecutionResult} from "../../../src/types/ExecutionTypes.sol";
 import {ComplianceContext, ComplianceDecision, VenueType, FlowType} from "../../../src/types/ComplianceTypes.sol";
+import {Errors} from "../../../src/libraries/Errors.sol";
 
 contract AMMAdapterTest is Test {
     UniswapV3Adapter internal adapter;
@@ -15,12 +16,14 @@ contract AMMAdapterTest is Test {
     MockERC20 internal token1;
 
     address internal constant BUYER = address(0xB0B);
+    address internal constant ROUTER = address(0xA17E);
 
     function setUp() public {
         token0 = new MockERC20("TokenIn", "TIN");
         token1 = new MockERC20("TokenOut", "TOUT");
         pool = new MockPool(token0, token1);
         adapter = new UniswapV3Adapter();
+        adapter.setRouter(ROUTER);
         adapter.setPool(address(pool), true);
 
         // fund the pool with tokenOut so it can pay the recipient
@@ -33,6 +36,7 @@ contract AMMAdapterTest is Test {
 
     function _req(bytes memory venueData) internal view returns (ExecutionRequest memory) {
         ComplianceContext memory ctx;
+        ctx.initiator = BUYER;
         ctx.buyer = BUYER;
         ctx.tokenIn = address(token0);
         ctx.tokenOut = address(token1);
@@ -53,6 +57,7 @@ contract AMMAdapterTest is Test {
 
         uint256 buyerInBefore = token0.balanceOf(BUYER);
 
+        vm.prank(ROUTER);
         ExecutionResult memory r = adapter.execute(req, _emptyDecision);
 
         // 1:1 rate
@@ -68,6 +73,7 @@ contract AMMAdapterTest is Test {
     function test_swap_settableRate() public {
         pool.setRate(2, 1); // 2x out
         ExecutionRequest memory req = _req("");
+        vm.prank(ROUTER);
         ExecutionResult memory r = adapter.execute(req, _emptyDecision);
         assertEq(r.amountOut, 200 ether);
         assertEq(token1.balanceOf(BUYER), 200 ether);
@@ -77,7 +83,13 @@ contract AMMAdapterTest is Test {
 
     function test_revert_unregisteredPool() public {
         adapter.setPool(address(pool), false);
+        vm.prank(ROUTER);
         vm.expectRevert("pool not registered");
+        adapter.execute(_req(""), _emptyDecision);
+    }
+
+    function test_revert_execute_onlyRouter() public {
+        vm.expectRevert(Errors.NotAuthorized.selector);
         adapter.execute(_req(""), _emptyDecision);
     }
 

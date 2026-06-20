@@ -7,6 +7,7 @@ import {IAMMAdapter} from "../../../interfaces/execution/adapters/IAMMAdapter.so
 import {IPool} from "../../../interfaces/execution/adapters/IPool.sol";
 import {ExecutionRequest, ExecutionResult} from "../../../types/ExecutionTypes.sol";
 import {ComplianceDecision} from "../../../types/ComplianceTypes.sol";
+import {Errors} from "../../../libraries/Errors.sol";
 
 /// @title UniswapV3Adapter
 /// @notice Non-custodial AMM adapter that routes a swap through a registered Uniswap-v3-style
@@ -22,8 +23,20 @@ import {ComplianceDecision} from "../../../types/ComplianceTypes.sol";
 ///     buyer who has approved this adapter to spend `tokenIn`.
 contract UniswapV3Adapter is IAMMAdapter, Governed {
     mapping(address => bool) public registeredPool;
+    address public router;
 
     event PoolSet(address indexed pool, bool registered);
+    event RouterSet(address indexed router);
+
+    modifier onlyRouter() {
+        if (msg.sender != router) revert Errors.NotAuthorized();
+        _;
+    }
+
+    function setRouter(address router_) external onlyOwner {
+        router = router_;
+        emit RouterSet(router_);
+    }
 
     function setPool(address pool, bool registered) external onlyOwner {
         registeredPool[pool] = registered;
@@ -31,14 +44,12 @@ contract UniswapV3Adapter is IAMMAdapter, Governed {
     }
 
     /// @notice Executes the swap for a single request.
-    /// @dev SECURITY: this function is permissionless by the {IExecutionAdapter} interface, but it
-    /// MUST only be reached through {ExecutionRouter}. The router runs the compliance/selector gates
-    /// and binds `req.context.buyer` to the trade context. A direct caller could invoke this with an
-    /// arbitrary `buyer` and pull `tokenIn` from any address that has approved this adapter, up to that
-    /// approval. A production deployment MUST add an authorized-caller (onlyRouter) gate; it is omitted
-    /// here only because this is skeleton scope. Do not rely on this adapter as a standalone entry point.
+    /// @dev SECURITY: only the wired {ExecutionRouter} may call this function.
+    /// The router runs the compliance/selector gates and binds the caller to the
+    /// request initiator before adapter dispatch.
     function execute(ExecutionRequest calldata req, ComplianceDecision calldata)
         external
+        onlyRouter
         returns (ExecutionResult memory)
     {
         address pool = req.context.venue;

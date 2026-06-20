@@ -72,6 +72,7 @@ contract RouterTest is Test {
 
     function _req(uint256 nonce, uint256 amountIn, uint64 deadline) internal pure returns (ExecutionRequest memory) {
         ComplianceContext memory ctx;
+        ctx.initiator = BUYER;
         ctx.buyer = BUYER;
         ctx.tokenIn = TOKEN_IN;
         ctx.tokenOut = TOKEN_OUT;
@@ -141,14 +142,26 @@ contract RouterTest is Test {
         router.execute(req);
     }
 
-    function test_nonce_scopedPerCaller() public {
+    function test_revert_callerMustMatchInitiator() public {
         ExecutionRequest memory req = _defaultReq();
         vm.prank(BUYER);
         router.execute(req);
-        // different caller, same nonce -> ok
+
+        // A different caller cannot reuse the same request body even though the
+        // nonce mapping is scoped by msg.sender.
         vm.prank(address(0xDEAD));
+        vm.expectRevert(Errors.NotAuthorized.selector);
         router.execute(req);
-        assertEq(adapter.callCount(), 2);
+        assertEq(adapter.callCount(), 1);
+    }
+
+    function test_revert_zeroInitiator() public {
+        ExecutionRequest memory req = _defaultReq();
+        req.context.initiator = address(0);
+
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        router.execute(req);
     }
 
     function test_revert_maxAmountExceeded() public {

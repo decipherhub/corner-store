@@ -26,7 +26,7 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
     IVenueSelector public immutable selector;
     IOperatorRegistry public immutable operatorReg;
 
-    /// @dev replay protection scoped per caller.
+    /// @dev replay protection scoped per authenticated initiator/caller.
     mapping(address => mapping(uint256 => bool)) public usedNonce;
 
     constructor(
@@ -45,7 +45,14 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
         // 1. deadline
         if (block.timestamp > req.deadline) revert Errors.DeadlineExpired();
 
-        // 2. nonce replay protection (per caller)
+        // 2. caller/request binding + nonce replay protection. The router is
+        //    the only public execution entry point, so the caller must be the
+        //    request initiator that compliance and the decision hash bind.
+        if (req.context.initiator == address(0) || msg.sender != req.context.initiator) {
+            revert Errors.NotAuthorized();
+        }
+
+        // 2a. nonce replay protection (per authenticated initiator/caller)
         if (usedNonce[msg.sender][req.nonce]) revert Errors.NonceUsed();
         usedNonce[msg.sender][req.nonce] = true;
 

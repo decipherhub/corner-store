@@ -120,8 +120,10 @@ abstract contract IntegrationBase is TREXSuite {
         router = new ExecutionRouter(engine, venueReg, selector, operatorReg);
 
         // Authenticate the post-trade write path (spec §6): only the router may
-        // drive engine.commit, and only the engine may drive element.onTransfer.
+        // drive engine.commit/adapter.execute, and only the engine may drive
+        // element.onTransfer.
         engine.setRouter(address(router));
+        adapter.setRouter(address(router));
         surveillance.setEngine(address(engine));
 
         // 6. quote token (UNREGULATED manifest) + pool (token0=QUOTE, token1=RWA)

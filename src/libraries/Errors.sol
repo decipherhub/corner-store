@@ -15,5 +15,6 @@ library Errors {
     error MaxAmountExceeded();
     error SlippageExceeded();
     error ElementNotRegistered(bytes32 elementId);
+    error RecipeNotRegistered(uint16 recipeId);
     error LooseningForbidden(); // strengthen-only override
 }

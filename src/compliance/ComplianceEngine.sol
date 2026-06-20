@@ -55,15 +55,15 @@ contract ComplianceEngine is IComplianceEngine, Governed {
     }
 
     // ---------------------------------------------------------------------
-    // Regulated-token selection rule (two-sided, documented, deterministic):
+    // Regulated-token evaluation rule (two-sided, documented, deterministic):
     // We read BOTH sides' status and decide the pair outcome fail-closed:
     //   * EITHER side SUSPENDED → reject.
     //   * EITHER side UNKNOWN (unregistered) → reject; quote/cash tokens must be
     //     EXPLICITLY registered UNREGULATED, we never infer an absent manifest.
     //   * BOTH UNREGULATED → pass through (fast path).
-    //   * At least one ACTIVE → the regulated token is the ACTIVE side. Prefer
-    //     tokenOut when it is ACTIVE, else tokenIn; that side's manifest/recipes
-    //     are evaluated against the full context.
+    //   * At least one ACTIVE → every ACTIVE side's manifest/recipes are
+    //     evaluated against the full context. Regulated-regulated pairs combine
+    //     both sides rather than choosing one.
     // This selection is inlined in `evaluate` (see below); status reads are done
     // once there for both sides.
     // ---------------------------------------------------------------------
@@ -85,72 +85,104 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         if (statusOut == PolicyStatus.UNREGULATED && statusIn == PolicyStatus.UNREGULATED) {
             return _passThrough(ctx);
         }
-        //     At least one ACTIVE → the ACTIVE side is the regulated token,
-        //     preferring tokenOut when it is ACTIVE.
-        address token = statusOut == PolicyStatus.ACTIVE ? ctx.tokenOut : ctx.tokenIn;
-
-        ManifestCore memory m = policyReg.manifestOf(token);
-        return _evaluateActive(ctx, token, m);
+        return _evaluateActivePair(ctx, statusIn, statusOut);
     }
 
-    function _evaluateActive(ComplianceContext calldata ctx, address token, ManifestCore memory m)
+    function _evaluateActivePair(ComplianceContext calldata ctx, PolicyStatus statusIn, PolicyStatus statusOut)
         internal
         view
         returns (ComplianceDecision memory d)
     {
-        // Collect applicable element ids (union + dedup) and remember the
-        // contributing recipeId per element for reasonCode attribution.
-        (bytes32[] memory elementIds, uint16[] memory contributingRecipe, uint256 count) = _applicableElements(ctx, m);
+        ManifestCore memory mIn;
+        ManifestCore memory mOut;
+        uint256 cap;
+        uint256 allowedVenueTypes = type(uint256).max;
+        uint64 policyVersion;
+        bytes32 policyId;
 
-        (bool allowed, bytes32 reasonCode) = _runChecks(ctx, token, elementIds, contributingRecipe, count);
+        if (statusIn == PolicyStatus.ACTIVE) {
+            mIn = policyReg.manifestOf(ctx.tokenIn);
+            cap += _maxElements(mIn);
+            allowedVenueTypes &= uint256(mIn.supportedEngines);
+            policyVersion = _max64(policyVersion, mIn.issuanceRecipeVersion);
+            policyId = _accumulatePolicyId(policyId, ctx.tokenIn, mIn);
+        }
+        if (statusOut == PolicyStatus.ACTIVE) {
+            mOut = policyReg.manifestOf(ctx.tokenOut);
+            cap += _maxElements(mOut);
+            allowedVenueTypes &= uint256(mOut.supportedEngines);
+            policyVersion = _max64(policyVersion, mOut.issuanceRecipeVersion);
+            policyId = _accumulatePolicyId(policyId, ctx.tokenOut, mOut);
+        }
 
-        return _buildDecision(ctx, m, allowed, reasonCode);
+        bytes32[] memory elementIds = new bytes32[](cap);
+        address[] memory tokens = new address[](cap);
+        uint16[] memory contributingRecipe = new uint16[](cap);
+        uint256 count;
+
+        if (statusIn == PolicyStatus.ACTIVE) {
+            count = _appendApplicableElements(ctx, ctx.tokenIn, mIn, elementIds, tokens, contributingRecipe, count);
+        }
+        if (statusOut == PolicyStatus.ACTIVE) {
+            count = _appendApplicableElements(ctx, ctx.tokenOut, mOut, elementIds, tokens, contributingRecipe, count);
+        }
+
+        (bool allowed, bytes32 reasonCode) = _runChecks(ctx, elementIds, tokens, contributingRecipe, count);
+
+        return _buildDecision(ctx, policyId, policyVersion, allowedVenueTypes, allowed, reasonCode);
     }
 
     /// @dev Resolve recipes → union/dedup their required elements. coverageScope
     ///      subtraction omitted in skeleton (no bit→elementId map).
-    function _applicableElements(ComplianceContext calldata ctx, ManifestCore memory m)
-        internal
-        view
-        returns (bytes32[] memory elementIds, uint16[] memory contributingRecipe, uint256 count)
-    {
+    function _appendApplicableElements(
+        ComplianceContext calldata ctx,
+        address token,
+        ManifestCore memory m,
+        bytes32[] memory elementIds,
+        address[] memory tokens,
+        uint16[] memory contributingRecipe,
+        uint256 count
+    ) internal view returns (uint256) {
         bytes memory recipeContext = abi.encode(m.factsPacked, ctx);
-        elementIds = new bytes32[](_maxElements(m));
-        contributingRecipe = new uint16[](elementIds.length);
-
         uint16[2] memory candidates = [m.issuanceRecipeId, m.fundRecipeId];
         for (uint256 c = 0; c < candidates.length; c++) {
             uint16 rid = candidates[c];
-            if (rid == 0) continue; // fundRecipeId 0 = absent
+            if (rid == 0) {
+                if (c == 0) revert Errors.RecipeNotRegistered(rid);
+                continue; // fundRecipeId 0 = absent
+            }
             address recipeAddr = recipeReg.recipeOf(rid);
-            if (recipeAddr == address(0)) continue;
+            if (recipeAddr == address(0)) revert Errors.RecipeNotRegistered(rid);
             IRecipe recipe = IRecipe(recipeAddr);
             if (!recipe.isApplicable(recipeContext)) continue;
 
             bytes32[] memory req = recipe.requiredElements();
             for (uint256 i = 0; i < req.length; i++) {
-                if (!_seen(elementIds, count, req[i])) {
+                if (!_seenForToken(elementIds, tokens, count, req[i], token)) {
                     elementIds[count] = req[i];
+                    tokens[count] = token;
                     contributingRecipe[count] = rid;
                     count++;
                 }
             }
         }
+        return count;
     }
 
     /// @dev Cumulative AND across every unique element. First failure stops.
     function _runChecks(
         ComplianceContext calldata ctx,
-        address token,
         bytes32[] memory elementIds,
+        address[] memory tokens,
         uint16[] memory contributingRecipe,
         uint256 count
     ) internal view returns (bool allowed, bytes32 reasonCode) {
-        // RWA-side amount: amountOut when the regulated token is tokenOut,
-        // else amountIn. This is the amount of the regulated asset moving.
-        uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
         bytes memory elementContext = abi.encode(ctx);
         for (uint256 i = 0; i < count; i++) {
+            address token = tokens[i];
+            // RWA-side amount: amountOut when the regulated token is tokenOut,
+            // else amountIn. This is the amount of the regulated asset moving.
+            uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
             address el = elementReg.elementOf(elementIds[i]);
             if (el == address(0)) revert Errors.ElementNotRegistered(elementIds[i]);
             (bool passed,) = IComplianceElement(el).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext);
@@ -161,24 +193,26 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         return (true, bytes32(0));
     }
 
-    function _buildDecision(ComplianceContext calldata ctx, ManifestCore memory m, bool allowed, bytes32 reasonCode)
-        internal
-        view
-        returns (ComplianceDecision memory d)
-    {
+    function _buildDecision(
+        ComplianceContext calldata ctx,
+        bytes32 policyId,
+        uint64 policyVersion,
+        uint256 allowedVenueTypes,
+        bool allowed,
+        bytes32 reasonCode
+    ) internal view returns (ComplianceDecision memory d) {
         d.allowed = allowed;
-        // policyId derivation is a SKELETON PLACEHOLDER: it currently encodes only
-        // issuanceRecipeId and is therefore LOSSY — it ignores fundRecipeId (and
-        // recipe versions / factsPacked). Two manifests sharing an issuance recipe
-        // but differing in fund recipe collapse to the same policyId. A real
-        // implementation must derive policyId from the full applicable policy set.
-        d.policyId = bytes32(uint256(m.issuanceRecipeId));
-        d.policyVersion = m.issuanceRecipeVersion;
+        // policyId derivation remains a SKELETON PLACEHOLDER, but it now binds
+        // every ACTIVE side included in this pair-level decision rather than
+        // choosing only one side. A real implementation still needs the full
+        // versioned policy-set derivation.
+        d.policyId = policyId;
+        d.policyVersion = policyVersion;
         d.validUntil = uint64(block.timestamp + 1 days);
         d.maxAmount = type(uint256).max; // skeleton: no quantitative cap
         // Map supported-engine bits → VenueType bits. Skeleton 1:1 mapping:
         // engine bit i corresponds to VenueType bit i (AMM=0, ORDER_BOOK=1, RFQ=2).
-        d.allowedVenueTypes = uint256(m.supportedEngines);
+        d.allowedVenueTypes = allowedVenueTypes;
         d.allowedVenuesHash = bytes32(0); // 0 = any registered venue (skeleton)
         d.reasonCode = reasonCode;
         d.reliedClaims = bytes32(0); // mock
@@ -240,24 +274,33 @@ contract ComplianceEngine is IComplianceEngine, Governed {
     ///      (spec §6). Only the wired router may record post-trade state; an
     ///      EOA/operator cannot forge surveillance counters by calling commit.
     function commit(ComplianceContext calldata ctx) external override onlyRouter {
-        // Mirror evaluate's two-sided selection: a STATEFUL post-trade hook runs
-        // only when there is an ACTIVE regulated side (prefer tokenOut). Any
-        // SUSPENDED/UNKNOWN side or both-UNREGULATED → nothing to commit.
+        // Mirror evaluate's two-sided rule: STATEFUL post-trade hooks run for
+        // every ACTIVE regulated side. Any SUSPENDED/UNKNOWN side or
+        // both-UNREGULATED → nothing to commit.
         PolicyStatus statusIn = policyReg.statusOf(ctx.tokenIn);
         PolicyStatus statusOut = policyReg.statusOf(ctx.tokenOut);
-        address token;
-        if (statusOut == PolicyStatus.ACTIVE) {
-            token = ctx.tokenOut;
-        } else if (statusIn == PolicyStatus.ACTIVE) {
-            token = ctx.tokenIn;
-        } else {
+        if (statusIn == PolicyStatus.SUSPENDED || statusOut == PolicyStatus.SUSPENDED) return;
+        if (statusIn == PolicyStatus.UNKNOWN || statusOut == PolicyStatus.UNKNOWN) return;
+        if (statusIn != PolicyStatus.ACTIVE && statusOut != PolicyStatus.ACTIVE) {
             return;
         }
 
-        ManifestCore memory m = policyReg.manifestOf(token);
+        if (statusIn == PolicyStatus.ACTIVE) {
+            _commitActiveSide(ctx, ctx.tokenIn, policyReg.manifestOf(ctx.tokenIn));
+        }
+        if (statusOut == PolicyStatus.ACTIVE) {
+            _commitActiveSide(ctx, ctx.tokenOut, policyReg.manifestOf(ctx.tokenOut));
+        }
+    }
+
+    function _commitActiveSide(ComplianceContext calldata ctx, address token, ManifestCore memory m) internal {
         uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
 
-        (bytes32[] memory elementIds,, uint256 count) = _applicableElements(ctx, m);
+        uint256 cap = _maxElements(m);
+        bytes32[] memory elementIds = new bytes32[](cap);
+        address[] memory tokens = new address[](cap);
+        uint16[] memory contributingRecipe = new uint16[](cap);
+        uint256 count = _appendApplicableElements(ctx, token, m, elementIds, tokens, contributingRecipe, 0);
 
         for (uint256 i = 0; i < count; i++) {
             address el = elementReg.elementOf(elementIds[i]);
@@ -270,11 +313,35 @@ contract ComplianceEngine is IComplianceEngine, Governed {
 
     // ---- helpers ----
 
-    function _seen(bytes32[] memory ids, uint256 count, bytes32 id) private pure returns (bool) {
+    function _seenForToken(bytes32[] memory ids, address[] memory tokens, uint256 count, bytes32 id, address token)
+        private
+        pure
+        returns (bool)
+    {
         for (uint256 i = 0; i < count; i++) {
-            if (ids[i] == id) return true;
+            if (ids[i] == id && tokens[i] == token) return true;
         }
         return false;
+    }
+
+    function _accumulatePolicyId(bytes32 acc, address token, ManifestCore memory m) private pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                acc,
+                token,
+                m.issuanceRecipeId,
+                m.issuanceRecipeVersion,
+                m.fundRecipeId,
+                m.supportedEngines,
+                m.factsPacked,
+                m.coverageScope,
+                m.fullManifestHash
+            )
+        );
+    }
+
+    function _max64(uint64 a, uint64 b) private pure returns (uint64) {
+        return a >= b ? a : b;
     }
 
     /// @dev Upper bound on distinct elements: sum of required-element counts of

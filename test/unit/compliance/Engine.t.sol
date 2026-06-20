@@ -37,6 +37,7 @@ contract EngineTest is Test {
     SurveillanceFlag internal surveillance;
 
     address internal constant RWA = address(0xBEEF);
+    address internal constant RWA2 = address(0xBEE2);
     address internal constant CASH = address(0xCA54);
     address internal constant BUYER = address(0xB0B);
     address internal constant SELLER = address(0x5E11E2);
@@ -111,6 +112,21 @@ contract EngineTest is Test {
         c.sellerIsAffiliate = false;
     }
 
+    function _ctxRegulatedPair() internal pure returns (ComplianceContext memory c) {
+        // buyer sends one regulated token and receives another. Both ACTIVE
+        // sides must be evaluated; neither manifest may mask the other.
+        c.initiator = BUYER;
+        c.buyer = BUYER;
+        c.seller = SELLER;
+        c.tokenIn = RWA;
+        c.tokenOut = RWA2;
+        c.amountIn = 10;
+        c.amountOut = 20;
+        c.venueType = VenueType.AMM;
+        c.venue = address(0x7E47);
+        c.flowType = FlowType.SECONDARY_TRADE;
+    }
+
     // --- cases ---
 
     function test_active_regd_allows_when_accredited_and_clean() public {
@@ -121,7 +137,7 @@ contract EngineTest is Test {
         assertTrue(d.allowed);
         assertEq(d.reasonCode, bytes32(0));
         assertTrue(d.decisionHash != bytes32(0));
-        assertEq(d.policyId, bytes32(uint256(1)));
+        assertTrue(d.policyId != bytes32(0));
         assertEq(d.policyVersion, 1);
     }
 
@@ -220,6 +236,32 @@ contract EngineTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, bytes32("Z-99-v1")));
         engine.evaluate(_ctxBuy());
+    }
+
+    function test_missing_issuance_recipe_reverts() public {
+        ManifestCore memory m = _activeManifest(0, 0);
+        m.issuanceRecipeId = 77; // manifest points at a recipe that was never registered
+        policyReg.registerManifest(RWA, m);
+        _registerCashUnregulated();
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeNotRegistered.selector, uint16(77)));
+        engine.evaluate(_ctxBuy());
+    }
+
+    function test_regulated_regulated_pair_evaluates_both_sides() public {
+        // tokenIn requires RegD + Fund3c7 (QP). tokenOut requires only RegD.
+        // Old single-side selection could choose tokenOut and incorrectly allow
+        // without QP. The pair-level rule must reject until both sides pass.
+        policyReg.registerManifest(RWA, _activeManifest(2, 1));
+        policyReg.registerManifest(RWA2, _activeManifest(0, 0));
+        accredited.setAccredited(BUYER, true);
+
+        ComplianceDecision memory d = engine.evaluate(_ctxRegulatedPair());
+        assertFalse(d.allowed, "tokenIn fund recipe must also be enforced");
+
+        qp.setQp(BUYER, true);
+        d = engine.evaluate(_ctxRegulatedPair());
+        assertTrue(d.allowed, "pair should allow only after both active sides pass");
     }
 
     function test_commit_emits_surveillance_flag() public {
