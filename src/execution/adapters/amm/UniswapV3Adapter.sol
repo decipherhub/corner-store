@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Governed} from "../../../auth/Governed.sol";
 import {IAMMAdapter} from "../../../interfaces/execution/adapters/IAMMAdapter.sol";
 import {IPool} from "../../../interfaces/execution/adapters/IPool.sol";
@@ -22,6 +23,8 @@ import {Errors} from "../../../libraries/Errors.sol";
 ///   - The callback `data` ABI-encodes `(address payer, address tokenIn)` where `payer` is the
 ///     buyer who has approved this adapter to spend `tokenIn`.
 contract UniswapV3Adapter is IAMMAdapter, Governed {
+    using SafeERC20 for IERC20;
+
     mapping(address => bool) public registeredPool;
     address public router;
 
@@ -86,7 +89,7 @@ contract UniswapV3Adapter is IAMMAdapter, Governed {
         // The owed amount is the positive delta (pool is owed tokenIn).
         uint256 amountOwed = amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
-        IERC20(tokenIn).transferFrom(payer, msg.sender, amountOwed);
+        IERC20(tokenIn).safeTransferFrom(payer, msg.sender, amountOwed);
     }
 
     function _decodeVenueData(bytes calldata venueData)

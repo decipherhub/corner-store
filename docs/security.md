@@ -95,8 +95,27 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 - Router와 Adapter는 의도하지 않은 자산을 보관하지 않는 구조를 우선한다.
 - Adapter와 settlement contract는 Router-only authorization 또는 동등한 호출자
   제한을 가져야 한다.
+- ERC-20 상호작용은 return value를 직접 가정하지 않고 `SafeERC20` 또는 동등한
+  safe wrapper를 사용한다.
 - 실패한 실행은 nonce, fill accounting과 token balance를 원자적으로 되돌려야 한다.
 - ERC-3643 transfer 실패를 성공으로 취급하거나 swallow하지 않는다.
+
+## Venue Integration Security
+
+- Uniswap-style callback은 등록되었거나 계산으로 검증한 pool에서만 수락한다.
+  callback `data`가 payer/token을 포함하더라도 callback origin 검증 없이 신뢰하지
+  않는다.
+- Pool/venue 등록은 compliance 보장의 일부다. 잘못된 venue 또는 악성 adapter가
+  등록되면 Router를 타더라도 settlement 결과가 왜곡될 수 있으므로 governance와
+  preflight 검증 대상이다.
+- RFQ와 Order Book signature flow는 구현 전에 chain id, verifying contract,
+  maker/taker, token pair, venue, policy/manifest version, nonce와 expiry를
+  binding해야 한다.
+- Slippage, deadline과 amount cap은 서로 다른 축이다. `amountIn`, RWA 수량,
+  quote notional과 investor/fund/offering cap의 기준을 혼동하지 않는다.
+- External call, callback, token transfer가 포함된 경로는 access control,
+  reentrancy, unchecked return, signature replay와 business-logic bypass를 함께
+  검토한다.
 
 ## Logging
 
@@ -131,3 +150,19 @@ scripts/check.sh
 - Manifest lifecycle과 cumulative multi-Recipe test
 - `UNKNOWN`, explicit `UNREGULATED`와 regulated path 구분 test
 - unregulated-regulated와 regulated-regulated pair의 양쪽 Manifest 적용 test
+- 모든 Adapter/RFQ/OrderBook settlement의 direct caller rejection test
+- ERC-20 safe transfer behavior와 callback-origin validation test
+- signed order/decision 도입 시 chain/domain/nonce/expiry replay test
+
+## Reference Security Inputs
+
+- ERC-3643 official documentation: permissioned tokens provide identity-backed
+  transfer checks, but Corner Store-specific venue, Recipe, amount cap와
+  surveillance 보장을 자동으로 대체하지 않는다.
+- OpenZeppelin `SafeERC20`: ERC-20 operation failure, false return과 no-return
+  token 처리를 위해 safe wrapper를 사용한다.
+- Uniswap v3 integration references: pool/callback origin 검증과 audited periphery
+  pattern을 직접 venue adapter 설계의 기준으로 삼는다.
+- OWASP Smart Contract Security Top 10 / SCSVS: access control, input validation,
+  unchecked external calls, reentrancy, signature replay와 business-logic risk를
+  review checklist에 포함한다.
