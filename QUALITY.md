@@ -2,13 +2,14 @@
 
 | Module | Grade | Reason | Required Improvement |
 | --- | --- | --- | --- |
-| Product documentation | B | SDK/reference DEX, 4-Layer와 roadmap이 정합함 | 개별 Element·Manifest schema와 법률 승인 보강 |
-| Harness / agent workflow | B | HE-001과 DOC-001 상태·검증 이력이 존재함 | CI 연계와 구현 feature 운영 검증 |
-| Product Solidity | D | Counter template만 존재 | FND-001 제품 foundation 구현 |
-| Foundry tests | D | Counter template test만 존재 | 제품 fixture와 behavior test 추가 |
+| Product documentation | B | SDK/reference DEX, 4-Layer, RFQ v1 scope와 roadmap이 대체로 정합함 | production RFQ/OrderBook, Manifest lifecycle와 법률 승인 기준 보강 |
+| Harness / agent workflow | B | HE-001, DOC-001, RFQ-001 상태·검증 이력이 존재함 | PR/CI 결과와 feature state 지속 동기화 |
+| Product Solidity | B- | Compliance Core, registries, ExecutionRouter, AMM adapter와 RFQ v1 adapter가 컴파일·테스트됨 | production Manifest lifecycle, RFQ dealer/custody/cancel, OrderBook 미구현 |
+| Foundry tests | B | unit/integration 122개와 RFQ failure-path 테스트 존재 | live Anvil deployment/E2E와 추가 adversarial/security tests |
+| RFQ reference service | B- | EIP-712 typed-data 생성, nonce/expiry, unsafe number guard와 smoke test 존재 | 실제 API 서버, signer custody, dealer pricing/inventory는 production feature에서 결정 |
 | `tools/deploy-v3` | B | profile 단위 테스트와 문서 존재 | 자동 Anvil integration test 추가 |
-| CI / static analysis | D | CI와 정적 분석 설정 없음 | 향후 foundation feature에서 추가 |
-| Security documentation | B | trust boundary와 구현 전 보안 규칙을 통합 문서화함 | 구현 및 위협 모델과 지속 동기화 |
+| CI / static analysis | C | GitHub Actions가 Foundry와 RFQ service smoke를 실행함 | deploy-v3 CI, slither 등 정적 분석, warning budget 도입 |
+| Security documentation | B | trust boundary, direct venue boundary와 구현 전 보안 규칙을 문서화함 | RFQ/dealer/custody 위협 모델과 production review 체크리스트 보강 |
 
 ## Grade Guide
 

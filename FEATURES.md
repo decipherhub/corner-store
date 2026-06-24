@@ -65,7 +65,7 @@ passing
 
 ### Behavior
 
-- Counter template를 제품 개발 구조로 교체한다.
+- Foundry template를 제품 개발 구조로 교체한다.
 - 제품 interface, type, error와 mock fixture를 컴파일할 수 있다.
 - 이후 compliance와 execution feature가 재사용할 테스트 기반을 제공한다.
 
@@ -77,11 +77,13 @@ passing
 
 ### State
 
-not-started
+passing
 
 ### Notes
 
-- DOC-001에서 제품 구조와 구현 순서를 확정한 뒤 시작한다.
+- 현재 제품 구조는 Compliance Core, Execution Integration Kit, reference adapters와
+  Foundry unit/integration fixture를 포함한다.
+- production Manifest lifecycle, RFQ dealer/custody, OrderBook은 별도 feature다.
 
 ## RFQ-001 — Reference RFQ Settlement
 

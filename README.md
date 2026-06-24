@@ -57,7 +57,8 @@ reference execution adapters including AMM and RFQ settlement paths.
 Required tools:
 
 - Foundry (`forge`, `anvil`)
-- Node.js and Yarn for `tools/deploy-v3`
+- Node.js and npm for `services/rfq`
+- Yarn for `tools/deploy-v3`
 
 Install or refresh the vendored tool dependencies when needed:
 
@@ -68,8 +69,9 @@ yarn install --frozen-lockfile
 
 ## Development Commands
 
-The product contracts use Foundry. The template `Counter` files remain only
-until Roadmap Phase 0 replaces them with the product structure and fixtures.
+The product contracts use Foundry. The current scaffold contains the Compliance
+Core, Execution Integration Kit, AMM reference adapter, RFQ v1 reference
+settlement adapter, and related fixtures/tests.
 
 ### Build
 
@@ -105,6 +107,7 @@ decision engine.
 
 ```shell
 cd services/rfq
+npm ci
 npm test
 ```
 

@@ -25,6 +25,13 @@ jobs:
         with:
           version: stable
 
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/rfq/package-lock.json
+
       - name: Check formatting
         run: forge fmt --check
 
@@ -33,3 +40,9 @@ jobs:
 
       - name: Run tests
         run: forge test -vv
+
+      - name: Run RFQ service smoke
+        working-directory: services/rfq
+        run: |
+          npm ci
+          npm test
