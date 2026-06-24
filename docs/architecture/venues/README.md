@@ -69,25 +69,47 @@ Uniswap v3는 Corner Store의 첫 번째 AMM venue다. 전체 DEX가 아니라
 RFQ는 기관, 대량 거래, 승인 상대방 거래를 위한 경로다. 견적 탐색과 협상은
 오프체인, 검증과 settlement는 온체인으로 시작한다.
 
+### RFQ v1 Scope
+
+현재 구현은 `ExecutionRouter` 뒤에 붙는 reference Adapter다. AMM과 같은
+Router/Adapter slot을 사용하므로 Manifest/Recipe가 RFQ venue를 허용한 경우에만
+실행된다.
+
+- full-fill only
+- exact taker only
+- maker가 서명한 EIP-712 quote만 허용
+- quote domain은 chainId와 RFQAdapter verifying contract에 바인딩
+- quote message는 maker, taker, tokenIn, tokenOut, amountIn, amountOut, venue,
+  nonce, expiry에 바인딩
+- Adapter 직접 호출은 거부하고 Router를 통한 최신 compliance evaluation 이후에만
+  settlement
+- settlement는 non-custodial `SafeERC20.transferFrom`으로 taker→maker,
+  maker→taker를 원자적으로 수행
+
+`services/rfq`는 이 quote를 생성·서명하는 최소 reference service다. pricing,
+dealer inventory, custody, websocket discovery, orderbook matching, compliance
+판단은 포함하지 않는다.
+
 ### Adapter Responsibilities
 
 - EIP-712 signature와 domain 검증
 - maker/taker/token/amount/price binding
 - nonce, expiry, replay protection
-- dealer/operator 상태 검증
+- Router가 평가한 최신 compliance decision과 venue/operator 상태 반영
 - fill 트랜잭션의 최신 decision과 quote parameter binding
-- 결정에 따른 partial fill accounting
+- v1에서는 partial fill을 허용하지 않고 signed amount와 request amount가 정확히
+  일치해야 함
 
 ### Open Decisions
 
 - dealer 승인 모델
-- exact taker 또는 taker class
+- exact taker 외 taker class 허용 여부
 - partial fill 허용 여부
 - settlement custody와 identity 등록
 - quote cancellation 방식
 
-결정 전 기본값은 exact fill, 미등록 dealer 거부, custody 모델 미확정 시 구현
-보류다.
+결정 전 기본값은 exact fill, exact taker, non-custodial settlement, Router-only
+진입점이다.
 
 ## Order Book
 

@@ -14,6 +14,10 @@ library Errors {
     error DecisionMismatch(); // decisionHash != recomputed
     error MaxAmountExceeded();
     error SlippageExceeded();
+    error RFQInvalidSignature();
+    error RFQQuoteExpired();
+    error RFQQuoteUsed();
+    error RFQQuoteMismatch();
     error ElementNotRegistered(bytes32 elementId);
     error RecipeNotRegistered(uint16 recipeId);
     error LooseningForbidden(); // strengthen-only override
