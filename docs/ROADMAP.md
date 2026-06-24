@@ -225,18 +225,22 @@ Blockers:
 
 ### 4B. RFQ
 
+Status: v1 reference settlement implemented; production dealer and custody
+decisions remain open.
+
 Deliverables:
 
 - EIP-712 quote
 - signature, nonce, expiry와 taker binding
-- partial fill policy
-- RFQ Adapter와 latest compliance evaluation
+- Router-only RFQ Adapter와 latest compliance evaluation
+- 최소 TypeScript quote signer reference service
+- partial fill policy는 v1 non-goal로 유지
 
 Completion:
 
 - invalid signer, replay와 expired quote가 거부된다.
 - Manifest/Recipe 또는 operator 변경이 fill에 반영된다.
-- total fill이 quote amount를 초과하지 않는다.
+- signed quote와 request amount가 정확히 일치한다.
 
 Blockers:
 
