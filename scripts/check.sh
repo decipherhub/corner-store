@@ -14,6 +14,15 @@ forge build
 echo "==> Running Foundry tests"
 forge test --offline
 
+echo "==> Running RFQ service smoke test"
+(
+  cd services/rfq
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
 echo "==> Running vendored deploy-v3 tests"
 (
   cd tools/deploy-v3

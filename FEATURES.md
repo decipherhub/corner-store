@@ -65,7 +65,7 @@ passing
 
 ### Behavior
 
-- Counter template를 제품 개발 구조로 교체한다.
+- Foundry template를 제품 개발 구조로 교체한다.
 - 제품 interface, type, error와 mock fixture를 컴파일할 수 있다.
 - 이후 compliance와 execution feature가 재사용할 테스트 기반을 제공한다.
 
@@ -77,8 +77,41 @@ passing
 
 ### State
 
-not-started
+passing
 
 ### Notes
 
-- DOC-001에서 제품 구조와 구현 순서를 확정한 뒤 시작한다.
+- 현재 제품 구조는 Compliance Core, Execution Integration Kit, reference adapters와
+  Foundry unit/integration fixture를 포함한다.
+- production Manifest lifecycle, RFQ dealer/custody, OrderBook은 별도 feature다.
+
+## RFQ-001 — Reference RFQ Settlement
+
+### Behavior
+
+- RFQ가 AMM과 같은 `ExecutionRouter`/Adapter slot에 등록·교체될 수 있다.
+- RFQ quote는 maker가 EIP-712로 서명하고 chainId, RFQAdapter, maker, taker,
+  token, amount, venue, nonce, expiry에 바인딩된다.
+- RFQAdapter는 Router-only로 동작하고 direct adapter bypass를 거부한다.
+- 매 fill은 Router의 최신 compliance evaluation 이후 full-fill/exact-taker로만
+  settlement된다.
+- reference TypeScript service는 quote 생성, expiry/nonce 부여, EIP-712 signing
+  요청만 담당한다.
+
+### Verification
+
+- `forge fmt`
+- `forge build`
+- `forge test --offline --match-path test/unit/execution/RFQAdapter.t.sol -vv`
+- `forge test --offline`
+- `cd services/rfq && npm test`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Non-goals: partial fill, orderbook, production pricing engine, dealer inventory,
+  custody 확장, websocket/order discovery.
