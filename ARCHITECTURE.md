@@ -17,10 +17,10 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 
 | 경로 | 역할 |
 | --- | --- |
-| `src/` | 제품 Solidity 컨트랙트. 현재 Counter scaffold 상태 |
+| `src/` | 제품 Solidity 컨트랙트: Compliance Core, Execution Integration Kit, reference adapters |
 | `test/` | Foundry 단위·통합 테스트 |
-| `script/` | Foundry 배포·운영 스크립트 |
 | `docs/` | 제품 명세, 아키텍처, 로드맵과 Harness 문서 |
+| `services/rfq/` | RFQ v1 quote signer reference service |
 | `tools/deploy-v3/` | 독립적으로 유지하는 vendored Uniswap v3 배포 도구 |
 | `lib/` | Foundry 의존성 |
 | `scripts/` | 저장소 setup, 검증과 정리 명령 |
@@ -113,6 +113,13 @@ compliance를 강제한다고 설명한다.
 ## Where to Add New Code
 
 제품 코드는 Compliance Core, Execution Integration Kit와 Corner Store reference
-Adapter/configuration의 의존 방향이 드러나게 구성한다. 정확한 Solidity 디렉터리는
-Foundation feature에서 확정하며, 기존 Counter scaffold를 제품 구조로 간주하지
-않는다.
+Adapter/configuration의 의존 방향이 드러나게 구성한다.
+
+- 공통 compliance interface/type/library는 `src/interfaces`, `src/types`,
+  `src/libraries`에 둔다.
+- compliance 구현은 `src/compliance`와 `src/registry`에 둔다.
+- Router/venue registry/selector와 공통 adapter interface는 `src/execution`에 둔다.
+- 구체 reference venue adapter는 `src/execution/adapters/<venue>/`에 둔다.
+- RFQ offchain quote signer reference는 `services/rfq`에 둔다.
+- production dealer, custody, matching, pricing engine은 별도 decision/feature 없이
+  reference adapter 내부에 섞지 않는다.

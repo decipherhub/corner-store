@@ -103,7 +103,8 @@
 | ERC-3643 `isVerified`/`canTransfer`, OnchainID claim | **진짜 동작** (테스트에서 실제 T-REX 배포) |
 | Element의 법률 판정(적격투자자·제재·QP·lockup 등) | **mock** (설정 가능한 bool/주입값) |
 | Uniswap v3 실제 pool 수학 | **mock** (MockPool 1:1) |
-| RFQ / OrderBook adapter | **스텁** (revert) |
+| RFQ adapter | **v1 reference 동작** (Router-only, exact-taker full-fill EIP-712 quote settlement) |
+| OrderBook adapter | **스텁** (revert) |
 | `computePoolAddress` | **스텁** (결정론적 keccak, 실제 init-code-hash 아님) |
 
 요점: **"배관은 진짜로 흐르고, 법률 판단만 mock"**. 그래서 E2E 테스트로 전체 경로를

@@ -11,8 +11,8 @@ are registered through a generic Router/Adapter boundary. Concrete Corner Store
 adapters and deployment configuration are reference implementations.
 
 The repository currently contains the architecture and development plan, a
-vendored Uniswap v3 deployment tool, and the initial Foundry project scaffold.
-Product Solidity contracts are not implemented yet.
+vendored Uniswap v3 deployment tool, the Foundry product scaffold, and initial
+reference execution adapters including AMM and RFQ settlement paths.
 
 ## Main Use Cases
 
@@ -49,6 +49,7 @@ Product Solidity contracts are not implemented yet.
 - Contracts: Solidity + Foundry
 - Tests: Forge
 - Local chain: Anvil
+- RFQ reference service: TypeScript
 - Vendored deployment tooling: TypeScript, Yarn, ethers v5
 
 ## Local Setup
@@ -56,7 +57,8 @@ Product Solidity contracts are not implemented yet.
 Required tools:
 
 - Foundry (`forge`, `anvil`)
-- Node.js and Yarn for `tools/deploy-v3`
+- Node.js and npm for `services/rfq`
+- Yarn for `tools/deploy-v3`
 
 Install or refresh the vendored tool dependencies when needed:
 
@@ -67,8 +69,9 @@ yarn install --frozen-lockfile
 
 ## Development Commands
 
-The product contracts use Foundry. The template `Counter` files remain only
-until Roadmap Phase 0 replaces them with the product structure and fixtures.
+The product contracts use Foundry. The current scaffold contains the Compliance
+Core, Execution Integration Kit, AMM reference adapter, RFQ v1 reference
+settlement adapter, and related fixtures/tests.
 
 ### Build
 
@@ -92,6 +95,20 @@ forge fmt
 
 ```shell
 anvil
+```
+
+### RFQ Reference Service
+
+`services/rfq` is a minimal quote signer reference for RFQ v1. It builds the
+same EIP-712 typed data that `RFQAdapter` verifies, assigns expiry and nonce,
+and returns a signed quote. It is not a production dealer, pricing engine,
+inventory manager, custody service, websocket feed, orderbook, or compliance
+decision engine.
+
+```shell
+cd services/rfq
+npm ci
+npm test
 ```
 
 ### Check All

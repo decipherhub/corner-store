@@ -19,9 +19,21 @@ forge build
 forge test --offline
 ```
 
-현재는 Counter template test만 존재한다.
+현재 제품 테스트는 compliance registry/engine, execution router, AMM adapter,
+RFQ adapter와 TREX fixture 기반 integration path를 포함한다.
 `--offline`은 외부 시그니처 조회를 차단해 로컬 검증을 결정적으로 유지하고,
 일부 macOS 환경의 Foundry nightly 프록시 초기화 충돌을 피한다.
+
+RFQ reference service 테스트:
+
+```sh
+cd services/rfq
+npm ci
+npm test
+```
+
+이 smoke test는 EIP-712 typed-data shape, expiry/nonce 부여, unsafe JavaScript
+number 거부와 monotonic nonce fallback을 검증한다.
 
 Vendored deploy tool 테스트:
 
@@ -32,9 +44,12 @@ yarn test
 
 ### Integration Tests
 
-현재 자동화된 제품 integration test는 없다. `tools/deploy-v3`의 Corner Store
-profile은 unit test로 구성과 순서를 검증하며, 과거 수동 Anvil 배포 검증 기록은
-`tools/deploy-v3/CORNER_STORE_PROFILE.md`에 있다.
+Foundry integration tests는 mock/ERC-3643 fixture를 사용해 regulated swap,
+multi-Recipe, surveillance, emergency pause와 invariant path를 검증한다.
+`tools/deploy-v3`의 Corner Store profile은 unit test로 구성과 순서를 검증하며,
+과거 수동 Anvil 배포 검증 기록은 `tools/deploy-v3/CORNER_STORE_PROFILE.md`에 있다.
+
+아직 자동화된 live Anvil deployment/E2E는 없다.
 
 ### E2E Tests
 
@@ -58,6 +73,8 @@ scripts/check.sh
 ```
 
 이 명령은 현재 저장소에서 지원하는 format, build와 test를 순서대로 실행한다.
+현재 포함 범위는 Foundry fmt/build/test, RFQ service smoke, vendored deploy-v3 test,
+whitespace check다.
 
 ## Manual Verification
 
