@@ -48,11 +48,15 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
 
 - Router는 Registry에 등록된 adapter와 venue만 신뢰한다.
 - Adapter 구현체 교체와 중단은 권한이 분리된 관리 작업이다.
+- Adapter와 settlement contract는 Router-only authorization 또는 동등한
+  호출자 제한을 가져야 한다.
 - decision 자체가 유효해도 요청 parameter가 decision과 다르면 실행하지 않는다.
-- Router를 지원 진입점으로 둔다고 표준 pool 직접 호출이 기술적으로 차단되는 것은
-  아니다.
-- Corner Store 4-Layer compliance 보장은 Router 지원 경로에 한정한다. 직접 pool
-  호출은 Corner Store 지원 실행으로 간주하지 않는다.
+- Router를 지원 진입점으로 둔다고 ERC-3643 직접 전송, 표준 pool 직접 호출,
+  wrapper/vault/custodian 이전 또는 offchain beneficial ownership 이전이
+  기술적으로 차단되는 것은 아니다.
+- Corner Store 4-Layer compliance 보장은 Router 지원 경로에 한정한다. 직접 token
+  transfer, 직접 pool/venue 호출과 non-router settlement는 Corner Store 지원
+  실행으로 간주하지 않는다.
 
 ## Invariants
 
@@ -61,6 +65,7 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
   multi-Recipe 평가 결과를 얻은 뒤 Adapter를 호출한다.
 - Adapter에 전달하는 decision은 actor, token, amount, venue, version, expiry와
   execution nonce에 바인딩한다.
+- 실행 caller는 `context.initiator`와 일치해야 한다.
 - nonce 재사용과 deadline 초과 요청을 거부한다.
 - Router는 matching 로직과 법률 규칙을 포함하지 않는다.
 - Router에 의도하지 않은 사용자 자산 잔액이 남지 않는다.
@@ -87,6 +92,8 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
 - 표준 pool 직접 호출에는 ERC-3643 자체 transfer enforcement만 적용될 수 있다.
   비우회 4-Layer enforcement가 필요한 production RWA venue는 별도 enforcement와
   외부 승인이 확정되기 전 활성화하지 않는다.
+- RFQ와 Order Book settlement는 Router-only authorization 또는 동등한 권한 모델이
+  확정되기 전 production-supported venue로 취급하지 않는다.
 
 ## Open Decisions
 
@@ -94,6 +101,7 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
 - 외부 preview API의 응답 형식
 - nonce scope와 batch execution
 - adapter upgrade/replace governance
+- Router-exclusive, token-level enforcement, limited-scope 중 production 보장 모델
 - 일반 ERC-20 public venue fast path의 허용 venue와 관측 이벤트 범위
 - 자산 classification onboarding과 integrator API
 
