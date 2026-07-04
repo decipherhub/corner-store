@@ -42,7 +42,7 @@ contract EmergencyPauseTest is IntegrationBase {
 
         ExecutionRequest memory req = buildBuyRequest(alice, 50 ether, 50 ether);
         vm.prank(alice);
-        vm.expectRevert(); // ComplianceRejected(reasonCode) — POLICY/SUSPENDED
+        vm.expectPartialRevert(Errors.ComplianceRejected.selector); // POLICY/SUSPENDED
         router.execute(req);
 
         assertEq(rwaToken.balanceOf(alice), 0, "no RWA while policy suspended");
@@ -59,7 +59,7 @@ contract EmergencyPauseTest is IntegrationBase {
 
         ExecutionRequest memory req = buildBuyRequest(alice, 50 ether, 50 ether);
         vm.prank(alice);
-        vm.expectRevert(); // ComplianceRejected(reasonCode) — POLICY/PROPOSED
+        vm.expectPartialRevert(Errors.ComplianceRejected.selector); // POLICY/PROPOSED
         router.execute(req);
 
         assertEq(rwaToken.balanceOf(alice), 0, "no RWA while policy only PROPOSED");
@@ -73,7 +73,7 @@ contract EmergencyPauseTest is IntegrationBase {
 
         ExecutionRequest memory req = buildBuyRequest(alice, 50 ether, 50 ether);
         vm.prank(alice);
-        vm.expectRevert(); // ComplianceRejected(reasonCode) — POLICY/RETIRED
+        vm.expectPartialRevert(Errors.ComplianceRejected.selector); // POLICY/RETIRED
         router.execute(req);
 
         assertEq(rwaToken.balanceOf(alice), 0, "no RWA while policy RETIRED");
@@ -87,7 +87,7 @@ contract EmergencyPauseTest is IntegrationBase {
         policyReg.suspendManifest(address(rwaToken), bytes32("EMERGENCY"));
         ExecutionRequest memory blocked = buildBuyRequest(alice, 50 ether, 50 ether);
         vm.prank(alice);
-        vm.expectRevert(); // ComplianceRejected — POLICY/SUSPENDED
+        vm.expectPartialRevert(Errors.ComplianceRejected.selector); // POLICY/SUSPENDED
         router.execute(blocked);
         assertEq(rwaToken.balanceOf(alice), 0, "blocked while suspended");
 
