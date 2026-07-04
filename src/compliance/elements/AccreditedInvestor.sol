@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {BaseElement} from "./BaseElement.sol";
+import {Governed} from "../../auth/Governed.sol";
 import {
     ElementMetadata,
     ElementCategory,
@@ -14,10 +15,12 @@ import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
 /// @dev A-03-v1 Accredited investor attestation (mock). Settable per-user flag
 ///      stands in for a real claim (existence + issuer + expiry, Pattern B).
-contract AccreditedInvestor is BaseElement {
+contract AccreditedInvestor is BaseElement, Governed {
     bytes32 internal constant ELEMENT_ID = "A-03-v1";
 
     mapping(address => bool) public accredited;
+
+    event AccreditedInvestorSet(address indexed investor, bool isAccredited);
 
     constructor()
         BaseElement(ElementMetadata({
@@ -31,8 +34,9 @@ contract AccreditedInvestor is BaseElement {
             }))
     {}
 
-    function setAccredited(address user, bool isAccredited) external {
+    function setAccredited(address user, bool isAccredited) external onlyOperator {
         accredited[user] = isAccredited;
+        emit AccreditedInvestorSet(user, isAccredited);
     }
 
     function check(address user, address, address, uint256, bytes calldata)

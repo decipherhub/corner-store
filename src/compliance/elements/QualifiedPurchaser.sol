@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {BaseElement} from "./BaseElement.sol";
+import {Governed} from "../../auth/Governed.sol";
 import {
     ElementMetadata,
     ElementCategory,
@@ -14,10 +15,12 @@ import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
 /// @dev A-13-v1 Qualified purchaser attestation (mock). Activated conditionally
 ///      by the 3(c)(7) fund recipe; settable per-user flag stands in for a claim.
-contract QualifiedPurchaser is BaseElement {
+contract QualifiedPurchaser is BaseElement, Governed {
     bytes32 internal constant ELEMENT_ID = "A-13-v1";
 
     mapping(address => bool) public qp;
+
+    event QualifiedPurchaserSet(address indexed investor, bool isQp);
 
     constructor()
         BaseElement(ElementMetadata({
@@ -31,8 +34,9 @@ contract QualifiedPurchaser is BaseElement {
             }))
     {}
 
-    function setQp(address user, bool isQp) external {
+    function setQp(address user, bool isQp) external onlyOperator {
         qp[user] = isQp;
+        emit QualifiedPurchaserSet(user, isQp);
     }
 
     function check(address user, address, address, uint256, bytes calldata)
