@@ -225,8 +225,13 @@ contract RFQAdapterTest is Test {
     }
 
     function test_execute_revertsWhenMakerNotApproved() public {
-        adapter.setMakerApproved(maker, false);
-        (, ExecutionRequest memory req) = _validRequest(1, 1);
+        // Fresh maker never passed to setMakerApproved: exercises the default-false path.
+        uint256 unapprovedMakerPk = 0xDEAD01;
+        address unapprovedMaker = vm.addr(unapprovedMakerPk);
+
+        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        q.maker = unapprovedMaker;
+        ExecutionRequest memory req = _request(q, _sign(q, unapprovedMakerPk), 1);
 
         vm.prank(taker);
         vm.expectRevert(Errors.RFQMakerNotApproved.selector);
