@@ -219,6 +219,68 @@ contract TokenPolicyRegistryTest is Test {
         reg.setUnregulated(token);
     }
 
+    /// @dev setUnregulated is onlyOwner, NOT onlyOperator: a mere operator (not
+    ///      the owner) must be rejected, proving the classification/lifecycle
+    ///      gate distinction.
+    function test_setUnregulated_reverts_for_operator() public {
+        vm.prank(operator);
+        vm.expectRevert(); // Ownable: operator is not the owner
+        reg.setUnregulated(token);
+    }
+
+    // --- clearUnregulated -------------------------------------------------
+
+    function test_clearUnregulated_from_UNREGULATED() public {
+        reg.setUnregulated(token); // UNKNOWN -> UNREGULATED
+        vm.expectEmit(true, false, false, true);
+        emit Events.ManifestStatusChanged(token, PolicyStatus.UNKNOWN, bytes32(0));
+        reg.clearUnregulated(token);
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.UNKNOWN));
+    }
+
+    /// @dev After clearing, the token is a clean slate again and can be declared
+    ///      as a regulated manifest (lands PROPOSED).
+    function test_clearUnregulated_then_register_ok() public {
+        reg.setUnregulated(token);
+        reg.clearUnregulated(token);
+        reg.registerManifest(token, _manifest());
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.PROPOSED));
+    }
+
+    function test_clearUnregulated_reverts_when_UNKNOWN() public {
+        // never tagged → still UNKNOWN → illegal.
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
+        reg.clearUnregulated(token);
+    }
+
+    function test_clearUnregulated_reverts_when_PROPOSED() public {
+        reg.registerManifest(token, _manifest()); // PROPOSED
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
+        reg.clearUnregulated(token);
+    }
+
+    function test_clearUnregulated_reverts_when_ACTIVE() public {
+        _activate(token);
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
+        reg.clearUnregulated(token);
+    }
+
+    function test_clearUnregulated_reverts_for_non_owner() public {
+        reg.setUnregulated(token);
+        vm.prank(stranger);
+        vm.expectRevert(); // Ownable: caller is not the owner
+        reg.clearUnregulated(token);
+    }
+
+    /// @dev clearUnregulated is onlyOwner, NOT onlyOperator: an operator (not the
+    ///      owner) must be rejected, symmetric with setUnregulated.
+    function test_clearUnregulated_reverts_for_operator() public {
+        reg.setUnregulated(token);
+        vm.prank(operator);
+        vm.expectRevert(); // Ownable: operator is not the owner
+        reg.clearUnregulated(token);
+    }
+
     // --- illegal-transition table -----------------------------------------
 
     /// @dev Move `token` into `from`, then assert the named mutator reverts

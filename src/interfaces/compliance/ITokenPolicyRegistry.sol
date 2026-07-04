@@ -17,6 +17,8 @@ interface ITokenPolicyRegistry {
 
     function setUnregulated(address token) external; // UNKNOWN -> UNREGULATED
 
+    function clearUnregulated(address token) external; // UNREGULATED -> UNKNOWN
+
     function manifestOf(address token) external view returns (ManifestCore memory);
 
     function statusOf(address token) external view returns (PolicyStatus);

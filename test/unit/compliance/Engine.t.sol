@@ -280,6 +280,70 @@ contract EngineTest is Test {
         assertTrue(d.reasonCode != bytes32(0));
     }
 
+    // --- non-active manifest statuses fail closed (default-deny) -----------
+    // The engine permits a side only when it is UNREGULATED or ACTIVE. PROPOSED
+    // (registered, not yet operator-approved) and RETIRED (terminal) must reject
+    // like UNKNOWN/SUSPENDED — never fall through to a zero-element pass. These
+    // pairs were fail-OPEN before the default-deny restructure: a PROPOSED/RETIRED
+    // side paired with UNREGULATED collected zero elements and returned allowed.
+
+    function test_proposed_against_unregulated_fails_closed() public {
+        // RWA registered (PROPOSED) but NOT approved; CASH UNREGULATED.
+        policyReg.registerManifest(RWA, _activeManifest(0, 0));
+        _registerCashUnregulated();
+        _makeBuyerCompliant();
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertFalse(d.allowed, "PROPOSED side must fail-closed against UNREGULATED");
+        assertTrue(d.reasonCode != bytes32(0));
+    }
+
+    function test_retired_against_unregulated_fails_closed() public {
+        // RWA reaches RETIRED via register -> approve -> retire; CASH UNREGULATED.
+        policyReg.registerManifest(RWA, _activeManifest(0, 0));
+        policyReg.approveManifest(RWA);
+        policyReg.retireManifest(RWA, bytes32("EOL"));
+        _registerCashUnregulated();
+        _makeBuyerCompliant();
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertFalse(d.allowed, "RETIRED side must fail-closed against UNREGULATED");
+        assertTrue(d.reasonCode != bytes32(0));
+    }
+
+    function test_proposed_against_active_fails_closed() public {
+        // tokenIn RWA is only PROPOSED; tokenOut RWA2 is ACTIVE. The ACTIVE side
+        // passing its recipes must NOT rescue a PROPOSED counterparty.
+        policyReg.registerManifest(RWA, _activeManifest(0, 0)); // PROPOSED
+        policyReg.registerManifest(RWA2, _activeManifest(0, 0));
+        policyReg.approveManifest(RWA2); // ACTIVE
+        _makeBuyerCompliant();
+
+        ComplianceDecision memory d = engine.evaluate(_ctxRegulatedPair());
+        assertFalse(d.allowed, "PROPOSED tokenIn must fail-closed even against an ACTIVE tokenOut");
+        assertTrue(d.reasonCode != bytes32(0));
+    }
+
+    function test_retired_against_active_fails_closed_both_orderings() public {
+        // RETIRED as tokenIn (RWA) against ACTIVE tokenOut (RWA2).
+        policyReg.registerManifest(RWA, _activeManifest(0, 0));
+        policyReg.approveManifest(RWA);
+        policyReg.retireManifest(RWA, bytes32("EOL")); // RWA RETIRED
+        policyReg.registerManifest(RWA2, _activeManifest(0, 0));
+        policyReg.approveManifest(RWA2); // RWA2 ACTIVE
+        _makeBuyerCompliant();
+
+        ComplianceContext memory c = _ctxRegulatedPair(); // tokenIn=RWA, tokenOut=RWA2
+        ComplianceDecision memory d = engine.evaluate(c);
+        assertFalse(d.allowed, "RETIRED tokenIn must fail-closed against ACTIVE tokenOut");
+
+        // Swap the ordering: RETIRED as tokenOut, ACTIVE as tokenIn.
+        (c.tokenIn, c.tokenOut) = (c.tokenOut, c.tokenIn);
+        d = engine.evaluate(c);
+        assertFalse(d.allowed, "RETIRED tokenOut must fail-closed against ACTIVE tokenIn");
+        assertTrue(d.reasonCode != bytes32(0));
+    }
+
     function test_decisionHash_binds_amount() public {
         _registerRWA(0, 0);
         _makeBuyerCompliant();

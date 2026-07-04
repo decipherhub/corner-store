@@ -90,6 +90,17 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         emit Events.ManifestStatusChanged(token, PolicyStatus.UNREGULATED, bytes32(0));
     }
 
+    /// @notice Undo an UNREGULATED tag: UNREGULATED -> UNKNOWN. Only from
+    ///         UNREGULATED (any other state reverts). Lets a token mistagged
+    ///         out-of-scope be returned to a clean slate so it can later be
+    ///         registered as a regulated manifest. onlyOwner, symmetric with
+    ///         setUnregulated (both are governance classification calls).
+    function clearUnregulated(address token) external onlyOwner {
+        if (_manifests[token].status != PolicyStatus.UNREGULATED) revert Errors.InvalidManifestTransition();
+        _manifests[token].status = PolicyStatus.UNKNOWN;
+        emit Events.ManifestStatusChanged(token, PolicyStatus.UNKNOWN, bytes32(0));
+    }
+
     function manifestOf(address token) external view returns (ManifestCore memory) {
         return _manifests[token];
     }
