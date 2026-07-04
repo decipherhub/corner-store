@@ -254,3 +254,58 @@ Router 밖 경로는 production deployment에서 다음 중 하나로 처리해�
 - `docs/security.md`
 - `ARCHITECTURE.md`
 - `docs/architecture/execution-routing.md`
+
+## D007 — RFQ v2 hardening: maker approval, full-fill, non-custodial, nonce-scoped cancel
+
+Date: 2026-07-04
+
+### Context
+
+RFQ v1(RFQ-001)은 EIP-712 signed quote와 router-only settlement를 확정했으나
+dealer approval, signer custody, quote cancellation, partial fill을 열린 항목으로
+남겼다(`docs/security.md` RFQ Safety, D006 protected-path 경계). v2 hardening에서
+maker approval gate와 maker-initiated cancellation을 구현하면서 이들 항목의 범위와
+정책을 확정할 필요가 있다.
+
+### Decision
+
+RFQ venue의 다음 정책을 확정한다.
+
+- maker approval은 adapter-local하며 operator가 관리한다(`RFQAdapter.approvedMaker`,
+  `setMakerApproved` onlyOperator). 여러 quote-driven venue가 공유하는 dealer
+  registry는 두 번째 quote-driven venue가 생길 때까지 도입하지 않는다.
+- fill 정책은 full-fill을 유지한다. compliance 판정은 평가된 정확한 amount에
+  바인딩되며, partial fill은 아직 설계되지 않은 per-fill 재평가 semantics를
+  요구하므로 채택하지 않는다.
+- custody는 non-custodial을 유지한다. settlement는 두 개의 `safeTransferFrom`
+  leg로 수행하며, adapter는 자산을 보관하지 않는다. custodial RFQ variant는
+  범위 밖이다.
+- cancellation은 nonce-scoped이며 idempotent하다. `usedQuoteNonce` fill guard를
+  재사용하여 cancel과 fill이 같은 nonce namespace를 공유한다. cancel-vs-fill
+  race는 먼저 채굴된 transaction으로 해소된다.
+
+### Alternatives Considered
+
+- 공유 dealer registry를 즉시 도입: 두 번째 quote-driven venue가 없어 abstraction을
+  과도하게 확정하므로 제외
+- partial fill 지원: compliance 판정과 amount binding, per-fill 재평가 semantics가
+  미설계여서 제외
+- custodial settlement: 자산 보관 위험과 별도 신뢰 가정이 필요해 reference 범위
+  밖으로 제외
+- cancel을 revert 기반 또는 별도 mapping으로 구현: fill guard와 상태를 이중화하고
+  race semantics를 복잡하게 만들어 제외
+
+### Consequences
+
+- maker off-boarding은 operator의 `setMakerApproved(maker, false)`로 처리한다.
+- signer key custody와 operator key management(multisig/HSM/rotation)은 여전히
+  open decision이며 production hardening에서 확정한다.
+- partial fill과 dealer inventory risk는 별도 feature spec 전까지 비활성이다.
+- 위협 모델은 `docs/rfq-threat-model.md`가 source of truth다.
+
+### Related Files
+
+- `docs/rfq-threat-model.md`
+- `docs/security.md`
+- `src/execution/adapters/rfq/RFQAdapter.sol`
+- `FEATURES.md`

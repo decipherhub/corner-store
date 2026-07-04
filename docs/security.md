@@ -128,8 +128,11 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   decimal string을 사용한다.
 - 기본 nonce 생성은 같은 millisecond 내 quote 충돌을 만들지 않는 단조 증가 fallback을
   가져야 한다.
-- production dealer approval, signer custody, quote cancellation, partial fill과
-  inventory risk는 별도 threat model과 feature spec 전까지 활성화하지 않는다.
+- maker(dealer) approval과 quote cancellation은 operator-curated allowlist와
+  nonce-scoped cancel로 활성화되었다. 위협 모델, actor/asset/trust boundary와
+  threat table은 `docs/rfq-threat-model.md`를 기준으로 한다.
+- signer key custody, partial fill과 inventory risk는 별도 feature spec 전까지
+  활성화하지 않는다.
 
 ## Logging
 
