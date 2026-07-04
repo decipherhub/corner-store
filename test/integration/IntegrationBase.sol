@@ -171,10 +171,11 @@ abstract contract IntegrationBase is TREXSuite {
         pool = new MockPool(IERC20(address(quote)), IERC20(address(rwaToken)));
 
         // 7. manifests
+        // TASK-2 SEAM: onboarding now goes through propose -> approve.
         policyReg.registerManifest(address(rwaToken), _activeManifest(fundRecipeId, factsPacked));
-        ManifestCore memory unreg;
-        unreg.status = PolicyStatus.UNREGULATED;
-        policyReg.registerManifest(address(quote), unreg);
+        policyReg.approveManifest(address(rwaToken));
+        // Quote/cash is out-of-scope: tag UNREGULATED directly from UNKNOWN.
+        policyReg.setUnregulated(address(quote));
 
         // 8. register the pool as a verified RWA holder + as an AMM venue + adapter pool
         registerVenueIdentity(address(pool));

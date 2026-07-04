@@ -23,4 +23,5 @@ library Errors {
     error ElementNotRegistered(bytes32 elementId);
     error RecipeNotRegistered(uint16 recipeId);
     error LooseningForbidden(); // strengthen-only override
+    error InvalidManifestTransition(); // illegal PolicyStatus lifecycle move
 }

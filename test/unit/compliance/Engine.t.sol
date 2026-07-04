@@ -150,7 +150,9 @@ contract EngineTest is Test {
     }
 
     function _registerRWA(uint16 fundRecipeId, uint256 factsPacked) internal {
+        // TASK-2 SEAM: register lands PROPOSED, approve moves it to ACTIVE.
         policyReg.registerManifest(RWA, _activeManifest(fundRecipeId, factsPacked));
+        policyReg.approveManifest(RWA);
         _registerCashUnregulated();
     }
 
@@ -159,9 +161,8 @@ contract EngineTest is Test {
     ///      engine never infers UNREGULATED from an absent manifest, so every
     ///      ACTIVE-side test must register CASH as UNREGULATED.
     function _registerCashUnregulated() internal {
-        ManifestCore memory unreg;
-        unreg.status = PolicyStatus.UNREGULATED;
-        policyReg.registerManifest(CASH, unreg);
+        // TASK-2 SEAM: UNREGULATED is now set via setUnregulated (only from UNKNOWN).
+        policyReg.setUnregulated(CASH);
     }
 
     function _ctxBuy() internal pure returns (ComplianceContext memory c) {
@@ -257,10 +258,8 @@ contract EngineTest is Test {
 
     function test_both_unregulated_passes_through() public {
         // Both sides explicitly UNREGULATED → pass through.
-        ManifestCore memory unreg;
-        unreg.status = PolicyStatus.UNREGULATED;
-        policyReg.registerManifest(RWA, unreg);
-        policyReg.registerManifest(CASH, unreg);
+        policyReg.setUnregulated(RWA);
+        policyReg.setUnregulated(CASH);
 
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
         assertTrue(d.allowed);
@@ -269,9 +268,11 @@ contract EngineTest is Test {
     }
 
     function test_suspended_fails_closed() public {
+        // TASK-2 SEAM: reach SUSPENDED via register -> approve -> suspend.
         ManifestCore memory m = _activeManifest(0, 0);
-        m.status = PolicyStatus.SUSPENDED;
         policyReg.registerManifest(RWA, m);
+        policyReg.approveManifest(RWA);
+        policyReg.suspendManifest(RWA, bytes32("HALT"));
         accredited.setAccredited(BUYER, true);
 
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
@@ -300,6 +301,7 @@ contract EngineTest is Test {
         ManifestCore memory m = _activeManifest(0, 0);
         m.issuanceRecipeId = 3; // point issuance at the bad recipe
         policyReg.registerManifest(RWA, m);
+        policyReg.approveManifest(RWA);
         _registerCashUnregulated();
 
         vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, bytes32("Z-99-v1")));
@@ -310,6 +312,7 @@ contract EngineTest is Test {
         ManifestCore memory m = _activeManifest(0, 0);
         m.issuanceRecipeId = 77; // manifest points at a recipe that was never registered
         policyReg.registerManifest(RWA, m);
+        policyReg.approveManifest(RWA);
         _registerCashUnregulated();
 
         vm.expectRevert(abi.encodeWithSelector(Errors.RecipeNotRegistered.selector, uint16(77)));
@@ -321,7 +324,9 @@ contract EngineTest is Test {
         // Old single-side selection could choose tokenOut and incorrectly allow
         // without QP. The pair-level rule must reject until both sides pass.
         policyReg.registerManifest(RWA, _activeManifest(2, 1));
+        policyReg.approveManifest(RWA);
         policyReg.registerManifest(RWA2, _activeManifest(0, 0));
+        policyReg.approveManifest(RWA2);
         _makeBuyerCompliant();
 
         ComplianceDecision memory d = engine.evaluate(_ctxRegulatedPair());
@@ -343,6 +348,7 @@ contract EngineTest is Test {
         ManifestCore memory m = _activeManifest(0, 0);
         m.issuanceRecipeId = 4;
         policyReg.registerManifest(RWA, m);
+        policyReg.approveManifest(RWA);
         _registerCashUnregulated();
 
         accredited.setAccredited(BUYER, true);
@@ -412,9 +418,7 @@ contract EngineTest is Test {
     // rules, ONLY both-UNREGULATED passes through; a single UNKNOWN side must
     // reject — we never infer UNREGULATED from an absent manifest.
     function test_mixed_unregulated_unknown_fails_closed() public {
-        ManifestCore memory unreg;
-        unreg.status = PolicyStatus.UNREGULATED;
-        policyReg.registerManifest(RWA, unreg);
+        policyReg.setUnregulated(RWA);
         // CASH intentionally NOT registered → UNKNOWN.
 
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
@@ -428,6 +432,7 @@ contract EngineTest is Test {
     // makes the pair fail-closed before any recipe runs.
     function test_active_against_unknown_cash_fails_closed() public {
         policyReg.registerManifest(RWA, _activeManifest(0, 0));
+        policyReg.approveManifest(RWA);
         // CASH intentionally NOT registered → UNKNOWN.
         accredited.setAccredited(BUYER, true); // would otherwise satisfy RegD506c.
 
@@ -457,6 +462,7 @@ contract EngineTest is Test {
         ManifestCore memory m = _activeManifest(0, 0);
         m.issuanceRecipeId = 6; // point issuance at the lockup-only recipe
         policyReg.registerManifest(RWA, m);
+        policyReg.approveManifest(RWA);
         _registerCashUnregulated();
 
         // Before lockup elapses → reject.

@@ -35,7 +35,11 @@ contract CornerStoreFactory is Governed {
         address venue,
         VenueConfig calldata venueCfg
     ) external onlyOperator {
+        // TASK-2 SEAM: onboarding is propose-then-approve in one governed call.
+        // The factory is the operator here; register lands PROPOSED, approve
+        // moves it to ACTIVE, preserving the old one-call "token ends ACTIVE".
         tokenPolicyRegistry.registerManifest(token, manifest);
+        tokenPolicyRegistry.approveManifest(token);
         venueRegistry.registerVenue(venue, venueCfg);
         emit RWATokenRegistered(token, venue);
     }
