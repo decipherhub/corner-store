@@ -170,8 +170,7 @@ abstract contract IntegrationBase is TREXSuite {
         quote = new MockERC20("Quote USD", "qUSD");
         pool = new MockPool(IERC20(address(quote)), IERC20(address(rwaToken)));
 
-        // 7. manifests
-        // TASK-2 SEAM: onboarding now goes through propose -> approve.
+        // 7. manifests: onboarding goes through the lifecycle (propose -> approve).
         policyReg.registerManifest(address(rwaToken), _activeManifest(fundRecipeId, factsPacked));
         policyReg.approveManifest(address(rwaToken));
         // Quote/cash is out-of-scope: tag UNREGULATED directly from UNKNOWN.

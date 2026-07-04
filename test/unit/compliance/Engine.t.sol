@@ -150,7 +150,7 @@ contract EngineTest is Test {
     }
 
     function _registerRWA(uint16 fundRecipeId, uint256 factsPacked) internal {
-        // TASK-2 SEAM: register lands PROPOSED, approve moves it to ACTIVE.
+        // Onboard the legal way: register lands PROPOSED, approve moves it to ACTIVE.
         policyReg.registerManifest(RWA, _activeManifest(fundRecipeId, factsPacked));
         policyReg.approveManifest(RWA);
         _registerCashUnregulated();
@@ -161,7 +161,7 @@ contract EngineTest is Test {
     ///      engine never infers UNREGULATED from an absent manifest, so every
     ///      ACTIVE-side test must register CASH as UNREGULATED.
     function _registerCashUnregulated() internal {
-        // TASK-2 SEAM: UNREGULATED is now set via setUnregulated (only from UNKNOWN).
+        // UNREGULATED is set via setUnregulated (only from UNKNOWN).
         policyReg.setUnregulated(CASH);
     }
 
@@ -268,7 +268,7 @@ contract EngineTest is Test {
     }
 
     function test_suspended_fails_closed() public {
-        // TASK-2 SEAM: reach SUSPENDED via register -> approve -> suspend.
+        // Reach SUSPENDED the legal way: register -> approve -> suspend.
         ManifestCore memory m = _activeManifest(0, 0);
         policyReg.registerManifest(RWA, m);
         policyReg.approveManifest(RWA);
