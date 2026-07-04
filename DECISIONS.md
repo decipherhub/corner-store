@@ -379,3 +379,109 @@ criteria remain approval-gated").
   `test/integration/RegD506cElements.t.sol`
 - `test/unit/compliance/Recipes.t.sol`, `test/unit/compliance/Engine.t.sol`
 - `docs/ROADMAP.md`
+
+## D009 — Manifest lifecycle를 validated state machine로 만들고 engine을 default-deny로 닫는다
+
+Date: 2026-07-04
+
+### Context
+
+MVP-v2 §5는 asset Manifest에 explicit operator approval step을 포함한 full
+lifecycle을 요구한다. 기존 `TokenPolicyRegistry`는 임의 상태를 덮어쓰는 raw
+`setStatus`만 제공했고(승인 단계 없음), `ComplianceEngine.evaluate`는 SUSPENDED와
+UNKNOWN만 명시적으로 reject한 뒤 나머지를 `_evaluateActivePair`로 흘려보냈다. 이
+구조에 PROPOSED/RETIRED 상태를 추가하면 두 개의 fail-open 구멍이 생긴다: (a)
+PROPOSED/RETIRED 자산이 UNREGULATED와 pair되면 element가 0개 수집되어 `allowed =
+true`, (b) PROPOSED/RETIRED가 ACTIVE와 pair되면 ACTIVE side만 검증되고 거래가
+통과한다.
+
+### Decision
+
+**1. Lifecycle state machine (states/transitions).** Manifest는 아래 transition만
+허용하는 명시적 state machine을 따른다. 그 외 모든 (state, action)은 dedicated
+custom error `Errors.InvalidManifestTransition`으로 revert한다.
+
+| From | Action | To | Gate |
+| --- | --- | --- | --- |
+| UNKNOWN 또는 RETIRED | `registerManifest` | PROPOSED | onlyOwner |
+| PROPOSED | `approveManifest` | ACTIVE | onlyOperator (issuance recipe 필수) |
+| ACTIVE | `suspendManifest(reasonCode)` | SUSPENDED | onlyOperator |
+| SUSPENDED | `resumeManifest` | ACTIVE | onlyOperator |
+| ACTIVE 또는 SUSPENDED | `retireManifest(reasonCode)` | RETIRED (terminal) | onlyOperator |
+| UNKNOWN | `setUnregulated` | UNREGULATED | onlyOwner |
+| UNREGULATED | `clearUnregulated` | UNKNOWN | onlyOwner |
+
+`registerManifest`는 caller가 넣은 `m.status`를 무시하고 항상 PROPOSED로 착지하며
+`declaredBy = msg.sender`를 기록한다. `approveManifest`는 `approvedBy = msg.sender`를
+기록하고 `issuanceRecipeId == 0`이면 registry-level completeness floor로 revert한다.
+RETIRED는 terminal이며 재발행은 RETIRED→register→approve 경로로만 가능하다. gating
+model: owner가 자산을 classify/declare(register/setUnregulated/clearUnregulated)하고,
+operator가 기존 manifest의 lifecycle(approve/suspend/resume/retire)을 구동한다.
+
+**2. Enum-append storage rationale.** `PolicyStatus`에 PROPOSED(4)와 RETIRED(5)를
+SUSPENDED(3) 뒤에 APPEND한다. 기존 numeric value(UNKNOWN=0, UNREGULATED=1,
+ACTIVE=2, SUSPENDED=3)는 storage layout과 enum↔uint cast에서 load-bearing이므로
+절대 재정렬하지 않는다. 그 결과 enum의 numeric order는 lifecycle graph의 semantic
+order와 일치하지 않는다(type 파일에 명시적 주석). UNKNOWN=0을 유지하는 것은 absent
+manifest가 fail-closed default가 되도록 하는 핵심이다.
+
+**3. `setStatus` 제거.** raw `setStatus` overwrite는 제거한다(pre-production
+breaking change; 모든 caller/test/factory를 이 feature에서 갱신). validation 없는
+상태 덮어쓰기는 approval step과 transition guard를 우회하므로 유지할 수 없다.
+
+**4. Engine default-deny 재구조화 (positive allowlist).** `evaluate`의 enumerated
+bad-status 검사(SUSPENDED/UNKNOWN reject)를 side별 positive allowlist로 교체한다:
+각 side는 UNREGULATED 또는 ACTIVE여야 하며, 그 외(UNKNOWN/SUSPENDED/PROPOSED/
+RETIRED와 미래에 추가될 모든 member)는 fail-closed한다. bad state를 열거하는 대신
+permitted state를 열거하는 이유: reject list에 새 상태를 추가하는 것을 잊으면
+그대로 fail-open이 되지만, allowlist는 새로 추가된 상태를 default로 거부하므로
+"append-only 안전"하다. both-UNREGULATED fast-path pass-through는 유지한다.
+`commit`은 router가 `evaluate`를 먼저 호출하고 reject 시 revert하므로 rejected
+pair에서 도달 불가능하다 — mirror guard가 필요 없고, in-file 주석으로 이유를
+남긴다(재구조화하지 않음).
+
+**5. `clearUnregulated` correction path.** 잘못 UNREGULATED로 tag된 token을
+UNKNOWN(clean slate)으로 되돌려 이후 regulated manifest로 register할 수 있게 한다.
+onlyOwner이며 UNREGULATED가 아닌 상태에서 호출하면 `InvalidManifestTransition`.
+setUnregulated와 대칭인 governance classification 호출이다.
+
+**6. `declaredBy = msg.sender` semantics와 factory consequence.** register는
+`declaredBy = msg.sender`, approve는 `approvedBy = msg.sender`를 기록한다.
+`CornerStoreFactory.registerRWAToken`은 register→approve를 한 governed call에서
+연속 실행하며 factory가 registry의 owner이자 approving operator다(배포 시
+governance가 registry ownership을 factory로 이전). 그 결과 이 경로로 onboarding된
+token의 `declaredBy`/`approvedBy`는 factory 주소이며, attribution은 factory
+경계에서 멈춘다.
+
+### Alternatives Considered
+
+- **Engine에서 reject list(bad state 열거) 유지**: PolicyStatus에 member를 추가할
+  때마다 reject list 갱신을 잊으면 fail-open이 되므로 제외. positive allowlist는
+  구조적으로 fail-closed default를 보장한다.
+- **enum member를 semantic order로 재정렬**: storage layout과 enum↔uint cast가
+  깨지므로 제외. append-only만 허용한다.
+- **`setStatus`를 deprecated로 유지**: validation 우회 경로가 남으므로 제외
+  (pre-production이라 breaking removal 비용이 낮다).
+- **PROPOSED/RETIRED에 UNKNOWN/SUSPENDED와 다른 별도 reason-code family 부여**:
+  기존 `_rejectPolicy`가 이미 `uint32(status)`를 reason code에 인코딩하므로 side의
+  실제 status를 그대로 넘기면 distinct code가 자동으로 나온다 — 추가 scheme 불필요.
+
+### Consequences
+
+- 모든 onboarding은 propose→approve 2단계를 거친다(factory는 한 call에서 collapse).
+- ACTIVE manifest의 issuance recipe re-point는 retire→register→approve 경로를
+  써야 한다(ACTIVE 위 re-register는 illegal).
+- engine은 미래에 PolicyStatus member가 추가되어도 default로 fail-closed한다.
+- fixture는 register→approve(및 UNREGULATED는 setUnregulated)로 통일된다.
+
+### Related Files
+
+- `src/types/ComplianceTypes.sol` (enum append + 주석)
+- `src/registry/TokenPolicyRegistry.sol`,
+  `src/interfaces/compliance/ITokenPolicyRegistry.sol`
+- `src/compliance/ComplianceEngine.sol` (evaluate default-deny gate)
+- `src/factory/CornerStoreFactory.sol` (register+approve, natspec)
+- `test/unit/compliance/Engine.t.sol`,
+  `test/unit/registry/TokenPolicyRegistry.t.sol`
+- `test/integration/EmergencyPause.t.sol`, `test/integration/IntegrationBase.sol`,
+  `test/integration/Surveillance.t.sol`
