@@ -11,6 +11,12 @@ import {AccreditedInvestor} from "../../../src/compliance/elements/AccreditedInv
 import {QualifiedPurchaser} from "../../../src/compliance/elements/QualifiedPurchaser.sol";
 import {SurveillanceFlag} from "../../../src/compliance/elements/SurveillanceFlag.sol";
 import {Lockup} from "../../../src/compliance/elements/Lockup.sol";
+import {Jurisdiction} from "../../../src/compliance/elements/Jurisdiction.sol";
+import {IdentityUniqueness} from "../../../src/compliance/elements/IdentityUniqueness.sol";
+import {UsTaxResident} from "../../../src/compliance/elements/UsTaxResident.sol";
+import {AssetClassification} from "../../../src/compliance/elements/AssetClassification.sol";
+import {Erc3643Native} from "../../../src/compliance/elements/Erc3643Native.sol";
+import {FormDFiling} from "../../../src/compliance/elements/FormDFiling.sol";
 import {IAcquisitionSource} from "../../../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipe} from "../../../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../../../src/compliance/recipes/Fund3c7Recipe.sol";
@@ -35,6 +41,19 @@ contract EngineTest is Test {
     AccreditedInvestor internal accredited;
     QualifiedPurchaser internal qp;
     SurveillanceFlag internal surveillance;
+    // 9-element Reg D 506(c) reference set (RegD506cRecipe is now version 2).
+    Jurisdiction internal jurisdiction; // A-02-v1
+    IdentityUniqueness internal identity; // A-04-v1
+    UsTaxResident internal usTax; // A-05-v1
+    AssetClassification internal assetClass; // B-01-v1
+    Erc3643Native internal erc3643; // B-02-v1
+    Lockup internal lockup; // C-01-v1
+    FormDFiling internal formD; // E-01-v1
+    MockAcquisitionSource internal acqSource;
+
+    bytes32 internal constant ALLOWED_JX = bytes32("US");
+    bytes32 internal constant REG_D_CLASS = bytes32("REG_D");
+    uint64 internal constant LOCKUP_SECONDS = 365 days;
 
     address internal constant RWA = address(0xBEEF);
     address internal constant RWA2 = address(0xBEE2);
@@ -57,9 +76,34 @@ contract EngineTest is Test {
         elementReg.registerElement(bytes32("A-13-v1"), address(qp));
         elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
 
+        // Remaining 9-element Reg D 506(c) reference set (RegD506cRecipe v2).
+        jurisdiction = new Jurisdiction();
+        identity = new IdentityUniqueness();
+        usTax = new UsTaxResident();
+        assetClass = new AssetClassification(REG_D_CLASS);
+        erc3643 = new Erc3643Native();
+        formD = new FormDFiling();
+        acqSource = new MockAcquisitionSource();
+        lockup = new Lockup(address(acqSource), LOCKUP_SECONDS);
+        elementReg.registerElement(bytes32("A-02-v1"), address(jurisdiction));
+        elementReg.registerElement(bytes32("A-04-v1"), address(identity));
+        elementReg.registerElement(bytes32("A-05-v1"), address(usTax));
+        elementReg.registerElement(bytes32("B-01-v1"), address(assetClass));
+        elementReg.registerElement(bytes32("B-02-v1"), address(erc3643));
+        elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
+        elementReg.registerElement(bytes32("E-01-v1"), address(formD));
+
+        // Asset-side attestations for the RWA tokens + allowed jurisdiction.
+        jurisdiction.setJurisdictionAllowed(ALLOWED_JX, true);
+        _attestAsset(RWA);
+        _attestAsset(RWA2);
+        // Warp past the lockup window so buyers with a genesis (t=1) acquisition
+        // time pass C-01. (No deadlines are built in these unit tests.)
+        vm.warp(uint256(LOCKUP_SECONDS) + 1);
+
         RegD506cRecipe regd = new RegD506cRecipe();
         Fund3c7Recipe fund = new Fund3c7Recipe();
-        recipeReg.registerRecipe(1, 1, address(regd));
+        recipeReg.registerRecipe(1, 2, address(regd));
         recipeReg.registerRecipe(2, 1, address(fund));
 
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
@@ -69,6 +113,29 @@ contract EngineTest is Test {
         // so wire the surveillance element's engine to the engine address.
         engine.setRouter(address(this));
         surveillance.setEngine(address(engine));
+    }
+
+    /// @dev Asset-side attestations so `asset` satisfies B-01/B-02/E-01.
+    function _attestAsset(address asset) internal {
+        assetClass.setClassification(asset, REG_D_CLASS);
+        erc3643.setErc3643Native(asset, true);
+        formD.setFormDFiled(asset, true, bytes32("EDGAR"));
+    }
+
+    /// @dev All investor-side pass-conditions for BUYER EXCEPT accreditation
+    ///      (A-02 jurisdiction, A-04 identity, C-01 lockup on both RWA tokens).
+    ///      A-01 sanctions / A-05 US-tax pass by default.
+    function _attestBuyerBase() internal {
+        jurisdiction.setJurisdiction(BUYER, ALLOWED_JX);
+        identity.bindIdentity(BUYER, keccak256(abi.encode("ID", BUYER)));
+        acqSource.setAcquiredAt(BUYER, RWA, uint64(1));
+        acqSource.setAcquiredAt(BUYER, RWA2, uint64(1));
+    }
+
+    /// @dev BUYER passes every investor-side element in the 9-element recipe.
+    function _makeBuyerCompliant() internal {
+        _attestBuyerBase();
+        accredited.setAccredited(BUYER, true);
     }
 
     // --- manifest helpers ---
@@ -131,7 +198,7 @@ contract EngineTest is Test {
 
     function test_active_regd_allows_when_accredited_and_clean() public {
         _registerRWA(0, 0);
-        accredited.setAccredited(BUYER, true);
+        _makeBuyerCompliant();
 
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
         assertTrue(d.allowed);
@@ -143,7 +210,8 @@ contract EngineTest is Test {
 
     function test_active_rejects_when_not_accredited() public {
         _registerRWA(0, 0);
-        // buyer not accredited (default false), not sanctioned.
+        // buyer passes every element EXCEPT accreditation → reject isolated at A-03.
+        _attestBuyerBase();
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
         assertFalse(d.allowed);
         assertTrue(d.reasonCode != bytes32(0));
@@ -151,7 +219,7 @@ contract EngineTest is Test {
 
     function test_active_rejects_when_sanctioned() public {
         _registerRWA(0, 0);
-        accredited.setAccredited(BUYER, true);
+        _makeBuyerCompliant();
         sanctions.setBlocked(BUYER, true);
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
         assertFalse(d.allowed);
@@ -160,7 +228,7 @@ contract EngineTest is Test {
     function test_fund_recipe_conditional_activation_requires_qp() public {
         // fundRecipeId=2 and factsPacked bit0 set → Fund3c7 applies → QP required.
         _registerRWA(2, 1);
-        accredited.setAccredited(BUYER, true);
+        _makeBuyerCompliant();
         // not qp yet → AND fails.
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
         assertFalse(d.allowed);
@@ -174,7 +242,7 @@ contract EngineTest is Test {
     function test_fund_recipe_not_applicable_when_bit0_clear() public {
         // fundRecipeId=2 set but factsPacked bit0 NOT set → Fund3c7 not applicable.
         _registerRWA(2, 0);
-        accredited.setAccredited(BUYER, true);
+        _makeBuyerCompliant();
         // qp NOT set, but QP not required since fund recipe inapplicable.
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
         assertTrue(d.allowed);
@@ -213,7 +281,7 @@ contract EngineTest is Test {
 
     function test_decisionHash_binds_amount() public {
         _registerRWA(0, 0);
-        accredited.setAccredited(BUYER, true);
+        _makeBuyerCompliant();
 
         ComplianceContext memory c = _ctxBuy();
         ComplianceDecision memory d1 = engine.evaluate(c);
@@ -254,7 +322,7 @@ contract EngineTest is Test {
         // without QP. The pair-level rule must reject until both sides pass.
         policyReg.registerManifest(RWA, _activeManifest(2, 1));
         policyReg.registerManifest(RWA2, _activeManifest(0, 0));
-        accredited.setAccredited(BUYER, true);
+        _makeBuyerCompliant();
 
         ComplianceDecision memory d = engine.evaluate(_ctxRegulatedPair());
         assertFalse(d.allowed, "tokenIn fund recipe must also be enforced");
@@ -326,7 +394,7 @@ contract EngineTest is Test {
 
         // issuance=RegD506c (1), fund=overlapping recipe (5), applicable regardless of facts.
         _registerRWA(5, 0);
-        accredited.setAccredited(BUYER, true);
+        _makeBuyerCompliant();
 
         // Buyer passes both recipes; the shared element is checked, union evaluates true.
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
