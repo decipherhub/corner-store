@@ -73,10 +73,13 @@ contract IdentityUniqueness is BaseElement, Governed {
     }
 
     /// @notice Clear both directions of `wallet`'s binding, if any.
+    /// @dev Idempotent: unbinding an unbound wallet is a silent no-op so indexers
+    ///      never see a spurious `IdentityUnbound(wallet, 0)` event.
     function unbindIdentity(address wallet) external onlyOperator {
         bytes32 identityId = identityOf[wallet];
+        if (identityId == bytes32(0)) return;
         delete identityOf[wallet];
-        if (identityId != bytes32(0)) delete walletOf[identityId];
+        delete walletOf[identityId];
         emit IdentityUnbound(wallet, identityId);
     }
 

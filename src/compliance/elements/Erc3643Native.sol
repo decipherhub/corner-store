@@ -36,6 +36,9 @@ contract Erc3643Native is BaseElement, Governed {
                 category: ElementCategory.ASSET_ATTRIBUTE,
                 version: "B-02-v1",
                 temporal: TemporalNature.ONE_TIME,
+                // DETERMINISTIC (not ATTESTATION_BASED): the production form of this
+                // check is ERC-165/token-registry introspection — an onchain-decidable
+                // fact. The operator attestation is only the illustrative stand-in.
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
                 statefulness: Statefulness.STATELESS
