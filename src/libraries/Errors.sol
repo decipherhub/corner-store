@@ -19,6 +19,7 @@ library Errors {
     error RFQQuoteExpired();
     error RFQQuoteUsed();
     error RFQQuoteMismatch();
+    error RFQMakerNotApproved();
     error ElementNotRegistered(bytes32 elementId);
     error RecipeNotRegistered(uint16 recipeId);
     error LooseningForbidden(); // strengthen-only override

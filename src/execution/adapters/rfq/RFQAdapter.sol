@@ -27,10 +27,15 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
 
     mapping(address => mapping(uint256 => bool)) public usedQuoteNonce;
 
+    /// @notice Operator-curated maker (dealer) allowlist. Quotes from unapproved
+    ///         makers are rejected at settlement regardless of signature validity.
+    mapping(address => bool) public approvedMaker;
+
     event RouterSet(address indexed router);
     event RFQFilled(
         bytes32 indexed quoteHash, address indexed maker, address indexed taker, uint256 amountIn, uint256 amountOut
     );
+    event MakerApprovalSet(address indexed maker, bool approved);
 
     modifier onlyRouter() {
         if (msg.sender != router) revert Errors.NotAuthorized();
@@ -42,6 +47,11 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
     function setRouter(address router_) external onlyOwner {
         router = router_;
         emit RouterSet(router_);
+    }
+
+    function setMakerApproved(address maker, bool approved) external onlyOperator {
+        approvedMaker[maker] = approved;
+        emit MakerApprovalSet(maker, approved);
     }
 
     /// @notice Executes a full-fill RFQ quote for a single router request.
@@ -95,6 +105,7 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
     ) internal view {
         if (block.timestamp > quote.expiry) revert Errors.RFQQuoteExpired();
         if (usedQuoteNonce[quote.maker][quote.nonce]) revert Errors.RFQQuoteUsed();
+        if (!approvedMaker[quote.maker]) revert Errors.RFQMakerNotApproved();
 
         if (ECDSA.recover(quoteHash, signature) != quote.maker) revert Errors.RFQInvalidSignature();
 

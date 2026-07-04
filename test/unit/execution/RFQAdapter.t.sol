@@ -16,12 +16,15 @@ import {ComplianceContext, ComplianceDecision, VenueType, FlowType} from "../../
 import {Errors} from "../../../src/libraries/Errors.sol";
 
 contract RFQAdapterTest is Test {
+    event MakerApprovalSet(address indexed maker, bool approved);
+
     uint256 internal constant MAKER_PK = 0xA11CE;
     uint256 internal constant WRONG_PK = 0xB0B;
 
     address internal maker;
     address internal taker = address(0xCAFE);
     address internal venue = address(0xF00D);
+    address internal nonOperator = address(0xBEEF);
 
     MockERC20 internal tokenIn;
     MockERC20 internal tokenOut;
@@ -45,6 +48,7 @@ contract RFQAdapterTest is Test {
         router = new ExecutionRouter(engine, venueReg, selector, operatorReg);
 
         adapter.setRouter(address(router));
+        adapter.setMakerApproved(maker, true);
         venueReg.registerVenue(
             venue,
             VenueConfig({
@@ -218,5 +222,41 @@ contract RFQAdapterTest is Test {
 
         assertEq(tokenIn.balanceOf(taker), 1_000 ether, "no settlement on compliance rejection");
         assertEq(tokenOut.balanceOf(maker), 1_000 ether, "maker funds unchanged");
+    }
+
+    function test_execute_revertsWhenMakerNotApproved() public {
+        adapter.setMakerApproved(maker, false);
+        (, ExecutionRequest memory req) = _validRequest(1, 1);
+
+        vm.prank(taker);
+        vm.expectRevert(Errors.RFQMakerNotApproved.selector);
+        router.execute(req);
+    }
+
+    function test_setMakerApproved_onlyOperator() public {
+        vm.prank(nonOperator);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        adapter.setMakerApproved(maker, true);
+    }
+
+    function test_setMakerApproved_setsAndEmits() public {
+        vm.expectEmit(true, false, false, true, address(adapter));
+        emit MakerApprovalSet(maker, false);
+        adapter.setMakerApproved(maker, false);
+        assertFalse(adapter.approvedMaker(maker));
+
+        vm.expectEmit(true, false, false, true, address(adapter));
+        emit MakerApprovalSet(maker, true);
+        adapter.setMakerApproved(maker, true);
+        assertTrue(adapter.approvedMaker(maker));
+    }
+
+    function test_execute_revertsAfterApprovalRevoked() public {
+        adapter.setMakerApproved(maker, false);
+        (, ExecutionRequest memory req) = _validRequest(1, 1);
+
+        vm.prank(taker);
+        vm.expectRevert(Errors.RFQMakerNotApproved.selector);
+        router.execute(req);
     }
 }
