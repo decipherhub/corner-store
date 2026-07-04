@@ -17,6 +17,7 @@ import {Errors} from "../../../src/libraries/Errors.sol";
 
 contract RFQAdapterTest is Test {
     event MakerApprovalSet(address indexed maker, bool approved);
+    event RFQQuoteCancelled(address indexed maker, uint256 indexed nonce);
 
     uint256 internal constant MAKER_PK = 0xA11CE;
     uint256 internal constant WRONG_PK = 0xB0B;
@@ -263,5 +264,82 @@ contract RFQAdapterTest is Test {
         vm.prank(taker);
         vm.expectRevert(Errors.RFQMakerNotApproved.selector);
         router.execute(req);
+    }
+
+    function test_cancelQuoteNonce_blocksSubsequentFill() public {
+        (, ExecutionRequest memory req) = _validRequest(1, 1);
+
+        vm.prank(maker);
+        adapter.cancelQuoteNonce(1);
+
+        vm.prank(taker);
+        vm.expectRevert(Errors.RFQQuoteUsed.selector);
+        router.execute(req);
+    }
+
+    function test_cancelQuoteNonce_emitsOnFirstCancelOnly() public {
+        uint256 nonce = 1;
+
+        vm.prank(maker);
+        vm.expectEmit(true, true, false, false, address(adapter));
+        emit RFQQuoteCancelled(maker, nonce);
+        adapter.cancelQuoteNonce(nonce);
+
+        vm.recordLogs();
+        vm.prank(maker);
+        adapter.cancelQuoteNonce(nonce);
+        assertEq(vm.getRecordedLogs().length, 0, "second cancel must be a silent no-op");
+    }
+
+    function test_cancelQuoteNonce_scopedToCaller() public {
+        uint256 makerBPk = 0xFACE;
+        address makerB = vm.addr(makerBPk);
+        adapter.setMakerApproved(makerB, true);
+
+        vm.prank(makerB);
+        adapter.cancelQuoteNonce(1);
+
+        (, ExecutionRequest memory req) = _validRequest(1, 1);
+        vm.prank(taker);
+        router.execute(req);
+
+        assertEq(tokenOut.balanceOf(taker), 250 ether, "maker A's quote still fills after maker B cancels same nonce");
+        assertTrue(
+            adapter.usedQuoteNonce(makerB, 1), "maker B's own cancelled nonce namespace is unaffected by maker A's fill"
+        );
+    }
+
+    function test_cancelQuoteNonces_batchCancels() public {
+        uint256[] memory nonces = new uint256[](3);
+        nonces[0] = 1;
+        nonces[1] = 2;
+        nonces[2] = 3;
+
+        vm.expectEmit(true, true, false, false, address(adapter));
+        emit RFQQuoteCancelled(maker, 1);
+        vm.expectEmit(true, true, false, false, address(adapter));
+        emit RFQQuoteCancelled(maker, 2);
+        vm.expectEmit(true, true, false, false, address(adapter));
+        emit RFQQuoteCancelled(maker, 3);
+
+        vm.prank(maker);
+        adapter.cancelQuoteNonces(nonces);
+
+        assertTrue(adapter.usedQuoteNonce(maker, 1));
+        assertTrue(adapter.usedQuoteNonce(maker, 2));
+        assertTrue(adapter.usedQuoteNonce(maker, 3));
+    }
+
+    function test_cancelQuoteNonce_afterFillIsNoOp() public {
+        (, ExecutionRequest memory req) = _validRequest(1, 1);
+        vm.prank(taker);
+        router.execute(req);
+
+        vm.recordLogs();
+        vm.prank(maker);
+        adapter.cancelQuoteNonce(1);
+
+        assertEq(vm.getRecordedLogs().length, 0, "cancelling an already-filled nonce must not emit");
+        assertTrue(adapter.usedQuoteNonce(maker, 1), "filled nonce remains used");
     }
 }
