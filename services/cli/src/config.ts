@@ -20,7 +20,6 @@ export const DEFAULT_CHAIN_ID = 31337;
 
 // The RFQ venue label + the AMM 1:1 fixture facts (script/DemoConstants.sol).
 export const ALLOWED_JURISDICTION = "US";
-export const REG_D_CLASS = "REG_D";
 
 export interface Artifact {
   ammAdapter: string;

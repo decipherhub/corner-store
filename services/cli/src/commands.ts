@@ -21,7 +21,8 @@ import {
   rfqAdapter,
   router,
   venueRegistry,
-  walletForAccount
+  walletForAccount,
+  DEFAULT_CHAIN_ID,
 } from "./config";
 import {Contract, encodeBytes32String} from "ethers";
 import {ELEMENT_IDS, applyAttestation, defaultIdentityId} from "./elements";
@@ -383,7 +384,7 @@ export async function cmdRfqQuote(opts: GlobalOpts & {
   const ttl = opts.expiry ? Number(opts.expiry) : 3600;
 
   const service = new RFQQuoteService(
-    {chainId: 31337, verifyingContract: a.rfqAdapter as `0x${string}`, defaultTtlSeconds: ttl},
+    {chainId: DEFAULT_CHAIN_ID, verifyingContract: a.rfqAdapter as `0x${string}`, defaultTtlSeconds: ttl},
     new WalletTypedDataSigner(maker)
   );
   const signed = await service.createSignedQuote({
@@ -437,6 +438,7 @@ export function cmdReason(code: string, opts: {json?: boolean}): void {
   const decoded = decodeReason(code);
   if (opts.json) {
     console.log(JSON.stringify(decoded, null, 2));
+    if (decoded.label === "unknown code") process.exitCode = 1;
     return;
   }
   console.log(`${decoded.code}`);
