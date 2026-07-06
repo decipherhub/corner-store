@@ -173,8 +173,12 @@ contract DemoScenarios is Script, DemoConstants {
         policyReg.suspendManifest(address(rwa), bytes32("DEMO-SUSPEND"));
 
         ExecutionRequest memory blockedReq = _buyRequest(AMM_TRADE);
-        (bool reverted,) = _tryExecuteExpectComplianceReject(blockedReq);
-        console2.log("    evidence: while SUSPENDED, trade reverts ComplianceRejected ->", reverted);
+        // the helper decodes `reason` ONLY for ComplianceRejected, so a nonzero
+        // reason proves the block came from the compliance gate specifically,
+        // not from an unrelated revert.
+        (bool reverted, bytes32 blockedReason) = _tryExecuteExpectComplianceReject(blockedReq);
+        bool blockedOk = reverted && blockedReason != bytes32(0);
+        console2.log("    evidence: while SUSPENDED, trade reverts ComplianceRejected ->", blockedOk);
 
         vm.broadcast(deployerPk);
         policyReg.resumeManifest(address(rwa));
@@ -186,7 +190,7 @@ contract DemoScenarios is Script, DemoConstants {
         uint256 delta = rwa.balanceOf(investor) - before;
         console2.log("    evidence: after RESUME, trade settles; RWA delta (wei):", delta);
 
-        _record(4, reverted && delta == AMM_TRADE);
+        _record(4, blockedOk && delta == AMM_TRADE);
     }
 
     // ---------------------------------------------------------------------
