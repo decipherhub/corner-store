@@ -4,4 +4,6 @@ cache/
 broadcast/
 services/rfq/dist/
 services/rfq/node_modules/
+services/cli/dist/
+services/cli/node_modules/
 deployments/
