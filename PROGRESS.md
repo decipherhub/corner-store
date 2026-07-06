@@ -40,6 +40,11 @@ source of truth로 사용한다.
 - RFQ integration: RFQ 벤처를 protected router path(`ExecutionRouter → ComplianceEngine
   → RFQAdapter`)로 real ERC-3643 스택 위에서 end-to-end 커버(`test/integration/RFQFlow.t.sol`,
   fill/maker-unapproved/cancel/non-compliant/direct-call bypass 5 시나리오) — RFQ-002 deferred follow-up 완료.
+- `E2E-001 — Live Anvil E2E & Demo Runner`(`scripts/e2e-anvil.sh` +
+  `script/DeployStack.s.sol` + `script/DemoScenarios.s.sol`): fresh Anvil에 전체 스택
+  배포 후 7-scenario demo suite 구동, scenario별 PASS/FAIL. T-REX 배포 코어를
+  `test/fixtures/TREXCore.sol`로 추출해 fixture/script 공유. src/ 변경 없음. runbook은
+  `docs/demo.md`.
 
 ## Blocked
 
@@ -49,42 +54,48 @@ source of truth로 사용한다.
 
 1. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
    (C-01 Lockup은 현재 fixture-only mock acquisition source).
-2. live Anvil deployment/E2E를 추가한다.
+2. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
+   `tools/deploy-v3` vendor isolation 유지).
 3. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
 4. CI hardening(static analysis 등)을 강화한다.
 
 ## Last Session Summary
 
-- CMP-002 (Manifest Lifecycle & Operator Approval Flow)을 landing했다. Task 1
-  (registry state machine)에 이어 Task 2에서 engine fail-open을 닫고 factory/seam
-  finalization, 통합 시나리오, bookkeeping을 완료했다.
+- `E2E-001` (Live Anvil E2E & Demo Runner)을 landing했다. src/ 변경 없이 forge
+  script 두 개 + 셸 러너 + T-REX 배포 코어 추출로 live-Anvil E2E/demo를 구현했다.
 - 변경한 파일:
-  - product: `src/compliance/ComplianceEngine.sol`(evaluate positive-allowlist
-    default-deny + commit 주석), `src/registry/TokenPolicyRegistry.sol` +
-    `src/interfaces/compliance/ITokenPolicyRegistry.sol`(clearUnregulated),
-    `src/factory/CornerStoreFactory.sol`(register→approve natspec)
-  - test: `test/unit/compliance/Engine.t.sol`(신규 4 default-deny),
-    `test/unit/registry/TokenPolicyRegistry.t.sol`(신규 8 clearUnregulated+auth),
-    `test/integration/EmergencyPause.t.sol`(신규 3 router E2E),
-    `test/integration/IntegrationBase.sol`/`Surveillance.t.sol`(seam 정리)
-  - bookkeeping: `DECISIONS.md`(D009), `FEATURES.md`(CMP-002), `PROGRESS.md`
-  - Task 1(앞선 커밋): `src/types/ComplianceTypes.sol`(enum append),
-    `src/libraries/Errors.sol`(InvalidManifestTransition), registry state machine
-- TDD: engine 4개 default-deny 테스트가 먼저 RED로 오늘의 fail-open(PROPOSED/
-  RETIRED × UNREGULATED/ACTIVE가 allowed=true)을 증명한 뒤 positive-allowlist로
-  GREEN 전환.
+  - script: `script/DeployStack.s.sol`(전체 스택 live 배포 + JSON artifact),
+    `script/DemoScenarios.s.sol`(7-scenario 러너), `script/DemoConstants.sol`(공유
+    상수)
+  - runner: `scripts/e2e-anvil.sh`(anvil 기동/배포/scenario/teardown, `--port`/
+    `--keep`, offline)
+  - fixture refactor: `test/fixtures/TREXCore.sol`(신규, `is CommonBase`,
+    admin-parameterized, prank-free) + `test/fixtures/TREXSuite.sol`(thin facade
+    `is Test, TREXCore`) — test suite green 유지
+  - config: `foundry.toml`(fs_permissions read-write, JSON artifact),
+    `.gitignore`(`deployments/`)
+  - docs: `docs/demo.md`(runbook), `docs/testing.md`(E2E 섹션), `docs/README.md`
+  - bookkeeping: `FEATURES.md`(E2E-001), `PROGRESS.md`
+- 설계 요점:
+  - broadcast(pk)로 persist해야 하는 상태 전이/거래를, prank(addr)+try/catch로
+    revert 기대 시나리오(compliance/policy/authz 거부)를 구동. reason code는
+    off-chain 재계산 후 revert data와 비교.
+  - onboarding은 scenario 1에서 factory가 수행하도록 deploy 시 manifest를 UNKNOWN로
+    남기고 policyReg/venueReg 소유권을 factory로 이전, deployer는 policyReg operator로
+    남겨 lifecycle(suspend/resume/retire) 구동 가능하게 함.
+  - anvil genesis timestamp가 실제 wall-clock이라 C-01 Rule 144 lockup(t=1 seed)이
+    on-chain에서 자연 통과 → vm.warp 불필요.
 - 실행한 명령:
-  - `forge fmt`
+  - `forge fmt` / `forge fmt --check`
   - `forge test --offline`
+  - `scripts/e2e-anvil.sh`(fresh + repeat, `--keep`)
 - 통과한 검증:
-  - `forge test --offline` 227/227(pre-task 212 + 신규 15).
-  - engine default-deny(양방향 ordering 포함), registry clearUnregulated +
-    onlyOwner-vs-onlyOperator auth, 통합 PROPOSED/RETIRED reject + suspend→resume
-    재거래.
+  - `forge test --offline` 238/238(TREXCore 추출 후에도 green).
+  - `scripts/e2e-anvil.sh` 2회 실행 모두 7/7 PASS, exit 0. `--keep`로 anvil 잔존 확인.
 - 남은 리스크:
-  - ungated legacy mock element(A-01/A-03/QP)와 새 operator-gated element 사이
-    hardening divergence — follow-up으로 정렬(CMP-001 deferred).
-  - C-01 Lockup은 fixture-only mock acquisition source에 의존; production
+  - AMM venue는 MockPool(1:1); 실제 Uniswap v3 pool 배포는 별도 follow-up(vendor
+    isolation). demo는 `tools/deploy-v3`에 의존하지 않는다.
+  - C-01 Lockup은 fixture/demo mock acquisition source에 의존; production
     acquisition/lot data source와 holding-period 활성화 default는 미결정.
   - production data source(OFAC/ONCHAINID/ERC-165/EDGAR) 연결과 legal 활성화는
     approval-gated로 열려 있다.
