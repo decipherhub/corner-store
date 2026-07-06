@@ -1,0 +1,456 @@
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity 0.8.17;
+
+import {Script} from "forge-std/Script.sol";
+import {console2} from "forge-std/console2.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import {CornerStoreFactory} from "../src/factory/CornerStoreFactory.sol";
+import {TokenPolicyRegistry} from "../src/registry/TokenPolicyRegistry.sol";
+import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
+import {SurveillanceFlag} from "../src/compliance/elements/SurveillanceFlag.sol";
+import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
+import {UniswapV3Adapter} from "../src/execution/adapters/amm/UniswapV3Adapter.sol";
+import {RFQAdapter} from "../src/execution/adapters/rfq/RFQAdapter.sol";
+import {RFQQuote} from "../src/execution/adapters/rfq/RFQTypes.sol";
+
+import {ExecutionRequest} from "../src/types/ExecutionTypes.sol";
+import {
+    ComplianceContext,
+    ComplianceDecision,
+    ManifestCore,
+    PolicyStatus,
+    VenueType,
+    FlowType
+} from "../src/types/ComplianceTypes.sol";
+import {VenueConfig, CustodyModel} from "../src/types/VenueTypes.sol";
+import {Errors} from "../src/libraries/Errors.sol";
+import {ReasonCodes} from "../src/libraries/ReasonCodes.sol";
+import {DemoConstants} from "./DemoConstants.sol";
+
+/// @title DemoScenarios
+/// @notice The live-Anvil E2E scenario runner + stakeholder DEMO (deliverable 2).
+///         Reads the {DeployStack} artifact and drives the 7-scenario suite
+///         against the live node, printing a one-line narrative + observable
+///         evidence + PASS/FAIL per scenario. Any FAIL reverts the script → the
+///         shell runner exits non-zero.
+///
+/// @dev Two execution modes are used deliberately:
+///   - `vm.broadcast(pk)` for state-changing steps that must PERSIST on-chain and
+///     must originate from a specific account (onboarding as deployer/operator,
+///     compliant trades as the investor).
+///   - `vm.prank(addr)` + `try/catch` for steps that are EXPECTED TO REVERT
+///     (compliance / policy / authz rejections). A reverting call is never
+///     broadcast; pranking sets `msg.sender` so the router reaches the real gate
+///     instead of the caller-binding check.
+contract DemoScenarios is Script, DemoConstants {
+    // --- resolved from the artifact --------------------------------------
+    address internal deployer;
+    address internal investor;
+    address internal maker;
+    address internal unapprovedMaker;
+
+    uint256 internal deployerPk;
+    uint256 internal investorPk;
+    uint256 internal makerPk;
+    uint256 internal unapprovedMakerPk;
+
+    IERC20 internal rwa;
+    IERC20 internal quote;
+    address internal pool;
+
+    CornerStoreFactory internal factory;
+    TokenPolicyRegistry internal policyReg;
+    Jurisdiction internal jurisdiction;
+    SurveillanceFlag internal surveillance;
+    ExecutionRouter internal router;
+    UniswapV3Adapter internal ammAdapter;
+    RFQAdapter internal rfqAdapter;
+
+    // per-initiator router nonce sequence for the investor.
+    uint256 internal nonceSeq = 1;
+
+    // scenario bookkeeping.
+    uint256 internal constant N = 7;
+    bool[N + 1] internal passed; // 1-indexed
+    string[N + 1] internal titles;
+
+    function run() external {
+        _load();
+
+        _scenario1_onboarding();
+        _scenario2_compliantTrade();
+        _scenario3_elementRejection();
+        _scenario4_lifecycle();
+        _scenario5_rfq();
+        _scenario6_surveillance();
+        _scenario7_bypass();
+
+        _summary();
+    }
+
+    // ---------------------------------------------------------------------
+    // Scenario 1 — Onboarding
+    // ---------------------------------------------------------------------
+    function _scenario1_onboarding() internal {
+        _title(1, "Onboarding: factory one-call onboards the RWA token (propose -> approve + venue)");
+
+        ManifestCore memory m;
+        m.issuanceRecipeId = 1; // Reg D 506(c)
+        m.issuanceRecipeVersion = 1;
+        m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
+
+        VenueConfig memory ammCfg = VenueConfig({
+            venueType: VenueType.AMM,
+            adapter: address(ammAdapter),
+            target: pool,
+            operator: address(0),
+            custody: CustodyModel.POOL,
+            active: true
+        });
+
+        vm.broadcast(deployerPk);
+        factory.registerRWAToken(address(rwa), m, pool, ammCfg);
+
+        ManifestCore memory stored = policyReg.manifestOf(address(rwa));
+        bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
+            && stored.approvedBy == address(factory);
+        console2.log("    evidence: manifest status ACTIVE, declared+approved by factory");
+        console2.log("      status(2=ACTIVE) :", uint256(stored.status));
+        _record(1, ok);
+    }
+
+    // ---------------------------------------------------------------------
+    // Scenario 2 — Compliant trade succeeds
+    // ---------------------------------------------------------------------
+    function _scenario2_compliantTrade() internal {
+        _title(2, "Compliant trade: fully-attested investor buys RWA via router -> AMM");
+
+        uint256 before = rwa.balanceOf(investor);
+        ExecutionRequest memory req = _buyRequest(AMM_TRADE);
+
+        vm.broadcast(investorPk);
+        router.execute(req);
+
+        uint256 delta = rwa.balanceOf(investor) - before;
+        console2.log("    evidence: Executed; investor RWA balance delta (wei):", delta);
+        _record(2, delta == AMM_TRADE);
+    }
+
+    // ---------------------------------------------------------------------
+    // Scenario 3 — Element rejection, live
+    // ---------------------------------------------------------------------
+    function _scenario3_elementRejection() internal {
+        _title(3, "Element rejection: operator flips jurisdiction (A-02) -> same trade is rejected");
+
+        // flip ONE attestation: investor jurisdiction -> disallowed code.
+        vm.broadcast(deployerPk);
+        jurisdiction.setJurisdiction(investor, bytes32("ZZ"));
+
+        ExecutionRequest memory req = _buyRequest(AMM_TRADE);
+        bytes32 expected = ReasonCodes.encode(1, bytes32("A-02-v1"), uint32(1));
+
+        (bool reverted, bytes32 reason) = _tryExecuteExpectComplianceReject(req);
+        bool ok = reverted && reason == expected;
+        console2.log("    evidence: ComplianceRejected; reason matches encode(1, A-02-v1, 1) ->", ok);
+        if (ok) console2.log("      rejected by A-02 Jurisdiction");
+
+        // restore the attestation so later scenarios see a compliant investor.
+        vm.broadcast(deployerPk);
+        jurisdiction.setJurisdiction(investor, ALLOWED_JURISDICTION);
+
+        _record(3, ok);
+    }
+
+    // ---------------------------------------------------------------------
+    // Scenario 4 — Lifecycle (suspend blocks, resume settles)
+    // ---------------------------------------------------------------------
+    function _scenario4_lifecycle() internal {
+        _title(4, "Lifecycle: suspendManifest blocks the trade; resumeManifest settles it again");
+
+        vm.broadcast(deployerPk);
+        policyReg.suspendManifest(address(rwa), bytes32("DEMO-SUSPEND"));
+
+        ExecutionRequest memory blockedReq = _buyRequest(AMM_TRADE);
+        (bool reverted,) = _tryExecuteExpectComplianceReject(blockedReq);
+        console2.log("    evidence: while SUSPENDED, trade reverts ComplianceRejected ->", reverted);
+
+        vm.broadcast(deployerPk);
+        policyReg.resumeManifest(address(rwa));
+
+        uint256 before = rwa.balanceOf(investor);
+        ExecutionRequest memory okReq = _buyRequest(AMM_TRADE);
+        vm.broadcast(investorPk);
+        router.execute(okReq);
+        uint256 delta = rwa.balanceOf(investor) - before;
+        console2.log("    evidence: after RESUME, trade settles; RWA delta (wei):", delta);
+
+        _record(4, reverted && delta == AMM_TRADE);
+    }
+
+    // ---------------------------------------------------------------------
+    // Scenario 5 — RFQ venue
+    // ---------------------------------------------------------------------
+    function _scenario5_rfq() internal {
+        _title(5, "RFQ venue: maker signs an EIP-712 quote off-chain; taker settles through the router");
+
+        // (a) approved maker fill.
+        uint256 invBefore = rwa.balanceOf(investor);
+        uint256 makerBefore = rwa.balanceOf(maker);
+        (RFQQuote memory q, ExecutionRequest memory req) = _rfqRequest(maker, makerPk, 1);
+
+        vm.broadcast(investorPk);
+        router.execute(req);
+
+        uint256 invDelta = rwa.balanceOf(investor) - invBefore;
+        uint256 makerOut = makerBefore - rwa.balanceOf(maker);
+        bool fillOk = invDelta == RFQ_RWA_OUT && makerOut == RFQ_RWA_OUT && quote.balanceOf(maker) >= RFQ_QUOTE_IN;
+        console2.log("    evidence: RFQFilled; taker RWA delta (wei):", invDelta);
+        q; // silence unused
+
+        // (b) unapproved maker is rejected before any settlement.
+        (, ExecutionRequest memory badReq) = _rfqRequest(unapprovedMaker, unapprovedMakerPk, 1);
+        (bool rejected, bytes4 sel) = _tryExecuteExpectSelector(badReq);
+        bool unapprovedOk = rejected && sel == Errors.RFQMakerNotApproved.selector;
+        console2.log("    evidence: unapproved maker quote rejected (RFQMakerNotApproved) ->", unapprovedOk);
+
+        _record(5, fillOk && unapprovedOk);
+    }
+
+    // ---------------------------------------------------------------------
+    // Scenario 6 — Surveillance (stateful layer)
+    // ---------------------------------------------------------------------
+    function _scenario6_surveillance() internal {
+        _title(6, "Surveillance: repeated trades past the threshold emit a SurveillanceFlag");
+
+        // Re-onboard the RWA under a surveillance-enabled recipe (id 7 = RegD +
+        // F-02). retire (operator) -> factory re-register+approve (owner).
+        vm.broadcast(deployerPk);
+        policyReg.retireManifest(address(rwa), bytes32("ADD-SURVEILLANCE"));
+
+        ManifestCore memory m;
+        m.issuanceRecipeId = SURVEIL_RECIPE_ID;
+        m.issuanceRecipeVersion = 1;
+        m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
+        VenueConfig memory ammCfg = VenueConfig({
+            venueType: VenueType.AMM,
+            adapter: address(ammAdapter),
+            target: pool,
+            operator: address(0),
+            custody: CustodyModel.POOL,
+            active: true
+        });
+        vm.broadcast(deployerPk);
+        factory.registerRWAToken(address(rwa), m, pool, ammCfg);
+
+        uint256 threshold = 2;
+        vm.broadcast(deployerPk);
+        surveillance.setThreshold(threshold);
+
+        uint256 startCount = surveillance.transferCount();
+
+        vm.recordLogs();
+        for (uint256 i = 0; i < 3; i++) {
+            ExecutionRequest memory req = _buyRequest(AMM_TRADE);
+            vm.broadcast(investorPk);
+            router.execute(req);
+        }
+        bool flagLogged = _sawSurveillanceFlag();
+
+        uint256 endCount = surveillance.transferCount();
+        // The flag is emitted inside onTransfer whenever transferCount > threshold,
+        // so crossing the threshold is a definitive on-chain witness of the flag.
+        bool crossed = endCount > threshold && endCount == startCount + 3;
+        console2.log("    evidence: transferCount crossed threshold; count:", endCount);
+        console2.log("      SurveillanceFlag log observed ->", flagLogged);
+        _record(6, crossed && flagLogged);
+    }
+
+    // ---------------------------------------------------------------------
+    // Scenario 7 — Bypass attempt
+    // ---------------------------------------------------------------------
+    function _scenario7_bypass() internal {
+        _title(7, "Bypass attempt: direct adapter.execute (around the router) reverts NotAuthorized");
+
+        ExecutionRequest memory req = _buyRequest(AMM_TRADE);
+        ComplianceDecision memory d; // unused: onlyRouter reverts first
+
+        bool reverted;
+        bytes4 sel;
+        try ammAdapter.execute(req, d) {
+            reverted = false;
+        } catch (bytes memory err) {
+            reverted = true;
+            sel = _selector(err);
+        }
+        bool ok = reverted && sel == Errors.NotAuthorized.selector;
+        console2.log("    evidence: compliance cannot be skipped by going around the router ->", ok);
+        _record(7, ok);
+    }
+
+    // ---------------------------------------------------------------------
+    // Request builders
+    // ---------------------------------------------------------------------
+    function _buyRequest(uint256 amount) internal returns (ExecutionRequest memory req) {
+        ComplianceContext memory ctx;
+        ctx.initiator = investor;
+        ctx.buyer = investor;
+        ctx.seller = pool;
+        ctx.tokenIn = address(quote);
+        ctx.tokenOut = address(rwa);
+        ctx.amountIn = amount;
+        ctx.amountOut = amount; // 1:1 MockPool
+        ctx.venueType = VenueType.AMM;
+        ctx.venue = pool;
+        ctx.flowType = FlowType.SECONDARY_TRADE;
+
+        req.context = ctx;
+        req.amountOutMin = 0;
+        req.deadline = uint64(block.timestamp + 1 hours);
+        req.nonce = nonceSeq++;
+        req.venueData = ""; // default zeroForOne=true: token0(QUOTE) in, token1(RWA) out
+    }
+
+    function _rfqRequest(address mk, uint256 mkPk, uint256 quoteNonce)
+        internal
+        returns (RFQQuote memory q, ExecutionRequest memory req)
+    {
+        q.maker = mk;
+        q.taker = investor;
+        q.tokenIn = address(quote);
+        q.tokenOut = address(rwa);
+        q.amountIn = RFQ_QUOTE_IN;
+        q.amountOut = RFQ_RWA_OUT;
+        q.venue = RFQ_VENUE;
+        q.nonce = quoteNonce;
+        q.expiry = uint64(block.timestamp + 1 hours);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(mkPk, rfqAdapter.hashQuote(q));
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        ComplianceContext memory ctx;
+        ctx.initiator = investor;
+        ctx.buyer = investor;
+        ctx.seller = mk;
+        ctx.tokenIn = address(quote);
+        ctx.tokenOut = address(rwa);
+        ctx.amountIn = RFQ_QUOTE_IN;
+        ctx.amountOut = RFQ_RWA_OUT;
+        ctx.venueType = VenueType.RFQ;
+        ctx.venue = RFQ_VENUE;
+        ctx.flowType = FlowType.SECONDARY_TRADE;
+
+        req.context = ctx;
+        req.amountOutMin = RFQ_RWA_OUT;
+        req.deadline = uint64(block.timestamp + 1 hours);
+        req.nonce = nonceSeq++;
+        req.venueData = abi.encode(q, sig);
+    }
+
+    // ---------------------------------------------------------------------
+    // Revert helpers (simulation-only; pranked, never broadcast)
+    // ---------------------------------------------------------------------
+    function _tryExecuteExpectComplianceReject(ExecutionRequest memory req)
+        internal
+        returns (bool reverted, bytes32 reason)
+    {
+        vm.prank(investor);
+        try router.execute(req) {
+            reverted = false;
+        } catch (bytes memory err) {
+            reverted = true;
+            if (_selector(err) == Errors.ComplianceRejected.selector && err.length >= 36) {
+                assembly {
+                    reason := mload(add(err, 0x24))
+                }
+            }
+        }
+    }
+
+    function _tryExecuteExpectSelector(ExecutionRequest memory req) internal returns (bool reverted, bytes4 sel) {
+        vm.prank(investor);
+        try router.execute(req) {
+            reverted = false;
+        } catch (bytes memory err) {
+            reverted = true;
+            sel = _selector(err);
+        }
+    }
+
+    function _selector(bytes memory err) internal pure returns (bytes4 sel) {
+        if (err.length >= 4) {
+            assembly {
+                sel := mload(add(err, 0x20))
+            }
+        }
+    }
+
+    function _sawSurveillanceFlag() internal returns (bool) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("SurveillanceFlag(bytes32,address,bytes32)");
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics.length > 0 && logs[i].topics[0] == sig) return true;
+        }
+        return false;
+    }
+
+    // ---------------------------------------------------------------------
+    // Reporting
+    // ---------------------------------------------------------------------
+    function _title(uint256 idx, string memory t) internal {
+        titles[idx] = t;
+        console2.log("");
+        console2.log(string.concat("[", vm.toString(idx), "] ", t));
+    }
+
+    function _record(uint256 idx, bool ok) internal {
+        passed[idx] = ok;
+        console2.log(ok ? "    -> PASS" : "    -> FAIL");
+    }
+
+    function _summary() internal view {
+        uint256 ok;
+        console2.log("");
+        console2.log("=====================================================");
+        console2.log("  Corner Store  -  DEMO SCENARIO RESULTS");
+        console2.log("=====================================================");
+        for (uint256 i = 1; i <= N; i++) {
+            console2.log(string.concat("  [", vm.toString(i), "] ", passed[i] ? "PASS  " : "FAIL  ", titles[i]));
+            if (passed[i]) ok++;
+        }
+        console2.log("-----------------------------------------------------");
+        console2.log(string.concat("  ", vm.toString(ok), " / ", vm.toString(N), " scenarios passed"));
+        console2.log("=====================================================");
+        require(ok == N, "DEMO FAILED: one or more scenarios did not pass");
+    }
+
+    // ---------------------------------------------------------------------
+    // Artifact loading
+    // ---------------------------------------------------------------------
+    function _load() internal {
+        string memory json = vm.readFile(ARTIFACT_PATH);
+
+        deployer = vm.parseJsonAddress(json, ".deployer");
+        investor = vm.parseJsonAddress(json, ".investor");
+        maker = vm.parseJsonAddress(json, ".maker");
+        unapprovedMaker = vm.parseJsonAddress(json, ".unapprovedMaker");
+
+        deployerPk = vm.deriveKey(MNEMONIC, 0);
+        investorPk = vm.deriveKey(MNEMONIC, 1);
+        makerPk = vm.deriveKey(MNEMONIC, 2);
+        unapprovedMakerPk = vm.deriveKey(MNEMONIC, 3);
+
+        rwa = IERC20(vm.parseJsonAddress(json, ".rwaToken"));
+        quote = IERC20(vm.parseJsonAddress(json, ".quote"));
+        pool = vm.parseJsonAddress(json, ".pool");
+
+        factory = CornerStoreFactory(vm.parseJsonAddress(json, ".factory"));
+        policyReg = TokenPolicyRegistry(vm.parseJsonAddress(json, ".policyReg"));
+        jurisdiction = Jurisdiction(vm.parseJsonAddress(json, ".jurisdiction"));
+        surveillance = SurveillanceFlag(vm.parseJsonAddress(json, ".surveillance"));
+        router = ExecutionRouter(vm.parseJsonAddress(json, ".router"));
+        ammAdapter = UniswapV3Adapter(vm.parseJsonAddress(json, ".ammAdapter"));
+        rfqAdapter = RFQAdapter(vm.parseJsonAddress(json, ".rfqAdapter"));
+    }
+}
