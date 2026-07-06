@@ -37,6 +37,9 @@ source of truth로 사용한다.
 - legacy mock element(Sanctions A-01, AccreditedInvestor A-03, QualifiedPurchaser
   A-13)의 attestation setter를 `Governed`/`onlyOperator` + 이벤트로 정렬해 CMP-001
   이후 hardening divergence를 닫았다(Lockup C-01은 settable mutator가 없어 변경 없음).
+- RFQ integration: RFQ 벤처를 protected router path(`ExecutionRouter → ComplianceEngine
+  → RFQAdapter`)로 real ERC-3643 스택 위에서 end-to-end 커버(`test/integration/RFQFlow.t.sol`,
+  fill/maker-unapproved/cancel/non-compliant/direct-call bypass 5 시나리오) — RFQ-002 deferred follow-up 완료.
 
 ## Blocked
 
@@ -44,13 +47,11 @@ source of truth로 사용한다.
 
 ## Next
 
-1. RFQ integration-test 시나리오(router-path maker-approval/cancellation coverage)를
-   추가한다 — RFQ-002에서 deferred된 follow-up.
-2. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
+1. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
    (C-01 Lockup은 현재 fixture-only mock acquisition source).
-3. live Anvil deployment/E2E를 추가한다.
-4. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
-5. CI hardening(static analysis 등)을 강화한다.
+2. live Anvil deployment/E2E를 추가한다.
+3. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
+4. CI hardening(static analysis 등)을 강화한다.
 
 ## Last Session Summary
 
