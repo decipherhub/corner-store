@@ -298,3 +298,51 @@ passing
   msg.sender와 factory consequence).
 - Non-goals: direction-aware element application, production onboarding governance
   key management.
+
+## CLI-001 — corner-store Reference CLI
+
+### Behavior
+
+- `services/cli/`에 TypeScript CLI(`corner-store`)를 추가해, forge 스크립트를 직접
+  다루지 않고 터미널에서 live 노드 대상으로 전체 스택을 구동한다: onboarding,
+  attestation, manifest lifecycle, AMM/RFQ 거래, reason-code 디코딩. 기대 환경은
+  Anvil E2E 배포(`scripts/e2e-anvil.sh --keep` + `deployments/anvil-e2e.json`).
+- 명령: `status`(주소/manifest/venue/per-element attestation 상태, `--json`),
+  `onboard`(factory 1-call, ACTIVE면 retire→register→approve),
+  `manifest <status|suspend|resume|retire>`, `attest <element> <subject> [value...]`
+  (9개 element setter), `investor-setup <addr>`(Reg D happy-path attestation +
+  C-01 acquisition seed + QUOTE funding), `kyc <addr>`(ERC-3643 identity/claim,
+  `script/KycInvestor.s.sol` forge 스크립트로 위임), `buy <amountIn>`
+  (`--venue amm|rfq`, `--min`, `--quote`), `rfq-quote`/`rfq-cancel`(services/rfq
+  EIP-712 서명 라이브러리 재사용), `maker <approve|revoke>`, `reason <bytes32>`.
+- reason 디코딩은 `(recipeId∈{1,2,7}) × (11 element) × code 1` + engine의 policy-status
+  거부(`encode(0,"POLICY",status)`)를 오프라인 사전계산해 매칭한다. `ComplianceRejected`
+  를 잡는 모든 명령이 자동 디코딩하고, 실패 tx는 디코딩된 reason과 함께 non-zero 종료.
+- chain 상호작용은 ethers(services/rfq에는 web3 라이브러리가 없어 CLI가 유일하게 도입),
+  ABI는 `src/abi.ts`의 hand-written fragment(`out/` 비의존). src/ 제품 코드 변경 없음;
+  신규 Solidity는 `script/KycInvestor.s.sol` 하나(shared `TREXCore` 재사용, 이미 배포된
+  T-REX 스택에 re-bind).
+
+### Verification
+
+- `npm test`(services/cli): reason-table decode round-trip(`cast keccak` ground-truth
+  대조) + quote-file round-trip 스모크, 네트워크 불필요.
+- Live 노드 walkthrough(fresh account 4): `status` → `onboard` → `investor-setup` →
+  `kyc` → `buy`(AMM PASS, +100 RWA) → `attest jurisdiction ZZ` → `buy`(FAIL, decoded
+  `recipe 1 / A-02-v1 / Jurisdiction`) → restore → `manifest suspend` → `buy`(FAIL,
+  `POLICY / SUSPENDED`) → `resume` → `buy`(PASS) → `rfq-quote` → `buy --venue rfq`
+  (PASS, +200 RWA) → `maker revoke` → `buy --venue rfq`(FAIL, `RFQMakerNotApproved`).
+  전 실패 경로 non-zero 종료 + 디코딩 확인.
+- `forge test --offline` 238/238 유지(Solidity 측 추가는 `KycInvestor.s.sol`뿐).
+
+### State
+
+passing
+
+### Notes
+
+- runbook: `services/cli/README.md`("CLI demo" 레시피), `docs/demo.md`의
+  "CLI로 직접 해보기" 섹션.
+- `kyc`는 repo root에서 실행해야 한다(상대 fs_permissions + 스크립트 경로). CLI가
+  forge cwd를 repo root로 설정하고 artifact를 root-상대 경로로 전달한다.
+- Non-goals: 프로덕션 key 관리, out/ ABI 커플링, 두 번째 web3 라이브러리 도입.

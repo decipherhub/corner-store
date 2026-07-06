@@ -45,6 +45,12 @@ source of truth로 사용한다.
   배포 후 7-scenario demo suite 구동, scenario별 PASS/FAIL. T-REX 배포 코어를
   `test/fixtures/TREXCore.sol`로 추출해 fixture/script 공유. src/ 변경 없음. runbook은
   `docs/demo.md`.
+- `CLI-001 — corner-store Reference CLI`(`services/cli/` + `script/KycInvestor.s.sol`):
+  live 노드 대상 인터랙티브 CLI(status/onboard/manifest/attest/investor-setup/kyc/
+  buy/rfq-quote/rfq-cancel/maker/reason). ethers 기반, services/rfq EIP-712 서명
+  라이브러리 재사용, reason-table 자동 디코딩. src/ 변경 없음(신규 Solidity는 KYC
+  forge 스크립트 하나). smoke + fresh-account live walkthrough로 검증. README는
+  `services/cli/README.md`.
 
 ## Blocked
 
@@ -61,44 +67,40 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
-- `E2E-001` (Live Anvil E2E & Demo Runner)을 landing했다. src/ 변경 없이 forge
-  script 두 개 + 셸 러너 + T-REX 배포 코어 추출로 live-Anvil E2E/demo를 구현했다.
+- `CLI-001` (corner-store Reference CLI)을 landing했다. src/ 제품 코드 변경 없이
+  `services/cli/` TypeScript CLI + `script/KycInvestor.s.sol` 하나로 live 노드
+  인터랙티브 클라이언트를 구현했다.
 - 변경한 파일:
-  - script: `script/DeployStack.s.sol`(전체 스택 live 배포 + JSON artifact),
-    `script/DemoScenarios.s.sol`(7-scenario 러너), `script/DemoConstants.sol`(공유
-    상수)
-  - runner: `scripts/e2e-anvil.sh`(anvil 기동/배포/scenario/teardown, `--port`/
-    `--keep`, offline)
-  - fixture refactor: `test/fixtures/TREXCore.sol`(신규, `is CommonBase`,
-    admin-parameterized, prank-free) + `test/fixtures/TREXSuite.sol`(thin facade
-    `is Test, TREXCore`) — test suite green 유지
-  - config: `foundry.toml`(fs_permissions read-write, JSON artifact),
-    `.gitignore`(`deployments/`)
-  - docs: `docs/demo.md`(runbook), `docs/testing.md`(E2E 섹션), `docs/README.md`
-  - bookkeeping: `FEATURES.md`(E2E-001), `PROGRESS.md`
+  - CLI: `services/cli/`(package.json/tsconfig, `src/`: index/config/abi/reason/
+    elements/rfq/util/commands, `test/smoke.ts`, README.md)
+  - script: `script/KycInvestor.s.sol`(이미 배포된 ERC-3643 스택에 re-bind해 신규
+    투자자 identity+KYC claim, shared `TREXCore` 재사용)
+  - config: `.gitignore`(`services/cli/dist`,`node_modules`)
+  - docs/bookkeeping: `docs/demo.md`("CLI로 직접 해보기"), `FEATURES.md`(CLI-001),
+    `PROGRESS.md`
 - 설계 요점:
-  - broadcast(pk)로 persist해야 하는 상태 전이/거래를, prank(addr)+try/catch로
-    revert 기대 시나리오(compliance/policy/authz 거부)를 구동. reason code는
-    off-chain 재계산 후 revert data와 비교.
-  - onboarding은 scenario 1에서 factory가 수행하도록 deploy 시 manifest를 UNKNOWN로
-    남기고 policyReg/venueReg 소유권을 factory로 이전, deployer는 policyReg operator로
-    남겨 lifecycle(suspend/resume/retire) 구동 가능하게 함.
-  - anvil genesis timestamp가 실제 wall-clock이라 C-01 Rule 144 lockup(t=1 seed)이
-    on-chain에서 자연 통과 → vm.warp 불필요.
+  - chain 상호작용은 ethers(services/rfq에는 web3 라이브러리가 없어 CLI가 유일 도입).
+    EIP-712 quote는 services/rfq `RFQQuoteService`를 ethers wallet TypedDataSigner로
+    감싸 재사용. ABI는 `src/abi.ts` hand-written fragment(out/ 비의존).
+  - reason 디코딩 테이블은 `(recipe∈{1,2,7})×(11 element)×code1` + `encode(0,"POLICY",
+    status)`를 오프라인 사전계산; `cast keccak` ground-truth로 smoke에서 대조.
+  - admin 명령은 operator(account 0), buy는 buyer로 signer 기본값을 분기. 동일 명령
+    내 연속 tx는 ethers `NonceManager`로 RPC pending-nonce 레이스 방지.
+  - `kyc`는 forge cwd를 repo root로 설정하고 artifact를 root-상대 경로로 전달해
+    fs_permissions/스크립트 경로를 만족. `investor-setup`은 C-01 acquisition source를
+    t=1로 seed(recipe 1이 C-01 요구).
 - 실행한 명령:
-  - `forge fmt` / `forge fmt --check`
+  - `npm run build` / `npm test`(services/cli)
   - `forge test --offline`
-  - `scripts/e2e-anvil.sh`(fresh + repeat, `--keep`)
+  - `anvil` + `forge script DeployStack` + 전체 CLI walkthrough(account 4)
 - 통과한 검증:
-  - `forge test --offline` 238/238(TREXCore 추출 후에도 green).
-  - `scripts/e2e-anvil.sh` 2회 실행 모두 7/7 PASS, exit 0. `--keep`로 anvil 잔존 확인.
+  - `services/cli` smoke ok(reason ground-truth 대조 + quote round-trip).
+  - live walkthrough: onboard→investor-setup→kyc→buy PASS(+100), jurisdiction ZZ→
+    buy FAIL(A-02 decoded), suspend→buy FAIL(POLICY SUSPENDED), resume→buy PASS,
+    rfq-quote→rfq buy PASS(+200), maker revoke→rfq buy FAIL(RFQMakerNotApproved).
+    전 실패 경로 non-zero 종료.
+  - `forge test --offline` 238/238 유지(KycInvestor 추가 후에도 green).
 - 남은 리스크:
-  - AMM venue는 MockPool(1:1); 실제 Uniswap v3 pool 배포는 별도 follow-up(vendor
-    isolation). demo는 `tools/deploy-v3`에 의존하지 않는다.
-  - C-01 Lockup은 fixture/demo mock acquisition source에 의존; production
-    acquisition/lot data source와 holding-period 활성화 default는 미결정.
-  - production data source(OFAC/ONCHAINID/ERC-165/EDGAR) 연결과 legal 활성화는
-    approval-gated로 열려 있다.
-  - engine은 direction-aware가 아니다(기존 문서화된 concern).
-  - production onboarding governance key management(factory ownership/multisig)는
-    미결정.
+  - `kyc`는 repo root 실행 전제(문서화). anvil 외 chainId/네트워크는 미검증(31337 고정).
+  - buy amount는 ether 단위 파싱(18 decimals) 가정; 비-18-decimals 토큰은 미지원.
+  - 나머지 스택 리스크는 E2E-001 세션의 것과 동일(MockPool AMM, C-01 mock source 등).
