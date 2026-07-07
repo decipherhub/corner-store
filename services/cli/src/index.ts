@@ -116,4 +116,34 @@ program
   .option("--json", "machine-readable output")
   .action(run((code, opts, command) => cmd.cmdReason(code, command.optsWithGlobals())));
 
+program
+  .command("check")
+  .description("per-element compliance preflight for a buyer WITHOUT trading (+ overall engine verdict)")
+  .argument("<buyer>", "address to screen (engine screens ctx.buyer; asset-side elements ignore it)")
+  .option("--venue <venue>", "amm | rfq", "amm")
+  .option("--amount <n>", "trade amount in ether units", "1")
+  .option("--json", "machine-readable output")
+  .action(run((buyer, opts, command) => cmd.cmdCheck(buyer, command.optsWithGlobals())));
+
+program
+  .command("sell")
+  .description("execute an AMM sell (tokenIn=RWA, tokenOut=QUOTE); defaults to the investor account 1")
+  .argument("<amountIn>", "RWA input amount in ether units")
+  .option("--min <amountOut>", "minimum acceptable QUOTE output (ether units)")
+  .action(run((amountIn, opts, command) => cmd.cmdSell(amountIn, command.optsWithGlobals())));
+
+program
+  .command("balances")
+  .description("RWA + QUOTE balances and adapter allowances (defaults to the 5 well-known roles)")
+  .argument("[addr...]", "addresses to report (default: accounts 0-4)")
+  .option("--json", "machine-readable output")
+  .action(run((addr, opts, command) => cmd.cmdBalances(addr, command.optsWithGlobals())));
+
+program
+  .command("faucet")
+  .description("mint QUOTE to an address (MockERC20.mint is permissionless — demo-only convenience)")
+  .argument("<addr>")
+  .argument("<amount>", "QUOTE to mint in ether units")
+  .action(run((addr, amount, opts, command) => cmd.cmdFaucet(addr, amount, command.optsWithGlobals())));
+
 program.parseAsync(process.argv);

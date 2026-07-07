@@ -3,19 +3,21 @@ import {formatEther, parseEther} from "ethers";
 
 import {relative} from "path";
 
-import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, LOCKUP_ABI} from "./abi";
+import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
   ALLOWED_JURISDICTION,
   Artifact,
   DEFAULT_RPC,
   GlobalOpts,
   elementRegistry,
+  engine,
   erc20,
   factory,
   findRepoRoot,
   loadArtifact,
   makeProvider,
   policyRegistry,
+  recipeRegistry,
   resolveArtifactPath,
   resolveSigner,
   rfqAdapter,
@@ -24,9 +26,9 @@ import {
   walletForAccount,
   DEFAULT_CHAIN_ID,
 } from "./config";
-import {Contract, encodeBytes32String} from "ethers";
+import {AbiCoder, Contract, decodeBytes32String, encodeBytes32String} from "ethers";
 import {ELEMENT_IDS, applyAttestation, defaultIdentityId} from "./elements";
-import {ELEMENT_LABELS, POLICY_STATUS, RECIPE_LABELS, decodeReason} from "./reason";
+import {ELEMENT_LABELS, POLICY_STATUS, RECIPE_LABELS, decodeReason, encodeReason} from "./reason";
 import {RFQQuoteService, WalletTypedDataSigner, encodeVenueData, readQuoteFile, writeQuoteFile} from "./rfq";
 import {CliError} from "./util";
 
@@ -444,4 +446,254 @@ export function cmdReason(code: string, opts: {json?: boolean}): void {
   console.log(`${decoded.code}`);
   console.log(`  -> ${decoded.label}`);
   if (decoded.label === "unknown code") process.exitCode = 1;
+}
+
+// ---------------------------------------------------------------------------
+// check <buyer> [--venue amm|rfq] [--amount <n>] [--json]
+// ---------------------------------------------------------------------------
+// Elements whose check() ignores its `user` argument and gates purely on the
+// asset (see src/compliance/elements/{AssetClassification,Erc3643Native,
+// FormDFiling}.sol). Labelled asset-side so a per-buyer FAIL isn't misread.
+const ASSET_SIDE_ELEMENTS = new Set(["B-01-v1", "B-02-v1", "E-01-v1"]);
+
+export async function cmdCheck(
+  buyer: string,
+  opts: GlobalOpts & {venue?: string; amount?: string; json?: boolean}
+): Promise<void> {
+  const a = loadArtifact(opts.artifact);
+  const provider = makeProvider(opts);
+  const venue = (opts.venue ?? "amm").toLowerCase();
+  if (venue !== "amm" && venue !== "rfq") throw new CliError(`unknown venue "${venue}" (amm|rfq)`);
+  const amount = parseEther(opts.amount ?? "1");
+  const seller = a.pool; // buy direction: the RWA counterparty is the AMM pool
+  const venueType = venue === "rfq" ? 2 : 0;
+  const venueAddr = venue === "rfq" ? a.rfqVenue : a.pool;
+
+  // Buy-direction context: tokenIn=QUOTE, tokenOut=RWA. The engine screens
+  // ctx.buyer for investor elements (documented non-direction-aware limitation).
+  const ctx = [buyer, buyer, seller, a.quote, a.rwaToken, amount, amount, venueType, venueAddr, 0, false];
+
+  // Active manifest's recipe ids -> requiredElements -> element addresses.
+  const manifest = await policyRegistry(a, provider).manifestOf(a.rwaToken);
+  const status = Number(manifest.status);
+  const recipeIds: number[] = [];
+  for (const rid of [Number(manifest.issuanceRecipeId), Number(manifest.fundRecipeId)]) {
+    if (rid !== 0 && !recipeIds.includes(rid)) recipeIds.push(rid);
+  }
+
+  const reg = elementRegistry(a, provider);
+  const recipeReg = recipeRegistry(a, provider);
+  const seen = new Set<string>();
+  const rows: Array<{
+    id: string;
+    label: string;
+    assetSide: boolean;
+    recipeId: number;
+    passed: boolean;
+    reason?: string;
+  }> = [];
+  for (const rid of recipeIds) {
+    const recipeAddr = await recipeReg.recipeOf(rid);
+    if (recipeAddr === ZERO_ADDR) throw new CliError(`recipe ${rid} not registered in RecipeRegistry`);
+    const requiredIds: string[] = await new Contract(recipeAddr, RECIPE_ABI, provider).requiredElements();
+    for (const raw of requiredIds) {
+      const idStr = decodeBytes32String(raw);
+      if (seen.has(idStr)) continue;
+      seen.add(idStr);
+      const label = ELEMENT_LABELS[idStr] ?? "?";
+      const assetSide = ASSET_SIDE_ELEMENTS.has(idStr);
+      const elAddr = await reg.elementOf(raw);
+      if (elAddr === ZERO_ADDR) {
+        rows.push({id: idStr, label, assetSide, recipeId: rid, passed: false, reason: "element not registered"});
+        continue;
+      }
+      try {
+        const [passed] = await new Contract(elAddr, ELEMENT_ABI, provider).check(buyer, seller, a.rwaToken, amount, "0x");
+        // The recipe-aware reason the engine would report for THIS element.
+        const reason = passed ? undefined : decodeReason(encodeReason(rid, idStr, 1)).label;
+        rows.push({id: idStr, label, assetSide, recipeId: rid, passed, reason});
+      } catch (e: any) {
+        rows.push({
+          id: idStr,
+          label,
+          assetSide,
+          recipeId: rid,
+          passed: false,
+          reason: `check reverted: ${e?.shortMessage ?? e?.message ?? e}`
+        });
+      }
+    }
+  }
+
+  // Overall verdict from the engine's view evaluate over the full context.
+  const decision = await engine(a, provider).evaluate(ctx);
+  const allowed: boolean = decision.allowed;
+  const verdictReason = allowed ? undefined : decodeReason(String(decision.reasonCode)).label;
+
+  if (opts.json) {
+    console.log(
+      JSON.stringify(
+        {
+          buyer,
+          venue,
+          amount: formatEther(amount),
+          seller,
+          manifest: {status, statusName: POLICY_STATUS[status] ?? "?"},
+          recipes: recipeIds.map((r) => ({id: r, name: RECIPE_LABELS[r] ?? "?"})),
+          elements: rows,
+          verdict: {allowed, reasonCode: String(decision.reasonCode), reason: verdictReason}
+        },
+        null,
+        2
+      )
+    );
+    if (!allowed) process.exitCode = 1;
+    return;
+  }
+
+  console.log(`Preflight for ${buyer}`);
+  console.log(`  venue=${venue}  amount=${formatEther(amount)}  seller/counterparty=${seller}`);
+  console.log(
+    `  manifest status ${status} (${POLICY_STATUS[status] ?? "?"}); recipes: ${
+      recipeIds.map((r) => `${r} (${RECIPE_LABELS[r] ?? "?"})`).join(", ") || "none"
+    }`
+  );
+  console.log("");
+  console.log("Per-element checks (asset-side rows gate on the asset, not the subject — a FAIL there is asset state):");
+  for (const r of rows) {
+    const tag = r.assetSide ? "  [asset-side]" : "";
+    const reason = r.passed ? "" : `  -> ${r.reason}`;
+    console.log(`  [${r.passed ? "PASS" : "FAIL"}] ${r.id.padEnd(8)} ${r.label.padEnd(22)}${tag}${reason}`);
+  }
+  console.log("");
+  if (allowed) {
+    console.log("Engine verdict: ALLOWED");
+  } else {
+    console.log(`Engine verdict: REJECTED  ${String(decision.reasonCode)}  -> ${verdictReason}`);
+    process.exitCode = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// sell <amountIn> [--min <amountOut>]
+// ---------------------------------------------------------------------------
+export async function cmdSell(amountInArg: string, opts: GlobalOpts & {min?: string}): Promise<void> {
+  const a = loadArtifact(opts.artifact);
+  const provider = makeProvider(opts);
+  const signer = resolveSigner(opts, provider, 1); // seller defaults to the investor
+  const seller = await signer.getAddress();
+  const nonce = BigInt(Date.now());
+
+  const amountIn = parseEther(amountInArg);
+  const amountOut = amountIn; // 1:1 MockPool
+  const amountOutMin = opts.min ? parseEther(opts.min) : 0n;
+
+  // SELL direction — mirror of `buy` with the token sides swapped, following
+  // test/integration/SwapFlow.t.sol::test_sell_shaped_success: tokenIn=RWA,
+  // tokenOut=QUOTE; ctx.buyer is the SELLER (the engine screens ctx.buyer, not a
+  // direction); venueData encodes zeroForOne=false so the pool pays token0(QUOTE).
+  const ctx = [seller, seller, a.pool, a.rwaToken, a.quote, amountIn, amountOut, 0, a.pool, 0, false];
+  const venueData = AbiCoder.defaultAbiCoder().encode(["bool", "uint160"], [false, 0]);
+
+  // The seller must approve the adapter to pull RWA (tokenIn).
+  const rwa = erc20(a.rwaToken, signer);
+  const allowance: bigint = await rwa.allowance(seller, a.ammAdapter);
+  if (allowance < amountIn) {
+    console.log(`  approving ${a.ammAdapter} to spend RWA`);
+    await logTx(await rwa.approve(a.ammAdapter, (1n << 256n) - 1n), "approve");
+  }
+
+  const rwaBefore = await erc20(a.rwaToken, provider).balanceOf(seller);
+  const quoteBefore = await erc20(a.quote, provider).balanceOf(seller);
+  const req = [ctx, amountOutMin, BigInt(Math.floor(Date.now() / 1000) + 3600), nonce, venueData];
+  console.log(`Executing AMM sell: amountIn=${formatEther(amountIn)} RWA as ${seller}`);
+  await logTx(await router(a, signer).execute(req), "execute");
+
+  const rwaAfter = await erc20(a.rwaToken, provider).balanceOf(seller);
+  const quoteAfter = await erc20(a.quote, provider).balanceOf(seller);
+  console.log(`  RWA balance delta:   ${formatEther(rwaAfter - rwaBefore)}`);
+  console.log(`  QUOTE balance delta: +${formatEther(quoteAfter - quoteBefore)}`);
+}
+
+// ---------------------------------------------------------------------------
+// balances [addr...]
+// ---------------------------------------------------------------------------
+const ROLE_LABELS = ["deployer/operator", "investor", "maker", "unapproved-maker", "free"];
+
+export async function cmdBalances(addrs: string[], opts: GlobalOpts & {json?: boolean}): Promise<void> {
+  const a = loadArtifact(opts.artifact);
+  const provider = makeProvider(opts);
+  const targets: Array<{label: string; address: string}> =
+    addrs.length > 0
+      ? addrs.map((x) => ({label: "-", address: x}))
+      : ROLE_LABELS.map((label, i) => ({label, address: walletForAccount(i).address}));
+
+  const rwa = erc20(a.rwaToken, provider);
+  const quote = erc20(a.quote, provider);
+  const rows: Array<{
+    label: string;
+    address: string;
+    rwa: bigint;
+    quote: bigint;
+    rwaAmm: bigint;
+    quoteAmm: bigint;
+    rwaRfq: bigint;
+    quoteRfq: bigint;
+  }> = [];
+  for (const t of targets) {
+    const [rwaBal, quoteBal, rwaAmm, quoteAmm, rwaRfq, quoteRfq] = await Promise.all([
+      rwa.balanceOf(t.address),
+      quote.balanceOf(t.address),
+      rwa.allowance(t.address, a.ammAdapter),
+      quote.allowance(t.address, a.ammAdapter),
+      rwa.allowance(t.address, a.rfqAdapter),
+      quote.allowance(t.address, a.rfqAdapter)
+    ]);
+    rows.push({...t, rwa: rwaBal, quote: quoteBal, rwaAmm, quoteAmm, rwaRfq, quoteRfq});
+  }
+
+  if (opts.json) {
+    console.log(
+      JSON.stringify(
+        rows.map((r) => ({
+          label: r.label,
+          address: r.address,
+          rwa: formatEther(r.rwa),
+          quote: formatEther(r.quote),
+          allowances: {
+            ammAdapter: {rwa: formatEther(r.rwaAmm), quote: formatEther(r.quoteAmm)},
+            rfqAdapter: {rwa: formatEther(r.rwaRfq), quote: formatEther(r.quoteRfq)}
+          }
+        })),
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  const fmtAllow = (v: bigint) => (v >= 1n << 255n ? "MAX" : formatEther(v));
+  console.log("Balances (RWA / QUOTE) and adapter allowances — ether units, MAX = unlimited:");
+  console.log(
+    `  ${"account".padEnd(18)} ${"address".padEnd(42)} ${"RWA".padStart(12)} ${"QUOTE".padStart(12)}  amm(rwa/quote)  rfq(rwa/quote)`
+  );
+  for (const r of rows) {
+    console.log(
+      `  ${r.label.padEnd(18)} ${r.address} ${formatEther(r.rwa).padStart(12)} ${formatEther(r.quote).padStart(12)}  ` +
+        `${fmtAllow(r.rwaAmm)}/${fmtAllow(r.quoteAmm)}  ${fmtAllow(r.rwaRfq)}/${fmtAllow(r.quoteRfq)}`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// faucet <addr> <amount> — mint QUOTE (MockERC20.mint is permissionless).
+// ---------------------------------------------------------------------------
+export async function cmdFaucet(addr: string, amount: string, opts: GlobalOpts): Promise<void> {
+  const a = loadArtifact(opts.artifact);
+  const provider = makeProvider(opts);
+  const signer = resolveSigner(opts, provider, 0);
+  const amt = parseEther(amount);
+  await logTx(await erc20(a.quote, signer).mint(addr, amt), `quote.mint(${addr}, ${formatEther(amt)})`);
+  const bal = await erc20(a.quote, provider).balanceOf(addr);
+  console.log(`  ${addr} QUOTE balance: ${formatEther(bal)}`);
 }

@@ -30,6 +30,22 @@ export const ELEMENT_REGISTRY_ABI = [
   "function elementOf(bytes32 elementId) view returns (address)"
 ];
 
+// RecipeRegistry.recipeOf(id) -> recipe address; the recipe exposes its required
+// element id list (IRecipe.requiredElements). Used by `check` to enumerate the
+// active manifest's per-element preflight set.
+export const RECIPE_REGISTRY_ABI = [
+  "function recipeOf(uint16 recipeId) view returns (address)"
+];
+export const RECIPE_ABI = [
+  "function requiredElements() view returns (bytes32[])"
+];
+
+// ComplianceEngine.evaluate(ctx) is a VIEW returning the full ComplianceDecision
+// (src/types/ComplianceTypes.sol). `check` calls it for the overall verdict.
+export const ENGINE_ABI = [
+  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,bytes32 decisionHash))"
+];
+
 // IComplianceElement.check(user, counterparty, asset, amount, context).
 export const ELEMENT_ABI = [
   "function check(address user, address counterparty, address asset, uint256 amount, bytes context) view returns (bool passed, bytes32 reasonCode)"

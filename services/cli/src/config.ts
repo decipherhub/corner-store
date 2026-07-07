@@ -4,9 +4,11 @@ import {Contract, HDNodeWallet, JsonRpcProvider, NonceManager, Signer, Wallet} f
 
 import {
   ELEMENT_REGISTRY_ABI,
+  ENGINE_ABI,
   ERC20_ABI,
   ERRORS_ABI,
   FACTORY_ABI,
+  RECIPE_REGISTRY_ABI,
   RFQ_ADAPTER_ABI,
   ROUTER_ABI,
   TOKEN_POLICY_REGISTRY_ABI,
@@ -119,6 +121,12 @@ export function router(a: Artifact, runner: any): Contract {
 }
 export function elementRegistry(a: Artifact, runner: any): Contract {
   return new Contract(a.elementReg, ELEMENT_REGISTRY_ABI, runner);
+}
+export function recipeRegistry(a: Artifact, runner: any): Contract {
+  return new Contract(a.recipeReg, RECIPE_REGISTRY_ABI, runner);
+}
+export function engine(a: Artifact, runner: any): Contract {
+  return new Contract(a.engine, [...ENGINE_ABI, ...ERRORS_ABI], runner);
 }
 export function policyRegistry(a: Artifact, runner: any): Contract {
   return new Contract(a.policyReg, [...TOKEN_POLICY_REGISTRY_ABI, ...ERRORS_ABI], runner);
