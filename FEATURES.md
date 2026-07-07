@@ -346,3 +346,57 @@ passing
 - `kyc`는 repo root에서 실행해야 한다(상대 fs_permissions + 스크립트 경로). CLI가
   forge cwd를 repo root로 설정하고 artifact를 root-상대 경로로 전달한다.
 - Non-goals: 프로덕션 key 관리, out/ ABI 커플링, 두 번째 web3 라이브러리 도입.
+
+## CLI-002 — corner-store CLI v2 (preflight · trade surface · observability)
+
+### Behavior
+
+- 기존 `services/cli`에 명령 7개를 더한다(제품 코드/스크립트 변경 없음, `services/cli/**`
+  + 문서만):
+  - `check <buyer> [--venue amm|rfq] [--amount n] [--json]` — 거래 없이 per-element
+    preflight. active manifest의 recipe id → `requiredElements()` →
+    `ElementRegistry.elementOf` → 각 element `check(buyer, seller, rwa, amount, "")`를
+    eth_call로 실행하고, `engine.evaluate(ctx)`(view)로 전체 verdict를 낸다. 표(id/name/
+    PASS·FAIL)+verdict 라인, FAIL 행은 디코딩된 reason, verdict가 rejected면 exit 1.
+    엔진은 `ctx.buyer`만 스크리닝(비-direction-aware)하므로 subject를 무시하는 asset-side
+    원소(B-01/B-02/E-01)는 표에 `[asset-side]`로 표기해 per-buyer FAIL 오독을 막는다.
+  - `sell <amountIn> [--min]` — AMM 매도(tokenIn=RWA, tokenOut=QUOTE). `buy`를 미러링하되
+    `test/integration/SwapFlow.t.sol::test_sell_shaped_success`의 컨텍스트(ctx.buyer=매도자,
+    venueData=zeroForOne=false)를 그대로 따른다.
+  - `balances [addr...] [--json]` — RWA/QUOTE 잔고 + amm/rfq adapter allowance(기본: 5개
+    well-known 역할).
+  - `watch [--from block]` — `eth_getLogs` 폴링(~2s) 이벤트 tail: Executed, RFQFilled,
+    RFQQuoteCancelled, MakerApprovalSet, ManifestRegistered, ManifestStatusChanged,
+    SurveillanceFlag. reason/label·status·elementId 디코딩, `--from`은 히스토리 재생.
+  - `faucet <addr> <amount>` — QUOTE 민팅(MockERC20.mint permissionless, demo 전용).
+  - `snapshot` / `restore <id>` — anvil `evm_snapshot`/`evm_revert`(RPC 미지원 시 명확한 에러).
+  - `quote-inspect <file> [--json]` — 서명 quote 디코딩: services/rfq 타입드데이터로 서명자
+    복구(==maker PASS/FAIL), 만료 카운트다운, on-chain `usedQuoteNonce`/`approvedMaker`.
+    실패 검사가 하나라도 있으면 exit 1.
+- 재사용 원칙 준수: reason 디코딩은 기존 `reason.ts`, EIP-712 복구는 services/rfq lib의
+  domain+types로 `ethers.verifyTypedData`(타입 문자열 재선언 없음). ABI fragment는 계속
+  hand-written(`out/` 비의존)이며 실제 컨트랙트 소스와 대조해 추가했다.
+
+### Verification
+
+- `npm test`(services/cli): quote-inspect 서명자 복구 round-trip(valid + tampered) +
+  reason-decode 회귀(check가 쓰는 recipe-aware per-element code) 스모크, 네트워크 불필요.
+- Live walkthrough(`scripts/e2e-anvil.sh --keep`, fresh account 4): `check`(미attested →
+  A-02/A-03/A-04/C-01 FAIL + rejected, exit 1) → `investor-setup`+`kyc` → `check`(전 PASS,
+  ALLOWED) → `faucet` → `buy`(+100 RWA) → `sell 40`(RWA -40, QUOTE +40) → `balances`
+  전/후 → `snapshot`(0x11) → `attest jurisdiction ZZ` → `check`(정확히 A-02 하나 FAIL,
+  exit 1) → `restore 0x11` → `check`(ALLOWED) → `watch --from 0`(세션 이벤트 디코딩 재생,
+  라이브 MakerApprovalSet tail) → `rfq-quote` → `quote-inspect`(전 PASS) → 파일 서명
+  변조 → `quote-inspect`(signature FAIL, exit 1).
+- `forge test --offline` 238/238 유지(Solidity 변경 없음).
+
+### State
+
+passing
+
+### Notes
+
+- runbook: `services/cli/README.md`(CLI v2 명령/주의), `docs/demo.md`.
+- `check`는 엔진이 direction-aware가 아니라는 점을 도움말·표기로 명시(asset-side 라벨).
+- `snapshot`/`restore`는 anvil 전용; `restore`는 이후 스냅샷을 무효화(문서화).
+- Non-goals: CLI-001과 동일(프로덕션 key 관리, out/ ABI 커플링, 2차 web3 라이브러리).

@@ -51,6 +51,12 @@ source of truth로 사용한다.
   라이브러리 재사용, reason-table 자동 디코딩. src/ 변경 없음(신규 Solidity는 KYC
   forge 스크립트 하나). smoke + fresh-account live walkthrough로 검증. README는
   `services/cli/README.md`.
+- `CLI-002 — corner-store CLI v2`(`services/cli/**` + 문서만, 제품 코드/스크립트 변경
+  없음): preflight `check`(per-element + engine verdict, asset-side 라벨, rejected면
+  exit 1), AMM `sell`, `balances`, 이벤트 tail `watch`, `faucet`, anvil
+  `snapshot`/`restore`, `quote-inspect`(서명자 복구/만료/nonce·승인, 실패 시 exit 1).
+  reason 디코딩·EIP-712 복구는 기존 lib 재사용. smoke(quote-inspect valid+tampered) +
+  full live walkthrough로 검증. `forge test --offline` 238/238 유지.
 
 ## Blocked
 
@@ -67,40 +73,39 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
-- `CLI-001` (corner-store Reference CLI)을 landing했다. src/ 제품 코드 변경 없이
-  `services/cli/` TypeScript CLI + `script/KycInvestor.s.sol` 하나로 live 노드
-  인터랙티브 클라이언트를 구현했다.
+- `CLI-002` (corner-store CLI v2)를 landing했다. src/·script/ 변경 없이 `services/cli`에
+  명령 7개(check/sell/balances/watch/faucet/snapshot/restore/quote-inspect)를 더했다.
 - 변경한 파일:
-  - CLI: `services/cli/`(package.json/tsconfig, `src/`: index/config/abi/reason/
-    elements/rfq/util/commands, `test/smoke.ts`, README.md)
-  - script: `script/KycInvestor.s.sol`(이미 배포된 ERC-3643 스택에 re-bind해 신규
-    투자자 identity+KYC claim, shared `TREXCore` 재사용)
-  - config: `.gitignore`(`services/cli/dist`,`node_modules`)
-  - docs/bookkeeping: `docs/demo.md`("CLI로 직접 해보기"), `FEATURES.md`(CLI-001),
-    `PROGRESS.md`
+  - CLI: `services/cli/src/`(abi/config/rfq/commands/index), `services/cli/test/smoke.ts`,
+    `services/cli/README.md`
+  - docs/bookkeeping: `docs/demo.md`, `FEATURES.md`(CLI-002), `PROGRESS.md`
 - 설계 요점:
-  - chain 상호작용은 ethers(services/rfq에는 web3 라이브러리가 없어 CLI가 유일 도입).
-    EIP-712 quote는 services/rfq `RFQQuoteService`를 ethers wallet TypedDataSigner로
-    감싸 재사용. ABI는 `src/abi.ts` hand-written fragment(out/ 비의존).
-  - reason 디코딩 테이블은 `(recipe∈{1,2,7})×(11 element)×code1` + `encode(0,"POLICY",
-    status)`를 오프라인 사전계산; `cast keccak` ground-truth로 smoke에서 대조.
-  - admin 명령은 operator(account 0), buy는 buyer로 signer 기본값을 분기. 동일 명령
-    내 연속 tx는 ethers `NonceManager`로 RPC pending-nonce 레이스 방지.
-  - `kyc`는 forge cwd를 repo root로 설정하고 artifact를 root-상대 경로로 전달해
-    fs_permissions/스크립트 경로를 만족. `investor-setup`은 C-01 acquisition source를
-    t=1로 seed(recipe 1이 C-01 요구).
+  - `check`는 active manifest의 recipe → `requiredElements()` → element `check()`를
+    eth_call로 돌려 per-element PASS/FAIL을 만들고 `engine.evaluate`(view)로 verdict를
+    낸다. 엔진이 `ctx.buyer`만 스크리닝하므로 subject 무시 원소(B-01/B-02/E-01)를
+    `[asset-side]`로 표기. FAIL reason은 recipe-aware code로 디코딩(엔진이 낼 코드와 동일).
+  - `sell`은 `SwapFlow.t.sol::test_sell_shaped_success`의 컨텍스트(ctx.buyer=매도자,
+    tokenIn=RWA/tokenOut=QUOTE, venueData=zeroForOne=false)를 그대로 미러링.
+  - `watch`는 `eth_getLogs`(address+topic0 OR 필터) 폴링. reasonCode는 reason-table →
+    recipe-0 monitoring-flag(`encode(0,elementId,1)`, SurveillanceFlag) → bytes32 라벨
+    순으로 디코딩; ManifestStatusChanged status·SurveillanceFlag elementId도 사람이 읽게.
+  - EIP-712 복구는 services/rfq lib의 `domain`+`RFQ_QUOTE_TYPES`로 `verifyTypedData`
+    (타입 문자열 재선언 없음). ABI는 계속 hand-written fragment(out/ 비의존).
 - 실행한 명령:
   - `npm run build` / `npm test`(services/cli)
+  - `scripts/e2e-anvil.sh --keep` + 전체 CLI v2 walkthrough(account 4)
   - `forge test --offline`
-  - `anvil` + `forge script DeployStack` + 전체 CLI walkthrough(account 4)
 - 통과한 검증:
-  - `services/cli` smoke ok(reason ground-truth 대조 + quote round-trip).
-  - live walkthrough: onboard→investor-setup→kyc→buy PASS(+100), jurisdiction ZZ→
-    buy FAIL(A-02 decoded), suspend→buy FAIL(POLICY SUSPENDED), resume→buy PASS,
-    rfq-quote→rfq buy PASS(+200), maker revoke→rfq buy FAIL(RFQMakerNotApproved).
-    전 실패 경로 non-zero 종료.
-  - `forge test --offline` 238/238 유지(KycInvestor 추가 후에도 green).
+  - smoke ok: quote-inspect 서명자 복구(valid=maker / tampered≠maker) + reason 회귀.
+  - live walkthrough: fresh `check`(A-02/A-03/A-04/C-01 FAIL, exit 1) → setup+kyc →
+    `check`(전 PASS) → faucet → buy(+100) → sell 40(RWA-40/QUOTE+40) → balances 전후 →
+    snapshot(0x11) → attest ZZ → `check`(A-02 하나 FAIL, exit 1) → restore → `check`(green)
+    → watch --from 0(세션 이벤트 디코딩 재생) → rfq-quote → quote-inspect(PASS) → 변조 →
+    quote-inspect(signature FAIL, exit 1).
+  - `forge test --offline` 238/238 유지(Solidity 변경 없음).
 - 남은 리스크:
-  - `kyc`는 repo root 실행 전제(문서화). anvil 외 chainId/네트워크는 미검증(31337 고정).
-  - buy amount는 ether 단위 파싱(18 decimals) 가정; 비-18-decimals 토큰은 미지원.
-  - 나머지 스택 리스크는 E2E-001 세션의 것과 동일(MockPool AMM, C-01 mock source 등).
+  - manifest는 데모가 recipe 7(Reg D + Surveillance, 10 원소)로 onboarding한 상태라
+    `check`가 10개 원소를 매긴다(recipe 1이면 9개). 재배포 시 recipe에 따라 달라짐.
+  - `snapshot`/`restore`는 anvil 전용. 셸에서 id 캡처 시 `snapshot id:` 라인만 파싱할 것
+    (도움말의 "snapshot ids" 문구가 느슨한 grep에 걸릴 수 있음).
+  - amount는 ether 단위(18 decimals) 가정. 나머지 스택 리스크는 CLI-001/E2E-001과 동일.

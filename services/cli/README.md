@@ -1,4 +1,4 @@
-# corner-store CLI (CLI-001)
+# corner-store CLI (CLI-001, CLI-002)
 
 An interactive TypeScript reference client for driving the whole Corner Store
 compliance-gated DEX stack against a live node from the terminal — onboarding,
@@ -46,6 +46,25 @@ corner-store rfq-cancel <nonce> --maker-account N
 corner-store maker <approve|revoke> <addr>
 corner-store reason <bytes32> [--json]
 ```
+
+CLI v2 (CLI-002) adds preflight, the sell direction, and observability:
+
+```
+corner-store check <buyer> [--venue amm|rfq] [--amount <n>] [--json]   # per-element compliance preflight (no trade) + engine verdict; exit 1 if rejected
+corner-store sell <amountIn> [--min <amountOut>]                        # AMM sell (tokenIn=RWA, tokenOut=QUOTE); defaults to investor account 1
+corner-store balances [addr...] [--json]                               # RWA/QUOTE balances + adapter allowances (default: the 5 well-known roles)
+corner-store watch [--from <block>]                                    # live event tail (Executed/RFQFilled/RFQQuoteCancelled/MakerApprovalSet/Manifest*/SurveillanceFlag); Ctrl-C to stop
+corner-store faucet <addr> <amount>                                    # mint QUOTE (MockERC20.mint is permissionless — demo-only)
+corner-store snapshot                                                  # anvil evm_snapshot -> prints id
+corner-store restore <id>                                              # anvil evm_revert (invalidates later snapshots)
+corner-store quote-inspect <file> [--json]                             # decode a signed RFQ quote: recover signer, expiry, on-chain nonce/approval; exit 1 on any failed check
+```
+
+`check` screens `ctx.buyer` (the engine is not direction-aware); asset-side
+elements (B-01/B-02/E-01) ignore the subject and are labelled as such so a
+per-buyer FAIL on them is not misread. `check`/`quote-inspect` exit non-zero when
+the verdict is rejected / any check fails, so they compose in scripts.
+`snapshot`/`restore` require an anvil-style RPC and error clearly otherwise.
 
 Amounts are given in ether units (18 decimals). Failed transactions exit
 non-zero and print the decoded revert; any `ComplianceRejected(bytes32)` is
