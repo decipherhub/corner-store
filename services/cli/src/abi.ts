@@ -46,6 +46,18 @@ export const ENGINE_ABI = [
   "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,bytes32 decisionHash))"
 ];
 
+// Event fragments for `watch` (src/libraries/Events.sol + RFQAdapter.sol). Only
+// the seven the tail decodes; topic0 hashes are derived from these at runtime.
+export const EVENTS_ABI = [
+  "event Executed(bytes32 indexed executionId, address indexed venue, uint256 amountOut)",
+  "event RFQFilled(bytes32 indexed quoteHash, address indexed maker, address indexed taker, uint256 amountIn, uint256 amountOut)",
+  "event RFQQuoteCancelled(address indexed maker, uint256 indexed nonce)",
+  "event MakerApprovalSet(address indexed maker, bool approved)",
+  "event ManifestRegistered(address indexed token, uint16 issuanceRecipeId, address declaredBy)",
+  "event ManifestStatusChanged(address indexed token, uint8 status, bytes32 reasonCode)",
+  "event SurveillanceFlag(bytes32 indexed elementId, address indexed subject, bytes32 reasonCode)"
+];
+
 // IComplianceElement.check(user, counterparty, asset, amount, context).
 export const ELEMENT_ABI = [
   "function check(address user, address counterparty, address asset, uint256 amount, bytes context) view returns (bool passed, bytes32 reasonCode)"

@@ -140,10 +140,34 @@ program
   .action(run((addr, opts, command) => cmd.cmdBalances(addr, command.optsWithGlobals())));
 
 program
+  .command("watch")
+  .description("live event tail (polls eth_getLogs ~2s; Ctrl-C to stop)")
+  .option("--from <block>", "replay history from this block first")
+  .action(run((opts, command) => cmd.cmdWatch(command.optsWithGlobals())));
+
+program
   .command("faucet")
   .description("mint QUOTE to an address (MockERC20.mint is permissionless — demo-only convenience)")
   .argument("<addr>")
   .argument("<amount>", "QUOTE to mint in ether units")
   .action(run((addr, amount, opts, command) => cmd.cmdFaucet(addr, amount, command.optsWithGlobals())));
+
+program
+  .command("snapshot")
+  .description("take an anvil evm_snapshot and print its id (anvil-only)")
+  .action(run((opts, command) => cmd.cmdSnapshot(command.optsWithGlobals())));
+
+program
+  .command("restore")
+  .description("revert to an anvil snapshot via evm_revert (invalidates later snapshots; anvil-only)")
+  .argument("<id>", "snapshot id from `snapshot`")
+  .action(run((id, opts, command) => cmd.cmdRestore(id, command.optsWithGlobals())));
+
+program
+  .command("quote-inspect")
+  .description("inspect a signed RFQ quote JSON: recover signer, expiry, on-chain nonce/approval state")
+  .argument("<file>", "signed quote JSON (from rfq-quote)")
+  .option("--json", "machine-readable output")
+  .action(run((file, opts, command) => cmd.cmdQuoteInspect(file, command.optsWithGlobals())));
 
 program.parseAsync(process.argv);

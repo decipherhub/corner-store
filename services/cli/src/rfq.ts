@@ -3,7 +3,7 @@ import {AbiCoder} from "ethers";
 
 // REUSE the services/rfq EIP-712 signer library (do NOT reimplement the typed
 // data). Resolved at runtime from the sibling package's compiled output.
-import {RFQQuoteService} from "../../rfq/src";
+import {RFQ_QUOTE_TYPES, RFQQuoteService, domain as rfqDomain} from "../../rfq/src";
 import {RFQQuote, RFQTypedData, SignedRFQQuote, TypedDataSigner} from "../../rfq/src/types";
 
 // Adapt an ethers wallet to the services/rfq TypedDataSigner interface.
@@ -55,5 +55,7 @@ export function encodeVenueData(quote: RFQQuote, signature: string): string {
   );
 }
 
-export {RFQQuoteService};
-export type {RFQQuote, SignedRFQQuote};
+// Re-export the lib's EIP-712 domain builder + type set so `quote-inspect` can
+// recover the signer with ethers.verifyTypedData WITHOUT re-declaring the types.
+export {RFQ_QUOTE_TYPES, RFQQuoteService, rfqDomain};
+export type {RFQQuote, RFQTypedData, SignedRFQQuote};

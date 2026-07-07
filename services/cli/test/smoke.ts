@@ -1,10 +1,32 @@
 import {mkdtempSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
-import {Wallet} from "ethers";
+import {Wallet, verifyTypedData} from "ethers";
 
 import {decodeReason, encodeReason, tableSize} from "../src/reason";
-import {encodeVenueData, readQuoteFile, RFQQuoteService, WalletTypedDataSigner, writeQuoteFile} from "../src/rfq";
+import {
+  RFQ_QUOTE_TYPES,
+  RFQQuoteService,
+  WalletTypedDataSigner,
+  encodeVenueData,
+  readQuoteFile,
+  rfqDomain,
+  writeQuoteFile
+} from "../src/rfq";
+
+const CHAIN_ID = 31337;
+const RFQ_VERIFYING_CONTRACT = "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0";
+
+// Mirror of cmdQuoteInspect's signer recovery (reuses the rfq lib domain+types).
+function recoverMaker(quote: any, signature: string): {recovered: string; ok: boolean} {
+  const dom = rfqDomain(CHAIN_ID, RFQ_VERIFYING_CONTRACT as `0x${string}`);
+  try {
+    const recovered = verifyTypedData(dom, RFQ_QUOTE_TYPES, quote, signature);
+    return {recovered, ok: recovered.toLowerCase() === quote.maker.toLowerCase()};
+  } catch {
+    return {recovered: "", ok: false};
+  }
+}
 
 // Ground-truth reason codes computed independently with `cast keccak` against the
 // on-chain ReasonCodes.encode / ComplianceEngine encoding.
@@ -32,7 +54,7 @@ async function main() {
   // --- quote-file round-trip ---------------------------------------------
   const maker = new Wallet("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
   const service = new RFQQuoteService(
-    {chainId: 31337, verifyingContract: "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0", defaultTtlSeconds: 3600},
+    {chainId: CHAIN_ID, verifyingContract: RFQ_VERIFYING_CONTRACT as `0x${string}`, defaultTtlSeconds: 3600},
     new WalletTypedDataSigner(maker)
   );
   const signed = await service.createSignedQuote({
@@ -57,6 +79,24 @@ async function main() {
 
   const venueData = encodeVenueData(round.quote, round.signature);
   assert(venueData.startsWith("0x") && venueData.length > 200, "venueData encodes");
+
+  // --- quote-inspect signer recovery (valid + tampered) -------------------
+  const valid = recoverMaker(round.quote, round.signature);
+  assert(valid.ok, "quote-inspect recovers the maker from a valid signature");
+  assert(valid.recovered.toLowerCase() === (await maker.getAddress()).toLowerCase(), "recovered == maker");
+
+  // Flip one hex nibble inside r; recovery yields a different address (or throws).
+  const tamperedSig = `${round.signature.slice(0, 10)}${round.signature[10] === "0" ? "1" : "0"}${round.signature.slice(11)}`;
+  assert(tamperedSig !== round.signature, "tampered signature differs");
+  const tampered = recoverMaker(round.quote, tamperedSig);
+  assert(!tampered.ok, "quote-inspect FAILs a tampered signature");
+
+  // --- reason-decode regression: the recipe-aware per-element code `check`
+  //     reports for a failed element must resolve in the reason table. --------
+  assert(
+    decodeReason(encodeReason(1, "A-02-v1", 1)).label.includes("Jurisdiction"),
+    "check per-element reason decodes (recipe 1 / A-02-v1 -> Jurisdiction)"
+  );
 
   console.log("corner-store CLI smoke ok");
 }

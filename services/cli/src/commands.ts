@@ -3,7 +3,7 @@ import {formatEther, parseEther} from "ethers";
 
 import {relative} from "path";
 
-import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
+import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
   ALLOWED_JURISDICTION,
   Artifact,
@@ -26,10 +26,18 @@ import {
   walletForAccount,
   DEFAULT_CHAIN_ID,
 } from "./config";
-import {AbiCoder, Contract, decodeBytes32String, encodeBytes32String} from "ethers";
+import {AbiCoder, Contract, Interface, decodeBytes32String, encodeBytes32String, verifyTypedData} from "ethers";
 import {ELEMENT_IDS, applyAttestation, defaultIdentityId} from "./elements";
 import {ELEMENT_LABELS, POLICY_STATUS, RECIPE_LABELS, decodeReason, encodeReason} from "./reason";
-import {RFQQuoteService, WalletTypedDataSigner, encodeVenueData, readQuoteFile, writeQuoteFile} from "./rfq";
+import {
+  RFQ_QUOTE_TYPES,
+  RFQQuoteService,
+  WalletTypedDataSigner,
+  encodeVenueData,
+  readQuoteFile,
+  rfqDomain,
+  writeQuoteFile
+} from "./rfq";
 import {CliError} from "./util";
 
 const CTX_TUPLE =
@@ -696,4 +704,213 @@ export async function cmdFaucet(addr: string, amount: string, opts: GlobalOpts):
   await logTx(await erc20(a.quote, signer).mint(addr, amt), `quote.mint(${addr}, ${formatEther(amt)})`);
   const bal = await erc20(a.quote, provider).balanceOf(addr);
   console.log(`  ${addr} QUOTE balance: ${formatEther(bal)}`);
+}
+
+// ---------------------------------------------------------------------------
+// watch [--from <block>] — live event tail.
+// ---------------------------------------------------------------------------
+const WATCH_EVENTS = [
+  "Executed",
+  "RFQFilled",
+  "RFQQuoteCancelled",
+  "MakerApprovalSet",
+  "ManifestRegistered",
+  "ManifestStatusChanged",
+  "SurveillanceFlag"
+];
+
+// A reasonCode field can be a recipe-scoped ComplianceRejected code (reason
+// table), a recipe-0 monitoring-flag code (e.g. SurveillanceFlag emits
+// ReasonCodes.encode(0, elementId, 1)), or a short bytes32 label string (e.g. a
+// manifest action reason). Try each in turn, else "unknown code".
+function describeReasonCode(code: string): string {
+  if (code === ZERO32) return "none";
+  const lc = code.toLowerCase();
+  const decoded = decodeReason(lc);
+  if (decoded.label !== "unknown code") return decoded.label;
+  for (const [elId, elLabel] of Object.entries(ELEMENT_LABELS)) {
+    if (lc === encodeReason(0, elId, 1).toLowerCase()) return `monitoring flag / ${elId} -> ${elLabel}`;
+  }
+  try {
+    const s = decodeBytes32String(code);
+    if (s && /^[\x20-\x7e]+$/.test(s)) return `"${s}" (label)`;
+  } catch {
+    /* not a bytes32 string */
+  }
+  return "unknown code";
+}
+
+// Best-effort bytes32 -> short-string element id (e.g. "F-02-v1"); falls back to
+// the raw hex if the value is not a clean printable string.
+function bytes32Label(raw: string): string {
+  try {
+    const s = decodeBytes32String(raw);
+    if (s && /^[\x20-\x7e]+$/.test(s)) return s;
+  } catch {
+    /* not a bytes32 string */
+  }
+  return raw;
+}
+
+function formatEvent(parsed: {name: string; args: any}): string {
+  const {name, args} = parsed;
+  switch (name) {
+    case "Executed":
+      return `Executed          venue=${args.venue} amountOut=${formatEther(args.amountOut)} executionId=${args.executionId}`;
+    case "RFQFilled":
+      return `RFQFilled         maker=${args.maker} taker=${args.taker} amountIn=${formatEther(args.amountIn)} amountOut=${formatEther(args.amountOut)}`;
+    case "RFQQuoteCancelled":
+      return `RFQQuoteCancelled maker=${args.maker} nonce=${args.nonce}`;
+    case "MakerApprovalSet":
+      return `MakerApprovalSet  maker=${args.maker} approved=${args.approved}`;
+    case "ManifestRegistered":
+      return `ManifestRegistered token=${args.token} issuanceRecipeId=${args.issuanceRecipeId} declaredBy=${args.declaredBy}`;
+    case "ManifestStatusChanged": {
+      const s = Number(args.status);
+      return `ManifestStatusChanged token=${args.token} status=${s} (${POLICY_STATUS[s] ?? "?"}) reason=${describeReasonCode(String(args.reasonCode))}`;
+    }
+    case "SurveillanceFlag": {
+      const el = bytes32Label(String(args.elementId));
+      const elLabel = ELEMENT_LABELS[el] ? ` (${ELEMENT_LABELS[el]})` : "";
+      return `SurveillanceFlag  element=${el}${elLabel} subject=${args.subject} reason=${describeReasonCode(String(args.reasonCode))}`;
+    }
+    default:
+      return name;
+  }
+}
+
+export async function cmdWatch(opts: GlobalOpts & {from?: string}): Promise<void> {
+  const a = loadArtifact(opts.artifact);
+  const provider = makeProvider(opts);
+  const iface = new Interface(EVENTS_ABI);
+  const topic0 = WATCH_EVENTS.map((n) => iface.getEvent(n)!.topicHash);
+  const addresses = [a.router, a.rfqAdapter, a.policyReg, a.factory, a.surveillance];
+
+  const latest = await provider.getBlockNumber();
+  let from = opts.from !== undefined ? Number(opts.from) : latest + 1;
+
+  const poll = async () => {
+    const tip = await provider.getBlockNumber();
+    if (tip < from) return;
+    const logs = await provider.getLogs({fromBlock: from, toBlock: tip, address: addresses, topics: [topic0]});
+    logs.sort((x, y) => x.blockNumber - y.blockNumber || x.index - y.index);
+    for (const log of logs) {
+      let parsed;
+      try {
+        parsed = iface.parseLog({topics: [...log.topics], data: log.data});
+      } catch {
+        continue;
+      }
+      if (parsed) console.log(`[block ${log.blockNumber}] ${formatEvent(parsed)}`);
+    }
+    from = tip + 1;
+  };
+
+  console.log(`Watching events from block ${from} (Ctrl-C to stop)`);
+  await poll();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      await poll();
+    } catch (e: any) {
+      console.error(`  poll error: ${e?.shortMessage ?? e?.message ?? e}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// snapshot / restore <id> — anvil evm_snapshot / evm_revert.
+// ---------------------------------------------------------------------------
+export async function cmdSnapshot(opts: GlobalOpts): Promise<void> {
+  const provider = makeProvider(opts);
+  let id: string;
+  try {
+    id = await provider.send("evm_snapshot", []);
+  } catch (e: any) {
+    throw new CliError(`evm_snapshot RPC unavailable (anvil/hardhat only): ${e?.shortMessage ?? e?.message ?? e}`);
+  }
+  console.log(`snapshot id: ${id}`);
+  console.log(`  restore with: corner-store restore ${id}`);
+  console.log("  note: a restore invalidates this and any LATER snapshot ids.");
+}
+
+export async function cmdRestore(id: string, opts: GlobalOpts): Promise<void> {
+  const provider = makeProvider(opts);
+  let ok: boolean;
+  try {
+    ok = await provider.send("evm_revert", [id]);
+  } catch (e: any) {
+    throw new CliError(`evm_revert RPC unavailable (anvil/hardhat only): ${e?.shortMessage ?? e?.message ?? e}`);
+  }
+  if (!ok) throw new CliError(`restore failed: snapshot ${id} not found (already reverted, or never taken?)`);
+  console.log(`restored to snapshot ${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// quote-inspect <file>
+// ---------------------------------------------------------------------------
+export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: boolean}): Promise<void> {
+  const a = loadArtifact(opts.artifact);
+  const provider = makeProvider(opts);
+  const qf = readQuoteFile(file);
+  const q = qf.quote;
+
+  // Recover the signer via the services/rfq typed-data — REUSE the lib's domain
+  // + type set (no re-declared type strings). Must equal quote.maker.
+  const dom = rfqDomain(DEFAULT_CHAIN_ID, a.rfqAdapter as `0x${string}`);
+  let recovered = "";
+  let sigOk = false;
+  try {
+    recovered = verifyTypedData(dom, RFQ_QUOTE_TYPES, q, qf.signature);
+    sigOk = recovered.toLowerCase() === q.maker.toLowerCase();
+  } catch (e: any) {
+    recovered = `<recovery failed: ${e?.shortMessage ?? e?.message ?? e}>`;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const secsLeft = Number(q.expiry) - now;
+  const expired = secsLeft <= 0;
+
+  const rfq = rfqAdapter(a, provider);
+  const [nonceUsed, makerApproved]: [boolean, boolean] = await Promise.all([
+    rfq.usedQuoteNonce(q.maker, BigInt(q.nonce)),
+    rfq.approvedMaker(q.maker)
+  ]);
+
+  const checks = [
+    {
+      name: "signature",
+      pass: sigOk,
+      detail: sigOk ? `recovered ${recovered} == maker` : `recovered ${recovered} != maker ${q.maker}`
+    },
+    {name: "not-expired", pass: !expired, detail: expired ? `expired ${-secsLeft}s ago` : `${secsLeft}s remaining`},
+    {
+      name: "nonce-unused",
+      pass: !nonceUsed,
+      detail: nonceUsed ? "nonce already used/cancelled on-chain" : "nonce fresh on-chain"
+    },
+    {
+      name: "maker-approved",
+      pass: makerApproved,
+      detail: makerApproved ? "maker on RFQ allowlist" : "maker NOT on RFQ allowlist"
+    }
+  ];
+  const allPass = checks.every((c) => c.pass);
+
+  if (opts.json) {
+    console.log(
+      JSON.stringify({file, quote: q, verifyingContract: a.rfqAdapter, recovered, checks, allPass}, null, 2)
+    );
+    if (!allPass) process.exitCode = 1;
+    return;
+  }
+
+  console.log(`Quote ${file}  (verifyingContract=${a.rfqAdapter}, chainId=${DEFAULT_CHAIN_ID})`);
+  for (const [k, v] of Object.entries(q)) console.log(`  ${k.padEnd(10)} ${v}`);
+  console.log(`  signature  ${qf.signature}`);
+  console.log("");
+  console.log("Checks:");
+  for (const c of checks) console.log(`  [${c.pass ? "PASS" : "FAIL"}] ${c.name.padEnd(15)} ${c.detail}`);
+  if (!allPass) process.exitCode = 1;
 }
