@@ -23,6 +23,15 @@ echo "==> Running RFQ service smoke test"
   npm test
 )
 
+echo "==> Running CLI build + smoke test"
+(
+  cd services/cli
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
 echo "==> Running vendored deploy-v3 tests"
 (
   cd tools/deploy-v3
