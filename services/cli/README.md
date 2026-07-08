@@ -14,7 +14,12 @@ cd services/cli
 npm install
 npm run build          # tsc -> dist/
 npm test               # offline smoke: reason-table + quote-file round-trips
+npm link               # one-time: puts the `corner-store` command on your PATH
 ```
+
+Without `npm link`, invoke it as `node dist/cli/src/index.js <command>` from
+`services/cli` instead. Undo the global link anytime with
+`npm unlink -g @corner-store/cli`.
 
 `node_modules/` and `dist/` are gitignored. Chain interaction uses `ethers`;
 EIP-712 RFQ quotes REUSE the sibling `services/rfq` signer library.
