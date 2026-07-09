@@ -115,3 +115,31 @@ passing
 
 - Non-goals: partial fill, orderbook, production pricing engine, dealer inventory,
   custody 확장, websocket/order discovery.
+
+## DEMO-001 — BUIDL-like ERC-3643 Demo Asset
+
+### Behavior
+
+- `src/demo/BuidlLikeDemoAsset.sol`이 Giwa MVP용 BUIDL-like asset profile을 제공한다.
+- 테스트 fixture가 profile의 이름/심볼로 실제 ERC-3643/T-REX 토큰을 배포한다.
+- profile Manifest는 Reg D 506(c) 발행 Recipe와 ICA 3(c)(7) fund Recipe를 동시에 바인딩한다.
+- `factsPacked` fund bit가 켜진 자산에서는 A-13 Qualified Purchaser 검사가 활성화된다.
+- protected Router 경로에서 QP buyer는 체결되고, accredited-only/non-QP buyer는 토큰 이동 전 거절된다.
+- QP/규제 로직은 BUIDL 전용 토큰 override가 아니라 Manifest/Recipe/Element에 남긴다.
+- 현실 BlackRock BUIDL 연동, Securitize claim 연동, NAV/redemption/distribution rail은 범위 밖이다.
+
+### Verification
+
+- `forge fmt --check src/demo/BuidlLikeDemoAsset.sol test/fixtures/TREXSuite.sol test/integration/IntegrationBase.sol test/integration/BUIDLLikeFlow.t.sol`
+- `forge test --offline --match-path test/integration/BUIDLLikeFlow.t.sol -vv`
+- `forge test --offline`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- 데모 문서: `docs/compliance/07-buidl-implementation.md`
+- 현재 구현은 local BUIDL-like profile + fixture다. 실제 BUIDL 온보딩은 법률 확정, issuer/trusted-claim 연동, 1차/2차 rail 분리 후 별도 feature로 진행한다.

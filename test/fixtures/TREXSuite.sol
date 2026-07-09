@@ -63,6 +63,11 @@ abstract contract TREXSuite is Test {
 
     /// @notice Stand up and wire the full ERC-3643 stack. Call from `setUp()`.
     function deployTREX() internal {
+        deployTREX("Corner Store RWA", "csRWA");
+    }
+
+    /// @notice Stand up the same ERC-3643 stack with scenario-specific token metadata.
+    function deployTREX(string memory tokenName, string memory tokenSymbol) internal {
         issuerAddr = vm.addr(issuerKey);
 
         // 1. registries
@@ -95,7 +100,7 @@ abstract contract TREXSuite is Test {
 
         // 5. token
         rwaToken = new Token();
-        rwaToken.init(address(idRegistry), address(compliance), "Corner Store RWA", "csRWA", 18, address(0));
+        rwaToken.init(address(idRegistry), address(compliance), tokenName, tokenSymbol, 18, address(0));
         rwaToken.addAgent(address(this)); // fixture may mint
         rwaToken.unpause(); // token deploys paused
     }

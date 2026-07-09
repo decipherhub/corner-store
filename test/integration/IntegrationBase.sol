@@ -26,6 +26,7 @@ import {UniswapV3Adapter} from "../../src/execution/adapters/amm/UniswapV3Adapte
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockPool} from "../mocks/MockPool.sol";
 
+import {BuidlLikeDemoAsset} from "../../src/demo/BuidlLikeDemoAsset.sol";
 import {ManifestCore, PolicyStatus, VenueType, FlowType} from "../../src/types/ComplianceTypes.sol";
 import {ComplianceContext} from "../../src/types/ComplianceTypes.sol";
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
@@ -88,7 +89,24 @@ abstract contract IntegrationBase is TREXSuite {
     /// @param fundRecipeId 0 (no fund recipe) or 2 (3(c)(7)).
     /// @param factsPacked  manifest facts (bit0 = fund applicable).
     function deployStack(uint16 fundRecipeId, uint256 factsPacked) internal {
-        deployTREX(); // real ERC-3643 token() + identity registry
+        deployStackWithAsset("Corner Store RWA", "csRWA", fundRecipeId, factsPacked);
+    }
+
+    /// @notice Stand up the same stack with scenario-specific ERC-3643 asset metadata.
+    function deployStackWithAsset(
+        string memory tokenName,
+        string memory tokenSymbol,
+        uint16 fundRecipeId,
+        uint256 factsPacked
+    ) internal {
+        deployStackWithManifest(tokenName, tokenSymbol, _activeManifest(fundRecipeId, factsPacked));
+    }
+
+    /// @notice Stand up the same stack with an explicit asset Manifest/profile.
+    function deployStackWithManifest(string memory tokenName, string memory tokenSymbol, ManifestCore memory manifest)
+        internal
+    {
+        deployTREX(tokenName, tokenSymbol); // real ERC-3643 token() + identity registry
 
         // 1. compliance registries
         elementReg = new ElementRegistry();
@@ -131,7 +149,7 @@ abstract contract IntegrationBase is TREXSuite {
         pool = new MockPool(IERC20(address(quote)), IERC20(address(rwaToken)));
 
         // 7. manifests
-        policyReg.registerManifest(address(rwaToken), _activeManifest(fundRecipeId, factsPacked));
+        policyReg.registerManifest(address(rwaToken), manifest);
         ManifestCore memory unreg;
         unreg.status = PolicyStatus.UNREGULATED;
         policyReg.registerManifest(address(quote), unreg);
@@ -155,6 +173,14 @@ abstract contract IntegrationBase is TREXSuite {
     /// @dev Convenience overload: plain RegD506c, no fund recipe.
     function deployStack() internal {
         deployStack(0, 0);
+    }
+
+    /// @dev BUIDL-like demo fixture: Reg D 506(c) + ICA 3(c)(7) fund fact.
+    ///      This is a local demo asset, not integration with real BlackRock BUIDL.
+    function deployBuidlLikeStack() internal {
+        deployStackWithManifest(
+            BuidlLikeDemoAsset.TOKEN_NAME, BuidlLikeDemoAsset.TOKEN_SYMBOL, BuidlLikeDemoAsset.manifest(ENGINES_AMM)
+        );
     }
 
     // --- manifest helper --------------------------------------------------
