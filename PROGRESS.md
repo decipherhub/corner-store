@@ -41,27 +41,32 @@ source of truth로 사용한다.
 ## Last Session Summary
 
 - 변경한 파일:
+  - `src/compliance/elements/BuidlMinimumInvestment.sol`
+  - `src/compliance/recipes/BuidlLikeFundRecipe.sol`
   - `src/demo/BuidlLikeDemoAsset.sol`
+  - `test/integration/IntegrationBase.sol`
   - `test/integration/BUIDLLikeFlow.t.sol`
+  - `test/unit/compliance/BuidlLikeFundRecipe.t.sol`
   - `docs/product-specs/buidl-like-demo-profile.md`
   - `docs/product-specs/index.md`
   - `FEATURES.md`
   - `PROGRESS.md`
 - 완료한 작업:
-  - BUIDL-like profile에 profile hash, DS/Securitize adapter seam, AI/QP claim topic constants 추가
+  - BUIDL-like profile에 profile hash, DS/Securitize adapter seam, AI/QP claim topic constants와 minimum investment amount 추가
   - DS Protocol/Securitize Compliance Service 개념을 ERC-3643/T-REX + Corner Store adapter boundary로 매핑한 profile spec 추가
-  - sanctioned QP buyer가 token movement 전에 compliance reject되는 테스트 추가
+  - sanctioned QP buyer와 minimum investment 미만 QP buyer가 token movement 전에 compliance reject되는 테스트 추가
   - engine-level AI/QP flags가 통과해도 ERC-3643-unverified recipient settlement가 rollback되는 테스트 추가
 - 실행한 명령:
-  - `forge fmt src/demo/BuidlLikeDemoAsset.sol test/integration/BUIDLLikeFlow.t.sol`
-  - `forge fmt --check src/demo/BuidlLikeDemoAsset.sol test/integration/BUIDLLikeFlow.t.sol`
+  - `forge fmt src/compliance/elements/BuidlMinimumInvestment.sol src/compliance/recipes/BuidlLikeFundRecipe.sol src/demo/BuidlLikeDemoAsset.sol test/integration/IntegrationBase.sol test/integration/BUIDLLikeFlow.t.sol test/unit/compliance/BuidlLikeFundRecipe.t.sol`
+  - `forge fmt --check src/compliance/elements/BuidlMinimumInvestment.sol src/compliance/recipes/BuidlLikeFundRecipe.sol src/demo/BuidlLikeDemoAsset.sol test/integration/IntegrationBase.sol test/integration/BUIDLLikeFlow.t.sol test/unit/compliance/BuidlLikeFundRecipe.t.sol`
   - `forge test --offline --match-path test/integration/BUIDLLikeFlow.t.sol -vv`
+  - `forge test --offline --match-path test/unit/compliance/BuidlLikeFundRecipe.t.sol -vv`
   - `forge test --offline`
 - 통과한 검증:
   - BUIDL-like profile metadata/Manifest/profile hash 확인
   - QP buyer protected-router trade 성공
-  - non-QP, sanctioned, ERC-3643-unverified recipient reject/rollback 검증
-  - 전체 Foundry 테스트 128개 통과
+  - non-QP, sanctioned, minimum investment 미만, ERC-3643-unverified recipient reject/rollback 검증
+  - 전체 Foundry 테스트 132개 통과
 - 남은 리스크:
   - 실제 BlackRock BUIDL/Securitize 연동은 구현하지 않았다.
   - AI/QP는 아직 ONCHAINID claim이 아니라 settable test flag다.

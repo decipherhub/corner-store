@@ -14,9 +14,11 @@ import {ComplianceEngine} from "../../src/compliance/ComplianceEngine.sol";
 import {Sanctions} from "../../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../../src/compliance/elements/QualifiedPurchaser.sol";
+import {BuidlMinimumInvestment} from "../../src/compliance/elements/BuidlMinimumInvestment.sol";
 import {SurveillanceFlag} from "../../src/compliance/elements/SurveillanceFlag.sol";
 import {RegD506cRecipe} from "../../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../../src/compliance/recipes/Fund3c7Recipe.sol";
+import {BuidlLikeFundRecipe} from "../../src/compliance/recipes/BuidlLikeFundRecipe.sol";
 
 import {ExecutionRouter} from "../../src/execution/ExecutionRouter.sol";
 import {VenueRegistry} from "../../src/execution/VenueRegistry.sol";
@@ -65,6 +67,7 @@ abstract contract IntegrationBase is TREXSuite {
     Sanctions internal sanctions;
     AccreditedInvestor internal accredited;
     QualifiedPurchaser internal qp;
+    BuidlMinimumInvestment internal buidlMinimum;
     SurveillanceFlag internal surveillance;
 
     // --- execution --------------------------------------------------------
@@ -118,15 +121,18 @@ abstract contract IntegrationBase is TREXSuite {
         sanctions = new Sanctions();
         accredited = new AccreditedInvestor();
         qp = new QualifiedPurchaser();
+        buidlMinimum = new BuidlMinimumInvestment();
         surveillance = new SurveillanceFlag();
         elementReg.registerElement(bytes32("A-01-v1"), address(sanctions));
         elementReg.registerElement(bytes32("A-03-v1"), address(accredited));
         elementReg.registerElement(bytes32("A-13-v1"), address(qp));
+        elementReg.registerElement(bytes32("BUIDL-MIN-v1"), address(buidlMinimum));
         elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
 
         // 3. recipes + register
         recipeReg.registerRecipe(1, 1, address(new RegD506cRecipe()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
+        recipeReg.registerRecipe(3, 1, address(new BuidlLikeFundRecipe()));
 
         // 4. engine
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);

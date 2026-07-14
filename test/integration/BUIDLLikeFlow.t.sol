@@ -11,7 +11,7 @@ import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
 /// the project ERC-3643/T-REX fixture with BUIDL-like metadata and binds a
 /// Manifest that models the minimum current demo fact: Reg D 506(c) issuance +
 /// ICA 3(c)(7) fund status. In this skeleton, `factsPacked bit0` activates the
-/// Fund3c7Recipe, which adds A-13 Qualified Purchaser to the router gate.
+/// BuidlLikeFundRecipe, which adds A-13 Qualified Purchaser plus the demo minimum investment gate.
 contract BUIDLLikeFlowTest is IntegrationBase {
     function setUp() public {
         deployBuidlLikeStack();
@@ -27,7 +27,9 @@ contract BUIDLLikeFlowTest is IntegrationBase {
             "RegD 506c recipe"
         );
         assertEq(
-            policyReg.manifestOf(address(rwaToken)).fundRecipeId, BuidlLikeDemoAsset.FUND_RECIPE_ID, "3c7 fund recipe"
+            policyReg.manifestOf(address(rwaToken)).fundRecipeId,
+            BuidlLikeDemoAsset.FUND_RECIPE_ID,
+            "BUIDL-like fund recipe"
         );
         assertEq(
             policyReg.manifestOf(address(rwaToken)).factsPacked & BuidlLikeDemoAsset.FACT_FUND_APPLICABLE,
@@ -41,7 +43,8 @@ contract BUIDLLikeFlowTest is IntegrationBase {
                     BuidlLikeDemoAsset.PROFILE_KEY,
                     BuidlLikeDemoAsset.SECURITIZE_DS_ADAPTER_SEAM,
                     BuidlLikeDemoAsset.CLAIM_TOPIC_ACCREDITED_INVESTOR,
-                    BuidlLikeDemoAsset.CLAIM_TOPIC_QUALIFIED_PURCHASER
+                    BuidlLikeDemoAsset.CLAIM_TOPIC_QUALIFIED_PURCHASER,
+                    BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT
                 )
             ),
             "profile hash anchors demo assumptions"
@@ -51,28 +54,36 @@ contract BUIDLLikeFlowTest is IntegrationBase {
     function test_buidlLike_qpBuyerCanTradeThroughProtectedRouter() public {
         setupBuyer(alice); // ERC-3643 verified + accredited + non-sanctioned
         qp.setQp(alice, true);
-        fundPoolRWA(1_000 ether);
-        fundBuyerQuote(alice, 1_000 ether);
+        fundPoolRWA(6_000_000 ether);
+        fundBuyerQuote(alice, 6_000_000 ether);
 
-        ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 100 ether);
+        ExecutionRequest memory req = buildBuyRequest(
+            alice, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT
+        );
         doBuy(req);
 
-        assertEq(rwaToken.balanceOf(alice), 100 ether, "QP buyer received BUIDL-like asset");
-        assertEq(quote.balanceOf(alice), 900 ether, "buyer paid quote");
+        assertEq(
+            rwaToken.balanceOf(alice),
+            BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT,
+            "QP buyer received BUIDL-like asset"
+        );
+        assertEq(quote.balanceOf(alice), 1_000_000 ether, "buyer paid quote");
     }
 
     function test_buidlLike_accreditedButNonQpBuyerRejectedBeforeTokenMoves() public {
         setupBuyer(alice); // accredited is not enough for this BUIDL-like fund asset
-        fundPoolRWA(1_000 ether);
-        fundBuyerQuote(alice, 1_000 ether);
+        fundPoolRWA(6_000_000 ether);
+        fundBuyerQuote(alice, 6_000_000 ether);
 
         uint256 aliceQuoteBefore = quote.balanceOf(alice);
         uint256 poolRwaBefore = rwaToken.balanceOf(address(pool));
 
-        ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 100 ether);
+        ExecutionRequest memory req = buildBuyRequest(
+            alice, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT
+        );
 
         vm.prank(alice);
-        vm.expectRevert(); // ComplianceRejected: A-13-v1 from Fund3c7Recipe
+        vm.expectRevert(); // ComplianceRejected: A-13-v1 from BuidlLikeFundRecipe
         router.execute(req);
 
         assertEq(rwaToken.balanceOf(alice), 0, "non-QP receives no BUIDL-like asset");
@@ -84,13 +95,15 @@ contract BUIDLLikeFlowTest is IntegrationBase {
         setupBuyer(alice);
         qp.setQp(alice, true);
         sanctions.setBlocked(alice, true);
-        fundPoolRWA(1_000 ether);
-        fundBuyerQuote(alice, 1_000 ether);
+        fundPoolRWA(6_000_000 ether);
+        fundBuyerQuote(alice, 6_000_000 ether);
 
         uint256 aliceQuoteBefore = quote.balanceOf(alice);
         uint256 poolRwaBefore = rwaToken.balanceOf(address(pool));
 
-        ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 100 ether);
+        ExecutionRequest memory req = buildBuyRequest(
+            alice, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT
+        );
 
         vm.prank(alice);
         vm.expectRevert(); // ComplianceRejected: A-01-v1 from RegD506cRecipe
@@ -106,13 +119,15 @@ contract BUIDLLikeFlowTest is IntegrationBase {
         // transfer to an unregistered recipient identity at settlement time.
         accredited.setAccredited(alice, true);
         qp.setQp(alice, true);
-        fundPoolRWA(1_000 ether);
-        fundBuyerQuote(alice, 1_000 ether);
+        fundPoolRWA(6_000_000 ether);
+        fundBuyerQuote(alice, 6_000_000 ether);
 
         uint256 aliceQuoteBefore = quote.balanceOf(alice);
         uint256 poolRwaBefore = rwaToken.balanceOf(address(pool));
 
-        ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 100 ether);
+        ExecutionRequest memory req = buildBuyRequest(
+            alice, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT
+        );
 
         vm.prank(alice);
         vm.expectRevert(); // ERC-3643 transfer-time verification rejects unverified recipient
@@ -121,5 +136,25 @@ contract BUIDLLikeFlowTest is IntegrationBase {
         assertEq(rwaToken.balanceOf(alice), 0, "unverified recipient receives no BUIDL-like asset");
         assertEq(quote.balanceOf(alice), aliceQuoteBefore, "quote transfer rolled back");
         assertEq(rwaToken.balanceOf(address(pool)), poolRwaBefore, "pool RWA transfer rolled back");
+    }
+
+    function test_buidlLike_qpBuyerBelowMinimumRejectedBeforeTokenMoves() public {
+        setupBuyer(alice);
+        qp.setQp(alice, true);
+        fundPoolRWA(6_000_000 ether);
+        fundBuyerQuote(alice, 6_000_000 ether);
+
+        uint256 aliceQuoteBefore = quote.balanceOf(alice);
+        uint256 poolRwaBefore = rwaToken.balanceOf(address(pool));
+
+        ExecutionRequest memory req = buildBuyRequest(alice, 1_000_000 ether, 1_000_000 ether);
+
+        vm.prank(alice);
+        vm.expectRevert(); // ComplianceRejected: BUIDL-MIN-v1 from BuidlLikeFundRecipe
+        router.execute(req);
+
+        assertEq(rwaToken.balanceOf(alice), 0, "below-minimum buyer receives no BUIDL-like asset");
+        assertEq(quote.balanceOf(alice), aliceQuoteBefore, "quote not pulled on minimum reject");
+        assertEq(rwaToken.balanceOf(address(pool)), poolRwaBefore, "pool RWA unchanged");
     }
 }

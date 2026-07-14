@@ -123,9 +123,10 @@ passing
 - `src/demo/BuidlLikeDemoAsset.sol`이 Giwa MVP용 BUIDL-like asset profile을 제공한다.
 - 테스트 fixture가 profile의 이름/심볼로 실제 ERC-3643/T-REX 토큰을 배포한다.
 - profile Manifest는 Reg D 506(c) 발행 Recipe와 ICA 3(c)(7) fund Recipe를 동시에 바인딩한다.
-- `factsPacked` fund bit가 켜진 자산에서는 A-13 Qualified Purchaser 검사가 활성화된다.
+- `factsPacked` fund bit가 켜진 자산에서는 BUIDL-like fund Recipe가 A-13 Qualified Purchaser와 minimum investment 검사를 활성화한다.
 - protected Router 경로에서 QP buyer는 체결되고, accredited-only/non-QP buyer는 토큰 이동 전 거절된다.
 - sanctioned QP buyer는 token movement 전에 compliance reject된다.
+- QP buyer라도 BUIDL-like minimum investment 미만이면 token movement 전에 compliance reject된다.
 - engine-level AI/QP flags가 통과해도 ERC-3643-unverified recipient는 settlement에서 rollback된다.
 - QP/규제 로직은 BUIDL 전용 토큰 override가 아니라 Manifest/Recipe/Element에 남긴다.
 - DS Protocol/Securitize-style Compliance Service는 profile 문서에서 adapter seam으로 매핑한다.
@@ -135,6 +136,7 @@ passing
 
 - `forge fmt --check src/demo/BuidlLikeDemoAsset.sol test/fixtures/TREXSuite.sol test/integration/IntegrationBase.sol test/integration/BUIDLLikeFlow.t.sol`
 - `forge test --offline --match-path test/integration/BUIDLLikeFlow.t.sol -vv`
+- `forge test --offline --match-path test/unit/compliance/BuidlLikeFundRecipe.t.sol -vv`
 - `forge test --offline`
 - `git diff --check`
 

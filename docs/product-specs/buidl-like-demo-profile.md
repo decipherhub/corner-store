@@ -8,6 +8,8 @@ Current demo profile; not real BlackRock/Securitize BUIDL integration.
 
 This profile lets the Giwa MVP demonstrate how a BUIDL-like regulated fund asset can trade through Corner Store's protected Router path using the existing ERC-3643/T-REX fixture and the Corner Store Manifest/Recipe/Element model.
 
+The test model is an ERC20-style BUIDL reference asset converted into a local ERC-3643/T-REX test issuance. It is not a bridge, wrapper, or live integration with the real BUIDL token.
+
 The goal is to prove the product flow, not to claim production compatibility with the real BUIDL token.
 
 ## Current implementation
@@ -21,8 +23,9 @@ The demo deploys a standard ERC-3643/T-REX token with BUIDL-like metadata:
 - token name: `BUIDL-like ERC-3643 Demo Asset`
 - token symbol: `bBUIDL`
 - issuance recipe: Reg D 506(c)
-- fund recipe: ICA 3(c)(7)
+- fund recipe: BUIDL-like ICA 3(c)(7) recipe
 - fund applicability: `factsPacked` bit 0
+- minimum investment amount: `5,000,000` demo units, modeled as $5M at $1 NAV
 - supported execution engine: AMM in the current fixture
 
 ## Compliance model
@@ -44,6 +47,7 @@ Current demo checks:
 - sanctions clear through `A-01-v1`
 - accredited investor through `A-03-v1`
 - qualified purchaser through `A-13-v1`
+- BUIDL-like minimum investment through `BUIDL-MIN-v1`
 - ERC-3643 recipient verification at token transfer time
 
 ## DS Protocol / Securitize mapping
@@ -81,6 +85,7 @@ The BUIDL-like profile should demonstrate:
 3. accredited but non-QP buyer is rejected before token movement
 4. sanctioned QP buyer is rejected before token movement
 5. QP/accredited but ERC-3643-unverified recipient rolls back during token settlement
+6. QP/accredited buyer below the BUIDL-like minimum investment is rejected before token movement
 
 ## Non-goals
 
