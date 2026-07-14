@@ -251,6 +251,8 @@ Deliverables:
 - signature, nonce, expiry와 taker binding
 - Router-only RFQ Adapter와 latest compliance evaluation
 - 최소 TypeScript quote signer reference service
+- RFQ backend SDK interface와 local reference example 계획은 `docs/product-specs/rfq-backend-sdk-and-demo.md`를 따른다.
+- MVP demo backend는 SDK 정리 이후 별도 feature로 구현한다.
 - partial fill policy는 v1 non-goal로 유지
 
 Completion:
@@ -317,16 +319,27 @@ SDK와 reference DEX를 반복 배포하고 Manifest/권한 상태를 검증 가
 
 ## Near-Term Issues
 
+Open PR context:
+
+- #24 covers RFQ maker approval and quote cancellation hardening.
+- #28 covers protected-router RFQ integration scenarios.
+- #29 covers live-Anvil E2E/demo runner.
+- #30 covers interactive CLI over the deployed demo stack.
+- #35 covers BUIDL-like ERC-3643 compliance fixture with mock TA facts.
+
 가까운 후속 이슈:
 
-1. `design(rfq): dealer/operator approval, custody, cancellation, partial-fill policy 확정`
-2. `security(rfq): direct venue, signer, custody, replay, quote-cancellation threat model 작성`
-3. `feat(compliance): production Asset Compliance Manifest lifecycle/schema 구현`
-4. `design(compliance): acquisition/lot data source와 holding-period Recipe 활성화 조건 결정`
-5. `test(e2e): live Anvil deployment와 regulated RFQ/AMM settlement smoke 자동화`
-6. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
-7. `chore(ci): deploy-v3 CI, static analysis, lint/warning budget 추가`
-8. `docs(ops): Manifest activation/suspension runbook과 incident drill 문서화`
+1. `feat(rfq): add TypeScript SDK interfaces for quote backend integration`
+2. `docs(demo): define MVP RFQ backend milestone and user flow`
+3. `feat(demo): add MVP RFQ backend using the RFQ SDK` — PR #29/#30이 머지되면 해당 E2E/CLI 경로를 재사용한다.
+4. `docs(roadmap): reconcile roadmap after pending RFQ/E2E/CLI/BUIDL PR stack merges`
+5. `design(rfq): remaining production RFQ policy beyond PR #24` — custody, partial fill, production dealer/operator 책임.
+6. `security(rfq): direct venue, signer custody, replay, quote-cancellation threat model 보강`
+7. `feat(compliance): production Asset Compliance Manifest lifecycle/schema 구현`
+8. `design(compliance): acquisition/lot data source와 holding-period Recipe 활성화 조건 결정`
+9. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
+10. `chore(ci): static analysis, lint/warning budget 추가`
+11. `docs(ops): Manifest activation/suspension runbook과 incident drill 문서화`
 
 ## Decision Backlog
 

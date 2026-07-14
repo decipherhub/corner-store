@@ -115,3 +115,26 @@ passing
 
 - Non-goals: partial fill, orderbook, production pricing engine, dealer inventory,
   custody 확장, websocket/order discovery.
+## DOC-002 — RFQ SDK and MVP Demo Planning
+
+### Behavior
+
+- RFQ backend 운영을 Corner Store가 제공하지 않는다는 제품 경계를 명확히 한다.
+- RFQ backend SDK, local reference example, MVP demo backend를 서로 다른 레이어로 분리한다.
+- 구현 순서는 SDK interface 정리 → local reference example → MVP demo backend로 기록한다.
+- production RFQ hardening(dealer approval, custody, cancellation, partial fill)은 별도 트랙으로 유지한다.
+- roadmap과 product spec index에서 RFQ SDK/MVP backend 후속 작업을 찾을 수 있다.
+
+### Verification
+
+- RFQ venue architecture, product-spec index, roadmap, FEATURES, PROGRESS 교차 검토
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`
+- 이 feature는 문서 계획 작업이며 `services/rfq` 구현은 후속 feature에서 진행한다.
