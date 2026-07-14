@@ -95,7 +95,10 @@ contract SwapFlowTest is IntegrationBase {
     // --- rejection: buyer not accredited (real engine element) -----------
 
     function test_reject_buyerNotAccredited() public {
-        verifyInvestor(alice); // verified but NOT accredited
+        // Verified + every investor-side attestation EXCEPT accreditation, so the
+        // 9-element recipe rejects specifically at A-03 (accredited).
+        verifyInvestor(alice);
+        attestInvestorExceptAccredited(alice);
         fundPoolRWA(1_000 ether);
         fundBuyerQuote(alice, 1_000 ether);
 
@@ -132,9 +135,10 @@ contract SwapFlowTest is IntegrationBase {
     // leg reverts inside canTransfer; the whole swap reverts and balances are
     // unchanged. This proves the real token enforcement and atomic rollback.
     function test_reject_unverifiedRecipient_erc3643Rollback() public {
-        // bob is accredited & not sanctioned in the engine, but NOT a verified
-        // ERC-3643 holder — so the RWA transfer to bob must revert.
-        accredited.setAccredited(bob, true);
+        // bob passes ALL 9 engine elements (accredited, jurisdiction, identity,
+        // lockup, asset-side attestations) but is NOT a verified ERC-3643 holder —
+        // so compliance passes and the RWA transfer to bob reverts in canTransfer.
+        attestInvestor(bob);
         fundPoolRWA(1_000 ether);
         fundBuyerQuote(bob, 1_000 ether);
 
@@ -157,7 +161,9 @@ contract SwapFlowTest is IntegrationBase {
     // --- Layer-2 (compliance) reject happens BEFORE any token moves ------
 
     function test_complianceReject_beforeAnyTokenMoves() public {
-        verifyInvestor(alice); // verified but not accredited → compliance gate fails
+        // verified but not accredited → compliance gate fails at A-03.
+        verifyInvestor(alice);
+        attestInvestorExceptAccredited(alice);
         fundPoolRWA(1_000 ether);
         fundBuyerQuote(alice, 1_000 ether);
 

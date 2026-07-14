@@ -354,3 +354,73 @@ RFQ venue의 다음 정책을 확정한다.
 - `docs/security.md`
 - `src/execution/adapters/rfq/RFQAdapter.sol`
 - `FEATURES.md`
+
+## D009 — Reg D 506(c) recipe를 9-element reference set으로 확장한다
+
+Date: 2026-07-04
+
+### Context
+
+reference Reg D 506(c) set을 향한 compliance module buildout이 최우선 작업이다.
+strategy report note-14는 Reg D 506(c) 판정을 9개 element로 분해한다. 기존
+`RegD506cRecipe`는 illustrative 2-element(A-01 sanctions + A-03 accredited)만
+요구했다. 나머지 element와 recipe 확장을 landing하면서, 열린 legal 결정과
+production data source는 여전히 approval-gated로 남겨야 한다(ROADMAP Phase 1:
+"implemented for illustrative/reference Elements and Recipes; production legal
+criteria remain approval-gated").
+
+### Decision
+
+- 6개의 새 illustrative element를 추가한다(note-14 Reg D 506(c) set의 adapter):
+  `Jurisdiction`(A-02), `IdentityUniqueness`(A-04), `UsTaxResident`(A-05),
+  `AssetClassification`(B-01, `bytes32 requiredClassification` 생성자 인자),
+  `Erc3643Native`(B-02), `FormDFiling`(E-01). attestation setter는 모두
+  operator-gated(`Governed`/`onlyOperator`)이며, production data source
+  (OFAC oracle, ONCHAINID claim, ERC-165 introspection, EDGAR)는 approval-gated
+  seam으로 남는다.
+- `RegD506cRecipe`를 in-place로 9-element set으로 확장한다(순서: A-01, A-02,
+  A-03, A-04, A-05, B-01, B-02, C-01, E-01). recipe id는 1 유지, version은 2로
+  bump, 여전히 always-applicable. 이는 illustrative reference wiring이며 approved
+  production policy가 아니다(ROADMAP/MVP-v2 gating 언어를 따른다).
+- C-01 Lockup은 test fixture에서 injected mock acquisition source
+  (`IAcquisitionSource`)를 통해서만 참여한다. production acquisition/lot data
+  source 결정과 holding-period 활성화 default는 변경하지 않는다(CR-3 seam,
+  ROADMAP: "acquisition data가 필요한 Recipe는 data source가 결정되기 전
+  활성화하지 않는다"). recipe는 illustrative fixture로 남는다.
+
+### Alternatives Considered
+
+- 새 element에 ungated setter를 사용(legacy mock element와 동일): state-input
+  write-gate가 없어 hardening 방향과 어긋나므로 제외. 대신 새 element는
+  `Governed`/`onlyOperator`를 쓴다(legacy element와의 divergence).
+- Lockup을 recipe에서 제외: 9-element reference set을 완전히 wiring하지 못하므로
+  제외. mock acquisition source로 fixture에서만 활성화한다.
+- production data source(OFAC/ONCHAINID/ERC-165/EDGAR)를 지금 연결: legal 검토와
+  data source 결정이 미완이라 제외. approval-gated seam으로 남긴다.
+
+### Consequences
+
+- ungated legacy mock element(Sanctions A-01, AccreditedInvestor A-03,
+  QualifiedPurchaser)와 새 operator-gated element 사이에 hardening divergence가
+  생긴다. legacy element 정렬은 follow-up으로 추적한다.
+- `RegD506cRecipe`(id 1)를 issuance recipe로 쓰는 모든 fixture(unit
+  `Engine.t.sol`, 통합 `IntegrationBase`/`SwapFlow`)는 9개 element를 모두
+  만족하도록 buyer/asset attestation을 추가해야 했다(fix fixtures, not product
+  code). engine/registry/router product code는 변경하지 않았다.
+- production 활성화 전 legal 검토, acquisition/lot data source 결정, production
+  data source 연결은 여전히 open이다.
+
+### Related Files
+
+- `src/compliance/recipes/RegD506cRecipe.sol`
+- `src/compliance/elements/Jurisdiction.sol`,
+  `src/compliance/elements/IdentityUniqueness.sol`,
+  `src/compliance/elements/UsTaxResident.sol`,
+  `src/compliance/elements/AssetClassification.sol`,
+  `src/compliance/elements/Erc3643Native.sol`,
+  `src/compliance/elements/FormDFiling.sol`,
+  `src/compliance/elements/Lockup.sol`
+- `test/integration/IntegrationBase.sol`,
+  `test/integration/RegD506cElements.t.sol`
+- `test/unit/compliance/Recipes.t.sol`, `test/unit/compliance/Engine.t.sol`
+- `docs/ROADMAP.md`

@@ -158,6 +158,39 @@ passing
 - Deferred follow-up: router-path maker-approval/cancellation integration-test
   시나리오.
 
+## CMP-001 — Reg D 506(c) 9-element Recipe
+
+### Behavior
+
+- illustrative Reg D 506(c) element library가 reference 9-element set을 커버한다:
+  A-01 sanctions, A-02 jurisdiction, A-03 accredited, A-04 identity uniqueness,
+  A-05 US-tax-resident 제외, B-01 asset classification(REG_D), B-02
+  ERC-3643-native asset, C-01 Rule 144 lockup, E-01 Form D filing.
+- `RegD506cRecipe`는 이 9-element set을 요구한다(id 1, version 2,
+  always-applicable). illustrative reference wiring이며 approved production
+  policy가 아니다.
+- 새 element의 attestation setter는 operator-gated(`Governed`/`onlyOperator`)이며
+  production data source(OFAC/ONCHAINID/ERC-165/EDGAR)는 approval-gated seam으로
+  남는다.
+- C-01 Lockup은 injected mock acquisition source를 통해 test fixture에서만
+  활성화된다. production holding-period 활성화 default는 변경하지 않는다.
+- 완전히 attested된 buyer + asset은 real ERC-3643 router 경로로 settle되고,
+  element family별로 하나를 깨면 그 element의 reasonCode로 거부된다.
+
+### Verification
+
+- `forge test --offline`(전체 195/195, pre-task 189 + 신규 6).
+- Recipe unit test: `test_regd_ids_and_elements`(9 element, version 2, id 1,
+  always-applicable).
+- 통합 test `test/integration/RegD506cElements.t.sol`:
+  `test_happyPath_nineElements_buySucceeds`,
+  `test_reject_jurisdictionDisallowed`, `test_reject_jurisdictionUnset`,
+  `test_reject_identityUnbound`, `test_reject_usTaxResidentFlagged`,
+  `test_reject_assetNotClassifiedRegD`.
+- 기존 통합/unit fixture(MultiRecipe, Surveillance, EmergencyPause, Invariants,
+  SwapFlow, Engine)는 shared setup helper로 9-element attestation을 추가해 유지.
+- `forge fmt`.
+
 ## DOC-002 — RFQ SDK and MVP Demo Planning
 
 ### Behavior
@@ -178,6 +211,13 @@ passing
 passing
 
 ### Notes
+
+- 정책 결정: D009(9-element in-place 확장, operator-gated setter, Lockup은
+  fixture-only mock acquisition source).
+- Deferred follow-up: ungated legacy mock element(A-01/A-03/QP)의 operator-gate
+  정렬, production data source 연결, acquisition/lot data source와 holding-period
+  활성화 조건 결정.
+- Non-goals: production legal 활성화, direction-aware element application.
 
 - Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`
 - 이 feature는 문서 계획 작업이며 `services/rfq` 구현은 후속 feature에서 진행한다.
