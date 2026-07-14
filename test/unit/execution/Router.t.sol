@@ -206,6 +206,18 @@ contract RouterTest is Test {
         router.execute(_defaultReq());
     }
 
+    function test_execute_revertsWhenVenueTypeMismatchesRegistry() public {
+        // registry has VENUE registered as VenueType.AMM (see setUp)
+        ExecutionRequest memory req = _defaultReq();
+        req.context.venueType = VenueType.RFQ;
+        // let step-6 selector pass by allowing RFQ in the decision's type mask
+        engine.setDecision(_decision(true, 1 << uint256(VenueType.RFQ), bytes32(0), type(uint256).max, REASON_OK));
+
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.VenueTypeMismatch.selector);
+        router.execute(req);
+    }
+
     function test_revert_adapterNotRegistered_unknownVenue() public {
         ExecutionRequest memory req = _defaultReq();
         req.context.venue = address(0xABCD); // not registered, but allowedVenuesHash==0 passes selector

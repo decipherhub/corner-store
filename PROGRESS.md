@@ -22,6 +22,8 @@ source of truth로 사용한다.
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
+- router now rejects requests whose `context.venueType` mismatches the registered
+  `VenueConfig.venueType` (closes the PR-12 review medium finding)
 
 ## Blocked
 

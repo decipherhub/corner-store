@@ -6,6 +6,7 @@ library Errors {
     error PolicyNotActive(); // UNKNOWN/SUSPENDED
     error ComplianceRejected(bytes32 reasonCode);
     error VenueNotAllowed();
+    error VenueTypeMismatch();
     error VenueSuspended();
     error AdapterNotRegistered();
     error DeadlineExpired();

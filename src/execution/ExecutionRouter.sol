@@ -18,7 +18,7 @@ import {Events} from "../libraries/Events.sol";
 /// @title ExecutionRouter
 /// @notice Single entry point for trade execution. Orchestrates the gate sequence
 /// (deadline -> nonce -> compliance -> amount bound -> venue suspension -> venue policy
-/// binding -> adapter dispatch -> post-trade commit) and delegates the actual swap to
+/// binding -> venue type binding -> adapter dispatch -> post-trade commit) and delegates the actual swap to
 /// the venue's registered adapter. Non-custodial: the router never holds tokens.
 contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
     IComplianceEngine public immutable engine;
@@ -83,6 +83,12 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
         // 7. resolve adapter
         VenueConfig memory cfg = venueReg.venueOf(req.context.venue);
         if (!cfg.active || cfg.adapter == address(0)) revert Errors.AdapterNotRegistered();
+
+        // 7a. bind the caller-supplied venue type to the registry's stored config.
+        //     Step 6 validated req.context.venueType against the decision's type mask;
+        //     without this check a caller could misreport venueType and route a venue
+        //     of a disallowed type through an allowed-type bit.
+        if (cfg.venueType != req.context.venueType) revert Errors.VenueTypeMismatch();
 
         // 8. dispatch to adapter (performs the swap; non-custodial)
         ExecutionResult memory r = IExecutionAdapter(cfg.adapter).execute(req, d);
