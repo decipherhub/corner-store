@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {TREXSuite} from "../fixtures/TREXSuite.sol";
+import {MockSecuritizeTA} from "../fixtures/MockSecuritizeTA.sol";
 
 import {ElementRegistry} from "../../src/registry/ElementRegistry.sol";
 import {RecipeRegistry} from "../../src/registry/RecipeRegistry.sol";
@@ -14,6 +15,7 @@ import {ComplianceEngine} from "../../src/compliance/ComplianceEngine.sol";
 import {Sanctions} from "../../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../../src/compliance/elements/QualifiedPurchaser.sol";
+import {BuidlMinimumInvestment} from "../../src/compliance/elements/BuidlMinimumInvestment.sol";
 import {SurveillanceFlag} from "../../src/compliance/elements/SurveillanceFlag.sol";
 import {Jurisdiction} from "../../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../../src/compliance/elements/IdentityUniqueness.sol";
@@ -25,6 +27,7 @@ import {Lockup} from "../../src/compliance/elements/Lockup.sol";
 import {IAcquisitionSource} from "../../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipe} from "../../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../../src/compliance/recipes/Fund3c7Recipe.sol";
+import {BuidlLikeFundRecipe} from "../../src/compliance/recipes/BuidlLikeFundRecipe.sol";
 
 import {ExecutionRouter} from "../../src/execution/ExecutionRouter.sol";
 import {VenueRegistry} from "../../src/execution/VenueRegistry.sol";
@@ -34,6 +37,7 @@ import {UniswapV3Adapter} from "../../src/execution/adapters/amm/UniswapV3Adapte
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockPool} from "../mocks/MockPool.sol";
 
+import {BuidlLikeDemoAsset} from "../../src/demo/BuidlLikeDemoAsset.sol";
 import {ManifestCore, PolicyStatus, VenueType, FlowType} from "../../src/types/ComplianceTypes.sol";
 import {ComplianceContext} from "../../src/types/ComplianceTypes.sol";
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
@@ -67,11 +71,13 @@ abstract contract IntegrationBase is TREXSuite {
     TokenPolicyRegistry internal policyReg;
     OperatorRegistry internal operatorReg;
     ComplianceEngine internal engine;
+    MockSecuritizeTA internal mockTA;
 
     // --- elements ---------------------------------------------------------
     Sanctions internal sanctions;
     AccreditedInvestor internal accredited;
     QualifiedPurchaser internal qp;
+    BuidlMinimumInvestment internal buidlMinimum;
     SurveillanceFlag internal surveillance;
     // 9-element Reg D 506(c) reference set (A-01/A-03 above + these):
     Jurisdiction internal jurisdiction; // A-02-v1
@@ -110,22 +116,42 @@ abstract contract IntegrationBase is TREXSuite {
     /// @param fundRecipeId 0 (no fund recipe) or 2 (3(c)(7)).
     /// @param factsPacked  manifest facts (bit0 = fund applicable).
     function deployStack(uint16 fundRecipeId, uint256 factsPacked) internal {
-        deployTREX(); // real ERC-3643 token() + identity registry
+        deployStackWithAsset("Corner Store RWA", "csRWA", fundRecipeId, factsPacked);
+    }
+
+    /// @notice Stand up the same stack with scenario-specific ERC-3643 asset metadata.
+    function deployStackWithAsset(
+        string memory tokenName,
+        string memory tokenSymbol,
+        uint16 fundRecipeId,
+        uint256 factsPacked
+    ) internal {
+        deployStackWithManifest(tokenName, tokenSymbol, _activeManifest(fundRecipeId, factsPacked));
+    }
+
+    /// @notice Stand up the same stack with an explicit asset Manifest/profile.
+    function deployStackWithManifest(string memory tokenName, string memory tokenSymbol, ManifestCore memory manifest)
+        internal
+    {
+        deployTREX(tokenName, tokenSymbol); // real ERC-3643 token() + identity registry
 
         // 1. compliance registries
         elementReg = new ElementRegistry();
         recipeReg = new RecipeRegistry();
         policyReg = new TokenPolicyRegistry();
         operatorReg = new OperatorRegistry();
+        mockTA = new MockSecuritizeTA();
 
         // 2. elements + register
         sanctions = new Sanctions();
         accredited = new AccreditedInvestor();
         qp = new QualifiedPurchaser();
+        buidlMinimum = new BuidlMinimumInvestment();
         surveillance = new SurveillanceFlag();
         elementReg.registerElement(bytes32("A-01-v1"), address(sanctions));
         elementReg.registerElement(bytes32("A-03-v1"), address(accredited));
         elementReg.registerElement(bytes32("A-13-v1"), address(qp));
+        elementReg.registerElement(bytes32("BUIDL-MIN-v1"), address(buidlMinimum));
         elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
 
         // 2b. remaining 9-element Reg D 506(c) reference set. AssetClassification
@@ -149,6 +175,7 @@ abstract contract IntegrationBase is TREXSuite {
         // 3. recipes + register
         recipeReg.registerRecipe(1, 2, address(new RegD506cRecipe()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
+        recipeReg.registerRecipe(3, 1, address(new BuidlLikeFundRecipe()));
 
         // 4. engine
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
@@ -171,7 +198,9 @@ abstract contract IntegrationBase is TREXSuite {
         pool = new MockPool(IERC20(address(quote)), IERC20(address(rwaToken)));
 
         // 7. manifests: onboarding goes through the lifecycle (propose -> approve).
-        policyReg.registerManifest(address(rwaToken), _activeManifest(fundRecipeId, factsPacked));
+        //    Keep the caller-provided manifest so BUIDL-like profiles can bind
+        //    their own fund recipe/facts while still using the current lifecycle.
+        policyReg.registerManifest(address(rwaToken), manifest);
         policyReg.approveManifest(address(rwaToken));
         // Quote/cash is out-of-scope: tag UNREGULATED directly from UNKNOWN.
         policyReg.setUnregulated(address(quote));
@@ -211,6 +240,14 @@ abstract contract IntegrationBase is TREXSuite {
     /// @dev Convenience overload: plain RegD506c, no fund recipe.
     function deployStack() internal {
         deployStack(0, 0);
+    }
+
+    /// @dev BUIDL-like demo fixture: Reg D 506(c) + ICA 3(c)(7) fund fact.
+    ///      This is a local demo asset, not integration with real BlackRock BUIDL.
+    function deployBuidlLikeStack() internal {
+        deployStackWithManifest(
+            BuidlLikeDemoAsset.TOKEN_NAME, BuidlLikeDemoAsset.TOKEN_SYMBOL, BuidlLikeDemoAsset.manifest(ENGINES_AMM)
+        );
     }
 
     // --- manifest helper --------------------------------------------------
@@ -253,6 +290,86 @@ abstract contract IntegrationBase is TREXSuite {
         identity.bindIdentity(who, keccak256(abi.encode("ID", who))); // A-04
         // C-01 lockup: seed acquisition time at genesis; deployStack warped past it.
         acqSource.setAcquiredAt(who, address(rwaToken), uint64(1));
+    }
+
+    /// @notice Record a TA-style profile and sync it into the local test stack.
+    /// @dev `registerIdentity=false` models a TA/claim sync bug where engine
+    ///      flags are present but ERC-3643 registry verification is missing.
+    function setupTaInvestor(
+        address who,
+        bool kycVerified,
+        bool isAccredited,
+        bool isQp,
+        bool isSanctioned,
+        bool registerIdentity
+    ) internal {
+        mockTA.setInvestorProfile(
+            who,
+            MockSecuritizeTA.InvestorProfile({
+                kycVerified: kycVerified,
+                accreditedInvestor: isAccredited,
+                qualifiedPurchaser: isQp,
+                sanctioned: isSanctioned,
+                country: DEFAULT_COUNTRY,
+                expiresAt: uint64(block.timestamp + 365 days),
+                sourceRef: keccak256(abi.encode("MOCK_SECURITIZE_TA", who, block.chainid))
+            })
+        );
+
+        syncTaInvestor(who, registerIdentity);
+    }
+
+    /// @notice Record an expired TA-style profile. Syncing leaves eligibility
+    ///      flags unset so the protected Router path fails closed.
+    function setupExpiredTaInvestor(address who, bool isAccredited, bool isQp) internal {
+        mockTA.setInvestorProfile(
+            who,
+            MockSecuritizeTA.InvestorProfile({
+                kycVerified: true,
+                accreditedInvestor: isAccredited,
+                qualifiedPurchaser: isQp,
+                sanctioned: false,
+                country: DEFAULT_COUNTRY,
+                expiresAt: uint64(block.timestamp + 1),
+                sourceRef: keccak256(abi.encode("MOCK_SECURITIZE_TA_EXPIRED", who, block.chainid))
+            })
+        );
+
+        vm.warp(block.timestamp + 2);
+        syncTaInvestor(who, true);
+    }
+
+    function syncTaInvestor(address who, bool registerIdentity) internal {
+        (
+            bool kycVerified,
+            bool isAccredited,
+            bool isQp,
+            bool isSanctioned,
+            uint16 country,
+            uint64 expiresAt,
+            bytes32 sourceRef
+        ) = mockTA.profileOf(who);
+        country;
+        sourceRef;
+
+        bool current = expiresAt == 0 || expiresAt >= block.timestamp;
+        if (!current) {
+            accredited.setAccredited(who, false);
+            qp.setQp(who, false);
+            sanctions.setBlocked(who, false);
+            return;
+        }
+
+        if (kycVerified && registerIdentity) {
+            verifyInvestor(who); // real OnchainID + KYC claim
+        }
+        jurisdiction.setJurisdiction(who, ALLOWED_JURISDICTION);
+        identity.bindIdentity(who, keccak256(abi.encode("TA_ID", who, sourceRef)));
+        // C-01 lockup: seed acquisition time at genesis; deployStack warped past it.
+        acqSource.setAcquiredAt(who, address(rwaToken), uint64(1));
+        accredited.setAccredited(who, isAccredited);
+        qp.setQp(who, isQp);
+        sanctions.setBlocked(who, isSanctioned);
     }
 
     /// @notice Seed the pool with RWA liquidity (so a BUY can deliver RWA out).

@@ -83,10 +83,20 @@ abstract contract TREXCore is CommonBase {
         deployTREX(address(this));
     }
 
+    /// @notice Stand up the same stack with scenario-specific token metadata.
+    function deployTREX(string memory tokenName, string memory tokenSymbol) internal {
+        deployTREX(address(this), tokenName, tokenSymbol);
+    }
+
     /// @notice Stand up and wire the full ERC-3643 stack with an explicit admin.
     ///         Under `forge script --broadcast`, pass the broadcasting deployer so
     ///         the registry/token agents and identity management keys are that EOA.
     function deployTREX(address admin) internal {
+        deployTREX(admin, "Corner Store RWA", "csRWA");
+    }
+
+    /// @notice Stand up the same stack with an explicit admin and token metadata.
+    function deployTREX(address admin, string memory tokenName, string memory tokenSymbol) internal {
         trexAdmin = admin;
         issuerAddr = vm.addr(issuerKey);
 
@@ -120,7 +130,7 @@ abstract contract TREXCore is CommonBase {
 
         // 5. token
         rwaToken = new Token();
-        rwaToken.init(address(idRegistry), address(compliance), "Corner Store RWA", "csRWA", 18, address(0));
+        rwaToken.init(address(idRegistry), address(compliance), tokenName, tokenSymbol, 18, address(0));
         rwaToken.addAgent(admin); // admin may mint
         rwaToken.unpause(); // token deploys paused
     }

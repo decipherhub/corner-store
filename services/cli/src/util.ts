@@ -53,4 +53,3 @@ function summarize(name: string, args: any[]): DecodedRevert {
 
 // Thrown by commands to signal a clean nonzero exit with a message.
 export class CliError extends Error {}
-
