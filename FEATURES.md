@@ -115,6 +115,49 @@ passing
 
 - Non-goals: partial fill, orderbook, production pricing engine, dealer inventory,
   custody 확장, websocket/order discovery.
+
+## RFQ-002 — RFQ v2 Hardening
+
+### Behavior
+
+- maker(dealer) approval이 operator-curated allowlist로 강제된다. 미승인 maker의
+  quote는 서명이 유효해도 settlement에서 거부된다(`RFQMakerNotApproved`).
+- `setMakerApproved(address,bool)`는 `onlyOperator`이며 `MakerApprovalSet` event를
+  emit한다.
+- maker는 자신의 nonce namespace에 대해 `cancelQuoteNonce`/`cancelQuoteNonces`로
+  outstanding quote를 취소할 수 있다. idempotent(used nonce는 no-op)하며 상태
+  전이 시에만 `RFQQuoteCancelled` event를 emit한다.
+- router는 `context.venueType`이 등록된 `VenueConfig.venueType`와 불일치하면
+  거부한다(`VenueTypeMismatch`).
+- venue 위협 모델이 `docs/rfq-threat-model.md`에 문서화된다.
+
+### Verification
+
+- `forge test --offline`(전체 133/133 유지)
+- RFQAdapter unit test: `test_execute_revertsWhenMakerNotApproved`,
+  `test_setMakerApproved_onlyOperator`, `test_setMakerApproved_setsAndEmits`,
+  `test_execute_revertsAfterApprovalRevoked`,
+  `test_cancelQuoteNonce_blocksSubsequentFill`,
+  `test_cancelQuoteNonce_emitsOnFirstCancelOnly`,
+  `test_cancelQuoteNonce_scopedToCaller`, `test_cancelQuoteNonces_batchCancels`,
+  `test_cancelQuoteNonce_afterFillIsNoOp`
+- Router unit test: `test_execute_revertsWhenVenueTypeMismatchesRegistry`
+- `cd services/rfq && npm test`(unchanged-service guard)
+- `docs/rfq-threat-model.md` 존재와 `docs/security.md`/`docs/README.md` 링크 무결성
+
+### State
+
+passing
+
+### Notes
+
+- 정책 결정: D008(maker approval adapter-local, full-fill, non-custodial,
+  nonce-scoped idempotent cancel).
+- Non-goals: partial fill, dealer inventory, signer key custody, shared dealer
+  registry.
+- Deferred follow-up: router-path maker-approval/cancellation integration-test
+  시나리오.
+
 ## DOC-002 — RFQ SDK and MVP Demo Planning
 
 ### Behavior

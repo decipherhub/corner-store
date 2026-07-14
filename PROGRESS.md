@@ -19,6 +19,7 @@ source of truth로 사용한다.
 - `DOC-001 — Imported Architecture Alignment`
 - `FND-001 — Foundry Product Foundation`
 - `RFQ-001 — Reference RFQ Settlement`
+- `RFQ-002 — RFQ v2 Hardening`
 - `DOC-002 — RFQ SDK and MVP Demo Planning`
 - `RFQ-SDK-001 — RFQ Backend SDK Interfaces`
 - multi-venue 아키텍처와 책임 문서 작성
@@ -26,6 +27,10 @@ source of truth로 사용한다.
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
 - router now rejects requests whose `context.venueType` mismatches the registered
   `VenueConfig.venueType` (closes the PR-12 review medium finding)
+- RFQ-002: operator-curated maker approval allowlist(`setMakerApproved`,
+  `RFQMakerNotApproved`), maker-initiated nonce-scoped idempotent cancellation
+  (`cancelQuoteNonce`/`cancelQuoteNonces`, `RFQQuoteCancelled`), venueType binding
+  fix, `docs/rfq-threat-model.md` 위협 모델과 D008 결정 기록
 
 ## Blocked
 
@@ -76,3 +81,8 @@ source of truth로 사용한다.
   - 아직 MVP HTTP/CLI backend는 구현하지 않았다.
   - production signer custody, persistent nonce store, pricing, inventory/risk는 integrator/operator 책임이다.
   - pending PR #24/#28/#29/#30/#35 merge 이후 roadmap/feature 상태 재조정이 필요하다.
+
+## RFQ-002 Merge Note
+
+- RFQ-002 hardening from PR #24 is included in this branch update: maker approval, maker nonce cancellation, venueType binding, and RFQ threat-model documentation.
+- Deferred follow-up remains router-path maker-approval/cancellation integration-test coverage after stacked PRs are reconciled.
