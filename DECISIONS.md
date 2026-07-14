@@ -255,7 +255,52 @@ Router 밖 경로는 production deployment에서 다음 중 하나로 처리해�
 - `ARCHITECTURE.md`
 - `docs/architecture/execution-routing.md`
 
-## D007 — RFQ v2 hardening: maker approval, full-fill, non-custodial, nonce-scoped cancel
+## D007 — PD-1~PD-7 Phase 1 architecture baseline을 확정한다
+
+Date: 2026-07-14
+
+### Context
+
+Phase 1 구현 전에 Manifest schema, Recipe evaluation, post-trade state,
+identity claim, enforcement action, governance와 lifecycle record 보존 방식에
+대한 개발팀 합의가 필요했다.
+
+이 결정들은 BUIDL-like demo나 RFQ/API 구현보다 상위의 아키텍처 baseline이다.
+
+### Decision
+
+PD-1~PD-7을 Phase 1 architecture baseline으로 확정한다.
+
+- PD-1: Manifest는 explicit core + registry-backed `RecipeBinding` 구조를 사용한다.
+- PD-2: Router/Engine은 Manifest-level multi-Recipe binding 모델을 사용한다.
+- PD-3: token transfer 기준 acquisition timestamp와 router execution context를 분리하고, post-trade commit은 idempotent하게 처리한다.
+- PD-4: investor qualification은 ERC-3643/ONCHAINID claim pipeline을 기본 인터페이스로 사용하고, Securitize/TA는 adapter boundary로 연동한다.
+- PD-5: `BLOCK`, `FLAG_ONLY`, `OPERATOR_REVIEW` 중심의 enforcement action 모델과 constrained override를 사용한다.
+- PD-6: governance authority는 외부 Safe-style multisig를 사용하고, compliance relaxation은 timelock을 요구한다.
+- PD-7: Manifest lifecycle은 semantic versioning, append-only history, central pause state와 hash-anchored record preservation을 사용한다.
+
+### Alternatives Considered
+
+- PD별 ADR을 7개로 분리: 현재 결정들이 하나의 Phase 1 구조 freeze를 구성하므로
+  단일 baseline ADR로 묶는 편이 리뷰와 추적에 더 적합해 보류한다.
+- 현행 `issuanceRecipeId + fundRecipeId` 구조 유지: BUIDL-like demo에는 충분하지만
+  future policy 조합과 path option을 표현하기 어려워 transitional 구조로만 남긴다.
+- Corner Store 전용 identity model 신설: ERC-3643/T-REX와 ONCHAINID 호환성을
+  해치고 TA/KYC provider 연동성이 떨어져 제외한다.
+
+### Consequences
+
+- PD-1~PD-7은 더 이상 열린 구조 질문이 아니며, 후속 작업은 구현 명세와 migration issue로 진행한다.
+- 현재 코드의 transitional 구조는 별도 implementation branch에서 `RecipeBinding[]`, compiled plan, lifecycle registry 등으로 이전해야 한다.
+- 실제 Securitize/TA 연동은 공식/current interface 확인 후 별도 refinement issue에서 처리한다.
+
+### Related Files
+
+- `docs/decisions/ADR-007-pd-architecture-decisions.md`
+- `docs/decisions/decision-register.md`
+- `docs/architecture/phase1-structural-decisions-proposed.md`
+
+## D008 — RFQ v2 hardening: maker approval, full-fill, non-custodial, nonce-scoped cancel
 
 Date: 2026-07-04
 
@@ -310,7 +355,7 @@ RFQ venue의 다음 정책을 확정한다.
 - `src/execution/adapters/rfq/RFQAdapter.sol`
 - `FEATURES.md`
 
-## D008 — Reg D 506(c) recipe를 9-element reference set으로 확장한다
+## D009 — Reg D 506(c) recipe를 9-element reference set으로 확장한다
 
 Date: 2026-07-04
 
@@ -380,7 +425,7 @@ criteria remain approval-gated").
 - `test/unit/compliance/Recipes.t.sol`, `test/unit/compliance/Engine.t.sol`
 - `docs/ROADMAP.md`
 
-## D009 — Manifest lifecycle를 validated state machine로 만들고 engine을 default-deny로 닫는다
+## D010 — Manifest lifecycle를 validated state machine로 만들고 engine을 default-deny로 닫는다
 
 Date: 2026-07-04
 
