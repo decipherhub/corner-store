@@ -138,3 +138,30 @@ passing
 
 - Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`
 - 이 feature는 문서 계획 작업이며 `services/rfq` 구현은 후속 feature에서 진행한다.
+
+## RFQ-SDK-001 — RFQ Backend SDK Interfaces
+
+### Behavior
+
+- `services/rfq`가 RFQ backend를 만들기 위한 TypeScript SDK helper를 제공한다.
+- integrator는 `createRFQService(...).quote(...)` high-level API로 taker/token/amount/venue만 넣고 `RFQAdapter` 호환 signed quote를 받을 수 있다.
+- SDK는 EIP-712 typed-data shape, chainId/verifyingContract binding, nonce, expiry, amount validation과 signature flow를 처리한다.
+- signer, nonce store, pricing provider, inventory/risk check는 교체 가능한 interface로 제공한다.
+- local reference component는 `InMemoryNonceStore`, `FixedRatePricingProvider`, `NoopInventoryRiskCheck`로 제한한다.
+- production server, hosted backend, pricing strategy, signer custody, inventory management와 compliance final decision은 범위 밖이다.
+
+### Verification
+
+- `cd services/rfq && npm test`
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- SDK README: `services/rfq/README.md`
+- Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`
+- MVP demo backend는 이 SDK를 기반으로 후속 feature에서 구현한다.

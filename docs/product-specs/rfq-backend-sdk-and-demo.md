@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned. This document defines scope before implementation.
+SDK foundation implemented for `services/rfq`; local/MVP demo backend remains planned.
 
 ## Purpose
 
@@ -26,11 +26,19 @@ Already implemented:
 - nonce, expiry, signature and quote-field binding tests.
 - `services/rfq` minimal TypeScript quote signer reference.
 
-Current gap on `main` before the stacked PRs land:
+Current gap on `main` before this branch and the stacked PRs land:
 
-- `services/rfq` is not yet shaped as a backend SDK.
-- signer, nonce, pricing and risk boundaries are not explicit enough for reuse.
+- `services/rfq` was a minimal quote signer, not yet shaped as a backend SDK.
+- signer, nonce, pricing and risk boundaries were not explicit enough for reuse.
 - there is no MVP user-facing RFQ backend flow yet.
+
+Implemented in this branch:
+
+- high-level `createRFQService(...).quote(...)` API.
+- `NonceStore`, `PricingProvider`, and `InventoryRiskCheck` seams.
+- local `InMemoryNonceStore`, `FixedRatePricingProvider`, and `NoopInventoryRiskCheck` reference implementations.
+- validation helpers for addresses, chain id, TTL and on-chain integer values.
+- `services/rfq/README.md` quick start and production responsibility boundary.
 
 Open PR context to preserve when planning implementation:
 
@@ -61,6 +69,8 @@ MVP demo backend
 ```
 
 ## Phase 1 — RFQ TypeScript SDK interfaces
+
+Status: implemented in the SDK foundation branch.
 
 Goal: make `services/rfq` usable as the reusable quote-backend integration layer.
 

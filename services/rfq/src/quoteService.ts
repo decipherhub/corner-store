@@ -1,9 +1,37 @@
 import {domain, typedData} from "./eip712";
-import {Address, Hex, RFQQuote, RFQQuoteRequest, RFQServiceConfig, SignedRFQQuote, TypedDataSigner} from "./types";
+import {
+  Address,
+  InventoryRiskCheck,
+  NonceStore,
+  RFQBackendSDKConfig,
+  RFQPriceRequest,
+  RFQQuote,
+  RFQQuoteIntent,
+  RFQQuoteRequest,
+  RFQServiceConfig,
+  SignedRFQQuote,
+  TypedDataSigner
+} from "./types";
+import {
+  assertHex,
+  normalizeAddress,
+  normalizeChainId,
+  normalizeTtlSeconds,
+  toPositiveUintString,
+  toUintString
+} from "./validation";
+import {InMemoryNonceStore, NoopInventoryRiskCheck} from "./reference";
 
-const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
-const HEX_RE = /^0x[a-fA-F0-9]*$/;
 const DEFAULT_TTL_SECONDS = 60;
+
+interface NormalizedQuoteIntent {
+  taker: Address;
+  tokenIn: Address;
+  tokenOut: Address;
+  amountIn: string;
+  venue: Address;
+  ttlSeconds: number;
+}
 
 export class RFQQuoteService {
   private readonly config: Required<Pick<RFQServiceConfig, "defaultTtlSeconds" | "now" | "nextNonce">> &
@@ -16,7 +44,7 @@ export class RFQQuoteService {
       defaultTtlSeconds: config.defaultTtlSeconds ?? DEFAULT_TTL_SECONDS,
       now: config.now ?? (() => Math.floor(Date.now() / 1000)),
       nextNonce,
-      chainId: config.chainId,
+      chainId: normalizeChainId(config.chainId),
       verifyingContract: normalizeAddress(config.verifyingContract, "verifyingContract")
     };
   }
@@ -30,10 +58,7 @@ export class RFQQuoteService {
   }
 
   createQuote(request: RFQQuoteRequest): RFQQuote {
-    const ttlSeconds = request.ttlSeconds ?? this.config.defaultTtlSeconds;
-    if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0) {
-      throw new Error("ttlSeconds must be a positive integer");
-    }
+    const ttlSeconds = normalizeTtlSeconds(request.ttlSeconds ?? this.config.defaultTtlSeconds);
 
     return {
       maker: normalizeAddress(request.maker, "maker"),
@@ -49,37 +74,85 @@ export class RFQQuoteService {
   }
 }
 
-function normalizeAddress(value: Address, field: string): Address {
-  if (!ADDRESS_RE.test(value)) throw new Error(`${field} must be a 20-byte hex address`);
-  return value.toLowerCase() as Address;
-}
+export class RFQBackendSDK {
+  private readonly chainId: number;
+  private readonly verifyingContract: Address;
+  private readonly maker: Address;
+  private readonly defaultTtlSeconds: number;
+  private readonly now: () => number;
+  private readonly nonceStore: NonceStore;
+  private readonly riskCheck: InventoryRiskCheck;
 
-function assertHex(value: Hex, field: string): Hex {
-  if (!HEX_RE.test(value)) throw new Error(`${field} must be hex`);
-  return value;
-}
-
-function toUintString(value: bigint | string | number, field: string): string {
-  const parsed = toBigInt(value, field);
-  if (parsed < 0n) throw new Error(`${field} must be non-negative`);
-  return parsed.toString();
-}
-
-function toPositiveUintString(value: bigint | string | number, field: string): string {
-  const parsed = toBigInt(value, field);
-  if (parsed <= 0n) throw new Error(`${field} must be positive`);
-  return parsed.toString();
-}
-
-function toBigInt(value: bigint | string | number, field: string): bigint {
-  if (typeof value === "number") {
-    if (!Number.isSafeInteger(value)) {
-      throw new Error(`${field} number input must be a safe integer; use bigint or decimal string for large values`);
-    }
-    return BigInt(value);
+  constructor(private readonly config: RFQBackendSDKConfig) {
+    this.chainId = normalizeChainId(config.chainId);
+    this.verifyingContract = normalizeAddress(config.verifyingContract, "verifyingContract");
+    this.maker = normalizeAddress(config.maker, "maker");
+    this.defaultTtlSeconds = normalizeTtlSeconds(config.defaultTtlSeconds ?? DEFAULT_TTL_SECONDS);
+    this.now = config.now ?? (() => Math.floor(Date.now() / 1000));
+    this.nonceStore = config.nonceStore ?? new InMemoryNonceStore();
+    this.riskCheck = config.riskCheck ?? new NoopInventoryRiskCheck();
   }
 
-  return typeof value === "bigint" ? value : BigInt(value);
+  async quote(intent: RFQQuoteIntent): Promise<SignedRFQQuote> {
+    const normalized = this.normalizeIntent(intent);
+    const priceRequest: RFQPriceRequest = {
+      maker: this.maker,
+      taker: normalized.taker,
+      tokenIn: normalized.tokenIn,
+      tokenOut: normalized.tokenOut,
+      amountIn: normalized.amountIn,
+      venue: normalized.venue
+    };
+
+    const priced = await this.config.pricing.price(priceRequest);
+    const amountOut = toPositiveUintString(priced.amountOut, "amountOut");
+    await this.riskCheck.check(priceRequest, {amountOut});
+    const nonce = await this.nonceStore.nextNonce({
+      maker: this.maker,
+      taker: normalized.taker,
+      tokenIn: normalized.tokenIn,
+      tokenOut: normalized.tokenOut,
+      venue: normalized.venue
+    });
+
+    const lowLevel = new RFQQuoteService(
+      {
+        chainId: this.chainId,
+        verifyingContract: this.verifyingContract,
+        defaultTtlSeconds: this.defaultTtlSeconds,
+        now: this.now,
+        nextNonce: () => nonce
+      },
+      this.config.signer
+    );
+
+    return lowLevel.createSignedQuote({
+      maker: this.maker,
+      taker: normalized.taker,
+      tokenIn: normalized.tokenIn,
+      tokenOut: normalized.tokenOut,
+      amountIn: normalized.amountIn,
+      amountOut,
+      venue: normalized.venue,
+      ttlSeconds: normalized.ttlSeconds,
+      nonce
+    });
+  }
+
+  private normalizeIntent(intent: RFQQuoteIntent): NormalizedQuoteIntent {
+    return {
+      taker: normalizeAddress(intent.taker, "taker"),
+      tokenIn: normalizeAddress(intent.tokenIn, "tokenIn"),
+      tokenOut: normalizeAddress(intent.tokenOut, "tokenOut"),
+      amountIn: toPositiveUintString(intent.amountIn, "amountIn"),
+      venue: normalizeAddress(intent.venue, "venue"),
+      ttlSeconds: normalizeTtlSeconds(intent.ttlSeconds ?? this.defaultTtlSeconds)
+    };
+  }
+}
+
+export function createRFQService(config: RFQBackendSDKConfig): RFQBackendSDK {
+  return new RFQBackendSDK(config);
 }
 
 function createMonotonicNonceGenerator(): () => bigint {
