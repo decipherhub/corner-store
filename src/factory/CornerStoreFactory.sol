@@ -27,8 +27,25 @@ contract CornerStoreFactory is Governed {
         venueRegistry = _venueRegistry;
     }
 
-    /// @notice Register an RWA token's compliance manifest and execution venue.
+    /// @notice Register an RWA token's compliance manifest and execution venue in
+    ///         one governed onboarding call. The manifest ends ACTIVE.
     /// @dev Governed: only owner/operator may onboard tokens.
+    ///
+    ///      Onboarding deliberately runs the manifest lifecycle's propose→approve
+    ///      steps back-to-back: `registerManifest` lands the manifest in PROPOSED,
+    ///      then `approveManifest` moves it to ACTIVE. The factory is BOTH the
+    ///      owner (register is `onlyOwner`) and the approving operator (approve is
+    ///      `onlyOperator`) of the registry in this flow — governance transfers
+    ///      registry ownership to the factory during deployment (see contract
+    ///      natspec). Collapsing propose+approve into a single trusted call is the
+    ///      intended onboarding shape; the two-step lifecycle exists to gate
+    ///      externally-declared manifests, not this atomic governed path.
+    ///
+    ///      CONSEQUENCE of `msg.sender` semantics: because `registerManifest`
+    ///      records `declaredBy = msg.sender`, the manifest's `declaredBy` is this
+    ///      factory's address (not the EOA/governance account that called the
+    ///      factory), and `approvedBy` is likewise the factory. Attribution stops
+    ///      at the factory boundary for tokens onboarded this way.
     function registerRWAToken(
         address token,
         ManifestCore calldata manifest,
@@ -36,6 +53,7 @@ contract CornerStoreFactory is Governed {
         VenueConfig calldata venueCfg
     ) external onlyOperator {
         tokenPolicyRegistry.registerManifest(token, manifest);
+        tokenPolicyRegistry.approveManifest(token);
         venueRegistry.registerVenue(venue, venueCfg);
         emit RWATokenRegistered(token, venue);
     }

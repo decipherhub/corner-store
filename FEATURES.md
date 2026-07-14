@@ -219,6 +219,43 @@ passing
   활성화 조건 결정.
 - Non-goals: production legal 활성화, direction-aware element application.
 
+## CMP-002 — Manifest Lifecycle & Operator Approval Flow
+
+### Behavior
+
+- Manifest는 validated state machine을 따른다: UNKNOWN --register--> PROPOSED
+  --approve--> ACTIVE, ACTIVE <--resume--/--suspend--> SUSPENDED,
+  {ACTIVE, SUSPENDED} --retire--> RETIRED(terminal), UNKNOWN --setUnregulated-->
+  UNREGULATED --clearUnregulated--> UNKNOWN. 그 외 모든 transition은
+  `InvalidManifestTransition`으로 revert한다.
+- `registerManifest`는 caller-supplied status를 무시하고 항상 PROPOSED로 착지하며
+  `declaredBy = msg.sender`를 기록한다. `approveManifest`는 `approvedBy`를 기록하고
+  issuance recipe가 비어 있으면 revert한다. raw `setStatus`는 제거되었다.
+- owner가 자산을 classify(register/setUnregulated/clearUnregulated)하고 operator가
+  기존 manifest의 lifecycle(approve/suspend/resume/retire)을 구동한다.
+- `ComplianceEngine.evaluate`는 side별 positive allowlist(UNREGULATED 또는 ACTIVE만
+  허용)로 default-deny한다. UNKNOWN/SUSPENDED/PROPOSED/RETIRED와 미래 member는
+  fail-closed하며, both-UNREGULATED fast-path는 유지된다.
+- `CornerStoreFactory.registerRWAToken`은 register→approve를 한 governed call에서
+  실행하고 token은 ACTIVE로 끝난다(`declaredBy`/`approvedBy` = factory).
+
+### Verification
+
+- `forge test --offline`(전체 227/227, pre-task 212 + 신규 15).
+- Engine unit test(default-deny fail-closed): `test_proposed_against_unregulated_fails_closed`,
+  `test_retired_against_unregulated_fails_closed`, `test_proposed_against_active_fails_closed`,
+  `test_retired_against_active_fails_closed_both_orderings`(양방향 ordering).
+- Registry unit test(clearUnregulated + onlyOwner-vs-onlyOperator):
+  `test_clearUnregulated_from_UNREGULATED`, `test_clearUnregulated_then_register_ok`,
+  `test_clearUnregulated_reverts_when_UNKNOWN`, `test_clearUnregulated_reverts_when_PROPOSED`,
+  `test_clearUnregulated_reverts_when_ACTIVE`, `test_clearUnregulated_reverts_for_non_owner`,
+  `test_clearUnregulated_reverts_for_operator`, `test_setUnregulated_reverts_for_operator`.
+- 통합 test `test/integration/EmergencyPause.t.sol`(router end-to-end):
+  `test_proposedPolicy_failsClosed`, `test_retiredPolicy_failsClosed`,
+  `test_suspendThenResume_tradesAgain`.
+- 기존 registry lifecycle state-machine unit test(Task 1, 25 tests)는 유지.
+- `forge fmt`.
+
 - Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`
 - 이 feature는 문서 계획 작업이며 `services/rfq` 구현은 후속 feature에서 진행한다.
 
@@ -244,6 +281,12 @@ passing
 passing
 
 ### Notes
+
+- 정책 결정: D010(lifecycle state machine, enum-append, setStatus 제거, engine
+  positive-allowlist default-deny, clearUnregulated correction path, declaredBy=
+  msg.sender와 factory consequence).
+- Non-goals: direction-aware element application, production onboarding governance
+  key management.
 
 - SDK README: `services/rfq/README.md`
 - Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`

@@ -52,7 +52,8 @@ contract FactoryTest is Test {
         ManifestCore memory stored = tpr.manifestOf(rwa);
         assertEq(uint8(stored.status), uint8(PolicyStatus.ACTIVE));
         assertEq(stored.issuanceRecipeId, 506);
-        assertEq(stored.declaredBy, address(this));
+        // registerManifest records the caller (the factory) as declaredBy.
+        assertEq(stored.declaredBy, address(factory));
     }
 
     function test_registerRWAToken_registersVenue() public {

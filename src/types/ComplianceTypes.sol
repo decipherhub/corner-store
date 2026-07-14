@@ -1,12 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.17;
 
+// Manifest lifecycle: UNKNOWN --register--> PROPOSED --approve--> ACTIVE,
+// ACTIVE <--resume--/--suspend--> SUSPENDED, and {ACTIVE, SUSPENDED} --retire-->
+// RETIRED (terminal, re-register only). UNKNOWN --setUnregulated--> UNREGULATED.
+//
+// STORAGE ORDER != SEMANTIC ORDER. PROPOSED and RETIRED are APPENDED at indices
+// 4 and 5 so the pre-existing numeric values stay load-bearing: UNKNOWN=0 (the
+// fail-closed default for an absent manifest), UNREGULATED=1, ACTIVE=2,
+// SUSPENDED=3 are relied on by storage layout and by enum<->uint casts across
+// src/ and test/. The lifecycle graph above therefore does NOT follow the
+// enum's numeric order. Never reorder these members; only ever append.
 enum PolicyStatus {
-    UNKNOWN,
-    UNREGULATED,
-    ACTIVE,
-    SUSPENDED
-} // 0 = UNKNOWN, fail-closed
+    UNKNOWN, // 0 = fail-closed default
+    UNREGULATED, // 1
+    ACTIVE, // 2
+    SUSPENDED, // 3
+    PROPOSED, // 4 (appended)
+    RETIRED // 5 (appended)
+}
 
 // LOAD-BEARING ORDER: ManifestCore.supportedEngines is a bitmask indexed by
 // VenueType value (bit i == VenueType(i): AMM=0, ORDER_BOOK=1, RFQ=2).

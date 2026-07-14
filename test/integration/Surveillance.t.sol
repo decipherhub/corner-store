@@ -27,7 +27,12 @@ contract SurveillanceTest is IntegrationBase {
 
         ManifestCore memory m = _activeManifest(0, 0);
         m.issuanceRecipeId = 7;
+        // deployStack already left rwaToken ACTIVE; re-pointing the issuance recipe
+        // goes through the terminal-then-reissue path (retire -> register ->
+        // approve) since re-register over ACTIVE reverts by design.
+        policyReg.retireManifest(address(rwaToken), bytes32("REISSUE"));
         policyReg.registerManifest(address(rwaToken), m);
+        policyReg.approveManifest(address(rwaToken));
     }
 
     function test_swapSucceeds_andEmitsSurveillanceFlag() public {
