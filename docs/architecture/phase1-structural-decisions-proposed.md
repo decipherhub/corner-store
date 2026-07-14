@@ -1,4 +1,4 @@
-# Phase 1 구조 결정 — 개발팀 리뷰 (PROPOSED)
+# Phase 1 구조 결정 — 개발팀 리뷰 (ACCEPTED)
 
 ## 읽기 전에 — 이게 뭐고, 당신들이 뭘 하면 되나
 
@@ -6,7 +6,7 @@
 - **왜 지금 정해야 하나:** 이건 *나중에 바꾸면 라우터·스키마·거래 흐름을 통째로 다시 짜야 하는(retrofit)* 골조입니다. 반대로 *구체 부품·임계치 값*은 나중에 가산하면 됩니다(OCP). **이 문서의 목적 = 그 "지금 박을 골조"와 "나중에 가산할 구체물"을 가르는 것.**
 - **각 결정의 틀:** ① *어떤 문제인가* → ② *왜 골조인가(naive하게 짜면 나중에 뭐가 깨지나)* → ③ *제안* → ④ *trade-off(대안/안 하면)* → ⑤ *당신들이 정할 것.*
 - **증권법 세부는 몰라도 됩니다** — 구조가 *왜 이렇게 생겼는지* 이해할 만큼만 풀어 썼습니다.
-- **상태:** PD-1~6은 리걸/PM이 *방향*은 승인. 남은 건 **개발팀의 *구현 합의*(인터페이스·필드셋·파라미터)**. PD-7은 신규.
+- **상태:** PD-1~7은 ADR-007로 개발팀 구현 방향이 확정되었습니다. 이 문서는 배경 설명이고, 최종 결정문은 `docs/decisions/ADR-007-pd-architecture-decisions.md`입니다.
 
 ---
 
@@ -123,14 +123,14 @@ mapping(bytes32 => IRecipeModule) public recipeModule;  // ← 확장 지점
 | ADR-004 | Element Pool Freeze v1 | ✅ Accepted |
 | ADR-005 | §4(a)(7) 주 재판매경로·A-03 active | ✅ (general solicitation 판정만 변호사 잔여) |
 | ADR-006 | 부품 asset-agnostic | ✅ Accepted |
-| **PD-1~7** | 위 7개 골조 | 🟢 방향비준 · **개발팀 구현 합의 대기** |
+| **PD-1~7** | 위 7개 골조 | ✅ Accepted by ADR-007 |
 
 ### 최소 게이트
-**PD-1·2·3·5·7**이 컴포넌트 스펙·생애주기를 여는 *최소 토대*. PD-4·6은 병렬 합의 가능.
+**PD-1~7**은 ADR-007로 accepted. 다음 단계는 컴포넌트별 구현 명세와 migration issue 작성.
 
 ### 리뷰 요청
 - 각 PD의 *제안에 동의/수정* + ④ trade-off가 납득되나 + ⑤ 구현 디테일(필드셋·인터페이스·파라미터) 확정.
-- 합의분 → **ADR-007(Q8)·008(Q9)·009(Q10/Q10-a)·010(Q12)·011(Q13)·012(Q11)·013(Q14)** 승격(`docs/decisions/`).
+- 합의분 → **ADR-007**로 승격 완료(`docs/decisions/ADR-007-pd-architecture-decisions.md`).
 - 전체 결정 현황: [`docs/decisions/decision-register.md`](../decisions/decision-register.md).
 
 > 법률 의존 항목(reliance 충분성·audit trail·SAR·general solicitation 등)은 *별도 변호사 트랙*이며 이 문서 범위 밖. 구조 freeze는 위 PD(개발팀 합의) + *구조에 걸리는 법률 회신*만 선행.
