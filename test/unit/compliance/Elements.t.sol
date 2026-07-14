@@ -17,6 +17,7 @@ import {
     Statefulness
 } from "../../../src/types/ComplianceTypes.sol";
 import {Events} from "../../../src/libraries/Events.sol";
+import {Errors} from "../../../src/libraries/Errors.sol";
 
 contract MockAcquisitionSource is IAcquisitionSource {
     mapping(bytes32 => uint64) internal _at;
@@ -31,8 +32,15 @@ contract MockAcquisitionSource is IAcquisitionSource {
 }
 
 contract ElementsTest is Test {
+    // Mirrors each legacy element's *Set event signature for vm.expectEmit matching
+    // (solc 0.8.17 does not support qualified `ContractName.EventName` emit syntax).
+    event SanctionsBlockedSet(address indexed account, bool blocked);
+    event AccreditedInvestorSet(address indexed investor, bool isAccredited);
+    event QualifiedPurchaserSet(address indexed investor, bool isQp);
+
     address internal user = address(0xA11CE);
     address internal asset = address(0xBEEF);
+    address internal stranger = address(0xDEAD);
 
     function test_sanctions_pass_and_fail_and_metadata() public {
         Sanctions s = new Sanctions();
@@ -54,6 +62,21 @@ contract ElementsTest is Test {
         assertEq(uint256(m.statefulness), uint256(Statefulness.STATELESS));
     }
 
+    function test_sanctions_setBlocked_reverts_for_non_operator() public {
+        Sanctions s = new Sanctions();
+        vm.prank(stranger);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        s.setBlocked(user, true);
+    }
+
+    function test_sanctions_setBlocked_updates_state_and_emits() public {
+        Sanctions s = new Sanctions();
+        vm.expectEmit(true, false, false, true);
+        emit SanctionsBlockedSet(user, true);
+        s.setBlocked(user, true);
+        assertTrue(s.blocked(user));
+    }
+
     function test_accredited_pass_fail_metadata() public {
         AccreditedInvestor a = new AccreditedInvestor();
         (bool passed,) = a.check(user, address(0), asset, 0, "");
@@ -70,6 +93,21 @@ contract ElementsTest is Test {
         assertEq(uint256(m.temporal), uint256(TemporalNature.ONE_TIME));
     }
 
+    function test_accredited_setAccredited_reverts_for_non_operator() public {
+        AccreditedInvestor a = new AccreditedInvestor();
+        vm.prank(stranger);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        a.setAccredited(user, true);
+    }
+
+    function test_accredited_setAccredited_updates_state_and_emits() public {
+        AccreditedInvestor a = new AccreditedInvestor();
+        vm.expectEmit(true, false, false, true);
+        emit AccreditedInvestorSet(user, true);
+        a.setAccredited(user, true);
+        assertTrue(a.accredited(user));
+    }
+
     function test_qp_pass_fail_metadata() public {
         QualifiedPurchaser q = new QualifiedPurchaser();
         (bool passed,) = q.check(user, address(0), asset, 0, "");
@@ -82,6 +120,21 @@ contract ElementsTest is Test {
         ElementMetadata memory m = q.elementMetadata();
         assertEq(m.elementId, bytes32("A-13-v1"));
         assertEq(uint256(m.decidability), uint256(Decidability.ATTESTATION_BASED));
+    }
+
+    function test_qp_setQp_reverts_for_non_operator() public {
+        QualifiedPurchaser q = new QualifiedPurchaser();
+        vm.prank(stranger);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        q.setQp(user, true);
+    }
+
+    function test_qp_setQp_updates_state_and_emits() public {
+        QualifiedPurchaser q = new QualifiedPurchaser();
+        vm.expectEmit(true, false, false, true);
+        emit QualifiedPurchaserSet(user, true);
+        q.setQp(user, true);
+        assertTrue(q.qp(user));
     }
 
     function test_lockup_blocks_until_elapsed() public {

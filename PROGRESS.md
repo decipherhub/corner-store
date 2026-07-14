@@ -36,6 +36,9 @@ source of truth로 사용한다.
   `RFQMakerNotApproved`), maker-initiated nonce-scoped idempotent cancellation
   (`cancelQuoteNonce`/`cancelQuoteNonces`, `RFQQuoteCancelled`), venueType binding
   fix, `docs/rfq-threat-model.md` 위협 모델과 D008 결정 기록
+- legacy mock element(Sanctions A-01, AccreditedInvestor A-03, QualifiedPurchaser
+  A-13)의 attestation setter를 `Governed`/`onlyOperator` + 이벤트로 정렬해 CMP-001
+  이후 hardening divergence를 닫았다(Lockup C-01은 settable mutator가 없어 변경 없음).
 
 ## Blocked
 
@@ -45,28 +48,25 @@ source of truth로 사용한다.
 
 1. MVP RFQ demo backend milestone/user flow를 별도 문서·feature로 구체화한다.
    PR #29/#30이 머지되면 기존 live-Anvil E2E/CLI 경로를 재사용한다.
-2. pending RFQ/E2E/CLI/BUIDL PR stack(#26/#27/#28/#29/#30/#35)이 머지된 뒤
+2. pending RFQ/E2E/CLI/BUIDL PR stack(#28/#29/#30/#35)이 머지된 뒤
    roadmap과 feature 상태를 재조정한다.
-3. ungated legacy mock element(A-01 sanctions, A-03 accredited, QP)를 새 element와
-   동일하게 operator-gate로 정렬한다 — CMP-001 deferred follow-up.
-4. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
+3. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
    production dealer/operator 책임.
-5. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
+4. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
    (C-01 Lockup은 현재 fixture-only mock acquisition source).
-6. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
+5. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
 
 ## Last Session Summary
 
-- #26 merge preparation includes CMP-002 (Manifest Lifecycle & Operator Approval Flow) on top of current main.
-- CMP-002 closes the manifest lifecycle state machine and engine default-deny path after CMP-001.
-- RFQ-002, CMP-001, and RFQ-SDK records are preserved during this stacked merge reconciliation.
+- #27 merge preparation includes legacy element gating on top of current main.
+- Legacy mock element setters for A-01/A-03/A-13 are now operator-gated, closing the CMP-001 hardening divergence.
+- RFQ-002, CMP-001, CMP-002, and RFQ-SDK records are preserved during this stacked merge reconciliation.
 - 실행한 검증:
   - original PR CI/checks passed before retarget
   - conflict reconciliation checked with `git diff --check`
 - 남은 리스크:
   - MVP HTTP/CLI backend는 아직 구현하지 않았다.
   - production signer custody, persistent nonce store, pricing, inventory/risk는 integrator/operator 책임이다.
-  - ungated legacy mock element(A-01/A-03/QP)와 새 operator-gated element 사이 hardening divergence는 follow-up으로 정렬한다.
   - C-01 Lockup은 fixture-only mock acquisition source에 의존한다.
 
 ## RFQ-002 Merge Note

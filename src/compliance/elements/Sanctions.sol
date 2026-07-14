@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {BaseElement} from "./BaseElement.sol";
+import {Governed} from "../../auth/Governed.sol";
 import {
     ElementMetadata,
     ElementCategory,
@@ -14,10 +15,12 @@ import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
 /// @dev A-01-v1 Sanctions screen (mock). Blocks listed users at the trade gate.
 ///      Real list management is out of scope — a settable mapping stands in.
-contract Sanctions is BaseElement {
+contract Sanctions is BaseElement, Governed {
     bytes32 internal constant ELEMENT_ID = "A-01-v1";
 
     mapping(address => bool) public blocked;
+
+    event SanctionsBlockedSet(address indexed account, bool blocked);
 
     constructor()
         BaseElement(ElementMetadata({
@@ -31,8 +34,9 @@ contract Sanctions is BaseElement {
             }))
     {}
 
-    function setBlocked(address user, bool isBlocked) external {
+    function setBlocked(address user, bool isBlocked) external onlyOperator {
         blocked[user] = isBlocked;
+        emit SanctionsBlockedSet(user, isBlocked);
     }
 
     function check(address user, address, address, uint256, bytes calldata)
