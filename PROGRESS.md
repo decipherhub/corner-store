@@ -39,6 +39,9 @@ source of truth로 사용한다.
 - legacy mock element(Sanctions A-01, AccreditedInvestor A-03, QualifiedPurchaser
   A-13)의 attestation setter를 `Governed`/`onlyOperator` + 이벤트로 정렬해 CMP-001
   이후 hardening divergence를 닫았다(Lockup C-01은 settable mutator가 없어 변경 없음).
+- RFQ integration: RFQ 벤처를 protected router path(`ExecutionRouter → ComplianceEngine
+  → RFQAdapter`)로 real ERC-3643 스택 위에서 end-to-end 커버(`test/integration/RFQFlow.t.sol`,
+  fill/maker-unapproved/cancel/non-compliant/direct-call bypass 5 시나리오) — RFQ-002 deferred follow-up 완료.
 
 ## Blocked
 
@@ -48,7 +51,7 @@ source of truth로 사용한다.
 
 1. MVP RFQ demo backend milestone/user flow를 별도 문서·feature로 구체화한다.
    PR #29/#30이 머지되면 기존 live-Anvil E2E/CLI 경로를 재사용한다.
-2. pending RFQ/E2E/CLI/BUIDL PR stack(#28/#29/#30/#35)이 머지된 뒤
+2. pending RFQ/E2E/CLI/BUIDL PR stack(#29/#30/#35)이 머지된 뒤
    roadmap과 feature 상태를 재조정한다.
 3. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
    production dealer/operator 책임.
@@ -58,9 +61,9 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
-- #27 merge preparation includes legacy element gating on top of current main.
-- Legacy mock element setters for A-01/A-03/A-13 are now operator-gated, closing the CMP-001 hardening divergence.
-- RFQ-002, CMP-001, CMP-002, and RFQ-SDK records are preserved during this stacked merge reconciliation.
+- #28 merge preparation includes RFQ protected-router integration scenarios on top of current main.
+- RFQFlow integration now covers router → compliance → RFQAdapter settlement plus maker-unapproved, cancellation, non-compliant buyer, and direct-call bypass scenarios.
+- RFQ-002, CMP-001, CMP-002, legacy gating, and RFQ-SDK records are preserved during this stacked merge reconciliation.
 - 실행한 검증:
   - original PR CI/checks passed before retarget
   - conflict reconciliation checked with `git diff --check`
@@ -72,4 +75,4 @@ source of truth로 사용한다.
 ## RFQ-002 Merge Note
 
 - RFQ-002 hardening from PR #24 is included in this branch update: maker approval, maker nonce cancellation, venueType binding, and RFQ threat-model documentation.
-- Deferred follow-up remains router-path maker-approval/cancellation integration-test coverage after stacked PRs are reconciled.
+- The deferred router-path maker-approval/cancellation integration coverage is completed by PR #28.

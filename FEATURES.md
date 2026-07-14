@@ -155,8 +155,9 @@ passing
   nonce-scoped idempotent cancel).
 - Non-goals: partial fill, dealer inventory, signer key custody, shared dealer
   registry.
-- Deferred follow-up: router-path maker-approval/cancellation integration-test
-  시나리오.
+- Deferred follow-up (완료): router-path maker-approval/cancellation
+  integration-test 시나리오를 `test/integration/RFQFlow.t.sol`에서 real ERC-3643
+  스택 위 protected path로 커버한다.
 
 ## CMP-001 — Reg D 506(c) 9-element Recipe
 
