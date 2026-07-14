@@ -31,11 +31,19 @@ contract RecipesTest is Test {
 
     function test_regd_ids_and_elements() public {
         assertEq(regd.recipeId(), uint16(1));
-        assertEq(regd.version(), uint16(1));
+        assertEq(regd.version(), uint16(2));
         bytes32[] memory e = regd.requiredElements();
-        assertEq(e.length, 2);
+        // 9-element reference set (strategy report note-14), in reference order.
+        assertEq(e.length, 9);
         assertEq(e[0], bytes32("A-01-v1"));
-        assertEq(e[1], bytes32("A-03-v1"));
+        assertEq(e[1], bytes32("A-02-v1"));
+        assertEq(e[2], bytes32("A-03-v1"));
+        assertEq(e[3], bytes32("A-04-v1"));
+        assertEq(e[4], bytes32("A-05-v1"));
+        assertEq(e[5], bytes32("B-01-v1"));
+        assertEq(e[6], bytes32("B-02-v1"));
+        assertEq(e[7], bytes32("C-01-v1"));
+        assertEq(e[8], bytes32("E-01-v1"));
         assertTrue(regd.isApplicable(""));
     }
 

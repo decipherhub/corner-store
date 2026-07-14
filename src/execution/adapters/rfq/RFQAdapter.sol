@@ -27,10 +27,16 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
 
     mapping(address => mapping(uint256 => bool)) public usedQuoteNonce;
 
+    /// @notice Operator-curated maker (dealer) allowlist. Quotes from unapproved
+    ///         makers are rejected at settlement regardless of signature validity.
+    mapping(address => bool) public approvedMaker;
+
     event RouterSet(address indexed router);
     event RFQFilled(
         bytes32 indexed quoteHash, address indexed maker, address indexed taker, uint256 amountIn, uint256 amountOut
     );
+    event MakerApprovalSet(address indexed maker, bool approved);
+    event RFQQuoteCancelled(address indexed maker, uint256 indexed nonce);
 
     modifier onlyRouter() {
         if (msg.sender != router) revert Errors.NotAuthorized();
@@ -42,6 +48,11 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
     function setRouter(address router_) external onlyOwner {
         router = router_;
         emit RouterSet(router_);
+    }
+
+    function setMakerApproved(address maker, bool approved) external onlyOperator {
+        approvedMaker[maker] = approved;
+        emit MakerApprovalSet(maker, approved);
     }
 
     /// @notice Executes a full-fill RFQ quote for a single router request.
@@ -66,6 +77,28 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
         return ExecutionResult({
             amountOut: quote.amountOut, executionId: keccak256(abi.encode(quoteHash, req.nonce, block.number))
         });
+    }
+
+    /// @notice Cancels a quote nonce for the calling maker. Idempotent: a nonce that
+    ///         is already used (filled or previously cancelled) is left unchanged and
+    ///         emits nothing — a cancel cannot un-fill, and reverting cannot win the
+    ///         cancel-vs-fill race either. Cancellation is permissionless for the
+    ///         caller's own nonce namespace (msg.sender scoping is the authorization).
+    function cancelQuoteNonce(uint256 nonce) external {
+        _cancelQuoteNonce(nonce);
+    }
+
+    /// @notice Batch form of {cancelQuoteNonce}.
+    function cancelQuoteNonces(uint256[] calldata nonces) external {
+        for (uint256 i = 0; i < nonces.length; i++) {
+            _cancelQuoteNonce(nonces[i]);
+        }
+    }
+
+    function _cancelQuoteNonce(uint256 nonce) internal {
+        if (usedQuoteNonce[msg.sender][nonce]) return;
+        usedQuoteNonce[msg.sender][nonce] = true;
+        emit RFQQuoteCancelled(msg.sender, nonce);
     }
 
     function hashQuote(RFQQuote memory quote) public view returns (bytes32) {
@@ -95,6 +128,7 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
     ) internal view {
         if (block.timestamp > quote.expiry) revert Errors.RFQQuoteExpired();
         if (usedQuoteNonce[quote.maker][quote.nonce]) revert Errors.RFQQuoteUsed();
+        if (!approvedMaker[quote.maker]) revert Errors.RFQMakerNotApproved();
 
         if (ECDSA.recover(quoteHash, signature) != quote.maker) revert Errors.RFQInvalidSignature();
 

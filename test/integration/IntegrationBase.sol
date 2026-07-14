@@ -17,6 +17,14 @@ import {AccreditedInvestor} from "../../src/compliance/elements/AccreditedInvest
 import {QualifiedPurchaser} from "../../src/compliance/elements/QualifiedPurchaser.sol";
 import {BuidlMinimumInvestment} from "../../src/compliance/elements/BuidlMinimumInvestment.sol";
 import {SurveillanceFlag} from "../../src/compliance/elements/SurveillanceFlag.sol";
+import {Jurisdiction} from "../../src/compliance/elements/Jurisdiction.sol";
+import {IdentityUniqueness} from "../../src/compliance/elements/IdentityUniqueness.sol";
+import {UsTaxResident} from "../../src/compliance/elements/UsTaxResident.sol";
+import {AssetClassification} from "../../src/compliance/elements/AssetClassification.sol";
+import {Erc3643Native} from "../../src/compliance/elements/Erc3643Native.sol";
+import {FormDFiling} from "../../src/compliance/elements/FormDFiling.sol";
+import {Lockup} from "../../src/compliance/elements/Lockup.sol";
+import {IAcquisitionSource} from "../../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipe} from "../../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../../src/compliance/recipes/Fund3c7Recipe.sol";
 import {BuidlLikeFundRecipe} from "../../src/compliance/recipes/BuidlLikeFundRecipe.sol";
@@ -71,6 +79,15 @@ abstract contract IntegrationBase is TREXSuite {
     QualifiedPurchaser internal qp;
     BuidlMinimumInvestment internal buidlMinimum;
     SurveillanceFlag internal surveillance;
+    // 9-element Reg D 506(c) reference set (A-01/A-03 above + these):
+    Jurisdiction internal jurisdiction; // A-02-v1
+    IdentityUniqueness internal identity; // A-04-v1
+    UsTaxResident internal usTax; // A-05-v1
+    AssetClassification internal assetClass; // B-01-v1
+    Erc3643Native internal erc3643; // B-02-v1
+    Lockup internal lockup; // C-01-v1
+    FormDFiling internal formD; // E-01-v1
+    MockAcquisitionSource internal acqSource; // Lockup CR-3 seam
 
     // --- execution --------------------------------------------------------
     ExecutionRouter internal router;
@@ -87,6 +104,11 @@ abstract contract IntegrationBase is TREXSuite {
 
     // RWA-side bit in supportedEngines / allowedVenueTypes (AMM = bit 0).
     uint8 internal constant ENGINES_AMM = 0x01;
+
+    // 9-element Reg D 506(c) fixture constants.
+    bytes32 internal constant ALLOWED_JURISDICTION = bytes32("US");
+    bytes32 internal constant REG_D_CLASS = bytes32("REG_D");
+    uint64 internal constant LOCKUP_SECONDS = 365 days;
 
     uint256 internal nextNonce = 1;
 
@@ -132,8 +154,26 @@ abstract contract IntegrationBase is TREXSuite {
         elementReg.registerElement(bytes32("BUIDL-MIN-v1"), address(buidlMinimum));
         elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
 
+        // 2b. remaining 9-element Reg D 506(c) reference set. AssetClassification
+        //     requires REG_D; Lockup reads acquisition time via an injected mock.
+        jurisdiction = new Jurisdiction();
+        identity = new IdentityUniqueness();
+        usTax = new UsTaxResident();
+        assetClass = new AssetClassification(REG_D_CLASS);
+        erc3643 = new Erc3643Native();
+        formD = new FormDFiling();
+        acqSource = new MockAcquisitionSource();
+        lockup = new Lockup(address(acqSource), LOCKUP_SECONDS);
+        elementReg.registerElement(bytes32("A-02-v1"), address(jurisdiction));
+        elementReg.registerElement(bytes32("A-04-v1"), address(identity));
+        elementReg.registerElement(bytes32("A-05-v1"), address(usTax));
+        elementReg.registerElement(bytes32("B-01-v1"), address(assetClass));
+        elementReg.registerElement(bytes32("B-02-v1"), address(erc3643));
+        elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
+        elementReg.registerElement(bytes32("E-01-v1"), address(formD));
+
         // 3. recipes + register
-        recipeReg.registerRecipe(1, 1, address(new RegD506cRecipe()));
+        recipeReg.registerRecipe(1, 2, address(new RegD506cRecipe()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
         recipeReg.registerRecipe(3, 1, address(new BuidlLikeFundRecipe()));
 
@@ -157,11 +197,13 @@ abstract contract IntegrationBase is TREXSuite {
         quote = new MockERC20("Quote USD", "qUSD");
         pool = new MockPool(IERC20(address(quote)), IERC20(address(rwaToken)));
 
-        // 7. manifests
+        // 7. manifests: onboarding goes through the lifecycle (propose -> approve).
+        //    Keep the caller-provided manifest so BUIDL-like profiles can bind
+        //    their own fund recipe/facts while still using the current lifecycle.
         policyReg.registerManifest(address(rwaToken), manifest);
-        ManifestCore memory unreg;
-        unreg.status = PolicyStatus.UNREGULATED;
-        policyReg.registerManifest(address(quote), unreg);
+        policyReg.approveManifest(address(rwaToken));
+        // Quote/cash is out-of-scope: tag UNREGULATED directly from UNKNOWN.
+        policyReg.setUnregulated(address(quote));
 
         // 8. register the pool as a verified RWA holder + as an AMM venue + adapter pool
         registerVenueIdentity(address(pool));
@@ -177,6 +219,22 @@ abstract contract IntegrationBase is TREXSuite {
             })
         );
         adapter.setPool(address(pool), true);
+
+        // 9. Asset-side attestations for the 9-element Reg D 506(c) recipe: the RWA
+        //    is classified REG_D, attested ERC-3643-native, and has Form D on file.
+        //    Allow the ALLOWED_JURISDICTION code for the investor-side screen.
+        assetClass.setClassification(address(rwaToken), REG_D_CLASS);
+        erc3643.setErc3643Native(address(rwaToken), true);
+        formD.setFormDFiled(address(rwaToken), true, bytes32("EDGAR-ACCESSION"));
+        jurisdiction.setJurisdictionAllowed(ALLOWED_JURISDICTION, true);
+
+        // Warp past the lockup window so a genuine (non-zero) Rule 144 holding
+        // period can elapse for buyers whose acquisition time is seeded at genesis
+        // (t=1) by attestInvestor. Deadlines are built relative to block.timestamp,
+        // so this is transparent to the other scenarios.
+        if (block.timestamp <= uint256(LOCKUP_SECONDS)) {
+            vm.warp(uint256(LOCKUP_SECONDS) + 1);
+        }
     }
 
     /// @dev Convenience overload: plain RegD506c, no fund recipe.
@@ -205,11 +263,33 @@ abstract contract IntegrationBase is TREXSuite {
 
     // --- actor setup ------------------------------------------------------
 
-    /// @notice Make `who` a verified, accredited, non-sanctioned investor.
+    /// @notice Make `who` a fully-compliant investor for the 9-element Reg D
+    ///         506(c) recipe: real T-REX verification PLUS every investor-side
+    ///         engine attestation.
     function setupBuyer(address who) internal {
-        verifyInvestor(who); // real OnchainID + KYC claim
-        accredited.setAccredited(who, true);
-        // sanctions default = not blocked
+        verifyInvestor(who); // real OnchainID + KYC claim (T-REX verified holder)
+        attestInvestor(who);
+    }
+
+    /// @notice Engine-side investor attestations only (NOT T-REX verification):
+    ///         accredited + all other pass-conditions for the investor-side
+    ///         elements. Separated from {setupBuyer} so a scenario can drive an
+    ///         engine-compliant-but-not-T-REX-verified buyer (ERC-3643 rollback).
+    function attestInvestor(address who) internal {
+        attestInvestorExceptAccredited(who);
+        accredited.setAccredited(who, true); // A-03
+    }
+
+    /// @notice All investor-side pass-conditions EXCEPT accreditation, so a
+    ///         scenario can isolate an A-03 (accredited) rejection. Covers
+    ///         jurisdiction (A-02), identity (A-04), and the Rule 144 lockup
+    ///         acquisition seed (C-01). Sanctions (A-01) and US-tax (A-05) pass
+    ///         by default (not blocked / not flagged).
+    function attestInvestorExceptAccredited(address who) internal {
+        jurisdiction.setJurisdiction(who, ALLOWED_JURISDICTION); // A-02
+        identity.bindIdentity(who, keccak256(abi.encode("ID", who))); // A-04
+        // C-01 lockup: seed acquisition time at genesis; deployStack warped past it.
+        acqSource.setAcquiredAt(who, address(rwaToken), uint64(1));
     }
 
     /// @notice Record a TA-style profile and sync it into the local test stack.
@@ -283,6 +363,10 @@ abstract contract IntegrationBase is TREXSuite {
         if (kycVerified && registerIdentity) {
             verifyInvestor(who); // real OnchainID + KYC claim
         }
+        jurisdiction.setJurisdiction(who, ALLOWED_JURISDICTION);
+        identity.bindIdentity(who, keccak256(abi.encode("TA_ID", who, sourceRef)));
+        // C-01 lockup: seed acquisition time at genesis; deployStack warped past it.
+        acqSource.setAcquiredAt(who, address(rwaToken), uint64(1));
         accredited.setAccredited(who, isAccredited);
         qp.setQp(who, isQp);
         sanctions.setBlocked(who, isSanctioned);
@@ -338,5 +422,19 @@ abstract contract IntegrationBase is TREXSuite {
     function doBuy(ExecutionRequest memory req) internal {
         vm.prank(req.context.buyer);
         router.execute(req);
+    }
+}
+
+/// @dev Test-only settable acquisition-time source for the Lockup (C-01-v1)
+///      element's injected CR-3 seam. Mirrors the unit-test helper.
+contract MockAcquisitionSource is IAcquisitionSource {
+    mapping(bytes32 => uint64) internal _acquiredAt;
+
+    function setAcquiredAt(address holder, address asset, uint64 ts) external {
+        _acquiredAt[keccak256(abi.encode(holder, asset))] = ts;
+    }
+
+    function acquiredAt(address holder, address asset) external view override returns (uint64) {
+        return _acquiredAt[keccak256(abi.encode(holder, asset))];
     }
 }

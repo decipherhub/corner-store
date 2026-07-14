@@ -254,3 +254,279 @@ Router 밖 경로는 production deployment에서 다음 중 하나로 처리해�
 - `docs/security.md`
 - `ARCHITECTURE.md`
 - `docs/architecture/execution-routing.md`
+
+## D007 — PD-1~PD-7 Phase 1 architecture baseline을 확정한다
+
+Date: 2026-07-14
+
+### Context
+
+Phase 1 구현 전에 Manifest schema, Recipe evaluation, post-trade state,
+identity claim, enforcement action, governance와 lifecycle record 보존 방식에
+대한 개발팀 합의가 필요했다.
+
+이 결정들은 BUIDL-like demo나 RFQ/API 구현보다 상위의 아키텍처 baseline이다.
+
+### Decision
+
+PD-1~PD-7을 Phase 1 architecture baseline으로 확정한다.
+
+- PD-1: Manifest는 explicit core + registry-backed `RecipeBinding` 구조를 사용한다.
+- PD-2: Router/Engine은 Manifest-level multi-Recipe binding 모델을 사용한다.
+- PD-3: token transfer 기준 acquisition timestamp와 router execution context를 분리하고, post-trade commit은 idempotent하게 처리한다.
+- PD-4: investor qualification은 ERC-3643/ONCHAINID claim pipeline을 기본 인터페이스로 사용하고, Securitize/TA는 adapter boundary로 연동한다.
+- PD-5: `BLOCK`, `FLAG_ONLY`, `OPERATOR_REVIEW` 중심의 enforcement action 모델과 constrained override를 사용한다.
+- PD-6: governance authority는 외부 Safe-style multisig를 사용하고, compliance relaxation은 timelock을 요구한다.
+- PD-7: Manifest lifecycle은 semantic versioning, append-only history, central pause state와 hash-anchored record preservation을 사용한다.
+
+### Alternatives Considered
+
+- PD별 ADR을 7개로 분리: 현재 결정들이 하나의 Phase 1 구조 freeze를 구성하므로
+  단일 baseline ADR로 묶는 편이 리뷰와 추적에 더 적합해 보류한다.
+- 현행 `issuanceRecipeId + fundRecipeId` 구조 유지: BUIDL-like demo에는 충분하지만
+  future policy 조합과 path option을 표현하기 어려워 transitional 구조로만 남긴다.
+- Corner Store 전용 identity model 신설: ERC-3643/T-REX와 ONCHAINID 호환성을
+  해치고 TA/KYC provider 연동성이 떨어져 제외한다.
+
+### Consequences
+
+- PD-1~PD-7은 더 이상 열린 구조 질문이 아니며, 후속 작업은 구현 명세와 migration issue로 진행한다.
+- 현재 코드의 transitional 구조는 별도 implementation branch에서 `RecipeBinding[]`, compiled plan, lifecycle registry 등으로 이전해야 한다.
+- 실제 Securitize/TA 연동은 공식/current interface 확인 후 별도 refinement issue에서 처리한다.
+
+### Related Files
+
+- `docs/decisions/ADR-007-pd-architecture-decisions.md`
+- `docs/decisions/decision-register.md`
+- `docs/architecture/phase1-structural-decisions-proposed.md`
+
+## D008 — RFQ v2 hardening: maker approval, full-fill, non-custodial, nonce-scoped cancel
+
+Date: 2026-07-04
+
+### Context
+
+RFQ v1(RFQ-001)은 EIP-712 signed quote와 router-only settlement를 확정했으나
+dealer approval, signer custody, quote cancellation, partial fill을 열린 항목으로
+남겼다(`docs/security.md` RFQ Safety, D006 protected-path 경계). v2 hardening에서
+maker approval gate와 maker-initiated cancellation을 구현하면서 이들 항목의 범위와
+정책을 확정할 필요가 있다.
+
+### Decision
+
+RFQ venue의 다음 정책을 확정한다.
+
+- maker approval은 adapter-local하며 operator가 관리한다(`RFQAdapter.approvedMaker`,
+  `setMakerApproved` onlyOperator). 여러 quote-driven venue가 공유하는 dealer
+  registry는 두 번째 quote-driven venue가 생길 때까지 도입하지 않는다.
+- fill 정책은 full-fill을 유지한다. compliance 판정은 평가된 정확한 amount에
+  바인딩되며, partial fill은 아직 설계되지 않은 per-fill 재평가 semantics를
+  요구하므로 채택하지 않는다.
+- custody는 non-custodial을 유지한다. settlement는 두 개의 `safeTransferFrom`
+  leg로 수행하며, adapter는 자산을 보관하지 않는다. custodial RFQ variant는
+  범위 밖이다.
+- cancellation은 nonce-scoped이며 idempotent하다. `usedQuoteNonce` fill guard를
+  재사용하여 cancel과 fill이 같은 nonce namespace를 공유한다. cancel-vs-fill
+  race는 먼저 채굴된 transaction으로 해소된다.
+
+### Alternatives Considered
+
+- 공유 dealer registry를 즉시 도입: 두 번째 quote-driven venue가 없어 abstraction을
+  과도하게 확정하므로 제외
+- partial fill 지원: compliance 판정과 amount binding, per-fill 재평가 semantics가
+  미설계여서 제외
+- custodial settlement: 자산 보관 위험과 별도 신뢰 가정이 필요해 reference 범위
+  밖으로 제외
+- cancel을 revert 기반 또는 별도 mapping으로 구현: fill guard와 상태를 이중화하고
+  race semantics를 복잡하게 만들어 제외
+
+### Consequences
+
+- maker off-boarding은 operator의 `setMakerApproved(maker, false)`로 처리한다.
+- signer key custody와 operator key management(multisig/HSM/rotation)은 여전히
+  open decision이며 production hardening에서 확정한다.
+- partial fill과 dealer inventory risk는 별도 feature spec 전까지 비활성이다.
+- 위협 모델은 `docs/rfq-threat-model.md`가 source of truth다.
+
+### Related Files
+
+- `docs/rfq-threat-model.md`
+- `docs/security.md`
+- `src/execution/adapters/rfq/RFQAdapter.sol`
+- `FEATURES.md`
+
+## D009 — Reg D 506(c) recipe를 9-element reference set으로 확장한다
+
+Date: 2026-07-04
+
+### Context
+
+reference Reg D 506(c) set을 향한 compliance module buildout이 최우선 작업이다.
+strategy report note-14는 Reg D 506(c) 판정을 9개 element로 분해한다. 기존
+`RegD506cRecipe`는 illustrative 2-element(A-01 sanctions + A-03 accredited)만
+요구했다. 나머지 element와 recipe 확장을 landing하면서, 열린 legal 결정과
+production data source는 여전히 approval-gated로 남겨야 한다(ROADMAP Phase 1:
+"implemented for illustrative/reference Elements and Recipes; production legal
+criteria remain approval-gated").
+
+### Decision
+
+- 6개의 새 illustrative element를 추가한다(note-14 Reg D 506(c) set의 adapter):
+  `Jurisdiction`(A-02), `IdentityUniqueness`(A-04), `UsTaxResident`(A-05),
+  `AssetClassification`(B-01, `bytes32 requiredClassification` 생성자 인자),
+  `Erc3643Native`(B-02), `FormDFiling`(E-01). attestation setter는 모두
+  operator-gated(`Governed`/`onlyOperator`)이며, production data source
+  (OFAC oracle, ONCHAINID claim, ERC-165 introspection, EDGAR)는 approval-gated
+  seam으로 남는다.
+- `RegD506cRecipe`를 in-place로 9-element set으로 확장한다(순서: A-01, A-02,
+  A-03, A-04, A-05, B-01, B-02, C-01, E-01). recipe id는 1 유지, version은 2로
+  bump, 여전히 always-applicable. 이는 illustrative reference wiring이며 approved
+  production policy가 아니다(ROADMAP/MVP-v2 gating 언어를 따른다).
+- C-01 Lockup은 test fixture에서 injected mock acquisition source
+  (`IAcquisitionSource`)를 통해서만 참여한다. production acquisition/lot data
+  source 결정과 holding-period 활성화 default는 변경하지 않는다(CR-3 seam,
+  ROADMAP: "acquisition data가 필요한 Recipe는 data source가 결정되기 전
+  활성화하지 않는다"). recipe는 illustrative fixture로 남는다.
+
+### Alternatives Considered
+
+- 새 element에 ungated setter를 사용(legacy mock element와 동일): state-input
+  write-gate가 없어 hardening 방향과 어긋나므로 제외. 대신 새 element는
+  `Governed`/`onlyOperator`를 쓴다(legacy element와의 divergence).
+- Lockup을 recipe에서 제외: 9-element reference set을 완전히 wiring하지 못하므로
+  제외. mock acquisition source로 fixture에서만 활성화한다.
+- production data source(OFAC/ONCHAINID/ERC-165/EDGAR)를 지금 연결: legal 검토와
+  data source 결정이 미완이라 제외. approval-gated seam으로 남긴다.
+
+### Consequences
+
+- ungated legacy mock element(Sanctions A-01, AccreditedInvestor A-03,
+  QualifiedPurchaser)와 새 operator-gated element 사이에 hardening divergence가
+  생긴다. legacy element 정렬은 follow-up으로 추적한다.
+- `RegD506cRecipe`(id 1)를 issuance recipe로 쓰는 모든 fixture(unit
+  `Engine.t.sol`, 통합 `IntegrationBase`/`SwapFlow`)는 9개 element를 모두
+  만족하도록 buyer/asset attestation을 추가해야 했다(fix fixtures, not product
+  code). engine/registry/router product code는 변경하지 않았다.
+- production 활성화 전 legal 검토, acquisition/lot data source 결정, production
+  data source 연결은 여전히 open이다.
+
+### Related Files
+
+- `src/compliance/recipes/RegD506cRecipe.sol`
+- `src/compliance/elements/Jurisdiction.sol`,
+  `src/compliance/elements/IdentityUniqueness.sol`,
+  `src/compliance/elements/UsTaxResident.sol`,
+  `src/compliance/elements/AssetClassification.sol`,
+  `src/compliance/elements/Erc3643Native.sol`,
+  `src/compliance/elements/FormDFiling.sol`,
+  `src/compliance/elements/Lockup.sol`
+- `test/integration/IntegrationBase.sol`,
+  `test/integration/RegD506cElements.t.sol`
+- `test/unit/compliance/Recipes.t.sol`, `test/unit/compliance/Engine.t.sol`
+- `docs/ROADMAP.md`
+
+## D010 — Manifest lifecycle를 validated state machine로 만들고 engine을 default-deny로 닫는다
+
+Date: 2026-07-04
+
+### Context
+
+MVP-v2 §5는 asset Manifest에 explicit operator approval step을 포함한 full
+lifecycle을 요구한다. 기존 `TokenPolicyRegistry`는 임의 상태를 덮어쓰는 raw
+`setStatus`만 제공했고(승인 단계 없음), `ComplianceEngine.evaluate`는 SUSPENDED와
+UNKNOWN만 명시적으로 reject한 뒤 나머지를 `_evaluateActivePair`로 흘려보냈다. 이
+구조에 PROPOSED/RETIRED 상태를 추가하면 두 개의 fail-open 구멍이 생긴다: (a)
+PROPOSED/RETIRED 자산이 UNREGULATED와 pair되면 element가 0개 수집되어 `allowed =
+true`, (b) PROPOSED/RETIRED가 ACTIVE와 pair되면 ACTIVE side만 검증되고 거래가
+통과한다.
+
+### Decision
+
+**1. Lifecycle state machine (states/transitions).** Manifest는 아래 transition만
+허용하는 명시적 state machine을 따른다. 그 외 모든 (state, action)은 dedicated
+custom error `Errors.InvalidManifestTransition`으로 revert한다.
+
+| From | Action | To | Gate |
+| --- | --- | --- | --- |
+| UNKNOWN 또는 RETIRED | `registerManifest` | PROPOSED | onlyOwner |
+| PROPOSED | `approveManifest` | ACTIVE | onlyOperator (issuance recipe 필수) |
+| ACTIVE | `suspendManifest(reasonCode)` | SUSPENDED | onlyOperator |
+| SUSPENDED | `resumeManifest` | ACTIVE | onlyOperator |
+| ACTIVE 또는 SUSPENDED | `retireManifest(reasonCode)` | RETIRED (terminal) | onlyOperator |
+| UNKNOWN | `setUnregulated` | UNREGULATED | onlyOwner |
+| UNREGULATED | `clearUnregulated` | UNKNOWN | onlyOwner |
+
+`registerManifest`는 caller가 넣은 `m.status`를 무시하고 항상 PROPOSED로 착지하며
+`declaredBy = msg.sender`를 기록한다. `approveManifest`는 `approvedBy = msg.sender`를
+기록하고 `issuanceRecipeId == 0`이면 registry-level completeness floor로 revert한다.
+RETIRED는 terminal이며 재발행은 RETIRED→register→approve 경로로만 가능하다. gating
+model: owner가 자산을 classify/declare(register/setUnregulated/clearUnregulated)하고,
+operator가 기존 manifest의 lifecycle(approve/suspend/resume/retire)을 구동한다.
+
+**2. Enum-append storage rationale.** `PolicyStatus`에 PROPOSED(4)와 RETIRED(5)를
+SUSPENDED(3) 뒤에 APPEND한다. 기존 numeric value(UNKNOWN=0, UNREGULATED=1,
+ACTIVE=2, SUSPENDED=3)는 storage layout과 enum↔uint cast에서 load-bearing이므로
+절대 재정렬하지 않는다. 그 결과 enum의 numeric order는 lifecycle graph의 semantic
+order와 일치하지 않는다(type 파일에 명시적 주석). UNKNOWN=0을 유지하는 것은 absent
+manifest가 fail-closed default가 되도록 하는 핵심이다.
+
+**3. `setStatus` 제거.** raw `setStatus` overwrite는 제거한다(pre-production
+breaking change; 모든 caller/test/factory를 이 feature에서 갱신). validation 없는
+상태 덮어쓰기는 approval step과 transition guard를 우회하므로 유지할 수 없다.
+
+**4. Engine default-deny 재구조화 (positive allowlist).** `evaluate`의 enumerated
+bad-status 검사(SUSPENDED/UNKNOWN reject)를 side별 positive allowlist로 교체한다:
+각 side는 UNREGULATED 또는 ACTIVE여야 하며, 그 외(UNKNOWN/SUSPENDED/PROPOSED/
+RETIRED와 미래에 추가될 모든 member)는 fail-closed한다. bad state를 열거하는 대신
+permitted state를 열거하는 이유: reject list에 새 상태를 추가하는 것을 잊으면
+그대로 fail-open이 되지만, allowlist는 새로 추가된 상태를 default로 거부하므로
+"append-only 안전"하다. both-UNREGULATED fast-path pass-through는 유지한다.
+`commit`은 router가 `evaluate`를 먼저 호출하고 reject 시 revert하므로 rejected
+pair에서 도달 불가능하다 — mirror guard가 필요 없고, in-file 주석으로 이유를
+남긴다(재구조화하지 않음).
+
+**5. `clearUnregulated` correction path.** 잘못 UNREGULATED로 tag된 token을
+UNKNOWN(clean slate)으로 되돌려 이후 regulated manifest로 register할 수 있게 한다.
+onlyOwner이며 UNREGULATED가 아닌 상태에서 호출하면 `InvalidManifestTransition`.
+setUnregulated와 대칭인 governance classification 호출이다.
+
+**6. `declaredBy = msg.sender` semantics와 factory consequence.** register는
+`declaredBy = msg.sender`, approve는 `approvedBy = msg.sender`를 기록한다.
+`CornerStoreFactory.registerRWAToken`은 register→approve를 한 governed call에서
+연속 실행하며 factory가 registry의 owner이자 approving operator다(배포 시
+governance가 registry ownership을 factory로 이전). 그 결과 이 경로로 onboarding된
+token의 `declaredBy`/`approvedBy`는 factory 주소이며, attribution은 factory
+경계에서 멈춘다.
+
+### Alternatives Considered
+
+- **Engine에서 reject list(bad state 열거) 유지**: PolicyStatus에 member를 추가할
+  때마다 reject list 갱신을 잊으면 fail-open이 되므로 제외. positive allowlist는
+  구조적으로 fail-closed default를 보장한다.
+- **enum member를 semantic order로 재정렬**: storage layout과 enum↔uint cast가
+  깨지므로 제외. append-only만 허용한다.
+- **`setStatus`를 deprecated로 유지**: validation 우회 경로가 남으므로 제외
+  (pre-production이라 breaking removal 비용이 낮다).
+- **PROPOSED/RETIRED에 UNKNOWN/SUSPENDED와 다른 별도 reason-code family 부여**:
+  기존 `_rejectPolicy`가 이미 `uint32(status)`를 reason code에 인코딩하므로 side의
+  실제 status를 그대로 넘기면 distinct code가 자동으로 나온다 — 추가 scheme 불필요.
+
+### Consequences
+
+- 모든 onboarding은 propose→approve 2단계를 거친다(factory는 한 call에서 collapse).
+- ACTIVE manifest의 issuance recipe re-point는 retire→register→approve 경로를
+  써야 한다(ACTIVE 위 re-register는 illegal).
+- engine은 미래에 PolicyStatus member가 추가되어도 default로 fail-closed한다.
+- fixture는 register→approve(및 UNREGULATED는 setUnregulated)로 통일된다.
+
+### Related Files
+
+- `src/types/ComplianceTypes.sol` (enum append + 주석)
+- `src/registry/TokenPolicyRegistry.sol`,
+  `src/interfaces/compliance/ITokenPolicyRegistry.sol`
+- `src/compliance/ComplianceEngine.sol` (evaluate default-deny gate)
+- `src/factory/CornerStoreFactory.sol` (register+approve, natspec)
+- `test/unit/compliance/Engine.t.sol`,
+  `test/unit/registry/TokenPolicyRegistry.t.sol`
+- `test/integration/EmergencyPause.t.sol`, `test/integration/IntegrationBase.sol`,
+  `test/integration/Surveillance.t.sol`

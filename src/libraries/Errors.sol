@@ -6,6 +6,7 @@ library Errors {
     error PolicyNotActive(); // UNKNOWN/SUSPENDED
     error ComplianceRejected(bytes32 reasonCode);
     error VenueNotAllowed();
+    error VenueTypeMismatch();
     error VenueSuspended();
     error AdapterNotRegistered();
     error DeadlineExpired();
@@ -18,7 +19,9 @@ library Errors {
     error RFQQuoteExpired();
     error RFQQuoteUsed();
     error RFQQuoteMismatch();
+    error RFQMakerNotApproved();
     error ElementNotRegistered(bytes32 elementId);
     error RecipeNotRegistered(uint16 recipeId);
     error LooseningForbidden(); // strengthen-only override
+    error InvalidManifestTransition(); // illegal PolicyStatus lifecycle move
 }

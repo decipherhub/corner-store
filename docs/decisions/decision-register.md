@@ -18,6 +18,7 @@
 | **ADR-004** | Element Pool Freeze v1 (frozen pool 무단 추가 금지) | 팀 | |
 | **ADR-005** | **§4(a)(7) = 주 재판매경로**(A-03 active), Rule 144 보조 | 리걸 | ⚖️ general solicitation 충족 판정만 잔여(07 ③) |
 | **ADR-006** | 부품 asset-agnostic(자산 사실이 일반 부품에 하드코딩 ❌) | 리걸 | |
+| **ADR-007** | PD-1~PD-7 Phase 1 architecture baseline accepted | 개발팀 | Manifest/Recipe/state/claims/enforcement/governance/lifecycle |
 
 ## 2. ✅ 확정 — 사용자(리걸/PM) 비준 [스코프·정책]
 
@@ -31,19 +32,19 @@
 | **Q6** | 관할 입력 = country + US state | |
 | **Q7** | freeze 게이트 = N≥2 증권유형 *사고실험* 검증 | 회사채·Reg A+ 수행 완료 |
 
-## 3. 🟢 제안 — 구조 토대 (사용자 방향비준 ✅, 개발팀 *구현* 합의 대기)
+## 3. ✅ 확정 — 구조 토대 (개발팀 구현 합의)
 
-> 상세: [`docs/architecture/phase1-structural-decisions-proposed.md`](../architecture/phase1-structural-decisions-proposed.md) (PD-1~7). 합의 시 ADR-007~013.
+> 상세: [`docs/architecture/phase1-structural-decisions-proposed.md`](../architecture/phase1-structural-decisions-proposed.md) (PD-1~7), [`ADR-007`](./ADR-007-pd-architecture-decisions.md).
 
 | ID | 결정 | 합의 주체 |
 |---|---|---|
-| **PD-1 / Q8** | Manifest = open-enum **레지스트리** 스키마(닫힌 boolean ❌) | 👥 개발팀 |
-| **PD-2 / Q9** | 다중-Recipe 라우터 + **열린 Recipe 레지스트리** + no-R2 수용 | 👥 개발팀 |
-| **PD-3 / Q10·Q10-a** | 두 경로 상태모델(체결 전 관문 + 체결 후 commit) + cross-venue 진리원천=TA anchor | 👥 개발팀 |
-| **PD-4 / Q11** | TA attested-claim **단일 파이프라인**(매도측 + cross-venue) | 👥 개발팀 + 발행사 |
-| **PD-5 / Q12** | 자동/인간 **경계 분류**(차단/깃발/Operator 행위) — *L3 스펙 직결* | 👥 개발팀 + 🏛️ 팀 |
-| **PD-6 / Q13** | Operator 거버넌스 = multisig + timelock | 🏛️ 팀·ADR |
-| **PD-7 / Q14** | 생애주기 구조 훅 4종(version·append-only 연혁·halt/freeze·record 보존) | 👥 개발팀 |
+| **PD-1 / Q8** | Manifest = explicit core + registry-backed `RecipeBinding` | 👥 개발팀 |
+| **PD-2 / Q9** | Manifest-level multi-Recipe binding + REQUIRED/PATH/FLAG modes | 👥 개발팀 |
+| **PD-3 / Q10·Q10-a** | token-transfer acquisition anchor + router execution context + idempotent post-trade commit | 👥 개발팀 |
+| **PD-4 / Q11** | ERC-3643/ONCHAINID claim pipeline + TA adapter boundary | 👥 개발팀 + 발행사 |
+| **PD-5 / Q12** | BLOCK/FLAG_ONLY/OPERATOR_REVIEW enforcement model with constrained overrides | 👥 개발팀 + 🏛️ 팀 |
+| **PD-6 / Q13** | external Safe-style multisig + timelock + emergency guardrails | 🏛️ 팀·ADR |
+| **PD-7 / Q14** | versioned lifecycle + central pause state + hash-anchored record preservation | 👥 개발팀 |
 
 ## 4. Recipe 결정 (DR) — 구조 분석 산출
 
@@ -81,3 +82,5 @@
 
 ## 변경 로그
 - [2026-06-24] (canton-rwa) v1.0 신설. 흩어진 결정(ADR-001~006·사용자 비준 Q1~7·proposed PD-1~7·Recipe DR-1~8·법률대기 07)을 *팀 전체 마스터 인덱스* 한 장으로 통합. 상태 범례(✅확정/🟢제안·방향비준/🟠미비준/⚖️법률대기/🍃deferred) + 담당 + 출처 링크. 개발팀 DECISIONS.md와 상보(컴플라이언스·구조 인덱스). DRY — 상세는 각 ADR/제안문서/의뢰서.
+
+- [2026-07-14] ADR-007 accepted PD-1~PD-7 Phase 1 architecture baseline. Section 3 moved from proposed/development-team pending to accepted.

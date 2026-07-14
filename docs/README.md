@@ -13,7 +13,9 @@
 | [`architecture/README.md`](./architecture/README.md) | 책임 레이어와 경계 인덱스     | Current    |
 | [`ROADMAP.md`](./ROADMAP.md)                         | 구현 순서, 완료 조건, blocker | Current    |
 | [`testing.md`](./testing.md)                         | 테스트와 완료 기준            | Current    |
+| [`demo.md`](./demo.md)                               | live Anvil E2E / demo runbook | Current    |
 | [`security.md`](./security.md)                       | 보안 규칙                     | Current    |
+| [`rfq-threat-model.md`](./rfq-threat-model.md)       | RFQ venue 위협 모델           | Current    |
 | [`MVP.md`](./MVP.md)                                 | 초기 AMM 중심 설계 기록       | Superseded |
 
 Uniswap v3 배포 도구의 실제 포함 범위와 의존성은

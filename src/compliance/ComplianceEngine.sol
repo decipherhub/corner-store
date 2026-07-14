@@ -55,11 +55,18 @@ contract ComplianceEngine is IComplianceEngine, Governed {
     }
 
     // ---------------------------------------------------------------------
-    // Regulated-token evaluation rule (two-sided, documented, deterministic):
-    // We read BOTH sides' status and decide the pair outcome fail-closed:
-    //   * EITHER side SUSPENDED → reject.
-    //   * EITHER side UNKNOWN (unregistered) → reject; quote/cash tokens must be
-    //     EXPLICITLY registered UNREGULATED, we never infer an absent manifest.
+    // Regulated-token evaluation rule (two-sided, documented, DEFAULT-DENY):
+    // We read BOTH sides' status and decide the pair outcome fail-closed. Each
+    // side is checked against a POSITIVE ALLOWLIST — it must be either:
+    //   * UNREGULATED → explicitly declared out-of-scope (quote/cash), or
+    //   * ACTIVE      → an operator-approved manifest.
+    // ANY other status — UNKNOWN (never registered / no inferred UNREGULATED),
+    // SUSPENDED (kill switch), PROPOSED (declared but not yet approved), RETIRED
+    // (terminal), and any member appended to PolicyStatus in the future — fails
+    // closed. Enumerating the permitted states rather than the rejected ones is
+    // what keeps a newly-added status fail-closed by default instead of silently
+    // slipping through a gap in a reject list.
+    // Once both sides are permitted:
     //   * BOTH UNREGULATED → pass through (fast path).
     //   * At least one ACTIVE → every ACTIVE side's manifest/recipes are
     //     evaluated against the full context. Regulated-regulated pairs combine
@@ -71,21 +78,28 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         PolicyStatus statusIn = policyReg.statusOf(ctx.tokenIn);
         PolicyStatus statusOut = policyReg.statusOf(ctx.tokenOut);
 
-        // (1) EITHER side SUSPENDED → fail-closed.
-        if (statusIn == PolicyStatus.SUSPENDED || statusOut == PolicyStatus.SUSPENDED) {
-            return _rejectPolicy(ctx, PolicyStatus.SUSPENDED);
+        // (1) Default-deny: each side must be on the positive allowlist
+        //     {UNREGULATED, ACTIVE}. Anything else fails closed, reporting the
+        //     offending side's own status in the reason code (tokenIn first).
+        if (!_isPermitted(statusIn)) {
+            return _rejectPolicy(ctx, statusIn);
         }
-        // (2) EITHER side UNKNOWN (unregistered) → fail-closed. We never infer
-        //     UNREGULATED from an absent manifest.
-        if (statusIn == PolicyStatus.UNKNOWN || statusOut == PolicyStatus.UNKNOWN) {
-            return _rejectPolicy(ctx, PolicyStatus.UNKNOWN);
+        if (!_isPermitted(statusOut)) {
+            return _rejectPolicy(ctx, statusOut);
         }
-        // (3) Both sides ∈ {UNREGULATED, ACTIVE}.
+        // (2) Both sides ∈ {UNREGULATED, ACTIVE}.
         //     Both UNREGULATED → fast path pass-through.
         if (statusOut == PolicyStatus.UNREGULATED && statusIn == PolicyStatus.UNREGULATED) {
             return _passThrough(ctx);
         }
         return _evaluateActivePair(ctx, statusIn, statusOut);
+    }
+
+    /// @dev Positive allowlist for a trade side: only an explicitly out-of-scope
+    ///      (UNREGULATED) or operator-approved (ACTIVE) manifest may trade. Every
+    ///      other status — present or future — is denied by omission.
+    function _isPermitted(PolicyStatus status) private pure returns (bool) {
+        return status == PolicyStatus.UNREGULATED || status == PolicyStatus.ACTIVE;
     }
 
     function _evaluateActivePair(ComplianceContext calldata ctx, PolicyStatus statusIn, PolicyStatus statusOut)
@@ -274,9 +288,14 @@ contract ComplianceEngine is IComplianceEngine, Governed {
     ///      (spec §6). Only the wired router may record post-trade state; an
     ///      EOA/operator cannot forge surveillance counters by calling commit.
     function commit(ComplianceContext calldata ctx) external override onlyRouter {
-        // Mirror evaluate's two-sided rule: STATEFUL post-trade hooks run for
-        // every ACTIVE regulated side. Any SUSPENDED/UNKNOWN side or
-        // both-UNREGULATED → nothing to commit.
+        // STATEFUL post-trade hooks run for every ACTIVE regulated side; a
+        // non-ACTIVE side (SUSPENDED/UNKNOWN/PROPOSED/RETIRED) or both-UNREGULATED
+        // has nothing to commit. NO mirror of evaluate's default-deny gate is
+        // needed here: `commit` is reachable ONLY after the router's own
+        // `engine.evaluate(ctx)` returned allowed (it reverts ComplianceRejected
+        // otherwise), so any pair that would fail the allowlist never reaches
+        // this path. The final `statusIn/Out == ACTIVE` guards below are what
+        // actually decide which sides get committed.
         PolicyStatus statusIn = policyReg.statusOf(ctx.tokenIn);
         PolicyStatus statusOut = policyReg.statusOf(ctx.tokenOut);
         if (statusIn == PolicyStatus.SUSPENDED || statusOut == PolicyStatus.SUSPENDED) return;

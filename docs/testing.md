@@ -24,7 +24,7 @@ RFQ adapter와 TREX fixture 기반 integration path를 포함한다.
 `--offline`은 외부 시그니처 조회를 차단해 로컬 검증을 결정적으로 유지하고,
 일부 macOS 환경의 Foundry nightly 프록시 초기화 충돌을 피한다.
 
-RFQ reference service 테스트:
+RFQ TypeScript SDK smoke test:
 
 ```sh
 cd services/rfq
@@ -32,8 +32,7 @@ npm ci
 npm test
 ```
 
-이 smoke test는 EIP-712 typed-data shape, expiry/nonce 부여, unsafe JavaScript
-number 거부와 monotonic nonce fallback을 검증한다.
+이 smoke test는 EIP-712 typed-data shape, high-level SDK quote flow, pricing/nonce/risk seams, expiry/nonce 부여, unsafe JavaScript number 거부와 monotonic nonce fallback을 검증한다.
 
 Vendored deploy tool 테스트:
 
@@ -49,11 +48,24 @@ multi-Recipe, surveillance, emergency pause와 invariant path를 검증한다.
 `tools/deploy-v3`의 Corner Store profile은 unit test로 구성과 순서를 검증하며,
 과거 수동 Anvil 배포 검증 기록은 `tools/deploy-v3/CORNER_STORE_PROFILE.md`에 있다.
 
-아직 자동화된 live Anvil deployment/E2E는 없다.
+자동화된 live Anvil deployment/E2E는 `scripts/e2e-anvil.sh`로 제공된다(아래 E2E
+Tests 및 `docs/demo.md` 참조).
 
 ### E2E Tests
 
-아직 제품 E2E test가 없다. 향후 최소 E2E는 다음을 포함해야 한다.
+live Anvil E2E는 `scripts/e2e-anvil.sh`로 자동화되어 있다(feature `E2E-001`).
+이 러너는 fresh Anvil 노드에 전체 스택을 배포(`script/DeployStack.s.sol`)하고
+7-scenario demo suite를 구동(`script/DemoScenarios.s.sol`)하며, scenario별
+narrative + 관찰 가능한 evidence + `PASS`/`FAIL`을 출력한다. 하나라도 실패하면
+스크립트가 non-zero로 종료한다. 실행 방법과 scenario 순서, reason code 재계산,
+mock/real 구분은 `docs/demo.md`(demo runbook)를 참조한다.
+
+```sh
+scripts/e2e-anvil.sh            # 배포 → scenario → teardown (offline)
+scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 demo)
+```
+
+이 러너가 커버하는 최소 E2E는 다음을 포함한다.
 
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패
