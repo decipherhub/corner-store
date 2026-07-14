@@ -25,6 +25,8 @@ source of truth로 사용한다.
 - `CMP-002 — Manifest Lifecycle & Operator Approval Flow`(validated state machine,
   setStatus 제거, engine positive-allowlist default-deny, clearUnregulated,
   factory register→approve)
+- `DOC-002 — RFQ SDK and MVP Demo Planning`
+- `RFQ-SDK-001 — RFQ Backend SDK Interfaces`
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -33,7 +35,7 @@ source of truth로 사용한다.
 - RFQ-002: operator-curated maker approval allowlist(`setMakerApproved`,
   `RFQMakerNotApproved`), maker-initiated nonce-scoped idempotent cancellation
   (`cancelQuoteNonce`/`cancelQuoteNonces`, `RFQQuoteCancelled`), venueType binding
-  fix, `docs/rfq-threat-model.md` 위협 모델과 D007 결정 기록
+  fix, `docs/rfq-threat-model.md` 위협 모델과 D008 결정 기록
 - legacy mock element(Sanctions A-01, AccreditedInvestor A-03, QualifiedPurchaser
   A-13)의 attestation setter를 `Governed`/`onlyOperator` + 이벤트로 정렬해 CMP-001
   이후 hardening divergence를 닫았다(Lockup C-01은 settable mutator가 없어 변경 없음).
@@ -64,16 +66,21 @@ source of truth로 사용한다.
 
 ## Next
 
-1. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
+1. MVP RFQ demo backend milestone/user flow를 별도 문서·feature로 구체화한다.
+   기존 live-Anvil E2E/CLI 경로를 재사용한다.
+2. pending RFQ/E2E/CLI/BUIDL PR stack(#35)이 머지된 뒤
+   roadmap과 feature 상태를 재조정한다.
+3. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
+   production dealer/operator 책임.
+4. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
    (C-01 Lockup은 현재 fixture-only mock acquisition source).
-2. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
+5. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
-3. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
-4. CI hardening(static analysis 등)을 강화한다.
+6. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
 
 ## Last Session Summary
 
-- `CLI-002` (corner-store CLI v2)를 landing했다. src/·script/ 변경 없이 `services/cli`에
+- #30 merge preparation includes `CLI-002` (corner-store CLI v2) on top of current main. src/·script/ 변경 없이 `services/cli`에
   명령 7개(check/sell/balances/watch/faucet/snapshot/restore/quote-inspect)를 더했다.
 - 변경한 파일:
   - CLI: `services/cli/src/`(abi/config/rfq/commands/index), `services/cli/test/smoke.ts`,

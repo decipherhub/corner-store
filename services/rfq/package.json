@@ -2,7 +2,7 @@
   "name": "@corner-store/rfq-service",
   "version": "0.1.0",
   "private": true,
-  "description": "Reference RFQ quote signer for Corner Store RFQ v1.",
+  "description": "TypeScript SDK helpers for Corner Store RFQ quote backends.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node dist/test/smoke.js"

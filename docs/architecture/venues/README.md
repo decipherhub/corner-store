@@ -86,9 +86,11 @@ Router/Adapter slot을 사용하므로 Manifest/Recipe가 RFQ venue를 허용한
 - settlement는 non-custodial `SafeERC20.transferFrom`으로 taker→maker,
   maker→taker를 원자적으로 수행
 
-`services/rfq`는 이 quote를 생성·서명하는 최소 reference service다. pricing,
-dealer inventory, custody, websocket discovery, orderbook matching, compliance
-판단은 포함하지 않는다.
+`services/rfq`는 이 quote를 생성·서명하는 TypeScript SDK helper다. high-level
+API는 pricing provider, nonce store, signer와 risk-check seam을 받아
+`RFQAdapter` 호환 signed quote를 만든다. production pricing, dealer inventory,
+custody, websocket discovery, orderbook matching, hosting과 compliance 판단은
+포함하지 않는다.
 
 ### Adapter Responsibilities
 
