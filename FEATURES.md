@@ -115,3 +115,53 @@ passing
 
 - Non-goals: partial fill, orderbook, production pricing engine, dealer inventory,
   custody 확장, websocket/order discovery.
+## DOC-002 — RFQ SDK and MVP Demo Planning
+
+### Behavior
+
+- RFQ backend 운영을 Corner Store가 제공하지 않는다는 제품 경계를 명확히 한다.
+- RFQ backend SDK, local reference example, MVP demo backend를 서로 다른 레이어로 분리한다.
+- 구현 순서는 SDK interface 정리 → local reference example → MVP demo backend로 기록한다.
+- production RFQ hardening(dealer approval, custody, cancellation, partial fill)은 별도 트랙으로 유지한다.
+- roadmap과 product spec index에서 RFQ SDK/MVP backend 후속 작업을 찾을 수 있다.
+
+### Verification
+
+- RFQ venue architecture, product-spec index, roadmap, FEATURES, PROGRESS 교차 검토
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`
+- 이 feature는 문서 계획 작업이며 `services/rfq` 구현은 후속 feature에서 진행한다.
+
+## RFQ-SDK-001 — RFQ Backend SDK Interfaces
+
+### Behavior
+
+- `services/rfq`가 RFQ backend를 만들기 위한 TypeScript SDK helper를 제공한다.
+- integrator는 `createRFQService(...).quote(...)` high-level API로 taker/token/amount/venue만 넣고 `RFQAdapter` 호환 signed quote를 받을 수 있다.
+- SDK는 EIP-712 typed-data shape, chainId/verifyingContract binding, nonce, expiry, amount validation과 signature flow를 처리한다.
+- signer, nonce store, pricing provider, inventory/risk check는 교체 가능한 interface로 제공한다.
+- local reference component는 `InMemoryNonceStore`, `FixedRatePricingProvider`, `NoopInventoryRiskCheck`로 제한한다.
+- production server, hosted backend, pricing strategy, signer custody, inventory management와 compliance final decision은 범위 밖이다.
+
+### Verification
+
+- `cd services/rfq && npm test`
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- SDK README: `services/rfq/README.md`
+- Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`
+- MVP demo backend는 이 SDK를 기반으로 후속 feature에서 구현한다.
