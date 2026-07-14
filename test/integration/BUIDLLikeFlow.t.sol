@@ -8,10 +8,12 @@ import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
 /// @notice Local BUIDL-like ERC-3643 demo asset flow.
 ///
 /// This is intentionally NOT real BlackRock BUIDL integration. The test deploys
-/// the project ERC-3643/T-REX fixture with BUIDL-like metadata and binds a
-/// Manifest that models the minimum current demo fact: Reg D 506(c) issuance +
-/// ICA 3(c)(7) fund status. In this skeleton, `factsPacked bit0` activates the
-/// BuidlLikeFundRecipe, which adds A-13 Qualified Purchaser plus the demo minimum investment gate.
+/// the project ERC-3643/T-REX fixture with BUIDL-like metadata, routes investor
+/// setup through a mock Securitize/TA-style fact source, and binds a Manifest
+/// that models the minimum current demo facts: Reg D 506(c) issuance + ICA
+/// 3(c)(7) fund status. In this skeleton, `factsPacked bit0` activates the
+/// BuidlLikeFundRecipe, which adds A-13 Qualified Purchaser plus the demo
+/// minimum investment gate.
 contract BUIDLLikeFlowTest is IntegrationBase {
     function setUp() public {
         deployBuidlLikeStack();
@@ -52,8 +54,7 @@ contract BUIDLLikeFlowTest is IntegrationBase {
     }
 
     function test_buidlLike_qpBuyerCanTradeThroughProtectedRouter() public {
-        setupBuyer(alice); // ERC-3643 verified + accredited + non-sanctioned
-        qp.setQp(alice, true);
+        setupTaInvestor(alice, true, true, true, false, true);
         fundPoolRWA(6_000_000 ether);
         fundBuyerQuote(alice, 6_000_000 ether);
 
@@ -71,7 +72,7 @@ contract BUIDLLikeFlowTest is IntegrationBase {
     }
 
     function test_buidlLike_accreditedButNonQpBuyerRejectedBeforeTokenMoves() public {
-        setupBuyer(alice); // accredited is not enough for this BUIDL-like fund asset
+        setupTaInvestor(alice, true, true, false, false, true);
         fundPoolRWA(6_000_000 ether);
         fundBuyerQuote(alice, 6_000_000 ether);
 
@@ -92,9 +93,7 @@ contract BUIDLLikeFlowTest is IntegrationBase {
     }
 
     function test_buidlLike_sanctionedQpBuyerRejectedBeforeTokenMoves() public {
-        setupBuyer(alice);
-        qp.setQp(alice, true);
-        sanctions.setBlocked(alice, true);
+        setupTaInvestor(alice, true, true, true, true, true);
         fundPoolRWA(6_000_000 ether);
         fundBuyerQuote(alice, 6_000_000 ether);
 
@@ -115,10 +114,10 @@ contract BUIDLLikeFlowTest is IntegrationBase {
     }
 
     function test_buidlLike_unverifiedQpRecipientRollsBackSettlement() public {
-        // Engine-level AI/QP flags pass, but the real ERC-3643 token still rejects
-        // transfer to an unregistered recipient identity at settlement time.
-        accredited.setAccredited(alice, true);
-        qp.setQp(alice, true);
+        // TA-derived engine-level AI/QP flags pass, but the real ERC-3643 token
+        // still rejects transfer to an unregistered recipient identity at
+        // settlement time.
+        setupTaInvestor(alice, true, true, true, false, false);
         fundPoolRWA(6_000_000 ether);
         fundBuyerQuote(alice, 6_000_000 ether);
 
@@ -139,8 +138,7 @@ contract BUIDLLikeFlowTest is IntegrationBase {
     }
 
     function test_buidlLike_qpBuyerBelowMinimumRejectedBeforeTokenMoves() public {
-        setupBuyer(alice);
-        qp.setQp(alice, true);
+        setupTaInvestor(alice, true, true, true, false, true);
         fundPoolRWA(6_000_000 ether);
         fundBuyerQuote(alice, 6_000_000 ether);
 
@@ -155,6 +153,27 @@ contract BUIDLLikeFlowTest is IntegrationBase {
 
         assertEq(rwaToken.balanceOf(alice), 0, "below-minimum buyer receives no BUIDL-like asset");
         assertEq(quote.balanceOf(alice), aliceQuoteBefore, "quote not pulled on minimum reject");
+        assertEq(rwaToken.balanceOf(address(pool)), poolRwaBefore, "pool RWA unchanged");
+    }
+
+    function test_buidlLike_expiredTaProfileRejectedBeforeTokenMoves() public {
+        setupExpiredTaInvestor(alice, true, true);
+        fundPoolRWA(6_000_000 ether);
+        fundBuyerQuote(alice, 6_000_000 ether);
+
+        uint256 aliceQuoteBefore = quote.balanceOf(alice);
+        uint256 poolRwaBefore = rwaToken.balanceOf(address(pool));
+
+        ExecutionRequest memory req = buildBuyRequest(
+            alice, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT, BuidlLikeDemoAsset.MINIMUM_INVESTMENT_AMOUNT
+        );
+
+        vm.prank(alice);
+        vm.expectRevert(); // expired TA profile is not synced into eligibility flags
+        router.execute(req);
+
+        assertEq(rwaToken.balanceOf(alice), 0, "expired TA profile receives no BUIDL-like asset");
+        assertEq(quote.balanceOf(alice), aliceQuoteBefore, "quote not pulled on expired TA profile");
         assertEq(rwaToken.balanceOf(address(pool)), poolRwaBefore, "pool RWA unchanged");
     }
 }

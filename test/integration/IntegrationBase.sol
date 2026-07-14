@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {TREXSuite} from "../fixtures/TREXSuite.sol";
+import {MockSecuritizeTA} from "../fixtures/MockSecuritizeTA.sol";
 
 import {ElementRegistry} from "../../src/registry/ElementRegistry.sol";
 import {RecipeRegistry} from "../../src/registry/RecipeRegistry.sol";
@@ -62,6 +63,7 @@ abstract contract IntegrationBase is TREXSuite {
     TokenPolicyRegistry internal policyReg;
     OperatorRegistry internal operatorReg;
     ComplianceEngine internal engine;
+    MockSecuritizeTA internal mockTA;
 
     // --- elements ---------------------------------------------------------
     Sanctions internal sanctions;
@@ -116,6 +118,7 @@ abstract contract IntegrationBase is TREXSuite {
         recipeReg = new RecipeRegistry();
         policyReg = new TokenPolicyRegistry();
         operatorReg = new OperatorRegistry();
+        mockTA = new MockSecuritizeTA();
 
         // 2. elements + register
         sanctions = new Sanctions();
@@ -207,6 +210,82 @@ abstract contract IntegrationBase is TREXSuite {
         verifyInvestor(who); // real OnchainID + KYC claim
         accredited.setAccredited(who, true);
         // sanctions default = not blocked
+    }
+
+    /// @notice Record a TA-style profile and sync it into the local test stack.
+    /// @dev `registerIdentity=false` models a TA/claim sync bug where engine
+    ///      flags are present but ERC-3643 registry verification is missing.
+    function setupTaInvestor(
+        address who,
+        bool kycVerified,
+        bool isAccredited,
+        bool isQp,
+        bool isSanctioned,
+        bool registerIdentity
+    ) internal {
+        mockTA.setInvestorProfile(
+            who,
+            MockSecuritizeTA.InvestorProfile({
+                kycVerified: kycVerified,
+                accreditedInvestor: isAccredited,
+                qualifiedPurchaser: isQp,
+                sanctioned: isSanctioned,
+                country: DEFAULT_COUNTRY,
+                expiresAt: uint64(block.timestamp + 365 days),
+                sourceRef: keccak256(abi.encode("MOCK_SECURITIZE_TA", who, block.chainid))
+            })
+        );
+
+        syncTaInvestor(who, registerIdentity);
+    }
+
+    /// @notice Record an expired TA-style profile. Syncing leaves eligibility
+    ///      flags unset so the protected Router path fails closed.
+    function setupExpiredTaInvestor(address who, bool isAccredited, bool isQp) internal {
+        mockTA.setInvestorProfile(
+            who,
+            MockSecuritizeTA.InvestorProfile({
+                kycVerified: true,
+                accreditedInvestor: isAccredited,
+                qualifiedPurchaser: isQp,
+                sanctioned: false,
+                country: DEFAULT_COUNTRY,
+                expiresAt: uint64(block.timestamp + 1),
+                sourceRef: keccak256(abi.encode("MOCK_SECURITIZE_TA_EXPIRED", who, block.chainid))
+            })
+        );
+
+        vm.warp(block.timestamp + 2);
+        syncTaInvestor(who, true);
+    }
+
+    function syncTaInvestor(address who, bool registerIdentity) internal {
+        (
+            bool kycVerified,
+            bool isAccredited,
+            bool isQp,
+            bool isSanctioned,
+            uint16 country,
+            uint64 expiresAt,
+            bytes32 sourceRef
+        ) = mockTA.profileOf(who);
+        country;
+        sourceRef;
+
+        bool current = expiresAt == 0 || expiresAt >= block.timestamp;
+        if (!current) {
+            accredited.setAccredited(who, false);
+            qp.setQp(who, false);
+            sanctions.setBlocked(who, false);
+            return;
+        }
+
+        if (kycVerified && registerIdentity) {
+            verifyInvestor(who); // real OnchainID + KYC claim
+        }
+        accredited.setAccredited(who, isAccredited);
+        qp.setQp(who, isQp);
+        sanctions.setBlocked(who, isSanctioned);
     }
 
     /// @notice Seed the pool with RWA liquidity (so a BUY can deliver RWA out).

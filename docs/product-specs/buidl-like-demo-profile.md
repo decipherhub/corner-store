@@ -12,9 +12,15 @@ The test model is an ERC20-style BUIDL reference asset converted into a local ER
 
 The goal is to prove the product flow, not to claim production compatibility with the real BUIDL token.
 
+External transfer-agent integration is also modeled, not connected. The test
+suite uses a mock Securitize/TA-style fixture as the source of investor facts,
+then syncs those facts into the local ERC-3643/T-REX identity registry and
+Corner Store Elements.
+
 ## Current implementation
 
 - Demo profile: `src/demo/BuidlLikeDemoAsset.sol`
+- Mock TA fact source: `test/fixtures/MockSecuritizeTA.sol`
 - Integration fixture: `test/integration/BUIDLLikeFlow.t.sol`
 - ERC-3643/T-REX harness: `test/fixtures/TREXSuite.sol`
 
@@ -50,6 +56,19 @@ Current demo checks:
 - BUIDL-like minimum investment through `BUIDL-MIN-v1`
 - ERC-3643 recipient verification at token transfer time
 
+Investor facts are seeded through `MockSecuritizeTA`, not by calling the AI/QP
+Elements directly from the BUIDL flow test. This keeps the demo shaped like the
+production seam without pretending to have a real Securitize or transfer-agent
+connection.
+
+```text
+MockSecuritizeTA profile
+  -> sync into ERC-3643 identity registry when KYC is current
+  -> sync AI/QP/sanctions flags into test Elements
+  -> Router evaluate()
+  -> ERC-3643 transfer-time verification
+```
+
 ## DS Protocol / Securitize mapping
 
 Public Securitize DS Protocol material describes a Compliance Service style boundary around token operations, including validation / pre-transfer checks. Corner Store should not replace its ERC-3643 identity model with DS-specific internals. The integration boundary should be an adapter.
@@ -60,8 +79,8 @@ Public Securitize DS Protocol material describes a Compliance Service style boun
 | Compliance Service | Corner Store `ComplianceEngine` + ERC-3643 transfer-time checks |
 | pre-transfer validation | Router `evaluate()` before adapter execution + token `canTransfer` during settlement |
 | Wallet / whitelist manager | ERC-3643 `IdentityRegistry` + ONCHAINID claims |
-| TA / trusted verification source | ERC-3643 `TrustedIssuersRegistry` / TrustedIssuer fixture |
-| investor eligibility facts | claim topics consumed by Elements |
+| TA / trusted verification source | `MockSecuritizeTA` in tests; future ERC-3643 `TrustedIssuersRegistry` / TrustedIssuer integration |
+| investor eligibility facts | mock TA profile now; claim topics consumed by Elements in production |
 | audit / reliance context | decision hash, reason code, events, future reliance log |
 
 ## Claim topics
@@ -74,7 +93,10 @@ Initial project-level topics used by the profile:
 - `ACCREDITED_INVESTOR = 1001`
 - `QUALIFIED_PURCHASER = 1002`
 
-The current AI/QP Elements still use settable test flags. Production refinement should replace those flags with ONCHAINID claims carrying issuer, topic, issuedAt, expiresAt, and revocation/freshness semantics.
+The current AI/QP Elements still use settable test flags, but BUIDL-like flow
+tests populate those flags through `MockSecuritizeTA`. Production refinement
+should replace those flags with ONCHAINID claims carrying issuer, topic,
+issuedAt, expiresAt, and revocation/freshness semantics.
 
 ## Demo acceptance cases
 
@@ -86,10 +108,12 @@ The BUIDL-like profile should demonstrate:
 4. sanctioned QP buyer is rejected before token movement
 5. QP/accredited but ERC-3643-unverified recipient rolls back during token settlement
 6. QP/accredited buyer below the BUIDL-like minimum investment is rejected before token movement
+7. expired TA profile is not synced into current eligibility and is rejected before token movement
 
 ## Non-goals
 
 - real BlackRock BUIDL deployment compatibility
+- real Securitize/TA API connection
 - real Securitize issuer address / topic mapping
 - production claim expiry and revocation integration
 - NAV oracle integration
