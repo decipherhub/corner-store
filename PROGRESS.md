@@ -20,6 +20,8 @@ source of truth로 사용한다.
 - `FND-001 — Foundry Product Foundation`
 - `RFQ-001 — Reference RFQ Settlement`
 - `RFQ-002 — RFQ v2 Hardening`
+- `DOC-002 — RFQ SDK and MVP Demo Planning`
+- `RFQ-SDK-001 — RFQ Backend SDK Interfaces`
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -28,7 +30,7 @@ source of truth로 사용한다.
 - RFQ-002: operator-curated maker approval allowlist(`setMakerApproved`,
   `RFQMakerNotApproved`), maker-initiated nonce-scoped idempotent cancellation
   (`cancelQuoteNonce`/`cancelQuoteNonces`, `RFQQuoteCancelled`), venueType binding
-  fix, `docs/rfq-threat-model.md` 위협 모델과 D007 결정 기록
+  fix, `docs/rfq-threat-model.md` 위협 모델과 D008 결정 기록
 
 ## Blocked
 
@@ -36,39 +38,51 @@ source of truth로 사용한다.
 
 ## Next
 
-1. Compliance module buildout을 최우선으로 진행한다(사용자/steering 결정):
-   reference Reg D 506(c) set을 향한 Element library → Recipe 확장 → Manifest
-   lifecycle/operator approval flow.
-2. RFQ integration-test 시나리오(router-path maker-approval/cancellation coverage)를
-   추가한다 — 이번 feature에서 deferred된 follow-up.
-3. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다.
-4. live Anvil deployment/E2E를 추가한다.
-5. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
-6. CI hardening(static analysis 등)을 강화한다.
+1. MVP RFQ demo backend milestone/user flow를 별도 문서·feature로 구체화한다.
+   PR #29/#30이 머지되면 기존 live-Anvil E2E/CLI 경로를 재사용한다.
+2. pending RFQ/E2E/CLI/BUIDL PR stack(#24/#28/#29/#30/#35)이 머지된 뒤
+   roadmap과 feature 상태를 재조정한다.
+3. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
+   production dealer/operator 책임.
+4. production Asset Compliance Manifest lifecycle/schema와 operator approval flow를
+   구현한다.
+5. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다.
+6. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
 
 ## Last Session Summary
 
-- 변경한 파일(docs/bookkeeping only, 이번 세션):
-  - `docs/rfq-threat-model.md`(신규 위협 모델)
-  - `docs/security.md`(RFQ Safety에 위협 모델 링크)
-  - `docs/README.md`(doc index 항목)
-  - `DECISIONS.md`(D007), `FEATURES.md`(RFQ-002), `PROGRESS.md`
-- 앞선 코드 세션(RFQ-002)에서 landed:
-  - RFQAdapter maker approval gate(`setMakerApproved`, `approvedMaker`,
-    `RFQMakerNotApproved`), maker-initiated cancellation(`cancelQuoteNonce`,
-    `cancelQuoteNonces`, `RFQQuoteCancelled`), router venueType binding fix
-  - RFQAdapter/Router Foundry tests(9 RFQ + 1 router venueType)
-- 실행한 명령:
-  - `forge fmt`
-  - `forge test --offline`
+- 변경한 파일:
+  - `services/rfq/src/types.ts`
+  - `services/rfq/src/quoteService.ts`
+  - `services/rfq/src/reference.ts`
+  - `services/rfq/src/validation.ts`
+  - `services/rfq/src/index.ts`
+  - `services/rfq/test/smoke.ts`
+  - `services/rfq/README.md`
+  - `services/rfq/package.json`
+  - `README.md`
+  - `docs/architecture/venues/README.md`
+  - `docs/product-specs/rfq-backend-sdk-and-demo.md`
+  - `docs/product-specs/index.md`
+  - `docs/testing.md`
+  - `FEATURES.md`
+  - `PROGRESS.md`
+- 완료한 작업:
+  - low-level `RFQQuoteService.createSignedQuote` 호환성을 유지하면서 high-level `createRFQService(...).quote(...)` API 추가
+  - signer, nonce store, pricing provider, inventory/risk check interface 추가
+  - local/demo reference component(`InMemoryNonceStore`, `FixedRatePricingProvider`, `NoopInventoryRiskCheck`) 추가
+  - address, chainId, TTL, on-chain integer validation helper 분리
+  - SDK quick start와 production responsibility boundary 문서화
+  - smoke test를 SDK quote flow, nonce uniqueness, unsafe number, invalid request, risk reject-before-signing까지 확장
+- 실행한 검증:
   - `cd services/rfq && npm test`
-- 통과한 검증:
-  - `forge test --offline` 133/133 유지(이번 task는 코드 변경 없음)
-  - RFQ service smoke check
-  - `docs/rfq-threat-model.md` 존재와 링크 무결성
+  - `scripts/check.sh`
 - 남은 리스크:
-  - signer key custody와 operator key management(multisig/HSM/rotation)은 open
-    decision이다.
-  - partial fill, dealer inventory, shared dealer registry는 범위 밖이다.
-  - cancel-vs-fill race는 first-lander로 해소되며 cancel은 확정 전까지 best-effort다.
-  - RFQ router-path integration-test 시나리오는 deferred follow-up이다.
+  - 아직 MVP HTTP/CLI backend는 구현하지 않았다.
+  - production signer custody, persistent nonce store, pricing, inventory/risk는 integrator/operator 책임이다.
+  - pending PR #24/#28/#29/#30/#35 merge 이후 roadmap/feature 상태 재조정이 필요하다.
+
+## RFQ-002 Merge Note
+
+- RFQ-002 hardening from PR #24 is included in this branch update: maker approval, maker nonce cancellation, venueType binding, and RFQ threat-model documentation.
+- Deferred follow-up remains router-path maker-approval/cancellation integration-test coverage after stacked PRs are reconciled.

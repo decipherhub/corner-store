@@ -24,7 +24,7 @@ RFQ adapter와 TREX fixture 기반 integration path를 포함한다.
 `--offline`은 외부 시그니처 조회를 차단해 로컬 검증을 결정적으로 유지하고,
 일부 macOS 환경의 Foundry nightly 프록시 초기화 충돌을 피한다.
 
-RFQ reference service 테스트:
+RFQ TypeScript SDK smoke test:
 
 ```sh
 cd services/rfq
@@ -32,8 +32,7 @@ npm ci
 npm test
 ```
 
-이 smoke test는 EIP-712 typed-data shape, expiry/nonce 부여, unsafe JavaScript
-number 거부와 monotonic nonce fallback을 검증한다.
+이 smoke test는 EIP-712 typed-data shape, high-level SDK quote flow, pricing/nonce/risk seams, expiry/nonce 부여, unsafe JavaScript number 거부와 monotonic nonce fallback을 검증한다.
 
 Vendored deploy tool 테스트:
 
