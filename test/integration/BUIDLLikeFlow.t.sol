@@ -34,6 +34,18 @@ contract BUIDLLikeFlowTest is IntegrationBase {
             BuidlLikeDemoAsset.FACT_FUND_APPLICABLE,
             "fund fact enabled"
         );
+        assertEq(
+            policyReg.manifestOf(address(rwaToken)).fullManifestHash,
+            keccak256(
+                abi.encode(
+                    BuidlLikeDemoAsset.PROFILE_KEY,
+                    BuidlLikeDemoAsset.SECURITIZE_DS_ADAPTER_SEAM,
+                    BuidlLikeDemoAsset.CLAIM_TOPIC_ACCREDITED_INVESTOR,
+                    BuidlLikeDemoAsset.CLAIM_TOPIC_QUALIFIED_PURCHASER
+                )
+            ),
+            "profile hash anchors demo assumptions"
+        );
     }
 
     function test_buidlLike_qpBuyerCanTradeThroughProtectedRouter() public {
@@ -66,5 +78,48 @@ contract BUIDLLikeFlowTest is IntegrationBase {
         assertEq(rwaToken.balanceOf(alice), 0, "non-QP receives no BUIDL-like asset");
         assertEq(quote.balanceOf(alice), aliceQuoteBefore, "quote not pulled on compliance reject");
         assertEq(rwaToken.balanceOf(address(pool)), poolRwaBefore, "pool RWA unchanged");
+    }
+
+    function test_buidlLike_sanctionedQpBuyerRejectedBeforeTokenMoves() public {
+        setupBuyer(alice);
+        qp.setQp(alice, true);
+        sanctions.setBlocked(alice, true);
+        fundPoolRWA(1_000 ether);
+        fundBuyerQuote(alice, 1_000 ether);
+
+        uint256 aliceQuoteBefore = quote.balanceOf(alice);
+        uint256 poolRwaBefore = rwaToken.balanceOf(address(pool));
+
+        ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 100 ether);
+
+        vm.prank(alice);
+        vm.expectRevert(); // ComplianceRejected: A-01-v1 from RegD506cRecipe
+        router.execute(req);
+
+        assertEq(rwaToken.balanceOf(alice), 0, "sanctioned buyer receives no BUIDL-like asset");
+        assertEq(quote.balanceOf(alice), aliceQuoteBefore, "quote not pulled on sanctions reject");
+        assertEq(rwaToken.balanceOf(address(pool)), poolRwaBefore, "pool RWA unchanged");
+    }
+
+    function test_buidlLike_unverifiedQpRecipientRollsBackSettlement() public {
+        // Engine-level AI/QP flags pass, but the real ERC-3643 token still rejects
+        // transfer to an unregistered recipient identity at settlement time.
+        accredited.setAccredited(alice, true);
+        qp.setQp(alice, true);
+        fundPoolRWA(1_000 ether);
+        fundBuyerQuote(alice, 1_000 ether);
+
+        uint256 aliceQuoteBefore = quote.balanceOf(alice);
+        uint256 poolRwaBefore = rwaToken.balanceOf(address(pool));
+
+        ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 100 ether);
+
+        vm.prank(alice);
+        vm.expectRevert(); // ERC-3643 transfer-time verification rejects unverified recipient
+        router.execute(req);
+
+        assertEq(rwaToken.balanceOf(alice), 0, "unverified recipient receives no BUIDL-like asset");
+        assertEq(quote.balanceOf(alice), aliceQuoteBefore, "quote transfer rolled back");
+        assertEq(rwaToken.balanceOf(address(pool)), poolRwaBefore, "pool RWA transfer rolled back");
     }
 }

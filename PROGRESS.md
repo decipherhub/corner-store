@@ -42,30 +42,30 @@ source of truth로 사용한다.
 
 - 변경한 파일:
   - `src/demo/BuidlLikeDemoAsset.sol`
-  - `test/fixtures/TREXSuite.sol`
-  - `test/integration/IntegrationBase.sol`
   - `test/integration/BUIDLLikeFlow.t.sol`
+  - `docs/product-specs/buidl-like-demo-profile.md`
+  - `docs/product-specs/index.md`
   - `FEATURES.md`
   - `PROGRESS.md`
 - 완료한 작업:
-  - Giwa MVP용 BUIDL-like demo asset profile 추가
-  - profile 기반 ERC-3643 demo fixture 배포
-  - Reg D 506(c) + ICA 3(c)(7) Manifest binding
-  - protected Router 경로에서 QP buyer 성공 / non-QP buyer compliance reject 검증
+  - BUIDL-like profile에 profile hash, DS/Securitize adapter seam, AI/QP claim topic constants 추가
+  - DS Protocol/Securitize Compliance Service 개념을 ERC-3643/T-REX + Corner Store adapter boundary로 매핑한 profile spec 추가
+  - sanctioned QP buyer가 token movement 전에 compliance reject되는 테스트 추가
+  - engine-level AI/QP flags가 통과해도 ERC-3643-unverified recipient settlement가 rollback되는 테스트 추가
 - 실행한 명령:
-  - `forge fmt src/demo/BuidlLikeDemoAsset.sol test/integration/IntegrationBase.sol test/integration/BUIDLLikeFlow.t.sol`
-  - `forge fmt --check src/demo/BuidlLikeDemoAsset.sol test/fixtures/TREXSuite.sol test/integration/IntegrationBase.sol test/integration/BUIDLLikeFlow.t.sol`
-  - `forge test --offline --match-path 'test/integration/BUIDLLikeFlow.t.sol' -vv`
+  - `forge fmt src/demo/BuidlLikeDemoAsset.sol test/integration/BUIDLLikeFlow.t.sol`
+  - `forge fmt --check src/demo/BuidlLikeDemoAsset.sol test/integration/BUIDLLikeFlow.t.sol`
+  - `forge test --offline --match-path test/integration/BUIDLLikeFlow.t.sol -vv`
   - `forge test --offline`
 - 통과한 검증:
-  - BUIDL-like profile 기반 asset metadata/Manifest 확인
+  - BUIDL-like profile metadata/Manifest/profile hash 확인
   - QP buyer protected-router trade 성공
-  - accredited-only/non-QP buyer가 토큰 이동 전 거절됨
-  - 전체 Foundry 테스트 126개 통과
+  - non-QP, sanctioned, ERC-3643-unverified recipient reject/rollback 검증
+  - 전체 Foundry 테스트 128개 통과
 - 남은 리스크:
   - 실제 BlackRock BUIDL/Securitize 연동은 구현하지 않았다.
+  - AI/QP는 아직 ONCHAINID claim이 아니라 settable test flag다.
   - NAV, redemption rail, monthly distribution, production claim issuer 연동은 별도 feature다.
-
 ## Previous Session Summary
 
 - 변경한 파일:

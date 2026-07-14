@@ -125,7 +125,10 @@ passing
 - profile Manifest는 Reg D 506(c) 발행 Recipe와 ICA 3(c)(7) fund Recipe를 동시에 바인딩한다.
 - `factsPacked` fund bit가 켜진 자산에서는 A-13 Qualified Purchaser 검사가 활성화된다.
 - protected Router 경로에서 QP buyer는 체결되고, accredited-only/non-QP buyer는 토큰 이동 전 거절된다.
+- sanctioned QP buyer는 token movement 전에 compliance reject된다.
+- engine-level AI/QP flags가 통과해도 ERC-3643-unverified recipient는 settlement에서 rollback된다.
 - QP/규제 로직은 BUIDL 전용 토큰 override가 아니라 Manifest/Recipe/Element에 남긴다.
+- DS Protocol/Securitize-style Compliance Service는 profile 문서에서 adapter seam으로 매핑한다.
 - 현실 BlackRock BUIDL 연동, Securitize claim 연동, NAV/redemption/distribution rail은 범위 밖이다.
 
 ### Verification
@@ -142,4 +145,5 @@ passing
 ### Notes
 
 - 데모 문서: `docs/compliance/07-buidl-implementation.md`
+- Profile spec: `docs/product-specs/buidl-like-demo-profile.md`
 - 현재 구현은 local BUIDL-like profile + fixture다. 실제 BUIDL 온보딩은 법률 확정, issuer/trusted-claim 연동, 1차/2차 rail 분리 후 별도 feature로 진행한다.
