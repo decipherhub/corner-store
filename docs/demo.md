@@ -111,6 +111,26 @@ MOCK / illustrative (documented seams):
   machine, engine positive-allowlist default-deny, factory register→approve).
 - `QUOTE` is a plain `MockERC20` tagged `UNREGULATED` (out-of-scope cash leg).
 
+## CLI로 직접 해보기
+
+위 7-scenario 스크립트는 자동 실행이지만, 같은 스택을 터미널에서 한 명령씩 직접
+구동하고 싶다면 `corner-store` 레퍼런스 CLI를 쓴다. `scripts/e2e-anvil.sh --keep`로
+노드를 띄운 뒤(또는 `DeployStack`만 배포한 뒤) `status` → `onboard` →
+`investor-setup` → `kyc` → `buy` → 실패 경로(jurisdiction flip / manifest suspend /
+maker revoke, 각각 reason-code 디코딩) 순으로 직접 몰아볼 수 있다.
+
+CLI v2(CLI-002)는 preflight·거래·관측 명령을 더한다: 거래 없이 per-element
+컴플라이언스를 미리 확인하는 `check <buyer>`(엔진 verdict 포함, 거부 시 exit 1),
+AMM 매도 방향 `sell <amountIn>`, 잔고/allowance 표 `balances`, 이벤트 실시간
+tail `watch [--from <block>]`(Executed/RFQFilled/Manifest*/SurveillanceFlag 등
+reason-code 디코딩), demo용 QUOTE 민팅 `faucet`, anvil `snapshot`/`restore <id>`,
+서명 quote를 검증하는 `quote-inspect <file>`(서명자 복구·만료·on-chain nonce/승인
+상태, 실패 시 exit 1). 예: `check`로 fresh 계정의 FAIL 원소들을 본 뒤
+`investor-setup`+`kyc`로 green을 만들고, `snapshot` → `attest jurisdiction ZZ` →
+`check`(정확히 A-02 하나 FAIL) → `restore`로 원복하는 흐름.
+
+설치/실행법과 전체 walkthrough 레시피는 `services/cli/README.md`를 참고한다.
+
 ## Related
 
 - Test layers and the automated suite: `docs/testing.md`.
