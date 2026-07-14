@@ -220,6 +220,51 @@ passing
   활성화 조건 결정.
 - Non-goals: production legal 활성화, direction-aware element application.
 
+## E2E-001 — Live Anvil E2E & Demo Runner
+
+### Behavior
+
+- `scripts/e2e-anvil.sh`가 fresh Anvil 노드를 띄우고 전체 스택을 배포
+  (`script/DeployStack.s.sol`)한 뒤 7-scenario demo suite
+  (`script/DemoScenarios.s.sol`)를 구동하고, scenario별 narrative + evidence +
+  `PASS`/`FAIL`을 출력한 다음 노드를 teardown한다. 완전히 offline로 동작하고,
+  하나라도 실패하면 스크립트가 non-zero로 종료한다. `--port`, `--keep` 플래그를
+  지원한다(`--keep`은 이후 Anvil을 계속 실행해 인터랙티브 demo/UI attach 가능).
+- `DeployStack`은 registries(Element/Recipe/TokenPolicy/Operator),
+  ComplianceEngine, ExecutionRouter+VenueRegistry+VenueSelector,
+  CornerStoreFactory, 11개 element, 두 recipe(RegD 506(c) id 1, 3(c)(7) id 2) +
+  surveillance-enabled RegD 변형(id 7), MockPool AMM venue, RFQAdapter venue,
+  그리고 REAL ERC-3643 token + OnchainID 스택을 live 노드에 배포하고 주소를
+  `deployments/anvil-e2e.json`(gitignore)로 기록한다. T-REX 배포 코어는
+  `test/fixtures/TREXCore.sol`로 추출해 test fixture와 script가 공유한다.
+- 7 scenario: (1) factory 1-call onboarding(propose→approve+venue), (2) compliant
+  trade 성공, (3) live element rejection(A-02 flip → `ComplianceRejected`, off-chain
+  reason-code 재계산 후 복원), (4) manifest lifecycle(suspend 차단 → resume 재거래),
+  (5) RFQ venue(EIP-712 quote 서명 → `RFQFilled`, 미승인 maker `RFQMakerNotApproved`),
+  (6) surveillance(threshold 초과 시 `SurveillanceFlag`), (7) bypass 시도(direct
+  adapter.execute → `NotAuthorized`).
+- src/(제품 코드) 변경 없음. `tools/deploy-v3`에 의존하지 않는다(vendor isolation);
+  AMM venue는 MockPool을 쓰고, 실제 Uniswap v3 pool 배포는 별도 follow-up으로 남는다.
+
+### Verification
+
+- `scripts/e2e-anvil.sh`(fresh + repeat) 2회 실행, 각 7/7 PASS + exit 0.
+- `scripts/e2e-anvil.sh --keep` 실행 후 Anvil이 계속 살아 있음을 확인.
+- `forge test --offline`(238/238 유지; TREXSuite→TREXCore 추출 후에도 green).
+- `forge fmt --check`.
+
+### State
+
+passing
+
+### Notes
+
+- runbook: `docs/demo.md`(실행법, scenario 순서, reason-code 재계산, mock/real 구분).
+- 관련 결정: D008/D009(illustrative element library, manifest lifecycle). 실제
+  Uniswap v3 pool 배포와 production data source 연결은 out-of-scope.
+- Non-goals: 실 Uniswap v3 pool, production governance key management,
+  direction-aware element application.
+
 ## CMP-002 — Manifest Lifecycle & Operator Approval Flow
 
 ### Behavior
