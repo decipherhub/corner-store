@@ -97,13 +97,14 @@ forge fmt
 anvil
 ```
 
-### RFQ Reference Service
+### RFQ TypeScript SDK
 
-`services/rfq` is a minimal quote signer reference for RFQ v1. It builds the
-same EIP-712 typed data that `RFQAdapter` verifies, assigns expiry and nonce,
-and returns a signed quote. It is not a production dealer, pricing engine,
-inventory manager, custody service, websocket feed, orderbook, or compliance
-decision engine.
+`services/rfq` provides TypeScript SDK helpers for RFQ quote backends. It builds
+the same EIP-712 typed data that `RFQAdapter` verifies, assigns expiry and
+nonce, signs quotes through a caller-provided signer, and exposes pricing, nonce
+and risk-check interfaces for integrators. It is not a hosted production RFQ
+server, dealer, pricing engine, inventory manager, custody service, websocket
+feed, orderbook, or compliance decision engine.
 
 ```shell
 cd services/rfq
