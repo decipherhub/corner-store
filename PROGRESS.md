@@ -25,6 +25,8 @@ source of truth로 사용한다.
 - `CMP-002 — Manifest Lifecycle & Operator Approval Flow`(validated state machine,
   setStatus 제거, engine positive-allowlist default-deny, clearUnregulated,
   factory register→approve)
+- `DOC-002 — RFQ SDK and MVP Demo Planning`
+- `RFQ-SDK-001 — RFQ Backend SDK Interfaces`
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -33,7 +35,7 @@ source of truth로 사용한다.
 - RFQ-002: operator-curated maker approval allowlist(`setMakerApproved`,
   `RFQMakerNotApproved`), maker-initiated nonce-scoped idempotent cancellation
   (`cancelQuoteNonce`/`cancelQuoteNonces`, `RFQQuoteCancelled`), venueType binding
-  fix, `docs/rfq-threat-model.md` 위협 모델과 D007 결정 기록
+  fix, `docs/rfq-threat-model.md` 위협 모델과 D008 결정 기록
 - legacy mock element(Sanctions A-01, AccreditedInvestor A-03, QualifiedPurchaser
   A-13)의 attestation setter를 `Governed`/`onlyOperator` + 이벤트로 정렬해 CMP-001
   이후 hardening divergence를 닫았다(Lockup C-01은 settable mutator가 없어 변경 없음).
@@ -52,53 +54,39 @@ source of truth로 사용한다.
 
 ## Next
 
-1. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
+1. MVP RFQ demo backend milestone/user flow를 별도 문서·feature로 구체화한다.
+   PR #30이 머지되면 기존 live-Anvil E2E/CLI 경로를 재사용한다.
+2. pending RFQ/E2E/CLI/BUIDL PR stack(#30/#35)이 머지된 뒤
+   roadmap과 feature 상태를 재조정한다.
+3. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
+   production dealer/operator 책임.
+4. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
    (C-01 Lockup은 현재 fixture-only mock acquisition source).
-2. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
+5. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
-3. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
-4. CI hardening(static analysis 등)을 강화한다.
+6. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
 
 ## Last Session Summary
 
 - `E2E-001` (Live Anvil E2E & Demo Runner)을 landing했다. src/ 변경 없이 forge
   script 두 개 + 셸 러너 + T-REX 배포 코어 추출로 live-Anvil E2E/demo를 구현했다.
+- RFQ-002, CMP-001, CMP-002, legacy gating, RFQ integration, and RFQ-SDK records are preserved during this stacked merge reconciliation.
 - 변경한 파일:
-  - script: `script/DeployStack.s.sol`(전체 스택 live 배포 + JSON artifact),
-    `script/DemoScenarios.s.sol`(7-scenario 러너), `script/DemoConstants.sol`(공유
-    상수)
-  - runner: `scripts/e2e-anvil.sh`(anvil 기동/배포/scenario/teardown, `--port`/
-    `--keep`, offline)
-  - fixture refactor: `test/fixtures/TREXCore.sol`(신규, `is CommonBase`,
-    admin-parameterized, prank-free) + `test/fixtures/TREXSuite.sol`(thin facade
-    `is Test, TREXCore`) — test suite green 유지
-  - config: `foundry.toml`(fs_permissions read-write, JSON artifact),
-    `.gitignore`(`deployments/`)
-  - docs: `docs/demo.md`(runbook), `docs/testing.md`(E2E 섹션), `docs/README.md`
-  - bookkeeping: `FEATURES.md`(E2E-001), `PROGRESS.md`
-- 설계 요점:
-  - broadcast(pk)로 persist해야 하는 상태 전이/거래를, prank(addr)+try/catch로
-    revert 기대 시나리오(compliance/policy/authz 거부)를 구동. reason code는
-    off-chain 재계산 후 revert data와 비교.
-  - onboarding은 scenario 1에서 factory가 수행하도록 deploy 시 manifest를 UNKNOWN로
-    남기고 policyReg/venueReg 소유권을 factory로 이전, deployer는 policyReg operator로
-    남겨 lifecycle(suspend/resume/retire) 구동 가능하게 함.
-  - anvil genesis timestamp가 실제 wall-clock이라 C-01 Rule 144 lockup(t=1 seed)이
-    on-chain에서 자연 통과 → vm.warp 불필요.
-- 실행한 명령:
-  - `forge fmt` / `forge fmt --check`
-  - `forge test --offline`
-  - `scripts/e2e-anvil.sh`(fresh + repeat, `--keep`)
-- 통과한 검증:
-  - `forge test --offline` 238/238(TREXCore 추출 후에도 green).
-  - `scripts/e2e-anvil.sh` 2회 실행 모두 7/7 PASS, exit 0. `--keep`로 anvil 잔존 확인.
+  - script: `script/DeployStack.s.sol`, `script/DemoScenarios.s.sol`, `script/DemoConstants.sol`
+  - runner: `scripts/e2e-anvil.sh`
+  - fixture refactor: `test/fixtures/TREXCore.sol`, `test/fixtures/TREXSuite.sol`
+  - config/docs: `foundry.toml`, `.gitignore`, `docs/demo.md`, `docs/testing.md`, `docs/README.md`
+  - bookkeeping: `FEATURES.md`, `PROGRESS.md`
+- 실행한 검증:
+  - original PR CI/checks passed before retarget
+  - conflict reconciliation checked with `git diff --check`
 - 남은 리스크:
-  - AMM venue는 MockPool(1:1); 실제 Uniswap v3 pool 배포는 별도 follow-up(vendor
-    isolation). demo는 `tools/deploy-v3`에 의존하지 않는다.
-  - C-01 Lockup은 fixture/demo mock acquisition source에 의존; production
-    acquisition/lot data source와 holding-period 활성화 default는 미결정.
-  - production data source(OFAC/ONCHAINID/ERC-165/EDGAR) 연결과 legal 활성화는
-    approval-gated로 열려 있다.
-  - engine은 direction-aware가 아니다(기존 문서화된 concern).
-  - production onboarding governance key management(factory ownership/multisig)는
-    미결정.
+  - AMM venue는 MockPool(1:1); 실제 Uniswap v3 pool 배포는 별도 follow-up이다.
+  - MVP HTTP/CLI backend는 아직 구현하지 않았다.
+  - production signer custody, persistent nonce store, pricing, inventory/risk는 integrator/operator 책임이다.
+  - C-01 Lockup은 fixture/demo mock acquisition source에 의존한다.
+
+## RFQ-002 Merge Note
+
+- RFQ-002 hardening from PR #24 is included in this branch update: maker approval, maker nonce cancellation, venueType binding, and RFQ threat-model documentation.
+- The deferred router-path maker-approval/cancellation integration coverage is completed by PR #28.
