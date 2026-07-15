@@ -60,6 +60,13 @@ source of truth로 사용한다.
   `snapshot`/`restore`, `quote-inspect`(서명자 복구/만료/nonce·승인, 실패 시 exit 1).
   reason 디코딩·EIP-712 복구는 기존 lib 재사용. smoke(quote-inspect valid+tampered) +
   full live walkthrough로 검증. `forge test --offline` 238/238 유지.
+- `CMP-003 — Wave-2 Illustrative Elements`(A-08 EntityEligibility, A-09
+  EquityOwnerLookThrough, A-11 ClaimFreshness, B-03 TransferRestrictionMetadata,
+  B-04 EngineSelection, D-01 HolderCount 6개 mock element + 전용 unit test):
+  `script/DeployStack.s.sol`에 전부 등록(A-09 → A-08 생성자 주입, D-01은
+  A-04/A-03 주소 + `CapMode.TWELVE_G`로 생성 후 engine 생성 이후 `setEngine`).
+  어떤 recipe의 `requiredElements`에도 연결하지 않음(별도 feature로 이연).
+  `forge test --offline` 399/399 유지.
 
 ## Blocked
 
@@ -77,28 +84,34 @@ source of truth로 사용한다.
 5. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
 6. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
+7. CMP-003의 6개 wave-2 element(A-08/A-09/A-11/B-03/B-04/D-01)를 실제 recipe
+   `requiredElements`에 연결할지, 연결한다면 어떤 recipe에 붙일지 결정한다.
 
 ## Last Session Summary
 
-- #35 merge preparation includes `DEMO-001 — BUIDL-like ERC-3643 Demo Asset` on top of current main.
+- `CMP-003 — Wave-2 Illustrative Elements`: A-08/A-09/A-11/B-03/B-04/D-01
+  6개 mock element(사전 세션에서 개별 구현 + unit test 완료)를
+  `script/DeployStack.s.sol`에 등록하는 integration 작업.
 - 변경한 파일:
-  - `src/demo/BuidlLikeDemoAsset.sol`
-  - `src/compliance/elements/BuidlMinimumInvestment.sol`
-  - `src/compliance/recipes/BuidlLikeFundRecipe.sol`
-  - `test/fixtures/MockSecuritizeTA.sol`
-  - `test/integration/IntegrationBase.sol`
-  - `test/integration/BUIDLLikeFlow.t.sol`
-  - `docs/product-specs/buidl-like-demo-profile.md`
+  - `script/DeployStack.s.sol`
   - `FEATURES.md`, `PROGRESS.md`
 - 완료한 작업:
-  - BUIDL-like ERC-3643 demo asset profile 추가
-  - Mock Securitize/TA fixture로 investor facts를 주입하고 Element flags로 sync
-  - QP/minimum investment/sanctions/expiry/ERC-3643 recipient verification 시나리오 추가
-  - 최신 Manifest lifecycle에 맞춰 BUIDL-like manifest도 register→approve flow로 정합화
+  - A-09(EquityOwnerLookThrough)를 먼저 배포하고 그 주소를 A-08
+    (EntityEligibility) 생성자에 `ILookThroughSource`로 주입
+  - A-11(ClaimFreshness), B-03(TransferRestrictionMetadata),
+    B-04(EngineSelection)를 문서화된 생성자 인자로 배포·등록
+  - D-01(HolderCount)을 위해 A-04(IdentityUniqueness)/A-03(AccreditedInvestor)
+    생성 결과를 state 변수로 캡처하도록 최소 리팩터링하고, `CapMode.TWELVE_G` +
+    두 주소로 생성 후 engine 생성 이후 `setEngine`으로 post-trade write path
+    연결(F-02 SurveillanceFlag와 동일 패턴)
+  - recipe `requiredElements`는 의도적으로 변경하지 않음(별도 feature로 이연)
 - 실행한 검증:
-  - original PR CI/checks passed before retarget
-  - conflict reconciliation checked with `git diff --check`
+  - `forge build --offline`
+  - `forge test --offline`(전체 399/399 유지; 기존 test 조정 불필요 —
+    `DeployStack.s.sol`은 forge test 경로에서 실행되지 않음)
+  - `forge fmt script/DeployStack.s.sol`
 - 남은 리스크:
-  - 실제 BlackRock BUIDL/Securitize/TA 연결은 구현 범위가 아니다.
-  - AI/QP는 아직 production ONCHAINID claim이 아니라 mock TA에서 sync되는 test flag다.
-  - NAV, redemption rail, monthly distribution, production claim issuer 연동은 별도 feature다.
+  - 6개 element는 아직 어떤 recipe에도 연결되지 않아 trade-path 동작이
+    검증되지 않았다(단위 테스트만 존재).
+  - `DeployStack.s.sol`의 실제 라이브 Anvil 배포/CLI 경로 재실행(`scripts/e2e-anvil.sh`)은
+    이번 세션에서 수행하지 않았다.

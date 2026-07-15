@@ -462,3 +462,48 @@ passing
 - `check`는 엔진이 direction-aware가 아니라는 점을 도움말·표기로 명시(asset-side 라벨).
 - `snapshot`/`restore`는 anvil 전용; `restore`는 이후 스냅샷을 무효화(문서화).
 - Non-goals: CLI-001과 동일(프로덕션 key 관리, out/ ABI 커플링, 2차 web3 라이브러리).
+
+## CMP-003 — Wave-2 Illustrative Elements (A-08/A-09/A-11/B-03/B-04/D-01)
+
+### Behavior
+
+- 6개의 신규 illustrative mock element를 element library에 추가한다: A-08
+  EntityEligibility(entity-level AI/QP 자격 판정, look-through consumer), A-09
+  EquityOwnerLookThrough(recursive ownership-graph 결과 기록,
+  `ILookThroughSource` 구현), A-11 ClaimFreshness(AI/QP claim의
+  verifiedAt/issuerExpiry freshness gate), B-03 TransferRestrictionMetadata
+  (asset-side 양도제한 legend 선언의 완전성/일관성 검사), B-04
+  EngineSelection(trade-context 기반 허용 execution engine 게이트;
+  `ComplianceContext`를 디코딩하는 유일한 element), D-01 HolderCount(STATEFUL;
+  §12(g)/§3(c)(1)/506(b) holder-count cap).
+- 각 element는 기존 illustrative library와 동일한 패턴을 따른다:
+  `BaseElement`(D-01은 `BaseStatefulElement`) + operator-gated attestation
+  setter + 전용 Foundry unit test.
+- `script/DeployStack.s.sol`이 6개 element 전부를 `ElementRegistry`에 등록한다:
+  A-09를 먼저 배포해 그 주소를 A-08 생성자에 `ILookThroughSource`로 주입하고,
+  D-01은 A-04(IdentityUniqueness)/A-03(AccreditedInvestor) 주소와
+  `CapMode.TWELVE_G`로 생성한 뒤 engine 생성 이후 `setEngine`으로 post-trade
+  write path를 연결한다(F-02 SurveillanceFlag와 동일 패턴).
+- 이 wave는 element library 확장에 한정된다: 어떤 recipe의
+  `requiredElements`에도 연결하지 않는다(recipe 부착은 별도 feature).
+
+### Verification
+
+- 개별 unit test: `test/unit/compliance/elements/{EntityEligibility,
+  EquityOwnerLookThrough,ClaimFreshness,TransferRestrictionMetadata,
+  EngineSelection,HolderCount}.t.sol`.
+- `forge build --offline`.
+- `forge test --offline`(전체 399/399 유지; `DeployStack.s.sol`은 forge test
+  경로에서 실행되지 않으므로 등록 변경으로 인한 기존 test 회귀 없음).
+- `forge fmt script/DeployStack.s.sol`.
+
+### State
+
+passing
+
+### Notes
+
+- Non-goals: 이번 wave의 recipe/manifest 연결(어떤 recipe도 새 element를
+  요구하지 않음), production legal 활성화, look-through graph 실제 순회.
+- Deferred follow-up: 6개 element를 실제 recipe(`requiredElements`)에 연결할지,
+  연결한다면 어떤 recipe에 붙일지는 별도 feature에서 결정한다.
