@@ -46,6 +46,7 @@ corner-store attest <element> <subject> [value...]   # element in: sanctions,jur
 corner-store investor-setup <addr> [--fund <ether>]  # Reg D happy-path attestations + C-01 seed + QUOTE funding
 corner-store kyc <addr>                           # ERC-3643 identity + KYC claim (forge script; run from repo root)
 corner-store buy <amountIn> [--venue amm|rfq] [--min <amountOut>] [--quote <file>]
+corner-store rfq-quote --backend <url> --amount-in X [--taker <addr>] [--expiry <sec>] [--out <file>]
 corner-store rfq-quote --maker-account N --amount-in X --amount-out Y [--taker <addr>] [--expiry <sec>] [--out <file>]
 corner-store rfq-cancel <nonce> --maker-account N
 corner-store maker <approve|revoke> <addr>
@@ -113,6 +114,8 @@ $CS manifest resume
 $CS --account 4 buy 100                            # PASS again
 
 # RFQ venue
+$CS rfq-quote --backend http://127.0.0.1:8787 --amount-in 120 --taker $ACCT4 --out quote.json
+# or sign locally without the demo backend:
 $CS rfq-quote --maker-account 2 --amount-in 120 --amount-out 200 --taker $ACCT4 --out quote.json
 $CS --account 4 buy 0 --venue rfq --quote quote.json   # PASS (+200 RWA, EIP-712 verified on-chain)
 $CS maker revoke 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC

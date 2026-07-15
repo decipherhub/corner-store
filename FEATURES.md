@@ -361,6 +361,34 @@ passing
 - Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`
 - MVP demo backend는 이 SDK를 기반으로 후속 feature에서 구현한다.
 
+## DEMO-002 — MVP RFQ Demo Backend
+
+### Behavior
+
+- `services/rfq-demo-backend`가 RFQ SDK를 사용해 local Anvil용 signed quote HTTP API를 제공한다.
+- backend는 deployment artifact의 approved maker, RFQ adapter, venue와 QUOTE/RWA pair에 고정되며 mock fixed-rate pricing을 사용한다.
+- CLI `rfq-quote --backend <url>`가 backend quote를 기존 quote JSON 형식으로 저장하고 기존 `buy --venue rfq` protected Router flow에서 사용한다.
+- backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
+- production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
+
+### Verification
+
+- `cd services/rfq-demo-backend && npm test`
+- `cd services/cli && npm test`
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- `scripts/check.sh` 통과: Foundry 248/248, RFQ SDK, CLI, RFQ demo backend와 deploy-v3.
+- backend smoke가 HTTP quote, fixed pricing, maker signature, monotonic nonce와 invalid amount를 검증한다.
+- CLI smoke가 `--backend` request path를 검증하고 기존 `RFQFlow.t.sol`이 protected Router settlement의 성공/거부 경로를 검증한다.
+- fresh Anvil manual walkthrough는 설치된 Foundry `1.4.0-nightly`의 constructor argument decode 오류로 broadcast 전에 중단되었다. 제품 코드 실패가 아니며 stable Foundry 재실행을 후속 runtime 확인으로 남긴다.
+
 ## CLI-001 — corner-store Reference CLI
 
 ### Behavior

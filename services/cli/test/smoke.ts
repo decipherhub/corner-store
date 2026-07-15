@@ -1,4 +1,5 @@
 import {mkdtempSync} from "fs";
+import {createServer} from "http";
 import {tmpdir} from "os";
 import {join} from "path";
 import {Wallet, verifyTypedData} from "ethers";
@@ -10,6 +11,7 @@ import {
   WalletTypedDataSigner,
   encodeVenueData,
   readQuoteFile,
+  requestBackendQuote,
   rfqDomain,
   writeQuoteFile
 } from "../src/rfq";
@@ -79,6 +81,26 @@ async function main() {
 
   const venueData = encodeVenueData(round.quote, round.signature);
   assert(venueData.startsWith("0x") && venueData.length > 200, "venueData encodes");
+
+  // --- demo-backend request path -----------------------------------------
+  const backend = createServer((req, res) => {
+    assert(req.method === "POST" && req.url === "/rfq/quote", "CLI calls the backend quote endpoint");
+    res.writeHead(200, {"content-type": "application/json"});
+    res.end(JSON.stringify(signed));
+  });
+  await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
+  const backendAddress = backend.address();
+  if (!backendAddress || typeof backendAddress === "string") throw new Error("backend test server did not bind");
+  try {
+    const remote = await requestBackendQuote(`http://127.0.0.1:${backendAddress.port}`, {
+      taker: signed.quote.taker,
+      amountIn: signed.quote.amountIn,
+      ttlSeconds: 3600
+    });
+    assert(remote.signature === signed.signature, "backend quote response is returned to the CLI");
+  } finally {
+    await new Promise<void>((resolve, reject) => backend.close((err) => (err ? reject(err) : resolve())));
+  }
 
   // --- quote-inspect signer recovery (valid + tampered) -------------------
   const valid = recoverMaker(round.quote, round.signature);

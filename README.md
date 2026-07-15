@@ -50,6 +50,7 @@ reference execution adapters including AMM and RFQ settlement paths.
 - Tests: Forge
 - Local chain: Anvil
 - RFQ reference service: TypeScript
+- RFQ demo backend and reference CLI: TypeScript
 - Vendored deployment tooling: TypeScript, Yarn, ethers v5
 
 ## Local Setup
@@ -57,7 +58,7 @@ reference execution adapters including AMM and RFQ settlement paths.
 Required tools:
 
 - Foundry (`forge`, `anvil`)
-- Node.js and npm for `services/rfq`
+- Node.js and npm for `services/rfq`, `services/rfq-demo-backend` and `services/cli`
 - Yarn for `tools/deploy-v3`
 
 Install or refresh the vendored tool dependencies when needed:
@@ -112,6 +113,33 @@ npm ci
 npm test
 ```
 
+### Local RFQ Demo Backend
+
+`services/rfq-demo-backend` is a local-only HTTP application built from the RFQ
+SDK. It reads the live Anvil deployment artifact, uses the configured mock maker
+and fixed-rate pricing, and returns `RFQAdapter`-compatible signed quotes. It is
+not a hosted or production RFQ operator service.
+
+```shell
+scripts/e2e-anvil.sh --keep
+
+cd services/rfq-demo-backend
+npm ci
+npm start
+```
+
+In another terminal, request and settle the quote through the protected Router
+path:
+
+```shell
+node services/cli/dist/cli/src/index.js rfq-quote \
+  --backend http://127.0.0.1:8787 --amount-in 120 --out quote.json
+node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
+```
+
+See [`services/rfq-demo-backend/README.md`](./services/rfq-demo-backend/README.md)
+for the complete local flow and production replacement boundaries.
+
 ### Check All
 
 ```shell
@@ -131,6 +159,6 @@ before changing the deployment profile.
 
 ## Runtime Notes
 
-- 제품 runtime과 자동 E2E 환경은 아직 구성되지 않았다.
+- local Anvil runtime과 자동 E2E는 `scripts/e2e-anvil.sh`로 제공한다.
 - `tools/deploy-v3`는 제품 배포 orchestrator가 아니라 독립 vendored module이다.
 - 현재 작업 상태와 다음 feature는 `PROGRESS.md`와 `FEATURES.md`를 기준으로 한다.

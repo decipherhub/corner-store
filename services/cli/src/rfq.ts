@@ -1,4 +1,6 @@
 import {readFileSync, writeFileSync} from "fs";
+import {request as httpRequest} from "http";
+import {request as httpsRequest} from "https";
 import {AbiCoder} from "ethers";
 
 // REUSE the services/rfq EIP-712 signer library (do NOT reimplement the typed
@@ -28,6 +30,64 @@ export function writeQuoteFile(path: string, signed: SignedRFQQuote): void {
 
 export function readQuoteFile(path: string): QuoteFile {
   return JSON.parse(readFileSync(path, "utf8")) as QuoteFile;
+}
+
+export async function requestBackendQuote(
+  backendUrl: string,
+  request: {taker: string; amountIn: string; ttlSeconds?: number}
+): Promise<SignedRFQQuote> {
+  const url = `${backendUrl.replace(/\/$/, "")}/rfq/quote`;
+  let response: {status: number; body: string};
+  try {
+    response = await postJson(url, request);
+  } catch (error) {
+    throw new Error(`RFQ backend request failed (${url}): ${error instanceof Error ? error.message : error}`);
+  }
+
+  let body: any;
+  try {
+    body = JSON.parse(response.body);
+  } catch {
+    throw new Error(`RFQ backend returned non-JSON response (${response.status})`);
+  }
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`RFQ backend rejected the request (${response.status}): ${body.message ?? body.error ?? "unknown error"}`);
+  }
+  if (!body || typeof body !== "object" || !body.quote || !body.signature || !body.typedData) {
+    throw new Error("RFQ backend response is missing quote, signature, or typedData");
+  }
+  return body as SignedRFQQuote;
+}
+
+function postJson(urlValue: string, value: unknown): Promise<{status: number; body: string}> {
+  const url = new URL(urlValue);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`unsupported backend protocol ${url.protocol}`);
+  }
+  const body = JSON.stringify(value);
+  const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
+
+  return new Promise((resolve, reject) => {
+    const req = requestFn(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(body)
+        },
+        timeout: 10_000
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        res.on("end", () => resolve({status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8")}));
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("request timed out after 10 seconds")));
+    req.on("error", reject);
+    req.end(body);
+  });
 }
 
 const coder = AbiCoder.defaultAbiCoder();

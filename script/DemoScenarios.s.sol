@@ -114,7 +114,8 @@ contract DemoScenarios is Script, DemoConstants {
         factory.registerRWAToken(address(rwa), m, pool, ammCfg);
 
         ManifestCore memory stored = policyReg.manifestOf(address(rwa));
-        bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
+        bool ok =
+            stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
             && stored.approvedBy == address(factory);
         console2.log("    evidence: manifest status ACTIVE, declared+approved by factory");
         console2.log("      status(2=ACTIVE) :", uint256(stored.status));

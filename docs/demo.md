@@ -131,6 +131,32 @@ reason-code 디코딩), demo용 QUOTE 민팅 `faucet`, anvil `snapshot`/`restore
 
 설치/실행법과 전체 walkthrough 레시피는 `services/cli/README.md`를 참고한다.
 
+## RFQ demo backend로 quote 받기
+
+`services/rfq-demo-backend`는 위 live Anvil artifact와 `services/rfq` SDK를
+재사용하는 local-only HTTP application이다. 별도 배포 경로나 컴플라이언스 판정을
+만들지 않는다.
+
+```sh
+# terminal 1: live stack
+scripts/e2e-anvil.sh --keep
+
+# terminal 2: mock maker quote API
+cd services/rfq-demo-backend
+npm ci
+npm start
+
+# terminal 3: user flow
+node services/cli/dist/cli/src/index.js rfq-quote \
+  --backend http://127.0.0.1:8787 --amount-in 120 --out quote.json
+node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
+```
+
+Backend는 quote를 가격 산정·서명할 뿐이다. maker revoke, Manifest suspend 또는
+Element 실패가 있으면 동일한 signed quote라도 Router fill 시점의 최신 compliance로
+거부된다. 자세한 API와 production 교체 지점은
+`services/rfq-demo-backend/README.md`를 참고한다.
+
 ## Related
 
 - Test layers and the automated suite: `docs/testing.md`.

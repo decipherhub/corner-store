@@ -86,10 +86,11 @@ program
 
 program
   .command("rfq-quote")
-  .description("sign an EIP-712 RFQ quote (via the services/rfq library) and write it to a file")
-  .requiredOption("--maker-account <n>", "maker/dealer Anvil account index")
+  .description("request a demo-backend quote or sign one locally, then write it to a file")
+  .option("--backend <url>", "RFQ demo backend base URL")
+  .option("--maker-account <n>", "local-signing maker/dealer Anvil account index")
   .requiredOption("--amount-in <x>", "taker QUOTE in (ether units)")
-  .requiredOption("--amount-out <y>", "maker RWA out (ether units)")
+  .option("--amount-out <y>", "local-signing maker RWA out (ether units)")
   .option("--taker <addr>", "taker address (defaults to the artifact investor)")
   .option("--expiry <sec>", "quote TTL in seconds", "3600")
   .option("--out <file>", "output path", "quote.json")

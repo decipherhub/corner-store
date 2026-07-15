@@ -28,6 +28,8 @@ source of truth로 사용한다.
   factory register→approve)
 - `DOC-002 — RFQ SDK and MVP Demo Planning`
 - `RFQ-SDK-001 — RFQ Backend SDK Interfaces`
+- `DEMO-002 — MVP RFQ Demo Backend`(local HTTP quote API + CLI `--backend` +
+  deployment-bound response validation)
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -67,38 +69,26 @@ source of truth로 사용한다.
 
 ## Next
 
-1. MVP RFQ demo backend milestone/user flow를 별도 문서·feature로 구체화한다.
-   기존 live-Anvil E2E/CLI 경로를 재사용한다.
-2. pending PR stack 정리 후 roadmap과 feature 상태를 재조정한다.
-3. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
+1. optional demo dashboard를 현재 backend/CLI 위 별도 feature로 구현한다.
+2. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
    production dealer/operator 책임.
-4. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
+3. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
    (C-01 Lockup은 현재 fixture-only mock acquisition source).
-5. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
+4. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
-6. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
+5. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
 
 ## Last Session Summary
 
-- #35 merge preparation includes `DEMO-001 — BUIDL-like ERC-3643 Demo Asset` on top of current main.
-- 변경한 파일:
-  - `src/demo/BuidlLikeDemoAsset.sol`
-  - `src/compliance/elements/BuidlMinimumInvestment.sol`
-  - `src/compliance/recipes/BuidlLikeFundRecipe.sol`
-  - `test/fixtures/MockSecuritizeTA.sol`
-  - `test/integration/IntegrationBase.sol`
-  - `test/integration/BUIDLLikeFlow.t.sol`
-  - `docs/product-specs/buidl-like-demo-profile.md`
-  - `FEATURES.md`, `PROGRESS.md`
-- 완료한 작업:
-  - BUIDL-like ERC-3643 demo asset profile 추가
-  - Mock Securitize/TA fixture로 investor facts를 주입하고 Element flags로 sync
-  - QP/minimum investment/sanctions/expiry/ERC-3643 recipient verification 시나리오 추가
-  - 최신 Manifest lifecycle에 맞춰 BUIDL-like manifest도 register→approve flow로 정합화
-- 실행한 검증:
-  - original PR CI/checks passed before retarget
-  - conflict reconciliation checked with `git diff --check`
-- 남은 리스크:
-  - 실제 BlackRock BUIDL/Securitize/TA 연결은 구현 범위가 아니다.
-  - AI/QP는 아직 production ONCHAINID claim이 아니라 mock TA에서 sync되는 test flag다.
-  - NAV, redemption rail, monthly distribution, production claim issuer 연동은 별도 feature다.
+- `DEMO-002` 구현 완료: `services/rfq-demo-backend` local HTTP quote API와
+  CLI `rfq-quote --backend`를 추가했다.
+- backend는 live-Anvil deployment artifact의 maker/pair/venue/RFQAdapter에 고정되고
+  RFQ SDK의 fixed pricing, in-memory nonce와 no-op risk fixture를 사용한다.
+- production signer custody, persistent nonce, pricing/inventory와 hosting은 범위 밖이며
+  최종 compliance는 Router fill 시점에 유지한다.
+- `scripts/check.sh` 통과: Foundry 248/248, RFQ SDK, CLI/backend smoke, deploy-v3.
+- live protected Router walkthrough는 설치된 Foundry `1.4.0-nightly`가
+  `ComplianceEngine` constructor argument를 decode하는 단계에서 broadcast 전에
+  실패해 실행하지 못했다. 같은 오류를 독립 Anvil과 `--skip-simulation`,
+  `--disable-labels --quiet`에서 재현했다. backend HTTP/서명과 CLI request path는
+  smoke로, Router settlement 성공/거부는 기존 `RFQFlow.t.sol`로 각각 검증했다.

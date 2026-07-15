@@ -34,6 +34,17 @@ npm test
 
 이 smoke test는 EIP-712 typed-data shape, high-level SDK quote flow, pricing/nonce/risk seams, expiry/nonce 부여, unsafe JavaScript number 거부와 monotonic nonce fallback을 검증한다.
 
+RFQ demo backend와 CLI smoke test:
+
+```sh
+cd services/rfq-demo-backend && npm ci && npm test
+cd services/cli && npm ci && npm test
+```
+
+Backend smoke는 ephemeral HTTP server의 health/quote API, fixed-rate pricing,
+maker signature, monotonic nonce와 numeric amount 거부를 검증한다. CLI smoke는
+backend quote request path와 기존 quote-file/서명 검증 경로를 함께 검증한다.
+
 Vendored deploy tool 테스트:
 
 ```sh
@@ -85,8 +96,8 @@ scripts/check.sh
 ```
 
 이 명령은 현재 저장소에서 지원하는 format, build와 test를 순서대로 실행한다.
-현재 포함 범위는 Foundry fmt/build/test, RFQ service smoke, vendored deploy-v3 test,
-whitespace check다.
+현재 포함 범위는 Foundry fmt/build/test, RFQ SDK·demo backend·CLI smoke,
+vendored deploy-v3 test와 whitespace check다.
 
 ## Manual Verification
 

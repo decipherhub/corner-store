@@ -6,4 +6,6 @@ services/rfq/dist/
 services/rfq/node_modules/
 services/cli/dist/
 services/cli/node_modules/
+services/rfq-demo-backend/dist/
+services/rfq-demo-backend/node_modules/
 deployments/

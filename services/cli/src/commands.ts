@@ -32,9 +32,11 @@ import {ELEMENT_LABELS, POLICY_STATUS, RECIPE_LABELS, decodeReason, encodeReason
 import {
   RFQ_QUOTE_TYPES,
   RFQQuoteService,
+  SignedRFQQuote,
   WalletTypedDataSigner,
   encodeVenueData,
   readQuoteFile,
+  requestBackendQuote,
   rfqDomain,
   writeQuoteFile
 } from "./rfq";
@@ -378,6 +380,7 @@ export async function cmdBuy(
 // rfq-quote --maker-account N --amount-in X --amount-out Y [--expiry sec] [--out file]
 // ---------------------------------------------------------------------------
 export async function cmdRfqQuote(opts: GlobalOpts & {
+  backend?: string;
   makerAccount?: string;
   amountIn?: string;
   amountOut?: string;
@@ -386,33 +389,68 @@ export async function cmdRfqQuote(opts: GlobalOpts & {
   out?: string;
 }): Promise<void> {
   const a = loadArtifact(opts.artifact);
-  const provider = makeProvider(opts);
-  if (opts.makerAccount === undefined) throw new CliError("--maker-account <0-9> is required");
-  if (!opts.amountIn || !opts.amountOut) throw new CliError("--amount-in and --amount-out are required");
-  const maker = walletForAccount(Number(opts.makerAccount)).connect(provider);
+  if (!opts.amountIn) throw new CliError("--amount-in is required");
   const taker = opts.taker ?? a.investor;
   const ttl = opts.expiry ? Number(opts.expiry) : 3600;
+  if (!Number.isSafeInteger(ttl) || ttl <= 0) throw new CliError("--expiry must be a positive integer");
+  const amountIn = parseEther(opts.amountIn).toString();
 
-  const service = new RFQQuoteService(
-    {chainId: DEFAULT_CHAIN_ID, verifyingContract: a.rfqAdapter as `0x${string}`, defaultTtlSeconds: ttl},
-    new WalletTypedDataSigner(maker)
-  );
-  const signed = await service.createSignedQuote({
-    maker: (await maker.getAddress()) as `0x${string}`,
-    taker: taker as `0x${string}`,
-    tokenIn: a.quote as `0x${string}`,
-    tokenOut: a.rwaToken as `0x${string}`,
-    amountIn: parseEther(opts.amountIn).toString(),
-    amountOut: parseEther(opts.amountOut).toString(),
-    venue: a.rfqVenue as `0x${string}`,
-    ttlSeconds: ttl
-  });
+  let signed: SignedRFQQuote;
+  if (opts.backend) {
+    if (opts.makerAccount !== undefined || opts.amountOut !== undefined) {
+      throw new CliError("--backend cannot be combined with --maker-account or --amount-out");
+    }
+    signed = await requestBackendQuote(opts.backend, {taker, amountIn, ttlSeconds: ttl});
+    validateBackendQuote(signed, a, taker, amountIn);
+  } else {
+    const provider = makeProvider(opts);
+    if (opts.makerAccount === undefined) throw new CliError("--maker-account is required without --backend");
+    if (!opts.amountOut) throw new CliError("--amount-out is required without --backend");
+    const maker = walletForAccount(Number(opts.makerAccount)).connect(provider);
+
+    const service = new RFQQuoteService(
+      {chainId: DEFAULT_CHAIN_ID, verifyingContract: a.rfqAdapter as `0x${string}`, defaultTtlSeconds: ttl},
+      new WalletTypedDataSigner(maker)
+    );
+    signed = await service.createSignedQuote({
+      maker: (await maker.getAddress()) as `0x${string}`,
+      taker: taker as `0x${string}`,
+      tokenIn: a.quote as `0x${string}`,
+      tokenOut: a.rwaToken as `0x${string}`,
+      amountIn,
+      amountOut: parseEther(opts.amountOut).toString(),
+      venue: a.rfqVenue as `0x${string}`,
+      ttlSeconds: ttl
+    });
+  }
 
   const out = opts.out ?? "quote.json";
   writeQuoteFile(out, signed);
   console.log(`Signed RFQ quote written to ${out}`);
   console.log(`  maker=${signed.quote.maker} taker=${signed.quote.taker}`);
   console.log(`  amountIn=${formatEther(signed.quote.amountIn)} amountOut=${formatEther(signed.quote.amountOut)} nonce=${signed.quote.nonce} expiry=${signed.quote.expiry}`);
+}
+
+function validateBackendQuote(signed: SignedRFQQuote, a: Artifact, taker: string, amountIn: string): void {
+  const q = signed.quote;
+  const expected = [
+    [q.taker, taker, "taker"],
+    [q.tokenIn, a.quote, "tokenIn"],
+    [q.tokenOut, a.rwaToken, "tokenOut"],
+    [q.venue, a.rfqVenue, "venue"]
+  ] as const;
+  for (const [actual, wanted, field] of expected) {
+    if (typeof actual !== "string" || actual.toLowerCase() !== wanted.toLowerCase()) {
+      throw new CliError(`backend quote ${field} does not match the deployment artifact`);
+    }
+  }
+  if (q.amountIn !== amountIn) throw new CliError("backend quote amountIn does not match the request");
+  if (signed.typedData?.domain?.chainId !== DEFAULT_CHAIN_ID) throw new CliError("backend quote chainId is not 31337");
+  if (signed.typedData?.domain?.verifyingContract?.toLowerCase() !== a.rfqAdapter.toLowerCase()) {
+    throw new CliError("backend quote verifyingContract does not match RFQAdapter");
+  }
+  const recovered = verifyTypedData(signed.typedData.domain, RFQ_QUOTE_TYPES, q, signed.signature);
+  if (recovered.toLowerCase() !== q.maker.toLowerCase()) throw new CliError("backend quote signature does not match maker");
 }
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 ## Status
 
-SDK foundation implemented for `services/rfq`; local/MVP demo backend remains planned.
+SDK foundation and the local MVP demo backend are implemented.
 
 ## Purpose
 
@@ -12,7 +12,7 @@ Corner Store should not provide or operate a production RFQ server. The product 
 
 1. TypeScript SDK pieces for integrators to build their own RFQ quote backend.
 2. A local-only reference example that demonstrates those SDK pieces.
-3. A later MVP demo backend that uses the SDK from a user's point of view.
+3. An MVP demo backend that uses the SDK from a user's point of view.
 
 The separation matters: the SDK is reusable product infrastructure; the MVP backend is an application/demo built on top of it.
 
@@ -26,31 +26,15 @@ Already implemented:
 - nonce, expiry, signature and quote-field binding tests.
 - `services/rfq` minimal TypeScript quote signer reference.
 
-Current gap on `main` before this branch and the stacked PRs land:
-
-- `services/rfq` was a minimal quote signer, not yet shaped as a backend SDK.
-- signer, nonce, pricing and risk boundaries were not explicit enough for reuse.
-- there is no MVP user-facing RFQ backend flow yet.
-
-Implemented in this branch:
+Implemented:
 
 - high-level `createRFQService(...).quote(...)` API.
 - `NonceStore`, `PricingProvider`, and `InventoryRiskCheck` seams.
 - local `InMemoryNonceStore`, `FixedRatePricingProvider`, and `NoopInventoryRiskCheck` reference implementations.
 - validation helpers for addresses, chain id, TTL and on-chain integer values.
 - `services/rfq/README.md` quick start and production responsibility boundary.
-
-Open PR context to preserve when planning implementation:
-
-- PR #24 adds RFQ maker approval and quote cancellation hardening.
-- PR #28 adds protected-router RFQ integration scenarios.
-- PR #29 adds a live-Anvil E2E runner and scripted demo vehicle.
-- PR #30 adds an interactive CLI using the deployed stack and RFQ quote path.
-- PR #35 adds the BUIDL-like ERC-3643 compliance fixture with mock TA facts.
-
-Those PRs should be treated as pending upstream context. The RFQ SDK work should
-not duplicate their contract tests, E2E runner, CLI, or BUIDL fixture; it should
-provide the reusable TypeScript backend boundary those layers can call.
+- `services/rfq-demo-backend` local HTTP quote API using the SDK reference seams.
+- CLI `rfq-quote --backend` request, response validation and existing Router fill path.
 
 ## Layering
 
@@ -109,6 +93,8 @@ Acceptance criteria:
 
 ## Phase 2 — Local reference example
 
+Status: implemented by the SDK reference components and demo backend wiring.
+
 Goal: show how an operator would wire the SDK without implying Corner Store operates the backend.
 
 Deliverables:
@@ -135,13 +121,14 @@ Acceptance criteria:
 
 ## Phase 3 — MVP demo backend
 
+Status: implemented as feature `DEMO-002`.
+
 Goal: provide a demo backend that uses the RFQ SDK from a user's point of view.
 
-This is separate from the SDK issue and should be implemented after Phase 1. If
-PR #29/#30 are merged first, this backend should reuse the live-Anvil demo
-runner and CLI configuration instead of creating another deployment/demo path.
-If PR #35 is merged first, the BUIDL-like asset should be the default regulated
-asset scenario for this demo backend.
+The backend reuses the live-Anvil artifact and CLI instead of creating another
+deployment path. The regulated leg is the deployed ERC-3643 demo asset; BUIDL-like
+policy tests remain in the dedicated BUIDL fixture until the deployment profile
+is explicitly switched to that manifest.
 
 Target demo flow:
 
@@ -155,13 +142,13 @@ user requests quote
   -> UI/CLI shows result
 ```
 
-Potential deliverables:
+Delivered:
 
-- local HTTP API or CLI wrapper.
-- `/quote`-style request/response shape if HTTP is chosen.
-- BUIDL-like demo asset pair config.
-- integration guide for local Anvil/Foundry deployment.
-- optional later dashboard issue.
+- local `GET /health` and `POST /rfq/quote` HTTP API.
+- deployment-artifact-bound pair, venue, maker and RFQ adapter configuration.
+- fixed-rate SDK pricing, in-memory nonce and local Anvil signer fixtures.
+- CLI `rfq-quote --backend` integration and quote-response validation.
+- local Anvil runbook; dashboard remains a later issue.
 
 MVP backend non-goals:
 
@@ -206,12 +193,8 @@ RFQ backend responsibilities remain split:
 | Compliance | on-chain final gate | optional precheck only |
 | Hosting | none | operator-owned infrastructure |
 
-## First implementation issue
+## Follow-up boundary
 
-Recommended first issue:
-
-```text
-feat(rfq): add TypeScript SDK interfaces for quote backend integration
-```
-
-That issue should not implement the MVP backend. It should prepare the SDK foundation the MVP backend will use.
+Further RFQ work must be split from this demo application: production pricing,
+signer custody, persistent nonce storage, inventory/risk controls, authentication,
+rate limiting, monitoring, partial fill and custody policy remain separate features.
