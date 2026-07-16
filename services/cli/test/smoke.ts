@@ -33,15 +33,33 @@ function recoverMaker(quote: any, signature: string): {recovered: string; ok: bo
 const A02_RECIPE1 = "0xdf005707ef0d1c9c5675600e45928090b03a3d8ea92af2d691132565e834e7c0";
 const POLICY_SUSPENDED = "0x6c918c291dab5574048c8f619004a9721b8ac1b978c93e69f239e614a34d5e4f";
 const A01_RECIPE7 = "0x4ec564787cbeb03d100cec07278646352648e18a22c4b6e3a8549fa92f376f46";
+// Wave-2b: direct element-level codes (recipeId 0), the reasonCode an
+// element's own `check()` actually self-encodes (e.g. Sanctions.sol,
+// HolderCount.sol) — ground truth via `cast keccak $(cast abi-encode
+// "f(uint16,bytes32,uint32)" 0 $(cast format-bytes32-string "<id>") <code>)`.
+const A01_DIRECT_CODE4 = "0x8bb6a77feb777933299995cf60c2f3d5a4804be0f6077feab1f7390c76179f9c";
+const D01_DIRECT_CODE3 = "0x944f96138687357570c74d60495e55251602230e456018945bdf8e15bc1241ba";
 
 async function main() {
   // --- reason table -------------------------------------------------------
   assert(encodeReason(1, "A-02-v1", 1) === A02_RECIPE1, "encode matches cast (A-02 recipe 1)");
   assert(encodeReason(0, "POLICY", 3) === POLICY_SUSPENDED, "encode matches cast (POLICY suspended)");
   assert(encodeReason(7, "A-01-v1", 1) === A01_RECIPE7, "encode matches cast (A-01 recipe 7)");
+  assert(encodeReason(0, "A-01-v1", 4) === A01_DIRECT_CODE4, "encode matches cast (A-01 direct code 4)");
+  assert(encodeReason(0, "D-01-v1", 3) === D01_DIRECT_CODE3, "encode matches cast (D-01 direct code 3)");
 
-  // table = 3 recipes x 11 elements + 6 policy statuses.
-  assert(tableSize() === 3 * 11 + 6, "reason table size");
+  // table = (recipe-scoped: 3 recipes x codes-per-element-sum) + (direct
+  // element-level: 1 x codes-per-element-sum, recipeId 0 — the reasonCode an
+  // element's own `check()` actually self-encodes) + 6 policy statuses.
+  // codes-per-element-sum is each of the 17 elements' code count, where an
+  // element without a richer ELEMENT_CODE_NAMES table contributes 1.
+  // Wave-2b upgraded 6 elements to multi-code taxonomies (A-01:10, A-03:9,
+  // A-04:9, A-13:9, B-01:6, B-02:6) and the wave-2 illustrative elements
+  // (A-08:8, A-09:2, A-11:5, B-03:6, B-04:7, D-01:4) are also enumerated;
+  // the remaining 5 single-code mocks (A-02, A-05, C-01, E-01, F-02)
+  // contribute 1 each.
+  const CODES_PER_ELEMENT = 10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4; // = 86
+  assert(tableSize() === 4 * CODES_PER_ELEMENT + 6, "reason table size");
 
   const jur = decodeReason(A02_RECIPE1);
   assert(jur.label.includes("Jurisdiction") && jur.label.includes("A-02-v1"), "decodes A-02 to Jurisdiction");
@@ -50,6 +68,19 @@ async function main() {
   // case-insensitive input.
   assert(decodeReason(A02_RECIPE1.toUpperCase()).label === jur.label, "upper-case input decodes");
   assert(decodeReason("0x" + "de".repeat(32)).label === "unknown code", "unknown code");
+
+  // Wave-2b: direct element-level (recipeId 0) codes decode to the doc-name
+  // from that element's header table — this is the reasonCode actually
+  // returned by an element's own `check()` / thrown via `ComplianceRejected`
+  // (e.g. D-01 HolderCount.onTransfer), unlike the engine-propagated verdict
+  // which today always carries code 1.
+  const sanctionsClaim = decodeReason(A01_DIRECT_CODE4);
+  assert(sanctionsClaim.label.includes("FAIL_NO_SANCTIONS_CLAIM"), "decodes A-01 direct code 4");
+  const holderCap = decodeReason(D01_DIRECT_CODE3);
+  assert(holderCap.label.includes("HOLDER_CAP_3C1_100"), "decodes D-01 direct code 3");
+  // Legacy code-1 meaning is preserved across the wave-2b upgrade (doc says
+  // code 1 keeps the pre-upgrade "blocked wallet" semantics for A-01).
+  assert(decodeReason(encodeReason(0, "A-01-v1", 1)).label.includes("FAIL_SDN_WALLET_MATCH"), "A-01 code 1 preserved");
 
   // --- quote-file round-trip ---------------------------------------------
   const maker = new Wallet("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");

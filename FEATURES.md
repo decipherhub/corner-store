@@ -507,3 +507,85 @@ passing
   요구하지 않음), production legal 활성화, look-through graph 실제 순회.
 - Deferred follow-up: 6개 element를 실제 recipe(`requiredElements`)에 연결할지,
   연결한다면 어떤 recipe에 붙일지는 별도 feature에서 결정한다.
+
+## CMP-004 — Wave-2b In-Place Element Upgrades (A-01/A-03/A-04/A-13/B-01/B-02) + CLI Decode
+
+### Behavior
+
+- 기존 6개 illustrative mock element — A-01 Sanctions, A-03 AccreditedInvestor,
+  A-04 IdentityUniqueness, A-13 QualifiedPurchaser, B-01 AssetClassification,
+  B-02 Erc3643Native — 를 동일 contract 파일·registry ID·recipe 배선을 유지한
+  채 각 element walkthrough 문서의 전체 실패코드 taxonomy로 in-place
+  업그레이드했다: A-01 10개, A-03/A-04/A-13 각 9개, B-01/B-02 각 6개
+  reasonCode(`ReasonCodes.encode(0, ELEMENT_ID, n)`, n -> doc §6.x 이름 —
+  각 contract 헤더 주석 테이블 참고).
+- 호환성 규칙(non-negotiable): 기존 operator setter —
+  `Sanctions.setBlocked`, `AccreditedInvestor.setAccredited`,
+  `IdentityUniqueness.bindIdentity`, `QualifiedPurchaser.setQp`,
+  `AssetClassification.setClassification`, `Erc3643Native.setErc3643Native`
+  — 는 시그니처와 legacy happy-path 효과(그 호출만으로 `check` PASS)를
+  그대로 유지한다: 각 setter가 내부적으로 완전히 유효한
+  claim/card(trusted issuer, valid signature, no expiry)를 대신 기록한다.
+- 새로 추가된 strictness(claim pipeline, look-through 게이트, 시간/신선도
+  경계, B-02 live-wiring 등)는 전부 operator-gated opt-in이며 기본값
+  off(`false`/`0`)다 — 이 config를 건드리지 않는 기존 흐름은 legacy 동작
+  그대로 유지된다.
+- `services/cli/src/reason.ts`의 reason-code decode table을 확장했다:
+  - 업그레이드된 6개 element의 신규 code range를 각 contract 헤더의
+    doc-name으로 채운 `ELEMENT_CODE_NAMES` 테이블을 추가(예: A-01 code 4 ->
+    `FAIL_NO_SANCTIONS_CLAIM`).
+  - `ELEMENT_LABELS`에서 누락돼 있던 wave-2(CMP-003) 6개 element(A-08 1-8,
+    A-09 1-2, A-11 1-5, B-03 1-6, B-04 1-7, D-01 1-4)도 등록해
+    `DeployStack`이 실제로 등록하는 17개 element 전체와 맞췄다(이전 주석은
+    "11개 element"라고 잘못 명시하고 있었음).
+  - 신규 code가 없는 5개 element(A-02/A-05/C-01/E-01/F-02)는 기존처럼
+    code 1 fallback을 유지한다.
+  - **recipeId 축 추가**: `ComplianceEngine._runChecks`는 실패 시 항상
+    `encode(contributingRecipe[i], elementId, 1)`로 code를 1로 재-encode
+    하므로(엔진 코드 미변경 범위), recipe-scoped(`{1,2,7}`) 조합에서 실제로
+    도달 가능한 code는 여전히 1뿐이다. 반면 각 element의 `check()`는 항상
+    `ReasonCodes.encode(0, ELEMENT_ID, n)`으로 스스로를 self-encode하며(실제
+    상세 코드가 나타나는 지점), D-01 HolderCount의 `onTransfer`는 이 값으로
+    직접 `Errors.ComplianceRejected`를 revert한다. 따라서 recipeId 0 축을
+    별도로 추가해(엔진과 무관하게 element 직접 호출·revert·이벤트에서 실제로
+    관측되는 값) 신규 code들이 실질적으로 디코딩되도록 했다(기존 recipeId
+    `{1,2,7}` 축도 audit-matching 용도로 유지, code 범위만 확장).
+
+### Verification
+
+- `forge build --offline`.
+- `forge test --offline`: 39 suites, 579 passed, 0 failed, 0 skipped(레거시
+  `test/unit/compliance/Elements.t.sol`의 Sanctions/AccreditedInvestor/
+  QualifiedPurchaser 케이스 불변 + 각 element 전용
+  `test/unit/compliance/elements/{Sanctions,AccreditedInvestor,
+  IdentityUniqueness,QualifiedPurchaser,AssetClassification,
+  Erc3643Native}.t.sol`에 신규 code·경계 테스트 다수 추가 — 개별 U1-U6
+  커밋에서 이미 작성·통과).
+- `cd services/cli && npm test`: reason-table 크기 회귀를
+  `4 * 86(elements 코드 합) + 6(policy)` = 350으로 갱신하고, `cast keccak`로
+  독립 검증한 신규 ground-truth(A-01 direct code 4, D-01 direct code 3)
+  decode 회귀 및 A-01 code 1 legacy 의미 보존 회귀를 추가.
+- `cd services/rfq && npm test`.
+- 수동 확인(코드 변경 없음): `script/DeployStack.s.sol`의 KYC/investor-setup
+  헬퍼(`setClassification`, `setErc3643Native`, `bindIdentity`,
+  `setAccredited`)와 `test/integration/IntegrationBase.sol`의 9-element
+  attestation 헬퍼(`setAccredited`/`setQp`/`setBlocked`/`bindIdentity`)가
+  legacy 시그니처 그대로 호출됨을 확인; `scripts/e2e-anvil.sh`는 CLI를
+  전혀 호출하지 않고 `DeployStack`/`DemoScenarios` forge script만
+  구동하므로 이번 CLI 변경과 무관함을 확인.
+
+### State
+
+passing
+
+### Notes
+
+- Non-goals: 이번 entry는 U1-U6에서 이미 완료된 6개 element 자체의 스펙
+  변경(claim pipeline, look-through 등, 커밋 `a99f4ae`..`5a36111`)을 다시
+  구현하지 않는다 — CLI decode table 확장과 통합 문서화·전체 검증에
+  한정된다.
+- `ComplianceEngine`의 코드-1 하드코딩(재-encode) 자체는 엔진 파일 편집 금지
+  범위 밖이라 이번 wave에서 고치지 않았다 — richer per-element propagation은
+  별도 feature로 이연.
+- Deferred follow-up: CMP-003과 동일하게 wave-2 6개 element의 recipe 연결
+  여부는 미결.
