@@ -235,7 +235,12 @@ contract IdentityUniqueness is BaseElement, Governed {
         if (!claim.issuerTrusted) {
             return (false, ReasonCodes.encode(0, ELEMENT_ID, 4));
         }
-        if (claim.maxAge != 0 && block.timestamp - uint256(claim.verifiedAt) > uint256(claim.maxAge)) {
+        // Freshness — strict `>`, so exactly-at-maxAge PASSes (A-11 discipline).
+        // Age is 0 for a future/equal anchor, avoiding underflow.
+        if (
+            claim.maxAge != 0 && block.timestamp > claim.verifiedAt
+                && block.timestamp - uint256(claim.verifiedAt) > uint256(claim.maxAge)
+        ) {
             return (false, ReasonCodes.encode(0, ELEMENT_ID, 5));
         }
 

@@ -269,6 +269,21 @@ contract AssetClassificationTest is Test {
         assertEq(reasonCode, bytes32(0));
     }
 
+    // A future factsAsOf anchor must not underflow the age subtraction and
+    // panic — age is treated as 0 (fresh), so `check` PASSes even with a
+    // nonzero maxFactAge (mirrors QualifiedPurchaser's freshness guard).
+    function test_check_futureFactsAsOf_passesWithoutRevert() public {
+        vm.warp(10_000);
+        AssetClassification.AssetCard memory card = _liveCard(REG_D);
+        card.factsAsOf = uint64(block.timestamp + 4000); // anchor in the future
+        card.maxFactAge = 500;
+        element.setCard(asset, card);
+
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        assertTrue(passed);
+        assertEq(reasonCode, bytes32(0));
+    }
+
     // Evaluation order: SUSPENDED (2) is reported before a version mismatch (3)
     // when both are wrong — confirms status precedes version in the pipeline.
     function test_check_evaluationOrder_statusBeforeVersion() public {

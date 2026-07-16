@@ -228,7 +228,11 @@ contract AssetClassification is BaseElement, Governed {
         // Freshness is STRICT `>`: now - factsAsOf == maxFactAge still PASSes;
         // exceeding it by one second fails. Opposite direction to the time-lock
         // above — doc §5.3 pins the asymmetry. maxFactAge 0 disables the check.
-        if (card.maxFactAge != 0 && block.timestamp - uint256(card.factsAsOf) > uint256(card.maxFactAge)) {
+        // Age is 0 for a future/equal anchor, avoiding underflow.
+        if (
+            card.maxFactAge != 0 && block.timestamp > card.factsAsOf
+                && block.timestamp - uint256(card.factsAsOf) > uint256(card.maxFactAge)
+        ) {
             return (false, ReasonCodes.encode(0, ELEMENT_ID, 6));
         }
 

@@ -371,6 +371,19 @@ contract IdentityUniquenessTest is Test {
         assertTrue(passed);
     }
 
+    // A future verifiedAt anchor must not underflow the age subtraction and
+    // panic — age is treated as 0 (fresh), so `check` PASSes even with a
+    // nonzero maxAge (mirrors QualifiedPurchaser's freshness guard).
+    function test_check_futureVerifiedAt_passesWithoutRevert() public {
+        vm.warp(1000);
+        bind(wallet);
+        setClaim(identityId, true, true, true, 5000, 100); // anchor 4000s in the future
+
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        assertTrue(passed);
+        assertEq(rc, bytes32(0));
+    }
+
     function test_check_code6_whenIdentityFrozen() public {
         bind(wallet);
         vm.prank(operator);
