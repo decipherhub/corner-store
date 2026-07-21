@@ -53,6 +53,12 @@ try {
 } catch (err: any) {
   if (!err.message.includes("at least one venue")) throw err;
 }
+try {
+  validateConfig({...defaultConfig(), governance: {multisig: "", requiredApprovals: 0}});
+  throw new Error("invalid governance policy accepted");
+} catch (err: any) {
+  if (!err.message.includes("governance")) throw err;
+}
 const proposal = createGovernanceProposal({target: artifact.router as string, value: "0", calldata: "0x", reason: "operator-approved policy change", expectedArtifactHash: "sha256:test", requiredApprovals: 2});
 if (proposal.state !== "draft" || !proposal.proposalId.startsWith("proposal-")) throw new Error("proposal regression");
 const dryRun = createDeploymentPlan(config, "http://127.0.0.1:8545");
