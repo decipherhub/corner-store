@@ -91,7 +91,8 @@ deployment ID 파일은 immutable하게 보존한다.
   fail-closed한다.
 
 첫 public workflow는 `toolkit-init`으로 기본 설정을 만들고 `toolkit-validate`로
-배포 전에 schema/profile/venue/account 설정을 검증하는 것이다. 실제 deploy,
+배포 전에 schema/profile/venue/account 설정을 검증하는 것이다. `toolkit-preflight`는
+선택된 venue에 필요한 artifact 주소와 profile binding까지 검사한다. 실제 deploy,
 simulation, handoff와 dashboard는 이 설정을 읽는 후속 단계이며, CLI가 임의로
 on-chain 주소나 compliance policy를 새로 결정하지 않는다.
 

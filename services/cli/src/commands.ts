@@ -4,6 +4,7 @@ import {formatEther, parseEther} from "ethers";
 import {relative} from "path";
 import {resolve} from "path";
 import {loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
+import {preflightConfig} from "../../toolkit/src/preflight";
 
 import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
@@ -77,6 +78,15 @@ export function cmdToolkitSimulate(path = "corner-store.config.json", artifactPa
   }
   const simulation = simulateConfig(config, deployedProfile);
   console.log(JSON.stringify(simulation, null, 2));
+}
+
+export function cmdToolkitPreflight(path = "corner-store.config.json", artifactPath?: string): void {
+  if (!artifactPath) throw new CliError("toolkit-preflight requires --artifact <path>");
+  const config = loadConfig(resolve(process.cwd(), path));
+  const artifact = loadArtifact(artifactPath) as unknown as Record<string, unknown>;
+  const result = preflightConfig(config, artifact);
+  console.log(JSON.stringify(result, null, 2));
+  if (!result.ready) process.exitCode = 1;
 }
 
 function subjectAddress(opts: GlobalOpts, positional: string | undefined, fallbackAccount: number): string {

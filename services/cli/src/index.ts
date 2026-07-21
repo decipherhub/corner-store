@@ -35,6 +35,12 @@ program
   .argument("[path]", "config JSON path", "corner-store.config.json")
   .action(run((path, command) => cmd.cmdToolkitSimulate(path, command.optsWithGlobals().artifact)));
 
+program
+  .command("toolkit-preflight")
+  .description("verify config/profile/venue addresses before deployment or onboarding")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, command) => cmd.cmdToolkitPreflight(path, command.optsWithGlobals().artifact)));
+
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.
 function run(fn: (...a: any[]) => Promise<void> | void): (...a: any[]) => Promise<void> {

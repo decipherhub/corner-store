@@ -510,6 +510,8 @@ passing
   같은 인터페이스에서 수행한다.
 - `corner-store toolkit-simulate`로 artifact/profile/venue binding과 read-only 실행
   순서를 트랜잭션 전에 확인한다.
+- `corner-store toolkit-preflight`로 실제 deployment artifact의 주소와 선택 profile,
+  venue 구성을 mutation 전에 검증한다.
 - Element/Recipe/Adapter/provider 템플릿과 required input/trust-boundary 검증을
   제공해 확장 시 기존 compliance/router 경계를 복사하지 않도록 한다.
 - private key를 받지 않는 read-only Operator API로 config/deployment snapshot과
@@ -517,7 +519,7 @@ passing
 
 ### Verification
 
-- `cd services/toolkit && npm test` (simulation/template mismatch 포함)
+- `cd services/toolkit && npm test` (simulation/template/preflight mismatch 포함)
 - `cd services/operator-api && npm test`
 - `cd services/cli && npm test`
 - `scripts/check.sh`

@@ -3,6 +3,7 @@ import {tmpdir} from "os";
 import {join} from "path";
 import {defaultConfig, loadConfig, simulateConfig, validateConfig, writeDefaultConfig} from "../src/config";
 import {getTemplate, validateTemplateInputs} from "../src/templates";
+import {preflightConfig} from "../src/preflight";
 
 const dir = mkdtempSync(join(tmpdir(), "corner-store-toolkit-"));
 const path = join(dir, "corner-store.config.json");
@@ -27,6 +28,14 @@ try {
 } catch (err: any) {
   if (!err.message.includes("trustedIssuer")) throw err;
 }
+const artifact = {
+  assetProfile: "buidl-like", rwaToken: "0x1111111111111111111111111111111111111111",
+  router: "0x2222222222222222222222222222222222222222",
+  ammAdapter: "0x3333333333333333333333333333333333333333", pool: "0x4444444444444444444444444444444444444444",
+  rfqAdapter: "0x5555555555555555555555555555555555555555", rfqVenue: "0x6666666666666666666666666666666666666666"
+};
+if (!preflightConfig(config, artifact).ready) throw new Error("preflight should be ready");
+if (preflightConfig({...config, asset: {profile: "reg-d"}}, artifact).ready) throw new Error("profile mismatch passed preflight");
 try {
   validateConfig({...defaultConfig(), venues: {amm: false, rfq: false, orderBook: false}});
   throw new Error("empty venues accepted");
