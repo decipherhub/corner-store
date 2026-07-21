@@ -152,6 +152,12 @@ export function cmdToolkitDeploy(path = "corner-store.config.json", opts: Global
   });
 }
 
+export function cmdToolkitTest(): void {
+  const repoRoot = findRepoRoot(process.cwd());
+  if (!repoRoot) throw new CliError("repository root not found; run Toolkit test from the Corner Store repository");
+  execFileSync("scripts/check.sh", [], {cwd: repoRoot, stdio: "inherit"});
+}
+
 function subjectAddress(opts: GlobalOpts, positional: string | undefined, fallbackAccount: number): string {
   if (positional) return positional;
   if (opts.key) return new (require("ethers").Wallet)(opts.key.startsWith("0x") ? opts.key : `0x${opts.key}`).address;

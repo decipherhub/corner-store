@@ -73,6 +73,11 @@ program
   .option("--broadcast", "submit deployment transactions (otherwise dry-run)")
   .action(run((path, opts, command) => cmd.cmdToolkitDeploy(path, {...command.optsWithGlobals(), broadcast: opts.broadcast})));
 
+program
+  .command("toolkit-test")
+  .description("run the repository-wide deterministic Toolkit and contract verification")
+  .action(run(() => cmd.cmdToolkitTest()));
+
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.
 function run(fn: (...a: any[]) => Promise<void> | void): (...a: any[]) => Promise<void> {

@@ -46,6 +46,7 @@ corner-store --artifact deployments/anvil-e2e.json toolkit-checkpoint corner-sto
 corner-store toolkit-proposal --target 0x... --calldata 0x... --reason "policy review" --artifact-hash sha256:... --output proposal.json
 corner-store toolkit-deploy corner-store.config.json                         # dry-run only
 corner-store --rpc http://127.0.0.1:8545 toolkit-deploy --broadcast          # explicit local/demo deployment
+corner-store toolkit-test                                                   # full deterministic repository check
 ```
 
 `toolkit-onboard` always runs the read-only preflight first. A profile or required
@@ -56,6 +57,8 @@ an existing deployment id/path.
 submits the proposal.
 `toolkit-deploy` reuses `DeployStack.s.sol`; without `--broadcast` it only prints the
 plan. Production orchestration, signer policy and ownership handoff remain separate.
+`toolkit-test` always runs the full repository check rather than a partial user-selected
+scope, so Solidity, SDK, CLI, API and dashboard regressions are not hidden.
 
 Admin commands (`onboard`, `manifest`, `attest`, `investor-setup`, `maker`)
 default to the operator (account 0). `buy` defaults to the buyer (account 1).
