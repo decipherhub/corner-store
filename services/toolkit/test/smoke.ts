@@ -7,6 +7,7 @@ import {preflightConfig} from "../src/preflight";
 import {createCheckpoint, loadCheckpoint, writeCheckpoint} from "../src/checkpoint";
 import {createGovernanceProposal} from "../src/proposal";
 import {createDeploymentPlan} from "../src/deploy";
+import {toSafeTransactionDraft} from "../src/multisig";
 
 const dir = mkdtempSync(join(tmpdir(), "corner-store-toolkit-"));
 const path = join(dir, "corner-store.config.json");
@@ -57,4 +58,6 @@ if (proposal.state !== "draft" || !proposal.proposalId.startsWith("proposal-")) 
 const dryRun = createDeploymentPlan(config, "http://127.0.0.1:8545");
 if (dryRun.broadcast || !dryRun.command.includes("ASSET_PROFILE=buidl-like") || dryRun.command.includes("--broadcast")) throw new Error("deploy dry-run regression");
 if (!createDeploymentPlan(config, "http://127.0.0.1:8545", true).command.includes("--broadcast")) throw new Error("deploy broadcast flag regression");
+const safeDraft = toSafeTransactionDraft(proposal, 42161);
+if (safeDraft.origin !== "corner-store-toolkit" || safeDraft.operation !== 0 || safeDraft.chainId !== 42161) throw new Error("Safe draft regression");
 console.log("corner-store toolkit smoke ok");

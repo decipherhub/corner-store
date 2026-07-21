@@ -44,6 +44,7 @@ corner-store --artifact deployments/anvil-e2e.json toolkit-preflight corner-stor
 corner-store --artifact deployments/anvil-e2e.json toolkit-onboard corner-store.config.json
 corner-store --artifact deployments/anvil-e2e.json toolkit-checkpoint corner-store.config.json --output deployments/checkpoint.json
 corner-store toolkit-proposal --target 0x... --calldata 0x... --reason "policy review" --artifact-hash sha256:... --output proposal.json
+corner-store toolkit-safe-proposal --target 0x... --calldata 0x... --reason "policy review" --artifact-hash sha256:... --chain-id 42161
 corner-store toolkit-deploy corner-store.config.json                         # dry-run only
 corner-store --rpc http://127.0.0.1:8545 toolkit-deploy --broadcast          # explicit local/demo deployment
 corner-store toolkit-test                                                   # full deterministic repository check
@@ -55,6 +56,7 @@ venue address mismatch stops before a lifecycle transaction is sent.
 an existing deployment id/path.
 `toolkit-proposal` only writes a draft for an external multisig; it never signs or
 submits the proposal.
+`toolkit-safe-proposal` exports the same draft in Safe-compatible format only.
 `toolkit-deploy` reuses `DeployStack.s.sol`; without `--broadcast` it only prints the
 plan. Production orchestration, signer policy and ownership handoff remain separate.
 `toolkit-test` always runs the full repository check rather than a partial user-selected

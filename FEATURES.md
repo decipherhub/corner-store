@@ -518,6 +518,8 @@ passing
   secret-free immutable JSON으로 기록하고 기존 checkpoint 덮어쓰기를 거부한다.
 - `corner-store toolkit-proposal`이 target/calldata/reason/artifact hash를 담은
   draft governance proposal만 생성하며 multisig 실행은 수행하지 않는다.
+- draft proposal을 Safe-compatible transaction payload로 export할 수 있지만, Toolkit은
+  서명·제출·승인 상태 변경을 수행하지 않는다.
 - `corner-store toolkit-deploy`가 기존 `DeployStack.s.sol`을 config profile에 맞춰
   호출하며, 기본은 dry-run이고 `--broadcast`를 명시해야만 mutation한다.
 - `corner-store toolkit-test`가 동일한 사용자 진입점에서 repository-wide

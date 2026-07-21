@@ -124,6 +124,8 @@ event index는 local persistence와 마지막 block cursor를 제공하고, prod
 `toolkit-proposal`은 이 checkpoint hash와 governance calldata를 비교 가능한
 draft JSON으로 만들 뿐이다. 서명·제출·승인 상태 변경은 외부 multisig provider의
 책임이며, dashboard와 Operator API는 이를 직접 수행하지 않는다.
+Toolkit의 Safe transaction draft adapter도 같은 원칙으로 payload만 export하며,
+Safe Transaction Service나 wallet provider에 네트워크 요청을 보내지 않는다.
 
 `toolkit-deploy`는 기존 `script/DeployStack.s.sol`을 재사용하는 reference/demo
 orchestrator다. 기본 실행은 dry-run이며 `--broadcast`가 없으면 RPC mutation을

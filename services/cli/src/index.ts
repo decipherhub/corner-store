@@ -67,6 +67,18 @@ program
   .action(run((opts) => cmd.cmdToolkitProposal(opts)));
 
 program
+  .command("toolkit-safe-proposal")
+  .description("export a draft proposal as a Safe-compatible payload; never signs or submits")
+  .requiredOption("--target <address>")
+  .requiredOption("--calldata <hex>")
+  .requiredOption("--reason <text>")
+  .requiredOption("--artifact-hash <hash>")
+  .requiredOption("--chain-id <n>")
+  .option("--approvals <n>", "required multisig approvals", "2")
+  .option("--output <path>", "Safe draft JSON output", "safe-proposal.json")
+  .action(run((opts) => cmd.cmdToolkitSafeProposal(opts)));
+
+program
   .command("toolkit-deploy")
   .description("dry-run the existing Foundry deployment; use --broadcast to submit transactions")
   .argument("[path]", "config JSON path", "corner-store.config.json")

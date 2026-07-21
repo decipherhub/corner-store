@@ -9,6 +9,7 @@ import {preflightConfig} from "../../toolkit/src/preflight";
 import {createCheckpoint, writeCheckpoint} from "../../toolkit/src/checkpoint";
 import {createGovernanceProposal} from "../../toolkit/src/proposal";
 import {createDeploymentPlan} from "../../toolkit/src/deploy";
+import {toSafeTransactionDraft} from "../../toolkit/src/multisig";
 
 import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
@@ -133,6 +134,17 @@ export function cmdToolkitProposal(opts: {target: string; calldata: string; reas
     throw new CliError(`cannot write immutable proposal: ${err.message}`);
   }
   console.log(JSON.stringify(proposal, null, 2));
+}
+
+export function cmdToolkitSafeProposal(opts: {target: string; calldata: string; reason: string; artifactHash: string; approvals: string; chainId: string; output: string}): void {
+  const proposal = createGovernanceProposal({target: opts.target, value: "0", calldata: opts.calldata, reason: opts.reason, expectedArtifactHash: opts.artifactHash, requiredApprovals: Number(opts.approvals)});
+  const draft = toSafeTransactionDraft(proposal, Number(opts.chainId));
+  try {
+    writeFileSync(resolve(process.cwd(), opts.output), `${JSON.stringify(draft, null, 2)}\n`, {flag: "wx"});
+  } catch (err: any) {
+    throw new CliError(`cannot write immutable Safe proposal: ${err.message}`);
+  }
+  console.log(JSON.stringify(draft, null, 2));
 }
 
 export function cmdToolkitDeploy(path = "corner-store.config.json", opts: GlobalOpts & {broadcast?: boolean}): void {
