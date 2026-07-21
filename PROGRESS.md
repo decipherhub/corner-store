@@ -97,3 +97,6 @@ source of truth로 사용한다.
 - `scripts/check.sh` 통과: Foundry 248/248, RFQ SDK, CLI/backend smoke, deploy-v3.
 - 기존 Foundry `1.4.0-nightly` build cache의 constructor decode 오류는
   Foundry v1.7.1 clean rebuild로 해소했고, 실제 protected Router walkthrough를 완료했다.
+- Toolkit 통합 후 `scripts/e2e-anvil.sh --profile buidl-like`와 `--profile reg-d`가
+  각각 실제 artifact preflight와 immutable checkpoint, 7/7 scenario, CLI/backend
+  RFQ success와 revoked-maker failure를 통과했다.

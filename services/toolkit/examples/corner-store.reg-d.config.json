@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "deployment": {
+    "artifact": "deployments/anvil-e2e.json",
+    "network": "anvil"
+  },
+  "asset": {
+    "profile": "reg-d"
+  },
+  "venues": {
+    "amm": true,
+    "rfq": true,
+    "orderBook": false
+  },
+  "accounts": {
+    "operator": "operator",
+    "investor": "investor",
+    "maker": "maker"
+  }
+}

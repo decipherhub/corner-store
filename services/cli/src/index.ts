@@ -33,19 +33,19 @@ program
   .command("toolkit-simulate")
   .description("preview Toolkit deployment and venue binding without sending transactions")
   .argument("[path]", "config JSON path", "corner-store.config.json")
-  .action(run((path, command) => cmd.cmdToolkitSimulate(path, command.optsWithGlobals().artifact)));
+  .action(run((path, _opts, command) => cmd.cmdToolkitSimulate(path, command.optsWithGlobals().artifact)));
 
 program
   .command("toolkit-preflight")
   .description("verify config/profile/venue addresses before deployment or onboarding")
   .argument("[path]", "config JSON path", "corner-store.config.json")
-  .action(run((path, command) => cmd.cmdToolkitPreflight(path, command.optsWithGlobals().artifact)));
+  .action(run((path, _opts, command) => cmd.cmdToolkitPreflight(path, command.optsWithGlobals().artifact)));
 
 program
   .command("toolkit-onboard")
   .description("preflight a Toolkit config, then onboard its selected asset and venues")
   .argument("[path]", "config JSON path", "corner-store.config.json")
-  .action(run((path, command) => cmd.cmdToolkitOnboard(path, command.optsWithGlobals())));
+  .action(run((path, _opts, command) => cmd.cmdToolkitOnboard(path, command.optsWithGlobals())));
 
 program
   .command("toolkit-checkpoint")

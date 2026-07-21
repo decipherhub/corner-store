@@ -51,6 +51,7 @@ BACKEND_LOG=$(mktemp -t corner-store-rfq-backend.XXXXXX)
 BACKEND_PID=""
 QUOTE_FILE=$(mktemp -t corner-store-rfq-quote.XXXXXX)
 REJECTED_QUOTE_FILE=$(mktemp -t corner-store-rfq-rejected.XXXXXX)
+CHECKPOINT_FILE="${TMPDIR:-/tmp}/corner-store-e2e-checkpoint.$$"
 
 cleanup() {
   if [ "$KEEP" -eq 1 ]; then
@@ -73,7 +74,7 @@ cleanup() {
     kill "$ANVIL_PID" 2>/dev/null || true
     wait "$ANVIL_PID" 2>/dev/null || true
   fi
-  rm -f "$ANVIL_LOG" "$BACKEND_LOG" "$QUOTE_FILE" "$REJECTED_QUOTE_FILE"
+  rm -f "$ANVIL_LOG" "$BACKEND_LOG" "$QUOTE_FILE" "$REJECTED_QUOTE_FILE" "$CHECKPOINT_FILE"
 }
 trap cleanup EXIT INT TERM
 
@@ -115,7 +116,17 @@ echo "==> Building CLI and RFQ demo backend"
 npm run build --prefix services/cli >/dev/null
 npm run build --prefix services/rfq-demo-backend >/dev/null
 
-CLI=(node services/cli/dist/cli/src/index.js --rpc "$RPC")
+CLI=(node services/cli/dist/cli/src/index.js --rpc "$RPC" --artifact deployments/anvil-e2e.json)
+echo "==> Running Toolkit artifact preflight and immutable checkpoint"
+if [ "$ASSET_PROFILE" = "reg-d" ]; then
+  TOOLKIT_CONFIG=services/toolkit/examples/corner-store.reg-d.config.json
+else
+  TOOLKIT_CONFIG=services/toolkit/examples/corner-store.config.json
+fi
+"${CLI[@]}" toolkit-preflight "$TOOLKIT_CONFIG"
+"${CLI[@]}" toolkit-checkpoint "$TOOLKIT_CONFIG" \
+  --output "$CHECKPOINT_FILE" --deployment-id "e2e-${ASSET_PROFILE}-${PORT}"
+test -s "$CHECKPOINT_FILE"
 echo "==> Re-onboarding the selected asset profile through the CLI"
 "${CLI[@]}" onboard --profile "$ASSET_PROFILE"
 

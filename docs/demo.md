@@ -33,7 +33,8 @@ Under the hood the runner executes two forge scripts and one backend/CLI stage:
    address summary and writes it to `deployments/anvil-e2e.json` (gitignored).
 2. `script/DemoScenarios.s.sol` — reads the selected profile from that artifact
    and runs the suite below.
-3. The shell runner re-onboards the selected profile through the CLI, starts the
+3. The shell runner selects the matching Toolkit config fixture, runs artifact preflight, writes a temporary immutable
+   checkpoint, re-onboards the selected profile through the CLI, starts the
    RFQ demo backend, requests a quote through the CLI, fills it through
    `ExecutionRouter → RFQAdapter`, then proves a revoked maker quote is rejected.
 
