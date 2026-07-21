@@ -528,6 +528,8 @@ passing
   변경은 외부 multisig proposal 검토 후 실행하도록 경계를 둔다.
 - Operator API가 local/demo in-memory index와 교체 가능한 file-backed event index를
   제공하며 마지막 block cursor를 보존한다.
+- finality-aware indexer가 confirmation depth 이후 block만 저장하고 finalized block
+  hash가 바뀌면 fail-closed로 중단한다.
 
 ### Verification
 

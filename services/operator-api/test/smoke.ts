@@ -3,6 +3,7 @@ import {request} from "http";
 import {tmpdir} from "os";
 import {join} from "path";
 import {createOperatorApi, EventIndex, FileEventIndex} from "../src/api";
+import {ChainReader, FinalityAwareIndexer} from "../src/indexer";
 import {defaultConfig} from "@corner-store/toolkit";
 
 async function main(): Promise<void> {
@@ -33,6 +34,21 @@ async function main(): Promise<void> {
   const persistent = new FileEventIndex(eventPath);
   persistent.add({blockNumber: 3, transactionHash: "0xdef", name: "ManifestSuspended", args: {token: "0x1"}});
   if (new FileEventIndex(eventPath).list().length !== 1) throw new Error("persistent event index regression");
+  let reorg = false;
+  let currentHead = 14;
+  const reader: ChainReader = {
+    async head() { return currentHead; },
+    async blockHash(block) { return reorg && block === 11 ? "0xreorg" : `0x${block}`; },
+    async events(from, to) { return from <= to ? [{blockNumber: to, transactionHash: "0xidx", name: "Executed", args: {}}] : []; }
+  };
+  const cursorPath = join(dir, "cursor.json");
+  const indexer = new FinalityAwareIndexer(reader, persistent, cursorPath, 3);
+  if ((await indexer.sync()).added !== 1) throw new Error("finality indexer sync regression");
+  reorg = true;
+  currentHead = 15;
+  try { await indexer.sync(); throw new Error("reorg was not detected"); } catch (err: any) {
+    if (!err.message.includes("reorg")) throw err;
+  }
   console.log("corner-store operator API smoke ok");
 }
 

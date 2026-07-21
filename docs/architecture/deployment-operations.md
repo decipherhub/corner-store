@@ -112,6 +112,11 @@ hash를 immutable checkpoint로 남긴다. checkpoint는 주소·상태 검증�
 event index는 local persistence와 마지막 block cursor를 제공하고, production에서는
 재조직(reorg)·finality 정책을 가진 chain indexer로 교체해야 한다.
 
+현재 `FinalityAwareIndexer`는 그 경계의 reference 구현이다. confirmation depth만큼
+기다린 block을 저장하고, 이미 finalized로 기록한 block hash가 바뀌면 자동으로
+새 이벤트를 덧붙이지 않고 중단한다. rewind/replay 정책은 chain별 운영 설정으로
+명시해야 한다.
+
 `toolkit-proposal`은 이 checkpoint hash와 governance calldata를 비교 가능한
 draft JSON으로 만들 뿐이다. 서명·제출·승인 상태 변경은 외부 multisig provider의
 책임이며, dashboard와 Operator API는 이를 직접 수행하지 않는다.

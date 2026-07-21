@@ -17,6 +17,7 @@ dashboard가 재사용할 수 있는 첫 Toolkit 경계를 만든다.
 - private-key 없는 read-only operator dashboard와 multisig proposal boundary
 - secret-free immutable deployment checkpoint와 file-backed event cursor
 - 기존 Foundry deploy script를 재사용하는 명시적 dry-run/broadcast workflow
+- confirmation depth와 finalized block hash를 확인하는 indexer seam
 - Element/Recipe/Adapter/provider template metadata와 required-input 검증
 - package와 CLI smoke test 및 repository check 연결
 
