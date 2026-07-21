@@ -518,11 +518,14 @@ passing
   제공해 확장 시 기존 compliance/router 경계를 복사하지 않도록 한다.
 - private key를 받지 않는 read-only Operator API로 config/deployment snapshot과
   normalized event index를 제공한다.
+- read-only Operator dashboard가 profile/venue/event snapshot을 표시하고,
+  변경은 외부 multisig proposal 검토 후 실행하도록 경계를 둔다.
 
 ### Verification
 
 - `cd services/toolkit && npm test` (simulation/template/preflight mismatch 포함)
 - `cd services/operator-api && npm test`
+- `cd services/operator-dashboard && npm test`
 - `cd services/cli && npm test`
 - `scripts/check.sh`
 

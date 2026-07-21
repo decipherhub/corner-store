@@ -101,6 +101,11 @@ key나 transaction endpoint를 제공하지 않고, config/deployment snapshot�
 normalized event cursor만 노출한다. 온체인 상태가 source of truth이며, 현재
 in-memory index는 local/demo용이고 production indexer로 교체할 seam이다.
 
+`services/operator-dashboard`는 이 API를 표시하는 read-only 화면이다. UI는 key를
+받거나 transaction을 전송하지 않으며, governance 변경은 별도 multisig proposal로
+검토·승인한다. production authentication, CSRF와 multisig provider 연동은 배포
+환경의 책임으로 남긴다.
+
 ## Open Decisions
 
 - manifest JSON schema와 validation 도구

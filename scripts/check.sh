@@ -59,6 +59,12 @@ echo "==> Running read-only Operator API smoke test"
   npm test
 )
 
+echo "==> Running read-only Operator dashboard smoke test"
+(
+  cd services/operator-dashboard
+  npm test
+)
+
 echo "==> Running vendored deploy-v3 tests"
 (
   cd tools/deploy-v3
