@@ -8,6 +8,7 @@ import {enabledEngineSpec, loadConfig, simulateConfig, writeDefaultConfig} from 
 import {preflightConfig} from "../../toolkit/src/preflight";
 import {createCheckpoint, writeCheckpoint} from "../../toolkit/src/checkpoint";
 import {createGovernanceProposal} from "../../toolkit/src/proposal";
+import {createDeploymentPlan} from "../../toolkit/src/deploy";
 
 import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
@@ -132,6 +133,23 @@ export function cmdToolkitProposal(opts: {target: string; calldata: string; reas
     throw new CliError(`cannot write immutable proposal: ${err.message}`);
   }
   console.log(JSON.stringify(proposal, null, 2));
+}
+
+export function cmdToolkitDeploy(path = "corner-store.config.json", opts: GlobalOpts & {broadcast?: boolean}): void {
+  const config = loadConfig(resolve(process.cwd(), path));
+  const plan = createDeploymentPlan(config, opts.rpc ?? DEFAULT_RPC, opts.broadcast === true);
+  if (!opts.broadcast) {
+    console.log(JSON.stringify(plan, null, 2));
+    return;
+  }
+  const repoRoot = findRepoRoot(process.cwd());
+  if (!repoRoot) throw new CliError("repository root not found; run Toolkit deploy from the Corner Store repository");
+  console.log(JSON.stringify(plan, null, 2));
+  execFileSync("forge", ["script", "script/DeployStack.s.sol:DeployStack", "--rpc-url", opts.rpc ?? DEFAULT_RPC, "--broadcast", "--offline"], {
+    cwd: repoRoot,
+    env: {...process.env, ASSET_PROFILE: config.asset.profile},
+    stdio: "inherit"
+  });
 }
 
 function subjectAddress(opts: GlobalOpts, positional: string | undefined, fallbackAccount: number): string {

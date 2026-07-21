@@ -66,6 +66,13 @@ program
   .option("--output <path>", "proposal JSON output", "proposal.json")
   .action(run((opts) => cmd.cmdToolkitProposal(opts)));
 
+program
+  .command("toolkit-deploy")
+  .description("dry-run the existing Foundry deployment; use --broadcast to submit transactions")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .option("--broadcast", "submit deployment transactions (otherwise dry-run)")
+  .action(run((path, opts, command) => cmd.cmdToolkitDeploy(path, {...command.optsWithGlobals(), broadcast: opts.broadcast})));
+
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.
 function run(fn: (...a: any[]) => Promise<void> | void): (...a: any[]) => Promise<void> {

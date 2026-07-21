@@ -116,6 +116,11 @@ event index는 local persistence와 마지막 block cursor를 제공하고, prod
 draft JSON으로 만들 뿐이다. 서명·제출·승인 상태 변경은 외부 multisig provider의
 책임이며, dashboard와 Operator API는 이를 직접 수행하지 않는다.
 
+`toolkit-deploy`는 기존 `script/DeployStack.s.sol`을 재사용하는 reference/demo
+orchestrator다. 기본 실행은 dry-run이며 `--broadcast`가 없으면 RPC mutation을
+하지 않는다. 이 경계는 production signer custody, confirmation/finality 정책과
+ownership handoff를 reference demo와 분리한다.
+
 ## Open Decisions
 
 - manifest JSON schema와 validation 도구

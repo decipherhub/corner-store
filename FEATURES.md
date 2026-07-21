@@ -518,6 +518,8 @@ passing
   secret-free immutable JSON으로 기록하고 기존 checkpoint 덮어쓰기를 거부한다.
 - `corner-store toolkit-proposal`이 target/calldata/reason/artifact hash를 담은
   draft governance proposal만 생성하며 multisig 실행은 수행하지 않는다.
+- `corner-store toolkit-deploy`가 기존 `DeployStack.s.sol`을 config profile에 맞춰
+  호출하며, 기본은 dry-run이고 `--broadcast`를 명시해야만 mutation한다.
 - Element/Recipe/Adapter/provider 템플릿과 required input/trust-boundary 검증을
   제공해 확장 시 기존 compliance/router 경계를 복사하지 않도록 한다.
 - private key를 받지 않는 read-only Operator API로 config/deployment snapshot과
