@@ -27,6 +27,7 @@ import {
   DEFAULT_CHAIN_ID,
 } from "./config";
 import {AbiCoder, Contract, Interface, decodeBytes32String, encodeBytes32String, verifyTypedData} from "ethers";
+import {assetProfileBinding, resolveAssetProfileForArtifact} from "./assetProfiles";
 import {ELEMENT_IDS, applyAttestation, defaultIdentityId} from "./elements";
 import {ELEMENT_LABELS, POLICY_STATUS, RECIPE_LABELS, decodeReason, encodeReason} from "./reason";
 import {
@@ -169,11 +170,14 @@ function enginesMask(spec: string | undefined): number {
   return mask;
 }
 
-export async function cmdOnboard(opts: GlobalOpts & {engines?: string}): Promise<void> {
+export async function cmdOnboard(opts: GlobalOpts & {engines?: string; profile?: string}): Promise<void> {
   const a = loadArtifact(opts.artifact);
   const provider = makeProvider(opts);
   const signer = resolveSigner(opts, provider, 0); // operator
   const mask = enginesMask(opts.engines);
+  // Validate the requested profile before any lifecycle transaction. The
+  // deployment artifact is authoritative for this token instance.
+  const binding = assetProfileBinding(resolveAssetProfileForArtifact(opts.profile, a.assetProfile));
 
   const policy = policyRegistry(a, signer);
   const current = Number(await policy.statusOf(a.rwaToken));
@@ -187,13 +191,23 @@ export async function cmdOnboard(opts: GlobalOpts & {engines?: string}): Promise
     throw new CliError("manifest is PROPOSED; approve or wait — cannot re-onboard from PROPOSED");
   }
 
-  // ManifestCore: status(ignored),issuanceRecipeId=1,version=1,fundRecipeId=0,
-  // enabledResalePaths=0,supportedEngines=mask,stateScopeId=0,factsPacked=0,
-  // coverageScope=0,fullManifestHash=0,declaredBy(ignored),approvedBy(ignored).
-  const m = [2, 1, 1, 0, 0, mask, 0, 0, 0, ZERO32, ZERO_ADDR, ZERO_ADDR];
+  const m = [
+    2,
+    1,
+    1,
+    binding.fundRecipeId,
+    0,
+    mask,
+    0,
+    binding.factsPacked,
+    0,
+    binding.fullManifestHash,
+    ZERO_ADDR,
+    ZERO_ADDR
+  ];
   const venueCfg = [0, a.ammAdapter, a.pool, ZERO_ADDR, 1, true]; // AMM, custody POOL
   await logTx(await factory(a, signer).registerRWAToken(a.rwaToken, m, a.pool, venueCfg), "registerRWAToken");
-  console.log(`Onboarded RWA ${a.rwaToken} with supportedEngines 0b${mask.toString(2).padStart(3, "0")} + AMM venue ${a.pool}`);
+  console.log(`Onboarded ${binding.profile} RWA ${a.rwaToken} with supportedEngines 0b${mask.toString(2).padStart(3, "0")} + AMM venue ${a.pool}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -255,13 +269,14 @@ export async function cmdAttest(element: string, subject: string, values: string
 // ---------------------------------------------------------------------------
 // investor-setup <addr>
 // ---------------------------------------------------------------------------
-export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund?: string}): Promise<void> {
+export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund?: string; profile?: string}): Promise<void> {
   const a = loadArtifact(opts.artifact);
   const provider = makeProvider(opts);
   const signer = resolveSigner(opts, provider, 0); // operator
   const reg = provider;
 
-  console.log(`Investor-side Reg D happy-path setup for ${subject}`);
+  const profile = resolveAssetProfileForArtifact(opts.profile, a.assetProfile);
+  console.log(`Investor-side ${profile} happy-path setup for ${subject}`);
   // jurisdiction: US + allow US
   const jur = await elementContract(a, "A-02-v1", signer, reg);
   await logTx(await jur.setJurisdictionAllowed(encodeBytes32String(ALLOWED_JURISDICTION), true), `jurisdiction.setJurisdictionAllowed("${ALLOWED_JURISDICTION}", true)`);
@@ -272,6 +287,10 @@ export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund
   // accredited
   const acc = await elementContract(a, "A-03-v1", signer, reg);
   await logTx(await acc.setAccredited(subject, true), `accredited.setAccredited(${subject}, true)`);
+  if (profile === "buidl-like") {
+    const qp = await elementContract(a, "A-13-v1", signer, reg);
+    await logTx(await qp.setQp(subject, true), `qp.setQp(${subject}, true)`);
+  }
   // sanctions clear
   const san = await elementContract(a, "A-01-v1", signer, reg);
   await logTx(await san.setBlocked(subject, false), `sanctions.setBlocked(${subject}, false)`);
@@ -284,7 +303,7 @@ export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund
   await logTx(await acq.setAcquiredAt(subject, a.rwaToken, 1), `lockup.acquisitionSource.setAcquiredAt(${subject}, rwa, 1)`);
 
   // fund the buyer with QUOTE so it can trade (MockERC20.mint is permissionless).
-  const fund = parseEther(opts.fund ?? "5000");
+  const fund = parseEther(opts.fund ?? (profile === "buidl-like" ? "20000000" : "5000"));
   await logTx(await erc20(a.quote, signer).mint(subject, fund), `quote.mint(${subject}, ${formatEther(fund)})`);
   console.log("Investor attestations applied. Run `corner-store kyc <addr>` to add the ERC-3643 identity/claim.");
 }

@@ -6,13 +6,15 @@ hosted production RFQ backend.
 
 ## Run
 
-From the repository root, keep the live Anvil demo stack running:
+From the repository root, run the complete demo and keep both Anvil and this
+backend running:
 
 ```sh
-scripts/e2e-anvil.sh --keep
+scripts/e2e-anvil.sh --profile buidl-like --keep
 ```
 
-Then start the backend:
+The runner builds and starts this package automatically. To run the backend
+manually against an already deployed stack instead:
 
 ```sh
 cd services/rfq-demo-backend
@@ -36,7 +38,7 @@ Request a quote using base units:
 ```sh
 curl -X POST http://127.0.0.1:8787/rfq/quote \
   -H 'content-type: application/json' \
-  -d '{"taker":"0x...","amountIn":"120000000000000000000","ttlSeconds":3600}'
+  -d '{"taker":"0x...","amountIn":"5000000000000000000000000","ttlSeconds":3600}'
 ```
 
 The backend fixes `tokenIn`, `tokenOut`, RFQ venue and verifying contract to the
@@ -47,7 +49,7 @@ The easiest end-user flow is:
 
 ```sh
 node services/cli/dist/cli/src/index.js rfq-quote \
-  --backend http://127.0.0.1:8787 --amount-in 120 --out quote.json
+  --backend http://127.0.0.1:8787 --amount-in 5000000 --out quote.json
 node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
 ```
 
@@ -81,3 +83,5 @@ npm test
 
 The smoke test starts an ephemeral local server, requests two quotes, verifies
 the maker signature and monotonic nonce, and rejects numeric on-chain amounts.
+The repository live runner additionally proves backend quote → CLI → protected
+Router fill and revoked-maker rejection against the selected asset profile.

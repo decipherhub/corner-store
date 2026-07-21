@@ -16,6 +16,7 @@ import {ComplianceEngine} from "../src/compliance/ComplianceEngine.sol";
 import {Sanctions} from "../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../src/compliance/elements/QualifiedPurchaser.sol";
+import {BuidlMinimumInvestment} from "../src/compliance/elements/BuidlMinimumInvestment.sol";
 import {SurveillanceFlag} from "../src/compliance/elements/SurveillanceFlag.sol";
 import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../src/compliance/elements/IdentityUniqueness.sol";
@@ -27,6 +28,8 @@ import {Lockup} from "../src/compliance/elements/Lockup.sol";
 import {IAcquisitionSource} from "../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipe} from "../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../src/compliance/recipes/Fund3c7Recipe.sol";
+import {BuidlLikeFundRecipe} from "../src/compliance/recipes/BuidlLikeFundRecipe.sol";
+import {BuidlLikeDemoAsset} from "../src/demo/BuidlLikeDemoAsset.sol";
 
 import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
 import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
@@ -81,6 +84,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     FormDFiling internal formD;
     Lockup internal lockup;
     DemoAcquisitionSource internal acqSource;
+    QualifiedPurchaser internal qualifiedPurchaser;
 
     ExecutionRouter internal router;
     VenueRegistry internal venueReg;
@@ -91,6 +95,8 @@ contract DeployStack is Script, TREXCore, DemoConstants {
 
     MockERC20 internal quote;
     MockPool internal pool;
+    string internal assetProfile;
+    bool internal useBuidlLikeProfile;
 
     function run() external {
         uint256 deployerPk = vm.deriveKey(MNEMONIC, 0);
@@ -101,10 +107,19 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         address maker = vm.addr(makerPk);
         address unapprovedMaker = vm.addr(vm.deriveKey(MNEMONIC, 3));
 
+        assetProfile = vm.envOr("ASSET_PROFILE", string("buidl-like"));
+        bytes32 profileHash = keccak256(bytes(assetProfile));
+        useBuidlLikeProfile = profileHash == keccak256("buidl-like");
+        require(useBuidlLikeProfile || profileHash == keccak256("reg-d"), "ASSET_PROFILE must be buidl-like or reg-d");
+
         vm.startBroadcast(deployerPk);
 
         // 1. REAL ERC-3643 (T-REX) + OnchainID, admin = deployer.
-        deployTREX(deployer);
+        if (useBuidlLikeProfile) {
+            deployTREX(deployer, BuidlLikeDemoAsset.TOKEN_NAME, BuidlLikeDemoAsset.TOKEN_SYMBOL);
+        } else {
+            deployTREX(deployer);
+        }
 
         // 2. compliance registries + engine.
         elementReg = new ElementRegistry();
@@ -115,10 +130,12 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         // 3. the full 9-element Reg D 506(c) reference set + surveillance.
         _deployAndRegisterElements();
 
-        // 4. recipes: RegD 506(c) (id 1) + 3(c)(7) fund (id 2) + a
-        //    surveillance-enabled RegD variant (id 7) used by scenario 6.
+        // 4. recipes: RegD 506(c) (id 1) + generic 3(c)(7) fund (id 2) +
+        //    BUIDL-like QP/minimum profile (id 3) + a surveillance-enabled RegD
+        //    variant (id 7) used by scenario 6.
         recipeReg.registerRecipe(1, 2, address(new RegD506cRecipe()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
+        recipeReg.registerRecipe(3, 1, address(new BuidlLikeFundRecipe()));
         recipeReg.registerRecipe(SURVEIL_RECIPE_ID, 1, address(new DemoSurveillanceRecipe()));
 
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
@@ -217,7 +234,9 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         formD = new FormDFiling();
         elementReg.registerElement(bytes32("E-01-v1"), address(formD));
         surveillance = new SurveillanceFlag();
-        elementReg.registerElement(bytes32("A-13-v1"), address(new QualifiedPurchaser()));
+        qualifiedPurchaser = new QualifiedPurchaser();
+        elementReg.registerElement(bytes32("A-13-v1"), address(qualifiedPurchaser));
+        elementReg.registerElement(bytes32("BUIDL-MIN-v1"), address(new BuidlMinimumInvestment()));
         elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
     }
 
@@ -229,6 +248,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         jurisdiction.setJurisdiction(who, ALLOWED_JURISDICTION); // A-02
         IdentityUniqueness(elementReg.elementOf(bytes32("A-04-v1"))).bindIdentity(who, keccak256(abi.encode("ID", who))); // A-04
         AccreditedInvestor(elementReg.elementOf(bytes32("A-03-v1"))).setAccredited(who, true); // A-03
+        if (useBuidlLikeProfile) qualifiedPurchaser.setQp(who, true); // A-13
         acqSource.setAcquiredAt(who, address(rwaToken), uint64(1)); // C-01 seed
     }
 
@@ -239,6 +259,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         vm.serializeAddress(k, "investor", investor);
         vm.serializeAddress(k, "maker", maker);
         vm.serializeAddress(k, "unapprovedMaker", unapprovedMaker);
+        vm.serializeString(k, "assetProfile", assetProfile);
         vm.serializeAddress(k, "rwaToken", address(rwaToken));
         vm.serializeAddress(k, "quote", address(quote));
         vm.serializeAddress(k, "pool", address(pool));

@@ -57,9 +57,12 @@ reference execution adapters including AMM and RFQ settlement paths.
 
 Required tools:
 
-- Foundry (`forge`, `anvil`)
+- Foundry stable (`forge`, `anvil`; live E2E verified with v1.7.1)
 - Node.js and npm for `services/rfq`, `services/rfq-demo-backend` and `services/cli`
 - Yarn for `tools/deploy-v3`
+
+Foundry 버전을 바꾼 뒤 script broadcast에서 constructor decoding 오류가 나면
+서로 다른 버전의 build artifact가 섞이지 않도록 `forge clean` 후 재실행한다.
 
 Install or refresh the vendored tool dependencies when needed:
 
@@ -121,19 +124,15 @@ and fixed-rate pricing, and returns `RFQAdapter`-compatible signed quotes. It is
 not a hosted or production RFQ operator service.
 
 ```shell
-scripts/e2e-anvil.sh --keep
-
-cd services/rfq-demo-backend
-npm ci
-npm start
+scripts/e2e-anvil.sh --profile buidl-like --keep
 ```
 
-In another terminal, request and settle the quote through the protected Router
-path:
+`--keep` leaves both Anvil and the RFQ demo backend running. In another terminal,
+request and settle the quote through the protected Router path:
 
 ```shell
 node services/cli/dist/cli/src/index.js rfq-quote \
-  --backend http://127.0.0.1:8787 --amount-in 120 --out quote.json
+  --backend http://127.0.0.1:8787 --amount-in 5000000 --out quote.json
 node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
 ```
 

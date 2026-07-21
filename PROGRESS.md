@@ -28,8 +28,8 @@ source of truth로 사용한다.
   factory register→approve)
 - `DOC-002 — RFQ SDK and MVP Demo Planning`
 - `RFQ-SDK-001 — RFQ Backend SDK Interfaces`
-- `DEMO-002 — MVP RFQ Demo Backend`(local HTTP quote API + CLI `--backend` +
-  deployment-bound response validation)
+- `DEMO-002 — MVP RFQ Demo Backend`(selectable asset profile + local HTTP quote
+  API + CLI/backend→Router live settlement)
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -80,15 +80,18 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
-- `DEMO-002` 구현 완료: `services/rfq-demo-backend` local HTTP quote API와
+- 기존 `DEMO-002` 작업은 `services/rfq-demo-backend` local HTTP quote API와
   CLI `rfq-quote --backend`를 추가했다.
+- issue #40 정합화 작업에서 live runner와 CLI에 `buidl-like | reg-d` profile
+  선택을 추가하고, BUIDL-like를 기본 데모로 지정했다.
+- runner가 backend quote 발급 → CLI 제출 → protected RFQ settlement와
+  revoked-maker 거부를 자동 수행하도록 확장했다.
+- Foundry v1.7.1 clean build에서 `buidl-like`과 `reg-d` live runner가
+  각각 7/7 scenario와 backend RFQ success/failure path를 통과했다.
 - backend는 live-Anvil deployment artifact의 maker/pair/venue/RFQAdapter에 고정되고
   RFQ SDK의 fixed pricing, in-memory nonce와 no-op risk fixture를 사용한다.
 - production signer custody, persistent nonce, pricing/inventory와 hosting은 범위 밖이며
   최종 compliance는 Router fill 시점에 유지한다.
 - `scripts/check.sh` 통과: Foundry 248/248, RFQ SDK, CLI/backend smoke, deploy-v3.
-- live protected Router walkthrough는 설치된 Foundry `1.4.0-nightly`가
-  `ComplianceEngine` constructor argument를 decode하는 단계에서 broadcast 전에
-  실패해 실행하지 못했다. 같은 오류를 독립 Anvil과 `--skip-simulation`,
-  `--disable-labels --quiet`에서 재현했다. backend HTTP/서명과 CLI request path는
-  smoke로, Router settlement 성공/거부는 기존 `RFQFlow.t.sol`로 각각 검증했다.
+- 기존 Foundry `1.4.0-nightly` build cache의 constructor decode 오류는
+  Foundry v1.7.1 clean rebuild로 해소했고, 실제 protected Router walkthrough를 완료했다.

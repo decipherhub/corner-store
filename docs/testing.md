@@ -64,15 +64,19 @@ Tests 및 `docs/demo.md` 참조).
 
 ### E2E Tests
 
-live Anvil E2E는 `scripts/e2e-anvil.sh`로 자동화되어 있다(feature `E2E-001`).
-이 러너는 fresh Anvil 노드에 전체 스택을 배포(`script/DeployStack.s.sol`)하고
-7-scenario demo suite를 구동(`script/DemoScenarios.s.sol`)하며, scenario별
-narrative + 관찰 가능한 evidence + `PASS`/`FAIL`을 출력한다. 하나라도 실패하면
-스크립트가 non-zero로 종료한다. 실행 방법과 scenario 순서, reason code 재계산,
-mock/real 구분은 `docs/demo.md`(demo runbook)를 참조한다.
+live Anvil E2E는 `scripts/e2e-anvil.sh`로 자동화되어 있다(features `E2E-001`,
+`DEMO-002`). 이 러너는 fresh Anvil 노드에 선택한 asset profile의 전체 스택을
+배포(`script/DeployStack.s.sol`)하고 7-scenario demo suite를 구동
+(`script/DemoScenarios.s.sol`)한다. 이어서 CLI로 선택 profile을 재온보딩하고
+RFQ demo backend를 띄워 quote를 요청한 뒤 Router/RFQAdapter를 통한 성공과
+revoked-maker 실패까지 실행한다.
+단계별 observable evidence와 `PASS`/`FAIL`을 출력하며 하나라도 실패하면 non-zero로
+종료한다. 실행 방법과 scenario 순서, reason code 재계산, mock/real 구분은
+`docs/demo.md`(demo runbook)를 참조한다.
 
 ```sh
-scripts/e2e-anvil.sh            # 배포 → scenario → teardown (offline)
+scripts/e2e-anvil.sh            # BUIDL-like 배포 → scenario → backend RFQ → teardown
+scripts/e2e-anvil.sh --profile reg-d
 scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 demo)
 ```
 
@@ -88,6 +92,9 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - unregulated-regulated mixed pair의 regulated Manifest 적용
 - regulated-regulated pair의 양쪽 Manifest/Recipe 누적 적용
 - Adapter 등록·교체·중단 시 Router와 compliance policy 불변성
+- `buidl-like | reg-d` asset profile 선택과 동일한 protected execution path
+- backend-signed quote의 CLI 요청과 Router/RFQAdapter settlement
+- backend quote 발급 후 maker revoke 시 fill-time 거부
 
 ### Integrated Check
 

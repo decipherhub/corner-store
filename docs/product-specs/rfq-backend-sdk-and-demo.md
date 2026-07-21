@@ -126,9 +126,9 @@ Status: implemented as feature `DEMO-002`.
 Goal: provide a demo backend that uses the RFQ SDK from a user's point of view.
 
 The backend reuses the live-Anvil artifact and CLI instead of creating another
-deployment path. The regulated leg is the deployed ERC-3643 demo asset; BUIDL-like
-policy tests remain in the dedicated BUIDL fixture until the deployment profile
-is explicitly switched to that manifest.
+deployment path. The runner accepts `buidl-like` and `reg-d` asset profiles;
+`buidl-like` is the default issue #40 demo while the Router, RFQ Adapter and
+backend remain profile-agnostic.
 
 Target demo flow:
 
@@ -148,7 +148,12 @@ Delivered:
 - deployment-artifact-bound pair, venue, maker and RFQ adapter configuration.
 - fixed-rate SDK pricing, in-memory nonce and local Anvil signer fixtures.
 - CLI `rfq-quote --backend` integration and quote-response validation.
-- local Anvil runbook; dashboard remains a later issue.
+- selectable `buidl-like | reg-d` deployment profile with BUIDL-like metadata,
+  QP Recipe and minimum investment enabled by default. The deployment artifact
+  remains authoritative during CLI re-onboarding, so a token cannot be rebound
+  to a different/weaker profile through a CLI flag.
+- automated runner coverage for backend quote → CLI → Router/RFQAdapter fill and
+  revoked-maker rejection; dashboard remains a later issue.
 
 MVP backend non-goals:
 

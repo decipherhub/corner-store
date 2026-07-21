@@ -11,26 +11,31 @@ This is feature `E2E-001` (see `FEATURES.md`).
 ## How To Run
 
 ```sh
-scripts/e2e-anvil.sh            # start Anvil, deploy, run scenarios, tear down
+scripts/e2e-anvil.sh            # BUIDL-like default: scenarios + backend/CLI RFQ flow
+scripts/e2e-anvil.sh --profile reg-d
 scripts/e2e-anvil.sh --port 8600
 scripts/e2e-anvil.sh --keep     # leave Anvil running afterwards (attach a UI / continue interactively)
 ```
 
 - Runs fully offline (`forge script ... --offline` against a local Anvil).
 - Exit code is non-zero if any scenario fails (`DemoScenarios` reverts).
-- `--keep` prints the Anvil PID and RPC URL and leaves the node up; stop it with
-  `kill <pid>`.
+- `--keep` prints the Anvil/backend PIDs and leaves both processes up; stop them
+  with the printed `kill <pid>` commands.
 
-Under the hood the runner executes two forge scripts:
+Under the hood the runner executes two forge scripts and one backend/CLI stage:
 
 1. `script/DeployStack.s.sol` — deploys registries (Element/Recipe/TokenPolicy/
    Operator), `ComplianceEngine`, `ExecutionRouter` + `VenueRegistry` +
-   `VenueSelector`, `CornerStoreFactory`, all 11 elements, both recipes (Reg D
-   506(c) id 1, 3(c)(7) id 2) plus a surveillance-enabled RegD variant (id 7),
+   `VenueSelector`, `CornerStoreFactory`, all 12 elements, Reg D 506(c), generic
+   3(c)(7), BUIDL-like QP/minimum and surveillance recipes,
    the AMM `MockPool` venue, the `RFQAdapter` venue, and a REAL ERC-3643 token +
    OnchainID stack (via the shared `test/fixtures/TREXCore.sol`). It prints an
    address summary and writes it to `deployments/anvil-e2e.json` (gitignored).
-2. `script/DemoScenarios.s.sol` — reads that artifact and runs the suite below.
+2. `script/DemoScenarios.s.sol` — reads the selected profile from that artifact
+   and runs the suite below.
+3. The shell runner re-onboards the selected profile through the CLI, starts the
+   RFQ demo backend, requests a quote through the CLI, fills it through
+   `ExecutionRouter → RFQAdapter`, then proves a revoked maker quote is rejected.
 
 Accounts are Anvil's well-known mnemonic (`test test ... junk`):
 account 0 = deployer/owner/operator, 1 = investor (buyer/taker),
@@ -138,17 +143,12 @@ reason-code 디코딩), demo용 QUOTE 민팅 `faucet`, anvil `snapshot`/`restore
 만들지 않는다.
 
 ```sh
-# terminal 1: live stack
-scripts/e2e-anvil.sh --keep
+# terminal 1: live stack + mock maker quote API
+scripts/e2e-anvil.sh --profile buidl-like --keep
 
-# terminal 2: mock maker quote API
-cd services/rfq-demo-backend
-npm ci
-npm start
-
-# terminal 3: user flow
+# terminal 2: user flow
 node services/cli/dist/cli/src/index.js rfq-quote \
-  --backend http://127.0.0.1:8787 --amount-in 120 --out quote.json
+  --backend http://127.0.0.1:8787 --amount-in 5000000 --out quote.json
 node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
 ```
 

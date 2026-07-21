@@ -4,6 +4,12 @@ import {tmpdir} from "os";
 import {join} from "path";
 import {Wallet, verifyTypedData} from "ethers";
 
+import {
+  BUIDL_LIKE_MANIFEST_HASH,
+  assetProfileBinding,
+  resolveAssetProfile,
+  resolveAssetProfileForArtifact
+} from "../src/assetProfiles";
 import {decodeReason, encodeReason, tableSize} from "../src/reason";
 import {
   RFQ_QUOTE_TYPES,
@@ -37,6 +43,30 @@ const POLICY_SUSPENDED = "0x6c918c291dab5574048c8f619004a9721b8ac1b978c93e69f239
 const A01_RECIPE7 = "0x4ec564787cbeb03d100cec07278646352648e18a22c4b6e3a8549fa92f376f46";
 
 async function main() {
+  // --- asset profile selection -------------------------------------------
+  assert(resolveAssetProfile() === "buidl-like", "BUIDL-like is the default asset profile");
+  assert(resolveAssetProfile("reg-d") === "reg-d", "Reg D asset profile is selectable");
+  assertThrows(() => resolveAssetProfile("unknown"), "unknown asset profile is rejected");
+  assert(
+    resolveAssetProfileForArtifact(undefined, "reg-d") === "reg-d",
+    "deployment artifact selects the asset profile"
+  );
+  assert(
+    resolveAssetProfileForArtifact("buidl-like", "buidl-like") === "buidl-like",
+    "matching explicit and deployed profiles are accepted"
+  );
+  assertThrows(
+    () => resolveAssetProfileForArtifact("reg-d", "buidl-like"),
+    "a deployed BUIDL-like asset cannot be rebound to weaker Reg D policy"
+  );
+  const buidl = assetProfileBinding("buidl-like");
+  assert(buidl.fundRecipeId === 3 && buidl.factsPacked === 1n, "BUIDL-like Recipe/facts binding");
+  assert(
+    buidl.fullManifestHash === "0xdcf411c4cfd970828531bfbaa85d4e6f833b6fb731a32add099081e4eea5b7c9",
+    "BUIDL-like Manifest hash matches the Solidity profile"
+  );
+  assert(buidl.fullManifestHash === BUIDL_LIKE_MANIFEST_HASH, "BUIDL-like exported hash matches binding");
+
   // --- reason table -------------------------------------------------------
   assert(encodeReason(1, "A-02-v1", 1) === A02_RECIPE1, "encode matches cast (A-02 recipe 1)");
   assert(encodeReason(0, "POLICY", 3) === POLICY_SUSPENDED, "encode matches cast (POLICY suspended)");
@@ -125,6 +155,15 @@ async function main() {
 
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error(`assertion failed: ${msg}`);
+}
+
+function assertThrows(fn: () => unknown, msg: string) {
+  try {
+    fn();
+  } catch {
+    return;
+  }
+  throw new Error(`assertion failed: ${msg}`);
 }
 
 main().catch((err) => {

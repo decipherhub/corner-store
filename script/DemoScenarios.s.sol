@@ -28,6 +28,7 @@ import {VenueConfig, CustodyModel} from "../src/types/VenueTypes.sol";
 import {Errors} from "../src/libraries/Errors.sol";
 import {ReasonCodes} from "../src/libraries/ReasonCodes.sol";
 import {DemoConstants} from "./DemoConstants.sol";
+import {BuidlLikeDemoAsset} from "../src/demo/BuidlLikeDemoAsset.sol";
 
 /// @title DemoScenarios
 /// @notice The live-Anvil E2E scenario runner + stakeholder DEMO (deliverable 2).
@@ -67,6 +68,7 @@ contract DemoScenarios is Script, DemoConstants {
     ExecutionRouter internal router;
     UniswapV3Adapter internal ammAdapter;
     RFQAdapter internal rfqAdapter;
+    bool internal useBuidlLikeProfile;
 
     // per-initiator router nonce sequence for the investor.
     uint256 internal nonceSeq = 1;
@@ -94,12 +96,14 @@ contract DemoScenarios is Script, DemoConstants {
     // Scenario 1 — Onboarding
     // ---------------------------------------------------------------------
     function _scenario1_onboarding() internal {
-        _title(1, "Onboarding: factory one-call onboards the RWA token (propose -> approve + venue)");
+        _title(
+            1,
+            useBuidlLikeProfile
+                ? "Onboarding: factory one-call onboards the BUIDL-like ERC-3643 asset"
+                : "Onboarding: factory one-call onboards the Reg D ERC-3643 asset"
+        );
 
-        ManifestCore memory m;
-        m.issuanceRecipeId = 1; // Reg D 506(c)
-        m.issuanceRecipeVersion = 1;
-        m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
+        ManifestCore memory m = _baseManifest();
 
         VenueConfig memory ammCfg = VenueConfig({
             venueType: VenueType.AMM,
@@ -114,10 +118,12 @@ contract DemoScenarios is Script, DemoConstants {
         factory.registerRWAToken(address(rwa), m, pool, ammCfg);
 
         ManifestCore memory stored = policyReg.manifestOf(address(rwa));
-        bool ok =
-            stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
-            && stored.approvedBy == address(factory);
-        console2.log("    evidence: manifest status ACTIVE, declared+approved by factory");
+        ManifestCore memory expected = _baseManifest();
+        bool profileOk = stored.fundRecipeId == expected.fundRecipeId && stored.factsPacked == expected.factsPacked
+            && stored.fullManifestHash == expected.fullManifestHash;
+        bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
+            && stored.approvedBy == address(factory) && profileOk;
+        console2.log("    evidence: ACTIVE selected asset profile, approved by factory");
         console2.log("      status(2=ACTIVE) :", uint256(stored.status));
         _record(1, ok);
     }
@@ -126,7 +132,12 @@ contract DemoScenarios is Script, DemoConstants {
     // Scenario 2 — Compliant trade succeeds
     // ---------------------------------------------------------------------
     function _scenario2_compliantTrade() internal {
-        _title(2, "Compliant trade: fully-attested investor buys RWA via router -> AMM");
+        _title(
+            2,
+            useBuidlLikeProfile
+                ? "Compliant trade: qualified purchaser buys BUIDL-like RWA via router -> AMM"
+                : "Compliant trade: accredited investor buys Reg D RWA via router -> AMM"
+        );
 
         uint256 before = rwa.balanceOf(investor);
         ExecutionRequest memory req = _buyRequest(AMM_TRADE);
@@ -234,10 +245,9 @@ contract DemoScenarios is Script, DemoConstants {
         vm.broadcast(deployerPk);
         policyReg.retireManifest(address(rwa), bytes32("ADD-SURVEILLANCE"));
 
-        ManifestCore memory m;
+        ManifestCore memory m = _baseManifest();
         m.issuanceRecipeId = SURVEIL_RECIPE_ID;
         m.issuanceRecipeVersion = 1;
-        m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
         VenueConfig memory ammCfg = VenueConfig({
             venueType: VenueType.AMM,
             adapter: address(ammAdapter),
@@ -436,6 +446,10 @@ contract DemoScenarios is Script, DemoConstants {
     function _load() internal {
         string memory json = vm.readFile(ARTIFACT_PATH);
 
+        bytes32 profileHash = keccak256(bytes(vm.parseJsonString(json, ".assetProfile")));
+        useBuidlLikeProfile = profileHash == keccak256("buidl-like");
+        require(useBuidlLikeProfile || profileHash == keccak256("reg-d"), "artifact assetProfile invalid");
+
         deployer = vm.parseJsonAddress(json, ".deployer");
         investor = vm.parseJsonAddress(json, ".investor");
         maker = vm.parseJsonAddress(json, ".maker");
@@ -457,5 +471,12 @@ contract DemoScenarios is Script, DemoConstants {
         router = ExecutionRouter(vm.parseJsonAddress(json, ".router"));
         ammAdapter = UniswapV3Adapter(vm.parseJsonAddress(json, ".ammAdapter"));
         rfqAdapter = RFQAdapter(vm.parseJsonAddress(json, ".rfqAdapter"));
+    }
+
+    function _baseManifest() internal view returns (ManifestCore memory m) {
+        if (useBuidlLikeProfile) return BuidlLikeDemoAsset.manifest(ENGINES_AMM | ENGINES_RFQ);
+        m.issuanceRecipeId = 1;
+        m.issuanceRecipeVersion = 1;
+        m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
     }
 }
