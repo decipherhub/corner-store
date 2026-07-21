@@ -554,9 +554,11 @@ passing
 
 ### State
 
-active
+passing
 
 ### Scope
 
-이번 단계는 공통 설정 계약과 preflight까지다. 실제 deploy/simulate/handoff,
-operator API/indexer와 dashboard는 같은 config를 소비하는 후속 단계다.
+이번 단계에서 공통 설정 계약, validation/simulation, preflight/onboard/deploy/test,
+checkpoint와 governance handoff, operator API/indexer 및 read-only dashboard까지
+구현·검증했다. production TLS/secret rotation, 실제 multisig provider, live RPC
+finality/recovery와 production RFQ custody는 별도 후속 feature다.
