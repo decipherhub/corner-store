@@ -543,9 +543,9 @@ passing
   인증 없이 노출하지 않는다.
 - `/metrics`가 요청 수·인증 실패·indexed event count를 Prometheus 형식으로
   노출하며 주소·token 값은 포함하지 않는다.
-- Wave-2 illustrative elements는 `DeployStack`과 분리된 opt-in
-  `DeployWave2Elements.s.sol`에서 등록해 기본 BUIDL-like/Reg D demo의 배포 범위와
-  컴파일 그래프를 보존한다.
+- Wave-2 illustrative elements는 기본 Foundry script discovery 경로 밖의
+  `tools/deploy-wave2/DeployWave2Elements.s.sol`에서 opt-in으로 등록해 기본
+  BUIDL-like/Reg D demo의 배포 범위와 컴파일 그래프를 보존한다.
 
 ### Verification
 
