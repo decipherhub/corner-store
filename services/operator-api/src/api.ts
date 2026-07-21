@@ -62,13 +62,19 @@ export function createOperatorApi(options: OperatorApiOptions): Server {
   const config = loadConfig(options.configPath);
   const artifact = options.artifactPath ? JSON.parse(readFileSync(options.artifactPath, "utf8")) : undefined;
   const index = options.index ?? (options.eventsPath ? new FileEventIndex(options.eventsPath) : new EventIndex());
+  const metrics = {requests: 0, unauthorized: 0};
 
   return createServer((req, res) => {
+    metrics.requests += 1;
     res.setHeader("content-type", "application/json");
     if (req.method !== "GET") return send(res, 405, {error: "read-only operator API"});
     const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
     if (path === "/api/v1/health") return send(res, 200, {ok: true, readOnly: true});
-    if (options.authToken && !authorized(req, options.authToken)) return send(res, 401, {error: "unauthorized"});
+    if (options.authToken && !authorized(req, options.authToken)) {
+      metrics.unauthorized += 1;
+      return send(res, 401, {error: "unauthorized"});
+    }
+    if (path === "/metrics") return sendMetrics(res, metrics.requests, metrics.unauthorized, index.list().length);
     if (path === "/api/v1/config") return send(res, 200, sanitizeConfig(config));
     if (path === "/api/v1/deployment") return send(res, 200, artifact ?? {configured: false});
     if (path === "/api/v1/events") return send(res, 200, {events: index.list(), source: "in-memory-index"});
@@ -91,4 +97,21 @@ function sanitizeConfig(config: ToolkitConfig): ToolkitConfig {
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
   res.end(JSON.stringify(body));
+}
+
+function sendMetrics(res: ServerResponse, requests: number, unauthorized: number, events: number): void {
+  res.setHeader("content-type", "text/plain; version=0.0.4");
+  res.statusCode = 200;
+  res.end([
+    "# HELP corner_store_operator_requests_total HTTP requests received",
+    "# TYPE corner_store_operator_requests_total counter",
+    `corner_store_operator_requests_total ${requests}`,
+    "# HELP corner_store_operator_unauthorized_total Unauthorized requests",
+    "# TYPE corner_store_operator_unauthorized_total counter",
+    `corner_store_operator_unauthorized_total ${unauthorized}`,
+    "# HELP corner_store_operator_indexed_events Current indexed event count",
+    "# TYPE corner_store_operator_indexed_events gauge",
+    `corner_store_operator_indexed_events ${events}`,
+    ""
+  ].join("\n"));
 }

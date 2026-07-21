@@ -539,6 +539,8 @@ passing
   hash가 바뀌면 fail-closed로 중단한다.
 - Operator API가 선택적 Bearer token 인증을 지원하며 health endpoint 외 조회를
   인증 없이 노출하지 않는다.
+- `/metrics`가 요청 수·인증 실패·indexed event count를 Prometheus 형식으로
+  노출하며 주소·token 값은 포함하지 않는다.
 
 ### Verification
 

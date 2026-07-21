@@ -109,6 +109,8 @@ in-memory index는 local/demo용이고 production indexer로 교체할 seam이�
 배포 환경에서는 `CORNER_STORE_API_TOKEN`을 설정해 health 이외의 API를 Bearer
 token으로 보호한다. token은 config/artifact/event 응답에 포함하지 않으며, 실제
 운영에서는 TLS와 외부 identity-aware proxy도 함께 적용해야 한다.
+`/metrics`는 Prometheus 형식의 비민감 운영 counters만 제공하며, production scrape
+경로도 인증·네트워크 정책 안에 둬야 한다.
 
 배포 전 `toolkit-checkpoint`는 validated config와 deployment artifact의 SHA-256
 hash를 immutable checkpoint로 남긴다. checkpoint는 주소·상태 검증을 위한 기록일

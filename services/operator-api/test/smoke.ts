@@ -20,7 +20,10 @@ async function main(): Promise<void> {
     const req = request({host: "127.0.0.1", port: address.port, path, method: "GET", headers: token ? {authorization: `Bearer ${token}`} : undefined}, (res) => {
       let body = "";
       res.on("data", (chunk) => (body += chunk));
-      res.on("end", () => resolve({status: res.statusCode ?? 0, body: JSON.parse(body)}));
+      res.on("end", () => {
+        try { resolve({status: res.statusCode ?? 0, body: JSON.parse(body)}); }
+        catch { resolve({status: res.statusCode ?? 0, body}); }
+      });
     });
     req.on("error", reject);
     req.end();
@@ -31,6 +34,8 @@ async function main(): Promise<void> {
   if (unauthorized.status !== 401) throw new Error("operator API auth regression");
   const events = await get("/api/v1/events", "test-token");
   if (events.body.events.length !== 1) throw new Error("event index regression");
+  const metrics = await get("/metrics", "test-token");
+  if (metrics.status !== 200 || !String(metrics.body).includes("corner_store_operator_requests_total")) throw new Error("metrics regression");
   server.close();
   const eventPath = join(dir, "events.json");
   const persistent = new FileEventIndex(eventPath);
