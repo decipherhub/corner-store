@@ -5,6 +5,7 @@ import {defaultConfig, enabledEngineSpec, loadConfig, simulateConfig, validateCo
 import {getTemplate, validateTemplateInputs} from "../src/templates";
 import {preflightConfig} from "../src/preflight";
 import {createCheckpoint, loadCheckpoint, writeCheckpoint} from "../src/checkpoint";
+import {createGovernanceProposal} from "../src/proposal";
 
 const dir = mkdtempSync(join(tmpdir(), "corner-store-toolkit-"));
 const path = join(dir, "corner-store.config.json");
@@ -50,4 +51,6 @@ try {
 } catch (err: any) {
   if (!err.message.includes("at least one venue")) throw err;
 }
+const proposal = createGovernanceProposal({target: artifact.router as string, value: "0", calldata: "0x", reason: "operator-approved policy change", expectedArtifactHash: "sha256:test", requiredApprovals: 2});
+if (proposal.state !== "draft" || !proposal.proposalId.startsWith("proposal-")) throw new Error("proposal regression");
 console.log("corner-store toolkit smoke ok");

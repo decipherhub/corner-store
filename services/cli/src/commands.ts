@@ -1,4 +1,5 @@
 import {execFileSync} from "child_process";
+import {writeFileSync} from "fs";
 import {formatEther, parseEther} from "ethers";
 
 import {relative} from "path";
@@ -6,6 +7,7 @@ import {resolve} from "path";
 import {enabledEngineSpec, loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
 import {preflightConfig} from "../../toolkit/src/preflight";
 import {createCheckpoint, writeCheckpoint} from "../../toolkit/src/checkpoint";
+import {createGovernanceProposal} from "../../toolkit/src/proposal";
 
 import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
@@ -113,6 +115,23 @@ export function cmdToolkitCheckpoint(path = "corner-store.config.json", output =
     throw new CliError(`cannot write immutable checkpoint: ${err.message}`);
   }
   console.log(JSON.stringify(checkpoint, null, 2));
+}
+
+export function cmdToolkitProposal(opts: {target: string; calldata: string; reason: string; artifactHash: string; approvals: string; output: string}): void {
+  const proposal = createGovernanceProposal({
+    target: opts.target,
+    value: "0",
+    calldata: opts.calldata,
+    reason: opts.reason,
+    expectedArtifactHash: opts.artifactHash,
+    requiredApprovals: Number(opts.approvals)
+  });
+  try {
+    writeFileSync(resolve(process.cwd(), opts.output), `${JSON.stringify(proposal, null, 2)}\n`, {flag: "wx"});
+  } catch (err: any) {
+    throw new CliError(`cannot write immutable proposal: ${err.message}`);
+  }
+  console.log(JSON.stringify(proposal, null, 2));
 }
 
 function subjectAddress(opts: GlobalOpts, positional: string | undefined, fallbackAccount: number): string {

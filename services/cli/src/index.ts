@@ -55,6 +55,17 @@ program
   .option("--deployment-id <id>", "stable deployment identifier")
   .action(run((path, opts, command) => cmd.cmdToolkitCheckpoint(path, opts.output, {...command.optsWithGlobals(), deploymentId: opts.deploymentId})));
 
+program
+  .command("toolkit-proposal")
+  .description("write a draft, secret-free governance proposal for external multisig review")
+  .requiredOption("--target <address>")
+  .requiredOption("--calldata <hex>")
+  .requiredOption("--reason <text>")
+  .requiredOption("--artifact-hash <hash>")
+  .option("--approvals <n>", "required multisig approvals", "2")
+  .option("--output <path>", "proposal JSON output", "proposal.json")
+  .action(run((opts) => cmd.cmdToolkitProposal(opts)));
+
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.
 function run(fn: (...a: any[]) => Promise<void> | void): (...a: any[]) => Promise<void> {
