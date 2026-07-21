@@ -136,6 +136,12 @@ orchestrator다. 기본 실행은 dry-run이며 `--broadcast`가 없으면 RPC m
 하지 않는다. 이 경계는 production signer custody, confirmation/finality 정책과
 ownership handoff를 reference demo와 분리한다.
 
+Wave-2 illustrative elements는 기본 demo 배포의 컴파일 그래프와 실행 범위를
+불필요하게 키우지 않도록 `script/DeployWave2Elements.s.sol`에서 opt-in으로 배포한다.
+이 script는 `ELEMENT_REGISTRY`, `COMPLIANCE_ENGINE`, `IDENTITY_ELEMENT`,
+`ACCREDITED_ELEMENT`, `DEPLOYER_PRIVATE_KEY`를 외부 환경에서 받아 요소를 등록하며,
+활성 Recipe에 자동으로 추가하지 않는다.
+
 ## Open Decisions
 
 - manifest JSON schema와 validation 도구

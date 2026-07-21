@@ -25,12 +25,6 @@ import {AssetClassification} from "../src/compliance/elements/AssetClassificatio
 import {Erc3643Native} from "../src/compliance/elements/Erc3643Native.sol";
 import {FormDFiling} from "../src/compliance/elements/FormDFiling.sol";
 import {Lockup} from "../src/compliance/elements/Lockup.sol";
-import {EntityEligibility} from "../src/compliance/elements/EntityEligibility.sol";
-import {EquityOwnerLookThrough} from "../src/compliance/elements/EquityOwnerLookThrough.sol";
-import {ClaimFreshness} from "../src/compliance/elements/ClaimFreshness.sol";
-import {TransferRestrictionMetadata} from "../src/compliance/elements/TransferRestrictionMetadata.sol";
-import {EngineSelection} from "../src/compliance/elements/EngineSelection.sol";
-import {HolderCount, IIdentityView, IAiView} from "../src/compliance/elements/HolderCount.sol";
 import {IAcquisitionSource} from "../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipe} from "../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../src/compliance/recipes/Fund3c7Recipe.sol";
@@ -91,13 +85,6 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     Lockup internal lockup;
     DemoAcquisitionSource internal acqSource;
     QualifiedPurchaser internal qualifiedPurchaser;
-
-    // wave-2 elements (illustrative library extension; kept in variables only
-    // where a later constructor/wiring step needs the address).
-    IdentityUniqueness internal identityUniqueness;
-    AccreditedInvestor internal accreditedInvestor;
-    EquityOwnerLookThrough internal equityOwnerLookThrough;
-    HolderCount internal holderCountElement;
 
     ExecutionRouter internal router;
     VenueRegistry internal venueReg;
@@ -166,7 +153,6 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         ammAdapter.setRouter(address(router));
         rfqAdapter.setRouter(address(router));
         surveillance.setEngine(address(engine));
-        holderCountElement.setEngine(address(engine));
 
         // 6. tokens + AMM pool (token0=QUOTE, token1=RWA).
         quote = new MockERC20("Quote USD", "qUSD");
@@ -235,10 +221,8 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         elementReg.registerElement(bytes32("A-01-v1"), address(new Sanctions()));
         jurisdiction = new Jurisdiction();
         elementReg.registerElement(bytes32("A-02-v1"), address(jurisdiction));
-        accreditedInvestor = new AccreditedInvestor();
-        elementReg.registerElement(bytes32("A-03-v1"), address(accreditedInvestor));
-        identityUniqueness = new IdentityUniqueness();
-        elementReg.registerElement(bytes32("A-04-v1"), address(identityUniqueness));
+        elementReg.registerElement(bytes32("A-03-v1"), address(new AccreditedInvestor()));
+        elementReg.registerElement(bytes32("A-04-v1"), address(new IdentityUniqueness()));
         elementReg.registerElement(bytes32("A-05-v1"), address(new UsTaxResident()));
         assetClass = new AssetClassification(REG_D_CLASS);
         elementReg.registerElement(bytes32("B-01-v1"), address(assetClass));
@@ -254,27 +238,6 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         elementReg.registerElement(bytes32("A-13-v1"), address(qualifiedPurchaser));
         elementReg.registerElement(bytes32("BUIDL-MIN-v1"), address(new BuidlMinimumInvestment()));
         elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
-
-        // --- wave 2: A-08/A-09/A-11/B-03/B-04/D-01 (illustrative library
-        //     extension; NOT wired into any recipe's requiredElements — see
-        //     FEATURES.md). A-09 must exist before A-08 so its address can be
-        //     injected as A-08's ILookThroughSource seam.
-        equityOwnerLookThrough = new EquityOwnerLookThrough();
-        elementReg.registerElement(bytes32("A-09-v1"), address(equityOwnerLookThrough));
-        elementReg.registerElement(bytes32("A-08-v1"), address(new EntityEligibility(equityOwnerLookThrough)));
-        elementReg.registerElement(bytes32("A-11-v1"), address(new ClaimFreshness()));
-        elementReg.registerElement(bytes32("B-03-v1"), address(new TransferRestrictionMetadata()));
-        elementReg.registerElement(bytes32("B-04-v1"), address(new EngineSelection()));
-        // D-01 is STATEFUL and needs the A-04/A-03 addresses above plus a cap
-        // regime; TWELVE_G is the demo-sensible default (the other two modes
-        // are library completeness, doc HolderCount.sol). Engine wiring
-        // happens later, once `engine` exists (mirrors surveillance.setEngine).
-        holderCountElement = new HolderCount(
-            HolderCount.CapMode.TWELVE_G,
-            IIdentityView(address(identityUniqueness)),
-            IAiView(address(accreditedInvestor))
-        );
-        elementReg.registerElement(bytes32("D-01-v1"), address(holderCountElement));
     }
 
     /// @dev Full investor-side engine attestations for the 9-element recipe.
