@@ -41,6 +41,24 @@ echo "==> Running RFQ demo backend build + smoke test"
   npm test
 )
 
+echo "==> Running Toolkit config build + smoke test"
+(
+  cd services/toolkit
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
+echo "==> Running read-only Operator API smoke test"
+(
+  cd services/operator-api
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
 echo "==> Running vendored deploy-v3 tests"
 (
   cd tools/deploy-v3

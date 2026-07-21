@@ -8,4 +8,8 @@ services/cli/dist/
 services/cli/node_modules/
 services/rfq-demo-backend/dist/
 services/rfq-demo-backend/node_modules/
+services/toolkit/dist/
+services/toolkit/node_modules/
+services/operator-api/dist/
+services/operator-api/node_modules/
 deployments/

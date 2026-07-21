@@ -30,6 +30,8 @@
 - RFQ dealer/operator approval, quote cancellation, custody와 partial-fill 정책
 - Order Book matching/custody/surveillance 모델
 - 자동 live Anvil deployment/E2E, monitoring, incident runbook
+- config-driven Toolkit: versioned config, validation/simulation, deployment and
+  operator workflows
 - static analysis, warning budget와 production security/legal review
 
 ## Delivery Strategy

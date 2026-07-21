@@ -22,6 +22,8 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `docs/` | 제품 명세, 아키텍처, 로드맵과 Harness 문서 |
 | `services/rfq/` | RFQ v1 quote signer reference service |
 | `services/rfq-demo-backend/` | RFQ SDK를 사용하는 local Anvil 전용 demo application |
+| `services/toolkit/` | versioned Toolkit config schema와 공통 validation primitives |
+| `services/operator-api/` | private-key 없는 read-only operator snapshot/event API |
 | `tools/deploy-v3/` | 독립적으로 유지하는 vendored Uniswap v3 배포 도구 |
 | `lib/` | Foundry 의존성 |
 | `scripts/` | 저장소 setup, 검증과 정리 명령 |

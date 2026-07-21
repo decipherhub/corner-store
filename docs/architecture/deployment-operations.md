@@ -85,6 +85,20 @@ deployment ID 파일은 immutable하게 보존한다.
 - `SwapRouter02`, Migrator, Staker, 1bp fee tier는 현재 기본 범위가 아니다.
 - Corner Store 제품 컨트랙트는 Foundry로 관리한다.
 - 통합 manifest가 모든 도구의 결과를 연결한다.
+- Toolkit 설정은 사람이 주소와 policy binding을 직접 조합하는 대신 versioned JSON으로
+  입력하고, CLI와 이후 orchestrator가 동일한 validator를 재사용한다. 자산 profile은
+  `buidl-like` 또는 `reg-d`처럼 명시적으로 선택하며 배포 artifact와 충돌하면
+  fail-closed한다.
+
+첫 public workflow는 `toolkit-init`으로 기본 설정을 만들고 `toolkit-validate`로
+배포 전에 schema/profile/venue/account 설정을 검증하는 것이다. 실제 deploy,
+simulation, handoff와 dashboard는 이 설정을 읽는 후속 단계이며, CLI가 임의로
+on-chain 주소나 compliance policy를 새로 결정하지 않는다.
+
+운영 조회는 `services/operator-api`의 read-only API 경계를 사용한다. API는 private
+key나 transaction endpoint를 제공하지 않고, config/deployment snapshot과
+normalized event cursor만 노출한다. 온체인 상태가 source of truth이며, 현재
+in-memory index는 local/demo용이고 production indexer로 교체할 seam이다.
 
 ## Open Decisions
 

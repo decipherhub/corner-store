@@ -497,3 +497,36 @@ passing
 - `check`는 엔진이 direction-aware가 아니라는 점을 도움말·표기로 명시(asset-side 라벨).
 - `snapshot`/`restore`는 anvil 전용; `restore`는 이후 스냅샷을 무효화(문서화).
 - Non-goals: CLI-001과 동일(프로덕션 key 관리, out/ ABI 커플링, 2차 web3 라이브러리).
+
+## TOOLKIT-001 — Versioned Config Foundation
+
+### Behavior
+
+- 사용자가 자산 profile과 사용할 venue를 JSON 설정에서 선택한다.
+- `schemaVersion`으로 설정 형식을 고정하고, 잘못된 profile·venue·operator 계정은
+  배포 전에 fail-closed 검증한다.
+- `services/toolkit`의 validator를 CLI가 재사용한다.
+- `corner-store toolkit-init`과 `corner-store toolkit-validate`로 설정 생성·검증을
+  같은 인터페이스에서 수행한다.
+- `corner-store toolkit-simulate`로 artifact/profile/venue binding과 read-only 실행
+  순서를 트랜잭션 전에 확인한다.
+- Element/Recipe/Adapter/provider 템플릿과 required input/trust-boundary 검증을
+  제공해 확장 시 기존 compliance/router 경계를 복사하지 않도록 한다.
+- private key를 받지 않는 read-only Operator API로 config/deployment snapshot과
+  normalized event index를 제공한다.
+
+### Verification
+
+- `cd services/toolkit && npm test` (simulation/template mismatch 포함)
+- `cd services/operator-api && npm test`
+- `cd services/cli && npm test`
+- `scripts/check.sh`
+
+### State
+
+active
+
+### Scope
+
+이번 단계는 공통 설정 계약과 preflight까지다. 실제 deploy/simulate/handoff,
+operator API/indexer와 dashboard는 같은 config를 소비하는 후속 단계다.

@@ -51,6 +51,7 @@ export interface Artifact {
 export interface GlobalOpts {
   rpc?: string;
   artifact?: string;
+  config?: string;
   account?: string;
   key?: string;
 }

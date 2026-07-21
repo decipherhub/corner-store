@@ -13,8 +13,27 @@ program
   .version("0.1.0")
   .option("--rpc <url>", "JSON-RPC endpoint", "http://127.0.0.1:8545")
   .option("--artifact <path>", "deployment artifact JSON (defaults to <repo>/deployments/anvil-e2e.json)")
+  .option("--config <path>", "versioned Toolkit config JSON")
   .option("--account <n>", "Anvil mnemonic account index 0-9")
   .option("--key <hex>", "explicit private key (overrides --account)");
+
+program
+  .command("toolkit-init")
+  .description("create a versioned Corner Store Toolkit config")
+  .argument("[path]", "output JSON path", "corner-store.config.json")
+  .action(run((path) => cmd.cmdToolkitInit(path)));
+
+program
+  .command("toolkit-validate")
+  .description("validate a versioned Corner Store Toolkit config")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path) => cmd.cmdToolkitValidate(path)));
+
+program
+  .command("toolkit-simulate")
+  .description("preview Toolkit deployment and venue binding without sending transactions")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, command) => cmd.cmdToolkitSimulate(path, command.optsWithGlobals().artifact)));
 
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.

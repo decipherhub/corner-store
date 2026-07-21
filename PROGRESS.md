@@ -11,7 +11,7 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-- 없음
+- `TOOLKIT-001 — Versioned Config Foundation`
 
 ## Completed
 
@@ -70,13 +70,15 @@ source of truth로 사용한다.
 ## Next
 
 1. optional demo dashboard를 현재 backend/CLI 위 별도 feature로 구현한다.
-2. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
+2. Toolkit config를 확장해 validation/simulation과 deployment/operator workflow를
+   연결한다.
+3. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
    production dealer/operator 책임.
-3. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
+4. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
    (C-01 Lockup은 현재 fixture-only mock acquisition source).
-4. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
+5. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
-5. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
+6. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
 
 ## Last Session Summary
 

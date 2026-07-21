@@ -2,6 +2,8 @@ import {execFileSync} from "child_process";
 import {formatEther, parseEther} from "ethers";
 
 import {relative} from "path";
+import {resolve} from "path";
+import {loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
 
 import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
@@ -49,6 +51,33 @@ const CTX_TUPLE =
 const VENUE_TYPE_NAMES = ["AMM", "ORDER_BOOK", "RFQ"];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+export function cmdToolkitInit(path = "corner-store.config.json"): void {
+  const target = resolve(process.cwd(), path);
+  try {
+    writeDefaultConfig(target);
+  } catch (err: any) {
+    throw new CliError(`cannot create toolkit config ${target}: ${err.message}`);
+  }
+  console.log(`created ${target}`);
+}
+
+export function cmdToolkitValidate(path = "corner-store.config.json"): void {
+  const target = resolve(process.cwd(), path);
+  const config = loadConfig(target);
+  console.log(`valid toolkit config: ${target} (schema v${config.schemaVersion}, profile=${config.asset.profile})`);
+}
+
+export function cmdToolkitSimulate(path = "corner-store.config.json", artifactPath?: string): void {
+  const config = loadConfig(resolve(process.cwd(), path));
+  let deployedProfile: string | undefined;
+  if (artifactPath) {
+    const raw = loadArtifact(artifactPath);
+    deployedProfile = raw.assetProfile;
+  }
+  const simulation = simulateConfig(config, deployedProfile);
+  console.log(JSON.stringify(simulation, null, 2));
+}
 
 function subjectAddress(opts: GlobalOpts, positional: string | undefined, fallbackAccount: number): string {
   if (positional) return positional;
