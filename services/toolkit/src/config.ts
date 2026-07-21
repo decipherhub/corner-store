@@ -9,6 +9,7 @@ export interface ToolkitConfig {
   asset: {profile: AssetProfile; token?: string};
   venues: {amm: boolean; rfq: boolean; orderBook: boolean};
   accounts: {operator: string; investor: string; maker: string};
+  governance: {multisig: string; requiredApprovals: number};
 }
 
 export interface ToolkitSimulation {
@@ -24,7 +25,8 @@ export function defaultConfig(): ToolkitConfig {
     deployment: {artifact: "deployments/anvil-e2e.json", network: "anvil"},
     asset: {profile: "buidl-like"},
     venues: {amm: true, rfq: true, orderBook: false},
-    accounts: {operator: "operator", investor: "investor", maker: "maker"}
+    accounts: {operator: "operator", investor: "investor", maker: "maker"},
+    governance: {multisig: "governance-multisig", requiredApprovals: 2}
   };
 }
 
@@ -44,6 +46,9 @@ export function validateConfig(value: unknown): ToolkitConfig {
   if (!c.venues.amm && !c.venues.rfq && !c.venues.orderBook) throw new Error("at least one venue must be enabled");
   if (!c.accounts || ![c.accounts.operator, c.accounts.investor, c.accounts.maker].every((x) => typeof x === "string" && x.length > 0)) {
     throw new Error("accounts.operator, accounts.investor, and accounts.maker are required");
+  }
+  if (!c.governance || typeof c.governance.multisig !== "string" || c.governance.multisig.length === 0 || !Number.isSafeInteger(c.governance.requiredApprovals) || c.governance.requiredApprovals < 1) {
+    throw new Error("governance.multisig and positive governance.requiredApprovals are required");
   }
   return c as ToolkitConfig;
 }

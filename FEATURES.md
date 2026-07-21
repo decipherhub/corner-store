@@ -527,6 +527,8 @@ passing
 - live Anvil E2E가 실제 deployment artifact에 대해 Toolkit preflight와 immutable
   checkpoint를 실행한 뒤 CLI onboarding/RFQ settlement를 수행한다.
 - BUIDL-like와 Reg D profile별 Toolkit config fixture를 각각 검증한다.
+- Toolkit config는 governance multisig alias와 required approval 수를 명시하며 private key나
+  signer material은 포함하지 않는다.
 - Element/Recipe/Adapter/provider 템플릿과 required input/trust-boundary 검증을
   제공해 확장 시 기존 compliance/router 경계를 복사하지 않도록 한다.
 - private key를 받지 않는 read-only Operator API로 config/deployment snapshot과

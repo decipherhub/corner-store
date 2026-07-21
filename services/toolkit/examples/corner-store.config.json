@@ -16,5 +16,9 @@
     "operator": "operator",
     "investor": "investor",
     "maker": "maker"
+  },
+  "governance": {
+    "multisig": "governance-multisig",
+    "requiredApprovals": 2
   }
 }

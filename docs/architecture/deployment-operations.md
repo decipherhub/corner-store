@@ -88,7 +88,9 @@ deployment ID 파일은 immutable하게 보존한다.
 - Toolkit 설정은 사람이 주소와 policy binding을 직접 조합하는 대신 versioned JSON으로
   입력하고, CLI와 이후 orchestrator가 동일한 validator를 재사용한다. 자산 profile은
   `buidl-like` 또는 `reg-d`처럼 명시적으로 선택하며 배포 artifact와 충돌하면
-  fail-closed한다.
+  fail-closed한다. 설정에는 governance multisig alias와 required approval 수를 기록하지만
+  private key나 signer material은 기록하지 않는다. alias는 배포 환경의 실제
+  Safe/multisig 주소로 별도 검증·handoff되어야 한다.
 
 첫 public workflow는 `toolkit-init`으로 기본 설정을 만들고 `toolkit-validate`로
 배포 전에 schema/profile/venue/account 설정을 검증하는 것이다. `toolkit-preflight`는
