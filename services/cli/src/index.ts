@@ -47,6 +47,14 @@ program
   .argument("[path]", "config JSON path", "corner-store.config.json")
   .action(run((path, command) => cmd.cmdToolkitOnboard(path, command.optsWithGlobals())));
 
+program
+  .command("toolkit-checkpoint")
+  .description("write an immutable, secret-free deployment checkpoint after preflight")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .option("--output <path>", "checkpoint JSON output", "deployments/checkpoint.json")
+  .option("--deployment-id <id>", "stable deployment identifier")
+  .action(run((path, opts, command) => cmd.cmdToolkitCheckpoint(path, opts.output, {...command.optsWithGlobals(), deploymentId: opts.deploymentId})));
+
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.
 function run(fn: (...a: any[]) => Promise<void> | void): (...a: any[]) => Promise<void> {

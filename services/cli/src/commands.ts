@@ -5,6 +5,7 @@ import {relative} from "path";
 import {resolve} from "path";
 import {enabledEngineSpec, loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
 import {preflightConfig} from "../../toolkit/src/preflight";
+import {createCheckpoint, writeCheckpoint} from "../../toolkit/src/checkpoint";
 
 import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
@@ -97,6 +98,21 @@ export async function cmdToolkitOnboard(path = "corner-store.config.json", opts:
     throw new CliError(`Toolkit preflight failed: ${result.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
   }
   await cmdOnboard({...opts, profile: config.asset.profile, engines: enabledEngineSpec(config)});
+}
+
+export function cmdToolkitCheckpoint(path = "corner-store.config.json", output = "deployments/checkpoint.json", opts: GlobalOpts & {deploymentId?: string}): void {
+  if (!opts.artifact) throw new CliError("toolkit-checkpoint requires --artifact <path>");
+  const config = loadConfig(resolve(process.cwd(), path));
+  const artifact = loadArtifact(opts.artifact) as unknown as Record<string, unknown>;
+  const result = preflightConfig(config, artifact);
+  if (!result.ready) throw new CliError(`Toolkit preflight failed: ${result.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
+  const checkpoint = createCheckpoint(config, artifact, opts.deploymentId ?? `${config.deployment.network}-${Date.now()}`);
+  try {
+    writeCheckpoint(resolve(process.cwd(), output), checkpoint);
+  } catch (err: any) {
+    throw new CliError(`cannot write immutable checkpoint: ${err.message}`);
+  }
+  console.log(JSON.stringify(checkpoint, null, 2));
 }
 
 function subjectAddress(opts: GlobalOpts, positional: string | undefined, fallbackAccount: number): string {

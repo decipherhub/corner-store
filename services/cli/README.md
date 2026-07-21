@@ -42,10 +42,13 @@ corner-store toolkit-validate corner-store.config.json
 corner-store toolkit-simulate corner-store.config.json
 corner-store --artifact deployments/anvil-e2e.json toolkit-preflight corner-store.config.json
 corner-store --artifact deployments/anvil-e2e.json toolkit-onboard corner-store.config.json
+corner-store --artifact deployments/anvil-e2e.json toolkit-checkpoint corner-store.config.json --output deployments/checkpoint.json
 ```
 
 `toolkit-onboard` always runs the read-only preflight first. A profile or required
 venue address mismatch stops before a lifecycle transaction is sent.
+`toolkit-checkpoint` writes a secret-free immutable record and refuses to overwrite
+an existing deployment id/path.
 
 Admin commands (`onboard`, `manifest`, `attest`, `investor-setup`, `maker`)
 default to the operator (account 0). `buy` defaults to the buyer (account 1).

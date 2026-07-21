@@ -1,5 +1,5 @@
 import {createServer, IncomingMessage, Server, ServerResponse} from "http";
-import {readFileSync} from "fs";
+import {readFileSync, writeFileSync, existsSync} from "fs";
 import {loadConfig, ToolkitConfig} from "@corner-store/toolkit";
 
 export interface IndexedEvent {
@@ -9,7 +9,12 @@ export interface IndexedEvent {
   args: Record<string, string>;
 }
 
-export class EventIndex {
+export interface EventStore {
+  add(event: IndexedEvent): void;
+  list(): IndexedEvent[];
+}
+
+export class EventIndex implements EventStore {
   private readonly events: IndexedEvent[] = [];
 
   add(event: IndexedEvent): void {
@@ -24,16 +29,37 @@ export class EventIndex {
   }
 }
 
+export class FileEventIndex implements EventStore {
+  private events: IndexedEvent[];
+
+  constructor(private readonly path: string) {
+    this.events = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")).events ?? [] : [];
+  }
+
+  add(event: IndexedEvent): void {
+    if (!Number.isSafeInteger(event.blockNumber) || event.blockNumber < 0) throw new Error("invalid event blockNumber");
+    if (!event.transactionHash || !event.name) throw new Error("event transactionHash and name are required");
+    this.events.push(event);
+    this.events.sort((a, b) => a.blockNumber - b.blockNumber);
+    writeFileSync(this.path, `${JSON.stringify({schemaVersion: 1, lastBlock: this.events[this.events.length - 1]?.blockNumber ?? 0, events: this.events}, null, 2)}\n`);
+  }
+
+  list(): IndexedEvent[] {
+    return [...this.events];
+  }
+}
+
 export interface OperatorApiOptions {
   configPath: string;
   artifactPath?: string;
-  index?: EventIndex;
+  eventsPath?: string;
+  index?: EventStore;
 }
 
 export function createOperatorApi(options: OperatorApiOptions): Server {
   const config = loadConfig(options.configPath);
   const artifact = options.artifactPath ? JSON.parse(readFileSync(options.artifactPath, "utf8")) : undefined;
-  const index = options.index ?? new EventIndex();
+  const index = options.index ?? (options.eventsPath ? new FileEventIndex(options.eventsPath) : new EventIndex());
 
   return createServer((req, res) => {
     res.setHeader("content-type", "application/json");

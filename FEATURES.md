@@ -514,12 +514,16 @@ passing
   venue 구성을 mutation 전에 검증한다.
 - `corner-store toolkit-onboard`가 같은 config를 preflight한 뒤에만 선택한 profile과
   venue를 manifest에 반영한다.
+- `corner-store toolkit-checkpoint`가 config/artifact hash와 deployment state를
+  secret-free immutable JSON으로 기록하고 기존 checkpoint 덮어쓰기를 거부한다.
 - Element/Recipe/Adapter/provider 템플릿과 required input/trust-boundary 검증을
   제공해 확장 시 기존 compliance/router 경계를 복사하지 않도록 한다.
 - private key를 받지 않는 read-only Operator API로 config/deployment snapshot과
   normalized event index를 제공한다.
 - read-only Operator dashboard가 profile/venue/event snapshot을 표시하고,
   변경은 외부 multisig proposal 검토 후 실행하도록 경계를 둔다.
+- Operator API가 local/demo in-memory index와 교체 가능한 file-backed event index를
+  제공하며 마지막 block cursor를 보존한다.
 
 ### Verification
 

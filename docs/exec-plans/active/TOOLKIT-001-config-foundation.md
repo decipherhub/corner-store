@@ -15,6 +15,7 @@ dashboard가 재사용할 수 있는 첫 Toolkit 경계를 만든다.
 - artifact address/profile/venue를 확인하는 `toolkit-preflight`
 - preflight 이후에만 실행되는 config-driven `toolkit-onboard`
 - private-key 없는 read-only operator dashboard와 multisig proposal boundary
+- secret-free immutable deployment checkpoint와 file-backed event cursor
 - Element/Recipe/Adapter/provider template metadata와 required-input 검증
 - package와 CLI smoke test 및 repository check 연결
 

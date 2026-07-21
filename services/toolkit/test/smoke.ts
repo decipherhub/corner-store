@@ -4,6 +4,7 @@ import {join} from "path";
 import {defaultConfig, enabledEngineSpec, loadConfig, simulateConfig, validateConfig, writeDefaultConfig} from "../src/config";
 import {getTemplate, validateTemplateInputs} from "../src/templates";
 import {preflightConfig} from "../src/preflight";
+import {createCheckpoint, loadCheckpoint, writeCheckpoint} from "../src/checkpoint";
 
 const dir = mkdtempSync(join(tmpdir(), "corner-store-toolkit-"));
 const path = join(dir, "corner-store.config.json");
@@ -37,6 +38,12 @@ const artifact = {
 if (!preflightConfig(config, artifact).ready) throw new Error("preflight should be ready");
 if (preflightConfig({...config, asset: {profile: "reg-d"}}, artifact).ready) throw new Error("profile mismatch passed preflight");
 if (enabledEngineSpec(config) !== "amm,rfq") throw new Error("engine selection regression");
+const checkpointPath = join(dir, "deployment.json");
+writeCheckpoint(checkpointPath, createCheckpoint(config, artifact, "anvil-demo-1"));
+if (loadCheckpoint(checkpointPath).state !== "preflighted") throw new Error("checkpoint regression");
+try { writeCheckpoint(checkpointPath, createCheckpoint(config, artifact, "anvil-demo-1")); throw new Error("checkpoint overwritten"); } catch (err: any) {
+  if (!String(err.code ?? err.message).includes("EEXIST")) throw err;
+}
 try {
   validateConfig({...defaultConfig(), venues: {amm: false, rfq: false, orderBook: false}});
   throw new Error("empty venues accepted");

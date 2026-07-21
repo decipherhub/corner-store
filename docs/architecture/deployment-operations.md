@@ -106,6 +106,12 @@ in-memory index는 local/demo용이고 production indexer로 교체할 seam이�
 검토·승인한다. production authentication, CSRF와 multisig provider 연동은 배포
 환경의 책임으로 남긴다.
 
+배포 전 `toolkit-checkpoint`는 validated config와 deployment artifact의 SHA-256
+hash를 immutable checkpoint로 남긴다. checkpoint는 주소·상태 검증을 위한 기록일
+뿐이며 secret이나 signer material을 포함하지 않는다. Operator API의 file-backed
+event index는 local persistence와 마지막 block cursor를 제공하고, production에서는
+재조직(reorg)·finality 정책을 가진 chain indexer로 교체해야 한다.
+
 ## Open Decisions
 
 - manifest JSON schema와 validation 도구

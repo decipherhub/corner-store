@@ -2,7 +2,7 @@ import {mkdtempSync, writeFileSync} from "fs";
 import {request} from "http";
 import {tmpdir} from "os";
 import {join} from "path";
-import {createOperatorApi, EventIndex} from "../src/api";
+import {createOperatorApi, EventIndex, FileEventIndex} from "../src/api";
 import {defaultConfig} from "@corner-store/toolkit";
 
 async function main(): Promise<void> {
@@ -29,6 +29,10 @@ async function main(): Promise<void> {
   const events = await get("/api/v1/events");
   if (events.body.events.length !== 1) throw new Error("event index regression");
   server.close();
+  const eventPath = join(dir, "events.json");
+  const persistent = new FileEventIndex(eventPath);
+  persistent.add({blockNumber: 3, transactionHash: "0xdef", name: "ManifestSuspended", args: {token: "0x1"}});
+  if (new FileEventIndex(eventPath).list().length !== 1) throw new Error("persistent event index regression");
   console.log("corner-store operator API smoke ok");
 }
 
