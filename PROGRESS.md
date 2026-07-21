@@ -69,16 +69,15 @@ source of truth로 사용한다.
 
 ## Next
 
-1. optional demo dashboard를 현재 backend/CLI 위 별도 feature로 구현한다.
-2. Toolkit config를 확장해 validation/simulation과 deployment/operator workflow를
-   연결한다.
-3. 남은 RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
+1. RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
    production dealer/operator 책임.
-4. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
+2. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
    (C-01 Lockup은 현재 fixture-only mock acquisition source).
-5. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
+3. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
-6. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
+4. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
+5. production 환경의 TLS, secret rotation, 실제 multisig provider와 live RPC
+   finality/recovery 정책을 별도 운영 feature로 구체화한다.
 
 ## Last Session Summary
 
@@ -100,3 +99,5 @@ source of truth로 사용한다.
 - Toolkit 통합 후 `scripts/e2e-anvil.sh --profile buidl-like`와 `--profile reg-d`가
   각각 실제 artifact preflight와 immutable checkpoint, 7/7 scenario, CLI/backend
   RFQ success와 revoked-maker failure를 통과했다.
+- Toolkit config에 governance multisig alias와 required approval 수를 명시하고,
+  signer material은 설정에서 제외했다.

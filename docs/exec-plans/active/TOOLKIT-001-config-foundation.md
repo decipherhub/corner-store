@@ -25,9 +25,8 @@ dashboard가 재사용할 수 있는 첫 Toolkit 경계를 만든다.
 ## Out of scope
 
 - private key 보관·서명·multisig
-- 실제 배포 orchestration과 chain mutation
-- simulation 결과 계산
-- hosted API, indexer와 dashboard
+- 실제 운영 환경의 배포 orchestration과 chain mutation
+- 실제 운영 환경의 hosted API/indexer/dashboard 배포
 - 법률 정책의 임의 생성 또는 profile별 컨트랙트 fork
 
 ## Acceptance
@@ -39,8 +38,13 @@ dashboard가 재사용할 수 있는 첫 Toolkit 경계를 만든다.
 - 다음 단계가 이 config를 읽어 validation → simulation → deployment → operation으로
   확장할 수 있도록 문서와 public boundary가 존재한다.
 
-## Next handoff
+## Delivered handoff
 
-다음 단계는 이 config를 읽는 deployment preflight와 checkpoint writer를 추가한다.
-그 뒤 deploy checkpoint와 operator API가 동일한 artifact/config hash를 사용하도록
-연결한다.
+Toolkit config, deployment preflight, checkpoint writer, operator API/indexer와
+read-only dashboard가 동일한 artifact/config hash 경계를 사용하도록 연결되었다.
+`scripts/check.sh`와 BUIDL-like/Reg D live Anvil E2E가 이 handoff를 검증한다.
+
+## Follow-up
+
+Production TLS/secret rotation, 실제 multisig provider, live RPC finality/recovery,
+production RFQ custody와 pricing은 이 feature의 후속 운영 범위다.
