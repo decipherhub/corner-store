@@ -530,6 +530,8 @@ passing
   제공하며 마지막 block cursor를 보존한다.
 - finality-aware indexer가 confirmation depth 이후 block만 저장하고 finalized block
   hash가 바뀌면 fail-closed로 중단한다.
+- Operator API가 선택적 Bearer token 인증을 지원하며 health endpoint 외 조회를
+  인증 없이 노출하지 않는다.
 
 ### Verification
 

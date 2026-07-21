@@ -1,5 +1,6 @@
 import {createServer, IncomingMessage, Server, ServerResponse} from "http";
 import {readFileSync, writeFileSync, existsSync} from "fs";
+import {timingSafeEqual} from "crypto";
 import {loadConfig, ToolkitConfig} from "@corner-store/toolkit";
 
 export interface IndexedEvent {
@@ -54,6 +55,7 @@ export interface OperatorApiOptions {
   artifactPath?: string;
   eventsPath?: string;
   index?: EventStore;
+  authToken?: string;
 }
 
 export function createOperatorApi(options: OperatorApiOptions): Server {
@@ -66,11 +68,20 @@ export function createOperatorApi(options: OperatorApiOptions): Server {
     if (req.method !== "GET") return send(res, 405, {error: "read-only operator API"});
     const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
     if (path === "/api/v1/health") return send(res, 200, {ok: true, readOnly: true});
+    if (options.authToken && !authorized(req, options.authToken)) return send(res, 401, {error: "unauthorized"});
     if (path === "/api/v1/config") return send(res, 200, sanitizeConfig(config));
     if (path === "/api/v1/deployment") return send(res, 200, artifact ?? {configured: false});
     if (path === "/api/v1/events") return send(res, 200, {events: index.list(), source: "in-memory-index"});
     return send(res, 404, {error: "not found"});
   });
+}
+
+function authorized(req: IncomingMessage, expected: string): boolean {
+  const supplied = req.headers.authorization;
+  if (!supplied?.startsWith("Bearer ")) return false;
+  const actual = Buffer.from(supplied.slice("Bearer ".length));
+  const target = Buffer.from(expected);
+  return actual.length === target.length && timingSafeEqual(actual, target);
 }
 
 function sanitizeConfig(config: ToolkitConfig): ToolkitConfig {

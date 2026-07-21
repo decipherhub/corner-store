@@ -12,12 +12,12 @@ async function main(): Promise<void> {
   writeFileSync(configPath, JSON.stringify(defaultConfig()));
   const index = new EventIndex();
   index.add({blockNumber: 2, transactionHash: "0xabc", name: "ManifestActivated", args: {token: "0x1"}});
-  const server = createOperatorApi({configPath, index});
+  const server = createOperatorApi({configPath, index, authToken: "test-token"});
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("operator API did not bind");
-  const get = (path: string) => new Promise<{status: number; body: any}>((resolve, reject) => {
-    const req = request({host: "127.0.0.1", port: address.port, path, method: "GET"}, (res) => {
+  const get = (path: string, token?: string) => new Promise<{status: number; body: any}>((resolve, reject) => {
+    const req = request({host: "127.0.0.1", port: address.port, path, method: "GET", headers: token ? {authorization: `Bearer ${token}`} : undefined}, (res) => {
       let body = "";
       res.on("data", (chunk) => (body += chunk));
       res.on("end", () => resolve({status: res.statusCode ?? 0, body: JSON.parse(body)}));
@@ -27,7 +27,9 @@ async function main(): Promise<void> {
   });
   const health = await get("/api/v1/health");
   if (health.status !== 200 || !health.body.readOnly) throw new Error("health endpoint regression");
-  const events = await get("/api/v1/events");
+  const unauthorized = await get("/api/v1/events");
+  if (unauthorized.status !== 401) throw new Error("operator API auth regression");
+  const events = await get("/api/v1/events", "test-token");
   if (events.body.events.length !== 1) throw new Error("event index regression");
   server.close();
   const eventPath = join(dir, "events.json");
