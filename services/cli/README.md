@@ -33,6 +33,20 @@ EIP-712 RFQ quotes REUSE the sibling `services/rfq` signer library.
 | `--account <0-9>` | command-specific (operator=0, buyer=1) | Anvil mnemonic account index |
 | `--key <hex>` | — | explicit private key (overrides `--account`) |
 
+Toolkit workflows use the versioned config file rather than repeating profile and
+venue flags:
+
+```sh
+corner-store toolkit-init corner-store.config.json
+corner-store toolkit-validate corner-store.config.json
+corner-store toolkit-simulate corner-store.config.json
+corner-store --artifact deployments/anvil-e2e.json toolkit-preflight corner-store.config.json
+corner-store --artifact deployments/anvil-e2e.json toolkit-onboard corner-store.config.json
+```
+
+`toolkit-onboard` always runs the read-only preflight first. A profile or required
+venue address mismatch stops before a lifecycle transaction is sent.
+
 Admin commands (`onboard`, `manifest`, `attest`, `investor-setup`, `maker`)
 default to the operator (account 0). `buy` defaults to the buyer (account 1).
 The asset is selected when the stack is deployed. `onboard --profile` and

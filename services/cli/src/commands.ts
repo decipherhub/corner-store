@@ -3,7 +3,7 @@ import {formatEther, parseEther} from "ethers";
 
 import {relative} from "path";
 import {resolve} from "path";
-import {loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
+import {enabledEngineSpec, loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
 import {preflightConfig} from "../../toolkit/src/preflight";
 
 import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
@@ -87,6 +87,16 @@ export function cmdToolkitPreflight(path = "corner-store.config.json", artifactP
   const result = preflightConfig(config, artifact);
   console.log(JSON.stringify(result, null, 2));
   if (!result.ready) process.exitCode = 1;
+}
+
+export async function cmdToolkitOnboard(path = "corner-store.config.json", opts: GlobalOpts): Promise<void> {
+  const config = loadConfig(resolve(process.cwd(), path));
+  const artifact = loadArtifact(opts.artifact) as unknown as Record<string, unknown>;
+  const result = preflightConfig(config, artifact);
+  if (!result.ready) {
+    throw new CliError(`Toolkit preflight failed: ${result.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
+  }
+  await cmdOnboard({...opts, profile: config.asset.profile, engines: enabledEngineSpec(config)});
 }
 
 function subjectAddress(opts: GlobalOpts, positional: string | undefined, fallbackAccount: number): string {

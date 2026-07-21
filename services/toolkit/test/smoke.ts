@@ -1,7 +1,7 @@
 import {mkdtempSync, readFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
-import {defaultConfig, loadConfig, simulateConfig, validateConfig, writeDefaultConfig} from "../src/config";
+import {defaultConfig, enabledEngineSpec, loadConfig, simulateConfig, validateConfig, writeDefaultConfig} from "../src/config";
 import {getTemplate, validateTemplateInputs} from "../src/templates";
 import {preflightConfig} from "../src/preflight";
 
@@ -36,6 +36,7 @@ const artifact = {
 };
 if (!preflightConfig(config, artifact).ready) throw new Error("preflight should be ready");
 if (preflightConfig({...config, asset: {profile: "reg-d"}}, artifact).ready) throw new Error("profile mismatch passed preflight");
+if (enabledEngineSpec(config) !== "amm,rfq") throw new Error("engine selection regression");
 try {
   validateConfig({...defaultConfig(), venues: {amm: false, rfq: false, orderBook: false}});
   throw new Error("empty venues accepted");

@@ -86,3 +86,12 @@ export function simulateConfig(config: ToolkitConfig, deployedProfile?: string):
     ]
   };
 }
+
+export function enabledEngineSpec(config: ToolkitConfig): string {
+  const selected = validateConfig(config);
+  return [
+    selected.venues.amm ? "amm" : undefined,
+    selected.venues.rfq ? "rfq" : undefined,
+    selected.venues.orderBook ? "order_book" : undefined
+  ].filter((value): value is string => value !== undefined).join(",");
+}

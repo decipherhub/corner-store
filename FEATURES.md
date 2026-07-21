@@ -512,6 +512,8 @@ passing
   순서를 트랜잭션 전에 확인한다.
 - `corner-store toolkit-preflight`로 실제 deployment artifact의 주소와 선택 profile,
   venue 구성을 mutation 전에 검증한다.
+- `corner-store toolkit-onboard`가 같은 config를 preflight한 뒤에만 선택한 profile과
+  venue를 manifest에 반영한다.
 - Element/Recipe/Adapter/provider 템플릿과 required input/trust-boundary 검증을
   제공해 확장 시 기존 compliance/router 경계를 복사하지 않도록 한다.
 - private key를 받지 않는 read-only Operator API로 config/deployment snapshot과

@@ -41,6 +41,12 @@ program
   .argument("[path]", "config JSON path", "corner-store.config.json")
   .action(run((path, command) => cmd.cmdToolkitPreflight(path, command.optsWithGlobals().artifact)));
 
+program
+  .command("toolkit-onboard")
+  .description("preflight a Toolkit config, then onboard its selected asset and venues")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, command) => cmd.cmdToolkitOnboard(path, command.optsWithGlobals())));
+
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.
 function run(fn: (...a: any[]) => Promise<void> | void): (...a: any[]) => Promise<void> {
