@@ -7,13 +7,14 @@
 # and tears the node down on exit. Runs fully offline.
 #
 # Usage:
-#   scripts/e2e-anvil.sh [--port N] [--backend-port N] [--profile buidl-like|reg-d] [--mode full|rfq] [--keep]
+#   scripts/e2e-anvil.sh [--port N] [--backend-port N] [--profile buidl-like|reg-d] [--mode full|rfq] [--pid-file PATH] [--keep]
 #
 #   --port N   Anvil port (default 8545).
 #   --backend-port N  RFQ demo backend port (default 8787).
 #   --profile  Asset profile (default buidl-like; alternative reg-d).
 #   --mode     full runs the 7-scenario suite plus RFQ; rfq runs the concise
 #              backend/CLI/Router RFQ walkthrough only (default full).
+#   --pid-file  write Anvil and RFQ backend PIDs for a supervising launcher.
 #   --keep     Leave Anvil running after the suite (attach a UI / continue the
 #              demo interactively). Otherwise Anvil is killed on exit.
 #
@@ -28,6 +29,7 @@ KEEP=0
 ASSET_PROFILE=buidl-like
 BACKEND_PORT=8787
 DEMO_MODE=full
+PID_FILE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --port) PORT="$2"; shift 2 ;;
@@ -38,6 +40,8 @@ while [ $# -gt 0 ]; do
     --backend-port=*) BACKEND_PORT="${1#*=}"; shift ;;
     --mode) DEMO_MODE="$2"; shift 2 ;;
     --mode=*) DEMO_MODE="${1#*=}"; shift ;;
+    --pid-file) PID_FILE="$2"; shift 2 ;;
+    --pid-file=*) PID_FILE="${1#*=}"; shift ;;
     --keep) KEEP=1; shift ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -65,6 +69,9 @@ CHECKPOINT_FILE="${TMPDIR:-/tmp}/corner-store-e2e-checkpoint.$$"
 
 cleanup() {
   if [ "$KEEP" -eq 1 ]; then
+    if [ -n "$PID_FILE" ]; then
+      printf '%s\n%s\n' "$ANVIL_PID" "$BACKEND_PID" > "$PID_FILE"
+    fi
     if [ -n "$ANVIL_PID" ]; then
       echo ""
       echo "==> --keep set: Anvil left running (pid ${ANVIL_PID}) on ${RPC}"
@@ -180,10 +187,10 @@ DEMO_SETTLED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
   -d '{"amountIn":"5000000000000000000000000","action":"settle"}')
 node -e 'const value=JSON.parse(process.argv[1]); if (!value.transaction?.hash || BigInt(value.transaction.rwaDelta) <= 0n) process.exit(1); console.log(`    PASS: dashboard trade settled in block ${value.transaction.blockNumber}`);' "$DEMO_SETTLED"
-DEMO_REJECTED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
+DEMO_REJECTED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
   -d '{"amountIn":"5000000000000000000000000","action":"revoked-maker"}')
-node -e 'const value=JSON.parse(process.argv[1]); if (!value.rejection) process.exit(1); console.log("    PASS: dashboard maker-revocation was rejected");' "$DEMO_REJECTED"
+node -e 'const value=JSON.parse(process.argv[1]); if (!value.rejection) { console.error(value); process.exit(1); } console.log("    PASS: dashboard maker-revocation was rejected");' "$DEMO_REJECTED"
 
 echo "==> Requesting and filling a backend-signed RFQ quote through the Router"
 "${CLI[@]}" rfq-quote --backend "http://127.0.0.1:${BACKEND_PORT}" \
