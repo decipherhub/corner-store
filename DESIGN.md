@@ -42,13 +42,13 @@
 
 ## Components
 - Existing components to reuse: status blocks, fact rows, quote cards, execution trace, event list, metrics strip
-- New/changed components: compliance pre-check, session trade history, live indexed-event summary and log, live firm-rate marker over clearly labeled fixture market context
+- New/changed components: compliance pre-check, session trade history, live indexed-event summary and log, live firm-rate marker over clearly labeled fixture market context, header help control and in-product presenter guide
 - Variants and states: live/preview, available/expired, loading/empty/error/success/rejected
 - Token/component ownership: dashboard CSS variables and classes in `services/operator-dashboard/index.html`
 
 ## Accessibility
 - Target standard: WCAG 2.1 AA for core demo controls
-- Keyboard/focus behavior: native buttons, inputs and details controls remain keyboard reachable
+- Keyboard/focus behavior: native buttons, inputs and details controls remain keyboard reachable; the demo guide traps focus, closes with Escape/backdrop/close control and restores focus to the help button
 - Contrast/readability: status is conveyed with text in addition to color
 - Screen-reader semantics: headings, labels, buttons and native details elements
 - Reduced motion and sensory considerations: no essential information depends on animation

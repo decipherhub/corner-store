@@ -383,6 +383,9 @@ passing
 - Trader의 live firm rate는 `/demo/quote` 금액에서 계산한다. 비교 maker, 가격 곡선,
   spread와 활동 통계는 multi-maker/market-data API가 생기기 전까지 명시적으로
   `Demo fixture data`와 `Preview only`로 표시해 실제 실행 가능 quote와 구분한다.
+- 헤더의 **?** presenter guide가 정상 거래, maker-revocation 보안 시나리오,
+  live/fixture 경계와 각 버튼의 실제 backend/Operator API 연결을 대시보드 안에서
+  설명한다.
 - backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
 - production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
 

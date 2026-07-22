@@ -1,6 +1,6 @@
 # Corner Store Operator Dashboard
 
-This dashboard has two modes:
+This dashboard has three modes:
 
 - **Operator view** is a read-only view backed by `services/operator-api` through
   the dashboard's same-origin proxy.
@@ -34,6 +34,8 @@ scripts/demo.sh --profile buidl-like
 ```
 
 Open the printed URL and select a view. Press Ctrl-C to stop all local services.
+Use the **?** button in the dashboard header for the presenter flow, the
+security scenario, live-versus-fixture labeling, and a button-to-endpoint map.
 For manual composition, start Operator API on port 8788 and set
 `CORNER_STORE_OPERATOR_API` to its URL. If the API uses authentication, set
 `CORNER_STORE_API_TOKEN` on the dashboard process; the token stays server side

@@ -2,9 +2,17 @@ const fs = require("fs");
 const path = require("path");
 
 const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-for (const marker of ["/api/v1/config", "/api/v1/deployment", "/api/v1/manifest", "/api/v1/events", "Active deployment", "Compliance control plane", "Manifest status", "Manifest version", "Recipe bindings", "no private keys", "Demo setup", "setupDemo", "Security demo", "securityAmount", "securityPrepare", "Create test quote", "Session trade history", "Compliance status", "Recent settlement activity", "eventSummary", "Indexed event log", "Request firm quote", "Revoke maker &amp; execute", "/demo/quote", "/demo/trade", "/demo/state", "/demo/setup", "/demo/restore", "setComplianceState", "Router → RFQAdapter", "Preview only", "Demo fixture data", "Live firm rate · API", "updateMarket", "liveRatePoint", "Falcon Markets", "Nomos Capital", "live.signature.slice", "securityQuote.signature.slice", "quote:live", "quote:securityQuote"]) {
+for (const marker of ["/api/v1/config", "/api/v1/deployment", "/api/v1/manifest", "/api/v1/events", "Active deployment", "Compliance control plane", "Manifest status", "Manifest version", "Recipe bindings", "no private keys", "Demo setup", "setupDemo", "Security demo", "securityAmount", "securityPrepare", "Create test quote", "Session trade history", "Compliance status", "Recent settlement activity", "eventSummary", "Indexed event log", "Request firm quote", "Revoke maker &amp; execute", "/demo/quote", "/demo/trade", "/demo/state", "/demo/setup", "/demo/restore", "setComplianceState", "Router → RFQAdapter", "Preview only", "Demo fixture data", "Live firm rate · API", "updateMarket", "liveRatePoint", "Falcon Markets", "Nomos Capital", "live.signature.slice", "securityQuote.signature.slice", "quote:live", "quote:securityQuote", "openGuide", "closeGuide", "guideBackdrop", "aria-modal=\"true\"", "lang=\"ko\"", "Demo guide", "버튼별 연결", "RFQMakerNotApproved", "operatorApi", "This one-time quote cannot be submitted again", "clearTimeout(quoteTimer)", "live!==q"]) {
   if (!html.includes(marker)) throw new Error(`dashboard safety/data marker missing: ${marker}`);
 }
+for (const [button, handler] of [["setupDemo", "setupDemo"], ["connect", "check"], ["requestQuote", "requestQuote"], ["executeQuote", "execute"], ["refresh", "operator"], ["securityPrepare", "prepareSecurityQuote"], ["securityRevoke", "revokeSecurity"], ["securityRestore", "restoreSecurity"], ["openGuide", "openGuide"], ["closeGuide", "closeGuide"]]) {
+  if (!html.includes(`$('${button}').onclick=${handler}`)) throw new Error(`dashboard button ${button} is not wired to ${handler}`);
+}
+if (!html.includes("$('selectLive').onclick=()=>selectQuote()")) throw new Error("live quote review button is not wired");
+if (!html.includes("document.querySelectorAll('[data-view]').forEach")) throw new Error("dashboard view navigation is not wired");
+const operatorStart = html.indexOf("function operator(");
+const operatorEnd = html.indexOf("\n", operatorStart);
+if (operatorStart < 0 || !html.slice(operatorStart, operatorEnd).includes("/api/v1/events")) throw new Error("operator refresh is not wired to indexed events");
 for (const [action, endpoint] of [["check", "/demo/state"], ["requestQuote", "/demo/quote"], ["execute", "/demo/trade"], ["prepareSecurityQuote", "/demo/quote"], ["revokeSecurity", "/demo/trade"], ["restoreSecurity", "/demo/restore"], ["setupDemo", "/demo/setup"]]) {
   const start = html.indexOf(`function ${action}(`);
   const end = html.indexOf("\n", start);

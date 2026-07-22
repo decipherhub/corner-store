@@ -100,6 +100,12 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- 대시보드의 모든 정적·동적 버튼을 endpoint/상태 전이와 대조하고 연결 회귀 검사를
+  추가했다. 체결된 single-use quote의 재실행을 차단하고 Operator API 오류 처리,
+  탭 활성 상태와 중복 실행 방지를 보강했으며, 헤더 **?**에서 정상 거래·Security
+  demo·live/fixture 경계·버튼별 연결을 바로 확인하는 접근 가능한 presenter guide를
+  제공한다. dashboard smoke와 fresh-port BUIDL-like RFQ E2E(setup, settle,
+  revoke rejection, state persistence, restore)가 통과했다.
 - RFQ MVP dashboard의 준비·상태 확인·quote 요청·검토·Router 체결·maker revoke·
   명시적 restore를 실제 local backend와 온체인 상태에 연결했다. revoke는 restore
   전까지 유지되고 Operator event index에 settlement와 maker false/true 전이가

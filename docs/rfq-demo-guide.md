@@ -13,7 +13,9 @@ scripts/demo.sh --profile buidl-like
 
 The launcher starts Anvil, deploys the selected profile, starts the RFQ backend,
 starts the read-only Operator API and serves the dashboard. Open the printed URL
-and press Ctrl-C to stop all local services.
+and press Ctrl-C to stop all local services. The same presenter sequence and a
+button-to-endpoint map are available from the **?** button in the dashboard
+header.
 
 The command exits non-zero on failure. A successful run proves, in order:
 
