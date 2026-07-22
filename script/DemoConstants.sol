@@ -40,4 +40,5 @@ abstract contract DemoConstants {
 
     // Deployment artifact shared between the two scripts.
     string internal constant ARTIFACT_PATH = "deployments/anvil-e2e.json";
+    string internal constant MANIFEST_SNAPSHOT_PATH = "deployments/operator-manifest.json";
 }

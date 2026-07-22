@@ -68,6 +68,7 @@ if [ "$PROFILE" = "reg-d" ]; then
 fi
 CORNER_STORE_CONFIG="$CORNER_STORE_CONFIG" \
 CORNER_STORE_ARTIFACT="deployments/anvil-e2e.json" \
+CORNER_STORE_MANIFEST="deployments/operator-manifest.json" \
 PORT="$OPERATOR_API_PORT" \
 node services/operator-api/dist/src/index.js >"$STATE_DIR/operator-api.log" 2>&1 &
 OPERATOR_API_PID=$!
@@ -96,4 +97,3 @@ echo "Demo is ready: http://127.0.0.1:${DASHBOARD_PORT}"
 echo "RFQ backend: http://127.0.0.1:${BACKEND_PORT}"
 echo "Press Ctrl-C to stop all demo services."
 wait "$DASHBOARD_PID"
-

@@ -8,6 +8,8 @@ This dashboard has two modes:
   downloads it and copies the protected CLI settlement command.
 
 - It displays the selected asset profile, enabled venues and indexed events.
+- It displays the deployment artifact and the read-only Manifest snapshot generated
+  after demo onboarding.
 - It never accepts or stores a private key.
 - It does not submit transactions.
 - Governance changes must be prepared as an external multisig proposal and reviewed
@@ -20,10 +22,13 @@ scripts/demo.sh --profile buidl-like
 ```
 
 Open the printed URL and select a view. Press Ctrl-C to stop all local services.
-For manual composition, start Operator API on port 8788 or set
+For manual composition, start Operator API on port 8788 and set
 `CORNER_STORE_OPERATOR_API` to its URL. If the API uses authentication, set
 `CORNER_STORE_API_TOKEN` on the dashboard process; the token stays server side
 and is never exposed to the browser.
+
+Set `CORNER_STORE_MANIFEST` on the Operator API to the onboarding snapshot path
+when running the API manually.
 
 Production hosting, authentication, CSRF policy and multisig provider
 integration remain deployment-specific work.
