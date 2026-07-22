@@ -16,7 +16,7 @@
 - Uniswap v3 vendored deployment profile 분리와 단위 테스트
 - Foundry product scaffold와 공통 type/error/event/interface
 - Element/Recipe registry와 illustrative compliance elements/recipes
-- Token policy registry와 cumulative multi-Recipe evaluation
+- Token policy registry와 bounded RecipeBinding(required/path/flag) evaluation
 - generic ExecutionRouter, VenueRegistry, VenueSelector와 공통 Adapter interface
 - AMM reference adapter와 RFQ v1 reference settlement adapter
 - RFQ quote signer SDK, local MVP backend와 CLI/Router settlement flow
@@ -36,7 +36,7 @@
 
 남은 주요 작업:
 
-- RecipeBinding 기반 production Asset Compliance Manifest schema/migration
+- canonical recipe-key alias와 per-element enforcement override compiler
 - production legal Element 기준과 승인된 operator 입력 모델
 - 실제 Securitize/TA provider adapter, production WORM/indexer와 amount-specific
   lot allocation 정책
@@ -62,7 +62,8 @@ flowchart LR
 
 1. mock ERC-3643 자산에 `ACTIVE` Manifest를 등록한다.
 2. transaction context에 따라 복수 Recipe가 활성화된다.
-3. Element 합집합이 cumulative AND로 평가된다.
+3. required Recipe는 cumulative AND, 명시된 path option은 group OR로 평가되고
+   non-blocking finding은 flag로 분리된다.
 4. 허용된 engine의 Adapter로만 실행된다.
 5. Corner Store 또는 ERC-3643 거부 시 전체 settlement가 원자적으로 실패한다.
 6. 명시적 `UNREGULATED` 일반 ERC-20 public path에는 4-Layer 보장이 없고,
@@ -148,9 +149,8 @@ IElement 최초 확정 전에 stateful Element commit hook을 결정한다.
 
 자산별 규제·engine binding과 cumulative multi-Recipe evaluation을 구현한다.
 
-Status: cumulative evaluation, validated lifecycle, monotonic history/version과
-timelocked semantic update control plane이 구현됨. RecipeBinding schema migration은
-후속 작업이다.
+Status: bounded RecipeBinding evaluation, validated lifecycle, monotonic
+history/version과 timelocked semantic update control plane이 구현됨.
 
 ### Deliverables
 
@@ -159,7 +159,8 @@ timelocked semantic update control plane이 구현됨. RecipeBinding schema migr
 - Recipe set, resale path, supported engine과 version binding
 - issuer-side coverage representation
 - applicable Recipe identification
-- Element union/deduplication과 cumulative AND
+- REQUIRED AND, path-group OR/group 간 AND와 FLAG_ONLY finding
+- selected-path stateful commit와 duplicate Element commit 방지
 - structured `ComplianceDecision`
 - preview/evaluate API와 audit events
 
@@ -167,7 +168,8 @@ timelocked semantic update control plane이 구현됨. RecipeBinding schema migr
 
 - 한 Manifest에 복수 Recipe를 binding할 수 있다.
 - transaction context에 따라 Recipe subset이 활성화된다.
-- 모든 applicable Recipe의 활성 Element가 cumulative AND로 평가된다.
+- 모든 applicable required Recipe가 AND로 평가되고 각 path group은 하나 이상의
+  통과 경로를 요구하며 FLAG_ONLY 실패는 실행을 막지 않는다.
 - duplicate Element 최적화가 결과 의미를 바꾸지 않는다.
 - decision이 actor, asset, amount, engine/venue, Manifest version, nonce와 expiry에
   바인딩된다.
@@ -183,7 +185,8 @@ timelocked semantic update control plane이 구현됨. RecipeBinding schema migr
 1. acquisition/lot source와 reject audit seam은 ADR-008/D012로 결정되고 DATA-001
    foundation으로 구현되었다.
 2. Manifest scope: token 또는 token×venue
-3. Recipe set와 issuer coverage encoding
+3. issuer coverage encoding
+4. canonical recipe-key alias와 per-element enforcement override compiler
 
 실제 Rule 144 production 활성화는 provider API, lot allocation과 운영 저장소가
 검증될 때까지 보류한다.

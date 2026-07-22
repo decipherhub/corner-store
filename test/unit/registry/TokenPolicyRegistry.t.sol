@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 
 import {Test} from "forge-std/Test.sol";
 import {TokenPolicyRegistry} from "../../../src/registry/TokenPolicyRegistry.sol";
-import {ManifestCore, PolicyStatus} from "../../../src/types/ComplianceTypes.sol";
+import {ManifestCore, PolicyStatus, RecipeBinding, RecipeBindingMode} from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 import {Events} from "../../../src/libraries/Events.sol";
 
@@ -29,6 +29,11 @@ contract TokenPolicyRegistryTest is Test {
         m.declaredBy = owner;
     }
 
+    function _bindings() internal pure returns (RecipeBinding[] memory bindings) {
+        bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+    }
+
     /// @dev Drive a token to ACTIVE the legal way (register -> approve).
     function _activate(address t) internal {
         reg.registerManifest(t, _manifest());
@@ -47,7 +52,7 @@ contract TokenPolicyRegistryTest is Test {
     function test_register_lands_PROPOSED_ignoring_caller_status() public {
         ManifestCore memory m = _manifest(); // m.status == ACTIVE on purpose
         vm.expectEmit(true, false, false, true);
-        emit Events.ManifestRegistered(token, m.issuanceRecipeId, owner);
+        emit Events.ManifestRegistered(token, keccak256(abi.encode(_bindings())), owner);
         reg.registerManifest(token, m);
 
         ManifestCore memory got = reg.manifestOf(token);
@@ -87,13 +92,51 @@ contract TokenPolicyRegistryTest is Test {
         assertEq(reg.manifestOf(token).approvedBy, operator, "approvedBy = approve caller");
     }
 
-    function test_approve_reverts_when_recipe_set_empty() public {
-        ManifestCore memory m = _manifest();
-        m.issuanceRecipeId = 0; // empty recipe set -> not approvable
-        reg.registerManifest(token, m);
-        vm.prank(operator);
-        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeNotRegistered.selector, uint16(0)));
-        reg.approveManifest(token);
+    function test_register_reverts_when_recipe_set_empty() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](0);
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_rejects_oversized_binding_plan() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](reg.MAX_RECIPE_BINDINGS() + 1);
+        for (uint256 i = 0; i < bindings.length; i++) {
+            bindings[i] =
+                RecipeBinding(uint16(i + 1), 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, uint8(bindings.length - i));
+        }
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.TooManyRecipeBindings.selector, bindings.length, reg.MAX_RECIPE_BINDINGS())
+        );
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_rejects_duplicate_recipe_binding() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[1] = RecipeBinding(7, 1, RecipeBindingMode.FLAG_ONLY, 0, 10);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DuplicateRecipeBinding.selector, uint16(7)));
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_rejects_path_without_group() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.PATH_OPTION, 0, 100);
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_rejects_flagOnly_plan_without_blocking_gate() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.FLAG_ONLY, 0, 10);
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_stores_recipeBindings() public {
+        RecipeBinding[] memory expected = _bindings();
+        reg.registerManifest(token, _manifest(), expected);
+        RecipeBinding[] memory actual = reg.recipeBindingsOf(token);
+        assertEq(keccak256(abi.encode(actual)), keccak256(abi.encode(expected)));
     }
 
     function test_approve_reverts_for_non_operator() public {
@@ -458,7 +501,7 @@ contract TokenPolicyRegistryTest is Test {
         next.fullManifestHash = keccak256("manifest-v2");
         reg.scheduleManifestUpdate(token, next, bytes32("REGULATORY_UPDATE"));
 
-        (, uint64 effectiveTime, bytes32 reasonCode) = reg.pendingManifestUpdateOf(token);
+        (,, uint64 effectiveTime, bytes32 reasonCode) = reg.pendingManifestUpdateOf(token);
         assertEq(reasonCode, bytes32("REGULATORY_UPDATE"));
         vm.prank(operator);
         vm.expectPartialRevert(Errors.TimelockNotReady.selector);
@@ -472,6 +515,32 @@ contract TokenPolicyRegistryTest is Test {
         assertEq(reg.manifestOf(token).fullManifestHash, next.fullManifestHash);
         assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.ACTIVE));
         assertNotEq(reg.manifestHistoryHashOf(token), historyBefore);
+    }
+
+    function test_manifestUpdate_changesBindingsOnlyAfterActivation() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        RecipeBinding[] memory oldBindings = _bindings();
+        reg.registerManifest(token, initial, oldBindings);
+        vm.prank(operator);
+        reg.approveManifest(token);
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        RecipeBinding[] memory nextBindings = new RecipeBinding[](2);
+        nextBindings[0] = oldBindings[0];
+        nextBindings[1] = RecipeBinding(8, 2, RecipeBindingMode.FLAG_ONLY, 0, 10);
+        reg.scheduleManifestUpdate(token, next, nextBindings, bytes32("BINDING_UPDATE"));
+
+        assertEq(keccak256(abi.encode(reg.recipeBindingsOf(token))), keccak256(abi.encode(oldBindings)));
+        (, RecipeBinding[] memory pending, uint64 effectiveTime,) = reg.pendingManifestUpdateOf(token);
+        assertEq(keccak256(abi.encode(pending)), keccak256(abi.encode(nextBindings)));
+
+        vm.warp(effectiveTime);
+        vm.prank(operator);
+        reg.activateManifestUpdate(token);
+        assertEq(keccak256(abi.encode(reg.recipeBindingsOf(token))), keccak256(abi.encode(nextBindings)));
+        assertEq(reg.manifestVersionOf(token), 2);
     }
 
     function test_manifestUpdate_preservesSuspendedState() public {

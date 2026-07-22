@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 
 import {Governed} from "../auth/Governed.sol";
 import {ITokenPolicyRegistry} from "../interfaces/compliance/ITokenPolicyRegistry.sol";
-import {ManifestCore, PolicyStatus} from "../types/ComplianceTypes.sol";
+import {ManifestCore, PolicyStatus, RecipeBinding, RecipeBindingMode} from "../types/ComplianceTypes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Events} from "../libraries/Events.sol";
 
@@ -25,6 +25,7 @@ import {Events} from "../libraries/Events.sol";
 ///         schedules reopening and semantic updates through the registry owner.
 contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
     uint64 public constant MIN_MANIFEST_DELAY = 1 days;
+    uint256 public constant MAX_RECIPE_BINDINGS = 8;
 
     struct PendingManifestUpdate {
         ManifestCore manifest;
@@ -38,15 +39,31 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
     }
 
     mapping(address => ManifestCore) internal _manifests;
+    mapping(address => RecipeBinding[]) internal _recipeBindings;
     mapping(address => uint64) internal _manifestVersions;
     mapping(address => bytes32) internal _manifestHistoryHashes;
     mapping(address => PendingManifestUpdate) internal _pendingManifestUpdates;
+    mapping(address => RecipeBinding[]) internal _pendingManifestBindings;
     mapping(address => PendingResume) internal _pendingManifestResumes;
 
     /// @notice Declare a token's manifest. Always lands in PROPOSED regardless of
     ///         the caller-supplied `m.status`; records the declarer. Allowed only
     ///         from UNKNOWN (never declared) or RETIRED (terminal, being re-issued).
+    function registerManifest(address token, ManifestCore calldata m, RecipeBinding[] calldata bindings)
+        external
+        onlyOwner
+    {
+        _registerManifest(token, m, bindings);
+    }
+
+    /// @dev Deprecated compatibility entrypoint. Runtime evaluation never reads
+    ///      the legacy fields after they are compiled into RecipeBinding[].
     function registerManifest(address token, ManifestCore calldata m) external onlyOwner {
+        _registerManifest(token, m, _legacyBindings(m));
+    }
+
+    function _registerManifest(address token, ManifestCore memory m, RecipeBinding[] memory bindings) internal {
+        _validateBindings(bindings);
         PolicyStatus current = _manifests[token].status;
         bytes32 oldHash = _manifests[token].fullManifestHash;
         // Re-registration only from a clean slate (never declared) or a terminal
@@ -59,6 +76,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         _manifests[token].status = PolicyStatus.PROPOSED;
         _manifests[token].declaredBy = msg.sender;
         _manifests[token].approvedBy = address(0);
+        _replaceBindings(_recipeBindings[token], bindings);
         _recordHistory(
             token,
             current,
@@ -70,7 +88,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
             uint64(block.timestamp),
             true
         );
-        emit Events.ManifestRegistered(token, m.issuanceRecipeId, msg.sender);
+        emit Events.ManifestRegistered(token, keccak256(abi.encode(bindings)), msg.sender);
         emit Events.ManifestStatusChanged(token, PolicyStatus.PROPOSED, bytes32(0));
     }
 
@@ -78,10 +96,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
     function approveManifest(address token) external onlyOperator {
         ManifestCore storage mm = _manifests[token];
         if (mm.status != PolicyStatus.PROPOSED) revert Errors.InvalidManifestTransition();
-        // Registry-level completeness floor: an approvable manifest must declare
-        // at least an issuance recipe (id 0 = none). Deep validation stays the
-        // engine's fail-closed job. Recipe id 0 is never a registered recipe.
-        if (mm.issuanceRecipeId == 0) revert Errors.RecipeNotRegistered(0);
+        if (_recipeBindings[token].length == 0) revert Errors.InvalidRecipeBinding();
         mm.status = PolicyStatus.ACTIVE;
         mm.approvedBy = msg.sender;
         _recordHistory(
@@ -154,19 +169,39 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
 
     /// @notice Owner proposes a hash-bearing manifest update for ACTIVE/SUSPENDED
     ///         manifests. Full legal/compliance docs remain offchain.
+    function scheduleManifestUpdate(
+        address token,
+        ManifestCore calldata m,
+        RecipeBinding[] calldata bindings,
+        bytes32 reasonCode
+    ) external onlyOwner {
+        _scheduleManifestUpdate(token, m, bindings, reasonCode);
+    }
+
+    /// @dev Deprecated compatibility entrypoint; see {registerManifest}.
     function scheduleManifestUpdate(address token, ManifestCore calldata m, bytes32 reasonCode) external onlyOwner {
+        _scheduleManifestUpdate(token, m, _legacyBindings(m), reasonCode);
+    }
+
+    function _scheduleManifestUpdate(
+        address token,
+        ManifestCore memory m,
+        RecipeBinding[] memory bindings,
+        bytes32 reasonCode
+    ) internal {
+        _validateBindings(bindings);
         PolicyStatus current = _manifests[token].status;
         if (current != PolicyStatus.ACTIVE && current != PolicyStatus.SUSPENDED) {
             revert Errors.InvalidManifestTransition();
         }
         if (_pendingManifestUpdates[token].effectiveTime != 0) revert Errors.PendingActionExists();
-        if (m.issuanceRecipeId == 0) revert Errors.RecipeNotRegistered(0);
         if (m.fullManifestHash == bytes32(0) || m.fullManifestHash == _manifests[token].fullManifestHash) {
             revert Errors.InvalidManifestHash();
         }
 
         uint64 effectiveTime = _readyTime();
         _pendingManifestUpdates[token] = PendingManifestUpdate(m, effectiveTime, reasonCode);
+        _replaceBindings(_pendingManifestBindings[token], bindings);
         emit Events.ManifestSemanticUpdateScheduled(
             token,
             _manifestVersions[token],
@@ -181,6 +216,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
     function cancelManifestUpdate(address token) external onlyOwner {
         if (_pendingManifestUpdates[token].effectiveTime == 0) revert Errors.PendingActionNotFound();
         delete _pendingManifestUpdates[token];
+        delete _pendingManifestBindings[token];
         emit Events.ManifestSemanticUpdateCancelled(token);
     }
 
@@ -206,9 +242,11 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         next.declaredBy = owner();
         next.approvedBy = msg.sender;
         _manifests[token] = next;
+        _copyBindings(_recipeBindings[token], _pendingManifestBindings[token]);
         uint64 newVersion =
             _recordHistory(token, current, current, oldHash, newHash, reasonCode, bytes32(0), effectiveTime, true);
         delete _pendingManifestUpdates[token];
+        delete _pendingManifestBindings[token];
 
         emit Events.ManifestSemanticUpdateActivated(
             token, oldVersion, newVersion, oldHash, newHash, reasonCode, effectiveTime
@@ -223,6 +261,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         }
         _manifests[token].status = PolicyStatus.RETIRED;
         delete _pendingManifestUpdates[token];
+        delete _pendingManifestBindings[token];
         delete _pendingManifestResumes[token];
         _recordHistory(
             token,
@@ -283,6 +322,10 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         return _manifests[token];
     }
 
+    function recipeBindingsOf(address token) external view returns (RecipeBinding[] memory) {
+        return _recipeBindings[token];
+    }
+
     function statusOf(address token) external view returns (PolicyStatus) {
         return _manifests[token].status;
     }
@@ -298,10 +341,15 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
     function pendingManifestUpdateOf(address token)
         external
         view
-        returns (ManifestCore memory manifest, uint64 effectiveTime, bytes32 reasonCode)
+        returns (
+            ManifestCore memory manifest,
+            RecipeBinding[] memory bindings,
+            uint64 effectiveTime,
+            bytes32 reasonCode
+        )
     {
         PendingManifestUpdate storage pending = _pendingManifestUpdates[token];
-        return (pending.manifest, pending.effectiveTime, pending.reasonCode);
+        return (pending.manifest, _pendingManifestBindings[token], pending.effectiveTime, pending.reasonCode);
     }
 
     function pendingManifestResumeOf(address token) external view returns (uint64 effectiveTime, bytes32 reasonCode) {
@@ -361,6 +409,58 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
             reasonHash,
             effectiveTime
         );
+    }
+
+    function _validateBindings(RecipeBinding[] memory bindings) internal pure {
+        if (bindings.length == 0) revert Errors.InvalidRecipeBinding();
+        if (bindings.length > MAX_RECIPE_BINDINGS) {
+            revert Errors.TooManyRecipeBindings(bindings.length, MAX_RECIPE_BINDINGS);
+        }
+
+        bool hasBlockingBinding;
+        for (uint256 i = 0; i < bindings.length; i++) {
+            RecipeBinding memory binding = bindings[i];
+            if (binding.recipeId == 0 || binding.recipeVersion == 0) revert Errors.InvalidRecipeBinding();
+            if (binding.mode == RecipeBindingMode.PATH_OPTION) {
+                if (binding.pathGroupId == 0) revert Errors.InvalidRecipeBinding();
+                hasBlockingBinding = true;
+            } else {
+                if (binding.pathGroupId != 0) revert Errors.InvalidRecipeBinding();
+                if (binding.mode == RecipeBindingMode.REQUIRED_BLOCKING) hasBlockingBinding = true;
+            }
+            for (uint256 j = 0; j < i; j++) {
+                if (bindings[j].recipeId == binding.recipeId) {
+                    revert Errors.DuplicateRecipeBinding(binding.recipeId);
+                }
+            }
+        }
+        if (!hasBlockingBinding) revert Errors.InvalidRecipeBinding();
+    }
+
+    function _replaceBindings(RecipeBinding[] storage target, RecipeBinding[] memory source) internal {
+        while (target.length != 0) target.pop();
+        for (uint256 i = 0; i < source.length; i++) {
+            target.push(source[i]);
+        }
+    }
+
+    function _copyBindings(RecipeBinding[] storage target, RecipeBinding[] storage source) internal {
+        while (target.length != 0) target.pop();
+        for (uint256 i = 0; i < source.length; i++) {
+            target.push(source[i]);
+        }
+    }
+
+    function _legacyBindings(ManifestCore calldata manifest) internal pure returns (RecipeBinding[] memory bindings) {
+        uint256 count = manifest.issuanceRecipeId == 0 ? 0 : (manifest.fundRecipeId == 0 ? 1 : 2);
+        bindings = new RecipeBinding[](count);
+        if (count == 0) return bindings;
+        uint16 issuanceVersion = manifest.issuanceRecipeVersion == 0 ? 1 : manifest.issuanceRecipeVersion;
+        bindings[0] =
+            RecipeBinding(manifest.issuanceRecipeId, issuanceVersion, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        if (count == 2) {
+            bindings[1] = RecipeBinding(manifest.fundRecipeId, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
+        }
     }
 
     function _readyTime() internal view returns (uint64) {

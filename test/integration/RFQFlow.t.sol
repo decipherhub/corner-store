@@ -104,7 +104,7 @@ contract RFQFlowTest is IntegrationBase {
         ManifestCore memory m = _activeManifest(0, 0);
         m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
         policyReg.retireManifest(address(rwaToken), bytes32("re-engine-rfq"));
-        policyReg.registerManifest(address(rwaToken), m);
+        policyReg.registerManifest(address(rwaToken), m, _bindings(0));
         policyReg.approveManifest(address(rwaToken));
     }
 

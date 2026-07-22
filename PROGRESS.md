@@ -6,12 +6,12 @@
 reference execution contracts와 vendored Uniswap v3 배포 도구를 포함한다.
 
 공식 문서는 DEX-level compliance SDK, Corner Store reference DEX,
-Element/Recipe/Manifest/Operator 4-Layer와 cumulative multi-Recipe 모델을
+Element/Recipe/Manifest/Operator 4-Layer와 mode-aware `RecipeBinding[]` 모델을
 source of truth로 사용한다.
 
 ## Active Feature
 
-- 없음
+없음
 
 ## Completed
 
@@ -40,6 +40,8 @@ source of truth로 사용한다.
 - `DATA-001 — Compliance Data Layer Foundation`(provider-neutral TA lot resolver,
   expiring attested acquisition snapshot, fail-closed Lockup, idempotent
   person-group state와 hash-chain rejection/surveillance audit)
+- `MANIFEST-002 — RecipeBinding Manifest Migration`(bounded registry-backed
+  bindings, required/path/flag 평가, delayed lifecycle update와 CLI/demo ABI migration)
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -91,6 +93,13 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- `MANIFEST-002`에서 고정 issuance/fund 두 필드 대신 bounded
+  `RecipeBinding[]`를 runtime source of truth로 도입했다. required AND,
+  path-group OR/그룹 간 AND, non-blocking flag bitmap과 deterministic failure를
+  구현하고, `FLAG_ONLY` stateful hook이 settlement를 되돌리지 못하도록
+  trade-critical commit에서 분리했다. `scripts/check.sh`(Foundry 634/634, 모든
+  service smoke, deploy-v3 10/10)와 `buidl-like`/`reg-d` live E2E(각 7/7 +
+  delayed recovery + CLI onboarding + backend RFQ)가 통과했다.
 - `DATA-001`에서 per-lot acquisition/완납/lineage를 검증하는 provider-neutral SDK,
   operator-attested on-chain snapshot과 missing/broken/stale/immature를 구분하는
   fail-closed Lockup을 구현했다. `SECONDARY` lot의 과거 lineage 상속을 거부하고,

@@ -98,7 +98,7 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패
-- 여러 Recipe의 cumulative AND와 중복 Element 실행 의미
+- RecipeBinding의 REQUIRED/PATH/FLAG truth table과 stateful commit 중복 방지
 - Manifest lifecycle, version과 supported engine binding
 - ERC-3643 transfer 거부의 원자적 실패
 - 지원 Router 경로와 직접 venue 호출의 보장 차이

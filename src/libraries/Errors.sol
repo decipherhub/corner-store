@@ -33,4 +33,9 @@ library Errors {
     error InvalidManifestHash();
     error ZeroAddress();
     error InvalidAcquisitionSnapshot();
+    error InvalidRecipeBinding();
+    error TooManyRecipeBindings(uint256 supplied, uint256 maximum);
+    error TooManyRecipeElements(uint16 recipeId, uint256 supplied, uint256 maximum);
+    error DuplicateRecipeBinding(uint16 recipeId);
+    error RecipeVersionMismatch(uint16 recipeId, uint16 expected, uint16 actual);
 }

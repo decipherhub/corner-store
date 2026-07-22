@@ -51,7 +51,8 @@ ERC-3643 Token & Identity는 이 네 layer 중 하나가 아니라 그 아래에
 
 ## Cross-Boundary Rules
 
-- 활성화된 여러 Recipe는 cumulative AND로 평가한다.
+- 활성화된 required Recipe는 AND, 같은 path group의 대안은 OR로 평가하고
+  FLAG_ONLY finding은 blocking verdict와 분리한다.
 - 같은 context의 중복 Element는 한 번만 평가할 수 있지만 결과 의미를 바꾸지 않는다.
 - 발행 측에서 검증한 사실은 Manifest coverage로 표현하고 불필요한 재검증을 줄인다.
 - `ComplianceEngine`은 거래를 실행하지 않고 Adapter는 정책을 정의하지 않는다.

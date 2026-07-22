@@ -71,6 +71,8 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
         //    a future flow where a signed/pre-computed decision is passed in and
         //    verified here, not the current replay defense.
         ComplianceDecision memory d = engine.evaluate(req.context);
+        emit Events.ComplianceEvaluated(d.decisionHash, d.allowed, d.reasonCode);
+        if (d.flagsBitmap != 0) emit Events.ComplianceFlags(d.decisionHash, d.flagsBitmap);
         if (!d.allowed) revert Errors.ComplianceRejected(d.reasonCode);
 
         // 4. amount bound. NOTE (open decision): this bounds the INPUT (quote-side)

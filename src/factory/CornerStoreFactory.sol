@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {Governed} from "../auth/Governed.sol";
 import {ITokenPolicyRegistry} from "../interfaces/compliance/ITokenPolicyRegistry.sol";
 import {IVenueRegistry} from "../interfaces/execution/IVenueRegistry.sol";
-import {ManifestCore} from "../types/ComplianceTypes.sol";
+import {ManifestCore, RecipeBinding} from "../types/ComplianceTypes.sol";
 import {VenueConfig} from "../types/VenueTypes.sol";
 
 /// @title CornerStoreFactory
@@ -49,10 +49,11 @@ contract CornerStoreFactory is Governed {
     function registerRWAToken(
         address token,
         ManifestCore calldata manifest,
+        RecipeBinding[] calldata bindings,
         address venue,
         VenueConfig calldata venueCfg
     ) external onlyOperator {
-        tokenPolicyRegistry.registerManifest(token, manifest);
+        tokenPolicyRegistry.registerManifest(token, manifest, bindings);
         tokenPolicyRegistry.approveManifest(token);
         venueRegistry.registerVenue(venue, venueCfg);
         emit RWATokenRegistered(token, venue);
@@ -71,11 +72,13 @@ contract CornerStoreFactory is Governed {
     }
 
     /// @notice Schedule a delayed semantic manifest update through governance.
-    function scheduleManifestUpdate(address token, ManifestCore calldata manifest, bytes32 reasonCode)
-        external
-        onlyOwner
-    {
-        tokenPolicyRegistry.scheduleManifestUpdate(token, manifest, reasonCode);
+    function scheduleManifestUpdate(
+        address token,
+        ManifestCore calldata manifest,
+        RecipeBinding[] calldata bindings,
+        bytes32 reasonCode
+    ) external onlyOwner {
+        tokenPolicyRegistry.scheduleManifestUpdate(token, manifest, bindings, reasonCode);
     }
 
     /// @notice Cancel a pending semantic manifest update through governance.

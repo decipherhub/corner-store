@@ -21,6 +21,8 @@ import {
     ComplianceDecision,
     ManifestCore,
     PolicyStatus,
+    RecipeBinding,
+    RecipeBindingMode,
     VenueType,
     FlowType
 } from "../src/types/ComplianceTypes.sol";
@@ -107,6 +109,7 @@ contract DemoScenarios is Script, DemoConstants {
         );
 
         ManifestCore memory m = _baseManifest();
+        RecipeBinding[] memory bindings = _baseBindings();
 
         VenueConfig memory ammCfg = VenueConfig({
             venueType: VenueType.AMM,
@@ -118,12 +121,13 @@ contract DemoScenarios is Script, DemoConstants {
         });
 
         vm.broadcast(deployerPk);
-        factory.registerRWAToken(address(rwa), m, pool, ammCfg);
+        factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
 
         ManifestCore memory stored = policyReg.manifestOf(address(rwa));
         ManifestCore memory expected = _baseManifest();
-        bool profileOk = stored.fundRecipeId == expected.fundRecipeId && stored.factsPacked == expected.factsPacked
-            && stored.fullManifestHash == expected.fullManifestHash;
+        RecipeBinding[] memory storedBindings = policyReg.recipeBindingsOf(address(rwa));
+        bool profileOk = keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
+            && stored.factsPacked == expected.factsPacked && stored.fullManifestHash == expected.fullManifestHash;
         bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
             && stored.approvedBy == address(factory) && profileOk;
         console2.log("    evidence: ACTIVE selected asset profile, approved by factory");
@@ -245,8 +249,7 @@ contract DemoScenarios is Script, DemoConstants {
         policyReg.retireManifest(address(rwa), bytes32("ADD-SURVEILLANCE"));
 
         ManifestCore memory m = _baseManifest();
-        m.issuanceRecipeId = SURVEIL_RECIPE_ID;
-        m.issuanceRecipeVersion = 1;
+        RecipeBinding[] memory bindings = _surveillanceBindings();
         VenueConfig memory ammCfg = VenueConfig({
             venueType: VenueType.AMM,
             adapter: address(ammAdapter),
@@ -256,7 +259,7 @@ contract DemoScenarios is Script, DemoConstants {
             active: true
         });
         vm.broadcast(deployerPk);
-        factory.registerRWAToken(address(rwa), m, pool, ammCfg);
+        factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
 
         uint256 threshold = 2;
         vm.broadcast(deployerPk);
@@ -474,8 +477,27 @@ contract DemoScenarios is Script, DemoConstants {
 
     function _baseManifest() internal view returns (ManifestCore memory m) {
         if (useBuidlLikeProfile) return BuidlLikeDemoAsset.manifest(ENGINES_AMM | ENGINES_RFQ);
-        m.issuanceRecipeId = 1;
-        m.issuanceRecipeVersion = 1;
         m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
+    }
+
+    function _baseBindings() internal view returns (RecipeBinding[] memory bindings) {
+        if (useBuidlLikeProfile) return BuidlLikeDemoAsset.recipeBindings();
+        bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(1, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+    }
+
+    function _surveillanceBindings() internal view returns (RecipeBinding[] memory bindings) {
+        uint256 count = useBuidlLikeProfile ? 2 : 1;
+        bindings = new RecipeBinding[](count);
+        bindings[0] = RecipeBinding(SURVEIL_RECIPE_ID, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        if (useBuidlLikeProfile) {
+            bindings[1] = RecipeBinding(
+                BuidlLikeDemoAsset.FUND_RECIPE_ID,
+                BuidlLikeDemoAsset.FUND_RECIPE_VERSION,
+                RecipeBindingMode.REQUIRED_BLOCKING,
+                0,
+                90
+            );
+        }
     }
 }

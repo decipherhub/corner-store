@@ -43,6 +43,34 @@ Manifest 최소 상태:
 활성화 시 version이 단조 증가하고 old/new manifest hash와 history hash가 event에
 남는다. SUSPENDED 상태에서 update를 활성화해도 상태는 SUSPENDED로 유지된다.
 
+## Recipe Binding Model
+
+Registry는 regulated token마다 최대 8개의 `RecipeBinding`을 저장한다.
+
+```solidity
+struct RecipeBinding {
+    uint16 recipeId;
+    uint16 recipeVersion;
+    RecipeBindingMode mode;
+    uint16 pathGroupId;
+    uint8 priority;
+}
+```
+
+- `REQUIRED_BLOCKING`: 적용되는 모든 binding이 통과해야 한다.
+- `PATH_OPTION`: 같은 `pathGroupId` 안에서는 하나 이상 통과해야 하고, 서로 다른
+  group은 모두 통과해야 한다.
+- `FLAG_ONLY`: 실패해도 거래를 막지 않고 binding index에 대응하는
+  `flagsBitmap` bit와 Router event를 남긴다.
+
+빈 plan, 8개 초과, 중복 recipe, version 0, 잘못된 path group과 blocking gate가
+전혀 없는 plan은 등록 시 거부한다. Recipe 주소와 실제 version, Recipe당 최대 32개
+Element는 평가 시 다시 fail-closed로 검증한다. binding 변경은 Manifest hash 변경,
+timelock, version/history 증가를 거친 뒤에만 활성화된다.
+
+`ManifestCore`의 과거 issuance/fund 필드는 ABI 전환을 위한 deprecated mirror이며
+현재 Engine, Factory와 CLI의 source of truth는 registry의 `RecipeBinding[]`다.
+
 ## Responsibility Boundary
 
 - 발행자: token facts와 issuer-side coverage를 선언
@@ -85,7 +113,6 @@ hot path에 필요한 compact core만 온체인에 둔다. 법률 문서, 심사
 
 - token 단위 또는 token×venue 단위 scope
 - 공개 필드와 비공개 자료의 경계
-- Recipe set encoding과 version migration
 - coverage field와 claim lookup 최적화
-- RecipeBinding schema와 기존 `issuanceRecipeId + fundRecipeId` migration
 - token 단위 version 변경이 기존 signed order/quote에 미치는 정책
+- canonical `bytes32 recipeKey` alias와 per-element enforcement override compiler

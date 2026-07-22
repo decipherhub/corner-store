@@ -74,7 +74,7 @@ contract EmergencyPauseTest is IntegrationBase {
     // (deployStack left it ACTIVE and re-register over ACTIVE is illegal).
     function test_proposedPolicy_failsClosed() public {
         policyReg.retireManifest(address(rwaToken), bytes32("REISSUE"));
-        policyReg.registerManifest(address(rwaToken), _activeManifest(0, 0)); // PROPOSED, not approved
+        policyReg.registerManifest(address(rwaToken), _activeManifest(0, 0), _bindings(0)); // PROPOSED, not approved
 
         ExecutionRequest memory req = buildBuyRequest(alice, 50 ether, 50 ether);
         vm.prank(alice);

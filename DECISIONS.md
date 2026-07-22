@@ -169,7 +169,8 @@ Recipe를 선택하는 인상을 주었다. 법률 연구는 한 거래에 발�
 - Manifest: 자산별 Recipe/engine/version/coverage binding
 - Operator: 판단·승인·감시
 
-거래마다 applicable Recipe를 식별하고 Element 합집합을 cumulative AND로 평가한다.
+거래마다 applicable Recipe를 식별한다. Required Recipe의 Element는 cumulative
+AND로 평가하고, ADR-007 이후 명시적 path option과 flag-only binding을 분리한다.
 기존 ExecutionRouter, ComplianceEngine과 Adapter 분리는 유지한다.
 
 ### Alternatives Considered
@@ -493,7 +494,8 @@ custom error `Errors.InvalidManifestTransition`으로 revert한다.
 
 `registerManifest`는 caller가 넣은 `m.status`를 무시하고 항상 PROPOSED로 착지하며
 `declaredBy = msg.sender`를 기록한다. `approveManifest`는 `approvedBy = msg.sender`를
-기록하고 `issuanceRecipeId == 0`이면 registry-level completeness floor로 revert한다.
+기록한다. MANIFEST-002 이후 completeness floor는 deprecated issuance field가 아니라
+비어 있지 않고 최소 하나의 blocking/path gate가 있는 validated `RecipeBinding[]`다.
 RETIRED는 terminal이며 재발행은 RETIRED→register→approve 경로로만 가능하다. gating
 model: owner가 자산을 classify/declare(register/setUnregulated/clearUnregulated)하고,
 operator가 approve/suspend/retire와 예약된 resume 실행을 구동한다. resume 예약과

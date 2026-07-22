@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.17;
 
-import {ManifestCore, PolicyStatus} from "../../types/ComplianceTypes.sol";
+import {ManifestCore, PolicyStatus, RecipeBinding} from "../../types/ComplianceTypes.sol";
 
 // ITokenPolicyRegistry  (Manifest store)
 interface ITokenPolicyRegistry {
     function MIN_MANIFEST_DELAY() external view returns (uint64);
 
-    function registerManifest(address token, ManifestCore calldata m) external; // -> PROPOSED
+    function registerManifest(address token, ManifestCore calldata m, RecipeBinding[] calldata bindings) external; // -> PROPOSED
 
     function approveManifest(address token) external; // PROPOSED -> ACTIVE
 
@@ -19,7 +19,12 @@ interface ITokenPolicyRegistry {
 
     function resumeManifest(address token) external; // executes pending SUSPENDED -> ACTIVE after delay
 
-    function scheduleManifestUpdate(address token, ManifestCore calldata m, bytes32 reasonCode) external;
+    function scheduleManifestUpdate(
+        address token,
+        ManifestCore calldata m,
+        RecipeBinding[] calldata bindings,
+        bytes32 reasonCode
+    ) external;
 
     function cancelManifestUpdate(address token) external;
 
@@ -33,6 +38,8 @@ interface ITokenPolicyRegistry {
 
     function manifestOf(address token) external view returns (ManifestCore memory);
 
+    function recipeBindingsOf(address token) external view returns (RecipeBinding[] memory);
+
     function statusOf(address token) external view returns (PolicyStatus);
 
     function manifestVersionOf(address token) external view returns (uint64);
@@ -42,7 +49,12 @@ interface ITokenPolicyRegistry {
     function pendingManifestUpdateOf(address token)
         external
         view
-        returns (ManifestCore memory manifest, uint64 effectiveTime, bytes32 reasonCode);
+        returns (
+            ManifestCore memory manifest,
+            RecipeBinding[] memory bindings,
+            uint64 effectiveTime,
+            bytes32 reasonCode
+        );
 
     function pendingManifestResumeOf(address token) external view returns (uint64 effectiveTime, bytes32 reasonCode);
 

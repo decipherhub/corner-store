@@ -719,3 +719,35 @@ passing
 - `src/registry/AttestedAcquisitionSource.sol`
 - `src/compliance/elements/Lockup.sol`
 - `test/unit/compliance/AcquisitionSource.t.sol`
+
+## MANIFEST-002 — RecipeBinding Manifest Migration
+
+### Behavior
+
+- 자산 Manifest는 고정 `issuanceRecipeId + fundRecipeId` 대신 bounded
+  `RecipeBinding[]`를 registry에 저장한다.
+- `REQUIRED_BLOCKING` Recipe는 AND, 같은 `pathGroupId`의 `PATH_OPTION`은 OR,
+  서로 다른 path group은 AND로 평가한다.
+- `FLAG_ONLY` 실패는 거래를 막지 않고 `ComplianceDecision.flagsBitmap`과 Router
+  event로 노출한다.
+- binding 변경은 full manifest hash 변경과 기존 timelock/version/history를 거친다.
+- binding 수, recipe/version, path group과 duplicate 입력은 등록 시 fail-closed로
+  검증한다.
+
+### Verification
+
+- RecipeBinding registry/lifecycle unit tests
+- REQUIRED/PATH/FLAG engine regression tests
+- pair-side, stateful commit와 Router event integration tests
+- `scripts/check.sh`
+- `buidl-like` / `reg-d` live E2E
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획: `docs/exec-plans/completed/MANIFEST-002-recipe-binding-migration.md`
+- canonical `bytes32 recipeKey` alias와 per-element enforcement override compiler는
+  별도 versioned refinement로 남긴다.

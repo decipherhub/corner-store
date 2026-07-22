@@ -26,7 +26,12 @@ export const ERRORS_ABI = [
   "error RFQQuoteUsed()",
   "error RFQQuoteExpired()",
   "error RFQInvalidSignature()",
-  "error RFQQuoteMismatch()"
+  "error RFQQuoteMismatch()",
+  "error InvalidRecipeBinding()",
+  "error TooManyRecipeBindings(uint256 supplied, uint256 maximum)",
+  "error TooManyRecipeElements(uint16 recipeId, uint256 supplied, uint256 maximum)",
+  "error DuplicateRecipeBinding(uint16 recipeId)",
+  "error RecipeVersionMismatch(uint16 recipeId, uint16 expected, uint16 actual)"
 ];
 
 export const ELEMENT_REGISTRY_ABI = [
@@ -40,13 +45,15 @@ export const RECIPE_REGISTRY_ABI = [
   "function recipeOf(uint16 recipeId) view returns (address)"
 ];
 export const RECIPE_ABI = [
+  "function version() view returns (uint16)",
+  "function isApplicable(bytes context) view returns (bool)",
   "function requiredElements() view returns (bytes32[])"
 ];
 
 // ComplianceEngine.evaluate(ctx) is a VIEW returning the full ComplianceDecision
 // (src/types/ComplianceTypes.sol). `check` calls it for the overall verdict.
 export const ENGINE_ABI = [
-  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,bytes32 decisionHash))"
+  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))"
 ];
 
 // Event fragments for `watch` (src/libraries/Events.sol + RFQAdapter.sol). Only
@@ -56,8 +63,9 @@ export const EVENTS_ABI = [
   "event RFQFilled(bytes32 indexed quoteHash, address indexed maker, address indexed taker, uint256 amountIn, uint256 amountOut)",
   "event RFQQuoteCancelled(address indexed maker, uint256 indexed nonce)",
   "event MakerApprovalSet(address indexed maker, bool approved)",
-  "event ManifestRegistered(address indexed token, uint16 issuanceRecipeId, address declaredBy)",
+  "event ManifestRegistered(address indexed token, bytes32 bindingsHash, address declaredBy)",
   "event ManifestStatusChanged(address indexed token, uint8 status, bytes32 reasonCode)",
+  "event ComplianceFlags(bytes32 indexed decisionHash, uint256 flagsBitmap)",
   "event SurveillanceFlag(bytes32 indexed elementId, address indexed subject, bytes32 reasonCode)"
 ];
 
@@ -84,6 +92,7 @@ export const ELEMENT_SETTERS_ABI = [
 export const TOKEN_POLICY_REGISTRY_ABI = [
   "function statusOf(address token) view returns (uint8)",
   "function manifestOf(address token) view returns (tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy))",
+  "function recipeBindingsOf(address token) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[])",
   "function suspendManifest(address token, bytes32 reasonCode)",
   "function scheduleManifestResume(address token, bytes32 reasonCode)",
   "function pendingManifestResumeOf(address token) view returns (uint64 effectiveTime,bytes32 reasonCode)",
@@ -93,10 +102,10 @@ export const TOKEN_POLICY_REGISTRY_ABI = [
 ];
 
 export const FACTORY_ABI = [
-  "function registerRWAToken(address token, tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) manifest, address venue, tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active) venueCfg)",
+  "function registerRWAToken(address token, tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) manifest, tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings, address venue, tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active) venueCfg)",
   "function scheduleManifestResume(address token, bytes32 reasonCode)",
   "function cancelManifestResume(address token)",
-  "function scheduleManifestUpdate(address token, tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) manifest, bytes32 reasonCode)",
+  "function scheduleManifestUpdate(address token, tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) manifest, tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings, bytes32 reasonCode)",
   "function cancelManifestUpdate(address token)",
   "event RWATokenRegistered(address indexed token, address indexed venue)"
 ];

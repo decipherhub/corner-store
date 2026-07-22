@@ -2,9 +2,9 @@
 
 | Module | Grade | Reason | Required Improvement |
 | --- | --- | --- | --- |
-| Product documentation | B | SDK/reference DEX, 4-Layer, RFQ v1 scope와 roadmap이 대체로 정합함 | production RFQ/OrderBook, Manifest lifecycle와 법률 승인 기준 보강 |
+| Product documentation | B | SDK/reference DEX, 4-Layer, RecipeBinding Manifest, RFQ와 roadmap이 대체로 정합함 | production RFQ/OrderBook와 법률 승인 기준 보강 |
 | Harness / agent workflow | B | HE-001, DOC-001, RFQ-001 상태·검증 이력이 존재함 | PR/CI 결과와 feature state 지속 동기화 |
-| Product Solidity | B- | Compliance Core, registries, ExecutionRouter, AMM adapter와 RFQ v1 adapter가 컴파일·테스트됨 | production Manifest lifecycle, RFQ dealer/custody/cancel, OrderBook 미구현 |
+| Product Solidity | B | bounded RecipeBinding Manifest, lifecycle/history, Compliance Core, Router, AMM/RFQ adapter가 컴파일·테스트됨 | production custody/partial fill, real Uniswap v3 E2E와 OrderBook 미구현 |
 | Foundry tests | B | unit/integration 테스트, RFQ failure path와 live Anvil E2E 존재 | 추가 adversarial/security tests |
 | RFQ reference service | B | EIP-712 SDK와 local demo HTTP API/CLI, nonce·입력·서명 smoke test 존재 | signer custody, persistent nonce, production pricing/inventory는 별도 feature에서 결정 |
 | `tools/deploy-v3` | B | profile 단위 테스트와 문서 존재 | 자동 Anvil integration test 추가 |

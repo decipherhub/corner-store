@@ -115,6 +115,19 @@ contract RouterTest is Test {
         router.execute(req);
     }
 
+    function test_execute_emitsNonBlockingComplianceFlags() public {
+        ComplianceDecision memory decision =
+            _decision(true, 1 << uint256(VenueType.AMM), bytes32(0), type(uint256).max, REASON_OK);
+        decision.decisionHash = keccak256("flagged-decision");
+        decision.flagsBitmap = 5;
+        engine.setDecision(decision);
+
+        vm.expectEmit(true, false, false, true);
+        emit Events.ComplianceFlags(decision.decisionHash, decision.flagsBitmap);
+        vm.prank(BUYER);
+        router.execute(_defaultReq());
+    }
+
     // ---- gate reverts ----
 
     function test_revert_complianceRejected() public {

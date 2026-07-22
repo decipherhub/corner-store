@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import "../types/ComplianceTypes.sol";
 
 library Events {
-    event ManifestRegistered(address indexed token, uint16 issuanceRecipeId, address declaredBy);
+    event ManifestRegistered(address indexed token, bytes32 bindingsHash, address declaredBy);
     event ManifestStatusChanged(address indexed token, PolicyStatus status, bytes32 reasonCode);
     event ManifestSemanticUpdateScheduled(
         address indexed token,
@@ -67,6 +67,7 @@ library Events {
         bytes32 historyHash
     );
     event ComplianceEvaluated(bytes32 indexed decisionHash, bool allowed, bytes32 reasonCode);
+    event ComplianceFlags(bytes32 indexed decisionHash, uint256 flagsBitmap);
     event Executed(bytes32 indexed executionId, address indexed venue, uint256 amountOut);
     event SurveillanceFlag(bytes32 indexed elementId, address indexed subject, bytes32 reasonCode);
 }

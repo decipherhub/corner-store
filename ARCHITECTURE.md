@@ -35,7 +35,9 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - ERC-3643과 ONCHAINID는 외부 token/identity trust boundary다.
 - Element, Recipe, Manifest, Operator의 이름 기반 4-Layer compliance model을
   사용한다.
-- applicable Recipe는 cumulative AND로 평가한다.
+- Manifest는 bounded `RecipeBinding[]`로 Recipe/version/mode를 고정한다.
+- `REQUIRED_BLOCKING`은 AND, 같은 `pathGroupId`의 `PATH_OPTION`은 OR,
+  서로 다른 path group은 AND로 평가하며 `FLAG_ONLY` 실패는 기록만 한다.
 - `tokenIn`과 `tokenOut` 양쪽의 classification과 Manifest를 평가한다.
 - Asset Compliance Manifest는 자산별 Recipe, engine, version과 발행 측 coverage를
   binding한다.
