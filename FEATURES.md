@@ -380,6 +380,9 @@ passing
   Router settlement를 실행하고, Security demo는 on-chain maker revoke 상태를
   명시적 restore 전까지 유지해 현재 정책 enforcement를 가시화한다. 브라우저에는
   private key가 전달되지 않는다.
+- Trader의 live firm rate는 `/demo/quote` 금액에서 계산한다. 비교 maker, 가격 곡선,
+  spread와 활동 통계는 multi-maker/market-data API가 생기기 전까지 명시적으로
+  `Demo fixture data`와 `Preview only`로 표시해 실제 실행 가능 quote와 구분한다.
 - backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
 - production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
 

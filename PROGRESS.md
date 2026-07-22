@@ -103,7 +103,9 @@ source of truth로 사용한다.
 - RFQ MVP dashboard의 준비·상태 확인·quote 요청·검토·Router 체결·maker revoke·
   명시적 restore를 실제 local backend와 온체인 상태에 연결했다. revoke는 restore
   전까지 유지되고 Operator event index에 settlement와 maker false/true 전이가
-  기록된다. 브라우저에는 private key가 전달되지 않는다. `scripts/check.sh`
+  기록된다. live quote rate와 indicative comparison chart를 추가하되, 외부 market
+  feed가 없는 곡선·spread·추가 maker는 fixture/preview로 명확히 구분했다. 브라우저에는
+  private key가 전달되지 않는다. `scripts/check.sh`
   (641/641 Foundry 포함)과 RFQ-only live E2E가 통과했다.
 - `AMM-001`에서 vendored pinned Uniswap v3 core artifact로 canonical factory와
   pool을 배포하고 CREATE2 주소, 초기화, 실제 liquidity mint/swap callback,

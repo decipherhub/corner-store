@@ -42,7 +42,7 @@
 
 ## Components
 - Existing components to reuse: status blocks, fact rows, quote cards, execution trace, event list, metrics strip
-- New/changed components: compliance pre-check, session trade history, live indexed-event summary and log
+- New/changed components: compliance pre-check, session trade history, live indexed-event summary and log, live firm-rate marker over clearly labeled fixture market context
 - Variants and states: live/preview, available/expired, loading/empty/error/success/rejected
 - Token/component ownership: dashboard CSS variables and classes in `services/operator-dashboard/index.html`
 
@@ -76,6 +76,7 @@
 - Design-token constraints: reuse existing CSS variables; no new frontend dependency for the MVP
 - Performance constraints: no blockchain calls or signing in the browser
 - Compatibility constraints: current backend returns one live `SignedRFQQuote`; preview makers are non-selectable
+- Data-provenance constraint: the live rate is derived from `/demo/quote`; comparison curves, spread, activity and non-live makers remain visibly labeled demo fixtures until market-data and multi-maker APIs exist
 - Test/screenshot expectations: smoke and syntax tests are required; visual screenshot comparison is required when a browser runtime is available
 
 ## Open questions

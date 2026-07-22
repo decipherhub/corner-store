@@ -42,7 +42,10 @@ npm run start --prefix services/operator-dashboard
 Select **Trader · RFQ** and click **Check & prepare demo**. Then request a firm
 quote, select it for review, and execute the selected quote. The four visible
 stages show the mock TA profile, EIP-712 quote, Router policy decision and
-on-chain ERC-3643 balance change.
+on-chain ERC-3643 balance change. The price-context panel marks the live firm
+rate returned by the backend. Its comparison curves, spread statistics and
+additional makers are presentation fixtures and are labeled accordingly; they
+are not executable quotes or an external market-data feed.
 
 Open **Security demo**, create a fresh test quote, then click **Revoke maker &
 execute**. The maker approval is changed on chain and the stored quote is

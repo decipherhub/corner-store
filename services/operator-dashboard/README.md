@@ -7,7 +7,9 @@ This dashboard has two modes:
 - **RFQ demo** requests a live firm quote, lets the trader review the exact
   signed payload, and settles that same quote through the protected Router.
   Additional maker rows are explicitly preview fixtures until multi-maker
-  backend support exists.
+  backend support exists. The price-context chart combines a live rate marker
+  derived from that quote with visibly labeled fixture curves and statistics;
+  it does not claim an external market-data feed.
 - **Security demo** is an independent flow: create a signed quote, revoke the
   maker, and submit the stored quote to prove the Router rejects it at fill
   time. The maker remains revoked until **Restore maker** performs the explicit
