@@ -192,6 +192,10 @@ if [ "$BACKEND_READY" -ne 1 ]; then
 fi
 
 echo "==> Proving the dashboard's click-through settlement endpoint"
+DEMO_READY=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/setup" \
+  -H "content-type: application/json" \
+  -d '{}')
+node -e 'const value=JSON.parse(process.argv[1]); if (!value.ready || !value.makerApproved) { console.error(value); process.exit(1); } console.log("    PASS: dashboard setup prepared the on-chain maker");' "$DEMO_READY"
 DEMO_SETTLED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
   -d '{"amountIn":"5000000000000000000000000","action":"settle"}')
@@ -199,7 +203,13 @@ node -e 'const value=JSON.parse(process.argv[1]); if (!value.transaction?.hash |
 DEMO_REJECTED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
   -d '{"amountIn":"5000000000000000000000000","action":"revoked-maker"}')
-node -e 'const value=JSON.parse(process.argv[1]); if (!value.rejection) { console.error(value); process.exit(1); } console.log("    PASS: dashboard maker-revocation was rejected");' "$DEMO_REJECTED"
+node -e 'const value=JSON.parse(process.argv[1]); if (value.rejection !== "RFQMakerNotApproved") { console.error(value); process.exit(1); } console.log("    PASS: dashboard maker-revocation returned RFQMakerNotApproved");' "$DEMO_REJECTED"
+DEMO_REVOKED_STATE=$(curl -fsS "http://127.0.0.1:${BACKEND_PORT}/demo/state")
+node -e 'const value=JSON.parse(process.argv[1]); if (value.makerApproved) { console.error(value); process.exit(1); } console.log("    PASS: maker remains revoked until an explicit restore");' "$DEMO_REVOKED_STATE"
+DEMO_RESTORED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/restore" \
+  -H "content-type: application/json" \
+  -d '{}')
+node -e 'const value=JSON.parse(process.argv[1]); if (!value.ready || !value.makerApproved) { console.error(value); process.exit(1); } console.log("    PASS: dashboard restore re-approved the maker on chain");' "$DEMO_RESTORED"
 
 echo "==> Requesting and filling a backend-signed RFQ quote through the Router"
 "${CLI[@]}" rfq-quote --backend "http://127.0.0.1:${BACKEND_PORT}" \

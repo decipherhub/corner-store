@@ -52,6 +52,12 @@ async function main(): Promise<void> {
 
     const disabledTrade = await requestJson(`${running.baseUrl}/demo/trade`, "POST", {amountIn: "100", action: "settle"});
     assert(disabledTrade.status === 403, "settlement endpoint is unavailable outside the local runner");
+    const disabledState = await requestJson(`${running.baseUrl}/demo/state`, "GET");
+    assert(disabledState.status === 403, "demo state is unavailable outside the local runner");
+    const disabledSetup = await requestJson(`${running.baseUrl}/demo/setup`, "POST", {});
+    assert(disabledSetup.status === 403, "demo setup is unavailable outside the local runner");
+    const disabledRestore = await requestJson(`${running.baseUrl}/demo/restore`, "POST", {});
+    assert(disabledRestore.status === 403, "demo restore is unavailable outside the local runner");
 
     const quoteResponse = await requestJson(`${running.baseUrl}/rfq/quote`, "POST", {
       taker: artifact.investor,

@@ -1,4 +1,4 @@
-import {AbiCoder, Contract, HDNodeWallet, JsonRpcProvider, MaxUint256, NonceManager, formatEther} from "ethers";
+import {AbiCoder, Contract, HDNodeWallet, JsonRpcProvider, MaxUint256, NonceManager, formatEther, id} from "ethers";
 import {existsSync, readFileSync, writeFileSync} from "fs";
 
 import {RFQBackendSDK, SignedRFQQuote} from "../../rfq/src";
@@ -6,15 +6,20 @@ import {RFQBackendSDK, SignedRFQQuote} from "../../rfq/src";
 import {ANVIL_MNEMONIC, DemoBackendConfig, asAddress} from "./config";
 
 const ROUTER_ABI = [
-  "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req) returns (tuple(uint256 amountOut,bytes32 executionId))"
+  "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req) returns (tuple(uint256 amountOut,bytes32 executionId))",
+  "error RFQMakerNotApproved()"
 ];
 const ERC20_ABI = [
   "function balanceOf(address account) view returns (uint256)",
   "function allowance(address owner,address spender) view returns (uint256)",
   "function approve(address spender,uint256 amount) returns (bool)"
 ];
-const RFQ_ADAPTER_ABI = ["function setMakerApproved(address maker,bool approved)"];
+const RFQ_ADAPTER_ABI = [
+  "function setMakerApproved(address maker,bool approved)",
+  "function approvedMaker(address maker) view returns (bool)"
+];
 const QUOTE_TUPLE = "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,uint256 nonce,uint64 expiry)";
+const RFQ_MAKER_NOT_APPROVED_SELECTOR = id("RFQMakerNotApproved()").slice(0, 10).toLowerCase();
 
 export type DemoTradeAction = "settle" | "revoked-maker";
 
@@ -53,6 +58,31 @@ export class DemoSettlementService {
     this.operator = operator.connect(this.provider);
   }
 
+  async state(): Promise<{ready: boolean; makerApproved: boolean; chainId: number; maker: string; investor: string}> {
+    const adapter = new Contract(this.config.artifact.rfqAdapter, RFQ_ADAPTER_ABI, this.provider);
+    const makerApproved = await adapter.approvedMaker(this.config.artifact.maker) as boolean;
+    const network = await this.provider.getNetwork();
+    return {
+      ready: makerApproved && Number(network.chainId) === this.config.chainId,
+      makerApproved,
+      chainId: Number(network.chainId),
+      maker: this.config.artifact.maker,
+      investor: this.investorAddress
+    };
+  }
+
+  async prepare(): Promise<{ready: boolean; makerApproved: boolean; chainId: number; maker: string; investor: string}> {
+    const current = await this.state();
+    if (!current.makerApproved) await this.setMakerApproval(true);
+    return this.state();
+  }
+
+  async restoreMaker(): Promise<{ready: boolean; makerApproved: boolean; chainId: number; maker: string; investor: string}> {
+    const current = await this.state();
+    if (!current.makerApproved) await this.setMakerApproval(true);
+    return this.state();
+  }
+
   async trade(amountIn: string, action: DemoTradeAction, provided?: SignedRFQQuote): Promise<DemoTradeResult> {
     const signed = provided ?? await this.quotes.quote({
       taker: asAddress(this.config.artifact.investor, "artifact investor"),
@@ -67,26 +97,20 @@ export class DemoSettlementService {
       {stage: "RFQ quote", detail: `maker signed nonce ${signed.quote.nonce}`, status: "passed"}
     ];
 
-    let makerRevoked = false;
-    try {
-      if (action === "revoked-maker") {
-        await this.setMakerApproval(false);
-        makerRevoked = true;
-        trace.push({stage: "Maker policy", detail: "operator revoked maker before fill", status: "rejected"});
-      }
-      const result = await this.execute(signed, action, trace);
-      if (result.transaction) {
-        this.appendEvent({
-          blockNumber: result.transaction.blockNumber,
-          transactionHash: result.transaction.hash,
-          name: "RFQSettled",
-          args: {maker: signed.quote.maker, taker: signed.quote.taker, amountIn: signed.quote.amountIn, amountOut: signed.quote.amountOut}
-        });
-      }
-      return result;
-    } finally {
-      if (makerRevoked) await this.setMakerApproval(true);
+    if (action === "revoked-maker") {
+      await this.setMakerApproval(false);
+      trace.push({stage: "Maker policy", detail: "operator revoked maker before fill", status: "rejected"});
     }
+    const result = await this.execute(signed, action, trace);
+    if (result.transaction) {
+      this.appendEvent({
+        blockNumber: result.transaction.blockNumber,
+        transactionHash: result.transaction.hash,
+        name: "RFQSettled",
+        args: {maker: signed.quote.maker, taker: signed.quote.taker, amountIn: signed.quote.amountIn, amountOut: signed.quote.amountOut}
+      });
+    }
+    return result;
   }
 
   private async execute(signed: SignedRFQQuote, action: DemoTradeAction, trace: DemoTradeResult["trace"]): Promise<DemoTradeResult> {
@@ -128,14 +152,15 @@ export class DemoSettlementService {
       const detail = error instanceof Error ? (error as any).shortMessage ?? error.message : String(error);
       trace.push({stage: "RFQ settlement", detail, status: "rejected"});
       if (action !== "revoked-maker") throw error;
-      return {action, quote: signed, trace, rejection: detail};
+      if (!isMakerNotApproved(error)) throw error;
+      return {action, quote: signed, trace, rejection: "RFQMakerNotApproved"};
     }
   }
 
   private async setMakerApproval(approved: boolean): Promise<void> {
     // The operator account also performed deployment/onboarding transactions.
-    // Refresh before each policy toggle so a revoke/finally-restore pair cannot
-    // reuse a stale cached nonce in the long-lived demo backend.
+    // Refresh before each explicit policy toggle so repeated dashboard actions
+    // cannot reuse a stale cached nonce in the long-lived demo backend.
     // Read the pending nonce for every policy transaction. The dashboard can
     // keep this backend alive across repeated demos, and an in-memory nonce
     // cache becomes stale when Anvil is restarted or another operator action
@@ -174,6 +199,16 @@ export class DemoSettlementService {
     events.sort((a: {blockNumber: number}, b: {blockNumber: number}) => a.blockNumber - b.blockNumber);
     writeFileSync(this.config.eventsPath, `${JSON.stringify({schemaVersion: 1, lastBlock: events[events.length - 1]?.blockNumber ?? 0, events}, null, 2)}\n`);
   }
+}
+
+function isMakerNotApproved(value: unknown, seen = new Set<object>()): boolean {
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+    return normalized.includes("rfqmakernotapproved") || normalized.includes(RFQ_MAKER_NOT_APPROVED_SELECTOR);
+  }
+  if (!value || typeof value !== "object" || seen.has(value)) return false;
+  seen.add(value);
+  return Object.values(value).some((nested) => isMakerNotApproved(nested, seen));
 }
 
 function demoWallet(account: number): HDNodeWallet {

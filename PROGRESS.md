@@ -44,8 +44,8 @@ source of truth로 사용한다.
   bindings, required/path/flag 평가, delayed lifecycle update와 CLI/demo ABI migration)
 - `AMM-001 — Canonical Uniswap v3 Pool E2E`(pinned core artifact factory/pool,
   CREATE2 preflight, real mint/swap callback와 ERC-3643 protected buy/sell)
-- RFQ-first MVP demo refinement(`scripts/e2e-anvil.sh --mode rfq` + existing
-  Operator dashboard의 `RFQ demo` mode + `docs/rfq-demo-guide.md`)
+- RFQ-first MVP demo refinement(`scripts/e2e-anvil.sh --mode rfq` + Trader /
+  Security / Operator dashboard + `docs/rfq-demo-guide.md`)
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -100,11 +100,10 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
-- RFQ MVP demo는 mock TA-seeded BUIDL-like profile, Toolkit preflight/onboard,
-  backend EIP-712 quote, protected Router settlement와 revoked-maker rejection을
-  `--mode rfq` 한 경로로 시연한다. 기존 Operator dashboard는 read-only
-  Operator view와 quote request/download/CLI handoff용 RFQ demo를 구분하며,
-  browser private key·direct transaction 권한을 갖지 않는다. `scripts/check.sh`
+- RFQ MVP dashboard의 준비·상태 확인·quote 요청·검토·Router 체결·maker revoke·
+  명시적 restore를 실제 local backend와 온체인 상태에 연결했다. revoke는 restore
+  전까지 유지되고 Operator event index에 settlement와 maker false/true 전이가
+  기록된다. 브라우저에는 private key가 전달되지 않는다. `scripts/check.sh`
   (641/641 Foundry 포함)과 RFQ-only live E2E가 통과했다.
 - `AMM-001`에서 vendored pinned Uniswap v3 core artifact로 canonical factory와
   pool을 배포하고 CREATE2 주소, 초기화, 실제 liquidity mint/swap callback,

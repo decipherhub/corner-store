@@ -375,9 +375,11 @@ passing
 - `scripts/e2e-anvil.sh --mode rfq`는 AMM·lifecycle·surveillance 설명을 건너뛰고
   mock TA profile → Toolkit/CLI → backend-signed quote → protected RFQ settlement
   → revoked-maker rejection만 보여주는 짧은 MVP 시연 경로를 제공한다.
-- 기존 Operator dashboard는 `Operator view`(read-only snapshot)와 `RFQ demo`
-  (local quote request/download/CLI settlement handoff) 모드를 제공하며, browser에
-  private key나 direct transaction endpoint를 추가하지 않는다.
+- Operator dashboard는 Trader, Security demo와 read-only Operator view를
+  제공한다. Trader는 local backend에서 exact signed quote를 요청·검토한 뒤 protected
+  Router settlement를 실행하고, Security demo는 on-chain maker revoke 상태를
+  명시적 restore 전까지 유지해 현재 정책 enforcement를 가시화한다. 브라우저에는
+  private key가 전달되지 않는다.
 - backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
 - production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
 

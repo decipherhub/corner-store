@@ -10,7 +10,8 @@ This dashboard has two modes:
   backend support exists.
 - **Security demo** is an independent flow: create a signed quote, revoke the
   maker, and submit the stored quote to prove the Router rejects it at fill
-  time. It does not require first visiting the Trader view.
+  time. The maker remains revoked until **Restore maker** performs the explicit
+  on-chain restore. It does not require first visiting the Trader view.
 
 - It displays the selected asset profile, enabled venues and indexed events.
 - It displays the deployment artifact and the read-only Manifest snapshot generated
@@ -18,6 +19,9 @@ This dashboard has two modes:
 - It never accepts or stores a private key.
 - It submits only the local demo transaction through the backend; it does not
   hold a private key or expose one to the browser.
+- **Check & prepare demo**, maker revoke and maker restore are connected to the
+  local demo backend and show the resulting on-chain state; they are not
+  cosmetic dashboard state changes.
 - Governance changes must be prepared as an external multisig proposal and reviewed
   against the deployment artifact before execution.
 

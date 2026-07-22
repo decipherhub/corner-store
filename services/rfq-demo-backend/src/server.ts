@@ -77,6 +77,35 @@ async function handleRequest(
       return;
     }
 
+    if (req.method === "GET" && req.url === "/demo/state") {
+      if (!settlement) {
+        sendJson(res, 403, {error: "demo_settlement_disabled", message: "demo state is available only from the local e2e runner"});
+        return;
+      }
+      sendJson(res, 200, await settlement.state());
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/demo/setup") {
+      if (!settlement) {
+        sendJson(res, 403, {error: "demo_settlement_disabled", message: "demo setup is available only from the local e2e runner"});
+        return;
+      }
+      await readJsonBody(req);
+      sendJson(res, 200, await settlement.prepare());
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/demo/restore") {
+      if (!settlement) {
+        sendJson(res, 403, {error: "demo_settlement_disabled", message: "demo restore is available only from the local e2e runner"});
+        return;
+      }
+      await readJsonBody(req);
+      sendJson(res, 200, await settlement.restoreMaker());
+      return;
+    }
+
     if (req.method === "POST" && (req.url === "/rfq/quote" || req.url === "/quote")) {
       const body = await readJsonBody(req);
       const signed = await createQuote(body, config, quoteService);

@@ -39,11 +39,16 @@ Then start the existing operator dashboard in a second terminal and open
 npm run start --prefix services/operator-dashboard
 ```
 
-Select **RFQ demo**, click **Check backend**, then click **Run compliant RFQ
-trade**. The four visible stages show the mock TA profile, EIP-712 quote,
-Router policy decision and on-chain ERC-3643 balance change. Click **Revoke
-maker & retry** to show the same flow being rejected. The browser never holds
-a private key.
+Select **Trader · RFQ** and click **Check & prepare demo**. Then request a firm
+quote, select it for review, and execute the selected quote. The four visible
+stages show the mock TA profile, EIP-712 quote, Router policy decision and
+on-chain ERC-3643 balance change.
+
+Open **Security demo**, create a fresh test quote, then click **Revoke maker &
+execute**. The maker approval is changed on chain and the stored quote is
+rejected at fill time. The maker deliberately stays revoked so the UI and
+Operator event log show the real state transition. Click **Restore maker**
+before returning to normal trading. The browser never holds a private key.
 
 The dashboard performs the quote request and Router settlement itself; no CLI
 copy/paste is needed for the normal demo. If you prefer the terminal instead,
