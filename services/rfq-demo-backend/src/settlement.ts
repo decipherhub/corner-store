@@ -32,7 +32,6 @@ export class DemoSettlementService {
   private readonly operator: HDNodeWallet;
   private readonly investorAddress: string;
   private nextRouterNonce = BigInt(Date.now());
-  private operatorNonce?: number;
 
   constructor(private readonly config: DemoBackendConfig, private readonly quotes: RFQBackendSDK) {
     if (!config.demoSettlement.enabled) throw new Error("demo settlement is disabled");
@@ -127,17 +126,16 @@ export class DemoSettlementService {
     // The operator account also performed deployment/onboarding transactions.
     // Refresh before each policy toggle so a revoke/finally-restore pair cannot
     // reuse a stale cached nonce in the long-lived demo backend.
-    // Read the mined nonce directly from the provider. JsonRpcSigner nonce
-    // caching can lag after the deployment script and cause the first
-    // maker-policy toggle to reuse an already-consumed deployer nonce.
-    const nonce = this.operatorNonce ?? await this.provider.getTransactionCount(this.operator.address, "latest");
-    this.operatorNonce = nonce + 1;
+    // Read the pending nonce for every policy transaction. The dashboard can
+    // keep this backend alive across repeated demos, and an in-memory nonce
+    // cache becomes stale when Anvil is restarted or another operator action
+    // consumes a deployer nonce.
+    const nonce = await this.provider.getTransactionCount(this.operator.address, "pending");
     const adapter = new Contract(this.config.artifact.rfqAdapter, RFQ_ADAPTER_ABI, this.operator);
     try {
       const tx = await adapter.setMakerApproved(this.config.artifact.maker, approved, {nonce});
       await tx.wait();
     } catch (error) {
-      this.operatorNonce = undefined;
       throw error;
     }
   }
