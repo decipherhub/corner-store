@@ -59,20 +59,25 @@ contract UniswapV3Adapter is IAMMAdapter, Governed {
         require(registeredPool[pool], "pool not registered");
 
         (bool zeroForOne, uint160 sqrtPriceLimitX96) = _decodeVenueData(req.venueData);
+        IPool targetPool = IPool(pool);
+        address expectedTokenIn = address(zeroForOne ? targetPool.token0() : targetPool.token1());
+        address expectedTokenOut = address(zeroForOne ? targetPool.token1() : targetPool.token0());
+        if (req.context.tokenIn != expectedTokenIn || req.context.tokenOut != expectedTokenOut) {
+            revert Errors.AMMPoolTokenMismatch();
+        }
 
         // Encode payer + tokenIn so the callback can pull funds from the buyer.
         bytes memory cb = abi.encode(req.context.buyer, req.context.tokenIn);
 
         uint256 balBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer);
 
-        IPool(pool)
-            .swap(
-                req.context.buyer, // recipient of tokenOut
-                zeroForOne,
-                int256(req.context.amountIn), // exact input
-                sqrtPriceLimitX96,
-                cb
-            );
+        targetPool.swap(
+            req.context.buyer, // recipient of tokenOut
+            zeroForOne,
+            int256(req.context.amountIn), // exact input
+            sqrtPriceLimitX96,
+            cb
+        );
 
         uint256 amountOut = IERC20(req.context.tokenOut).balanceOf(req.context.buyer) - balBefore;
 
@@ -86,8 +91,18 @@ contract UniswapV3Adapter is IAMMAdapter, Governed {
 
         (address payer, address tokenIn) = abi.decode(data, (address, address));
 
-        // The owed amount is the positive delta (pool is owed tokenIn).
-        uint256 amountOwed = amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+        // Exactly one positive delta identifies the token owed to the pool.
+        // Bind that delta to the registered pool's canonical token ordering so
+        // malformed callback data cannot redirect transferFrom to another asset.
+        uint256 amountOwed;
+        IPool pool = IPool(msg.sender);
+        if (amount0Delta > 0 && amount1Delta <= 0 && tokenIn == address(pool.token0())) {
+            amountOwed = uint256(amount0Delta);
+        } else if (amount1Delta > 0 && amount0Delta <= 0 && tokenIn == address(pool.token1())) {
+            amountOwed = uint256(amount1Delta);
+        } else {
+            revert Errors.AMMPoolTokenMismatch();
+        }
 
         IERC20(tokenIn).safeTransferFrom(payer, msg.sender, amountOwed);
     }

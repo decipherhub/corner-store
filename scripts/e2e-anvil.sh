@@ -7,11 +7,13 @@
 # and tears the node down on exit. Runs fully offline.
 #
 # Usage:
-#   scripts/e2e-anvil.sh [--port N] [--backend-port N] [--profile buidl-like|reg-d] [--keep]
+#   scripts/e2e-anvil.sh [--port N] [--backend-port N] [--profile buidl-like|reg-d] [--mode full|rfq] [--keep]
 #
 #   --port N   Anvil port (default 8545).
 #   --backend-port N  RFQ demo backend port (default 8787).
 #   --profile  Asset profile (default buidl-like; alternative reg-d).
+#   --mode     full runs the 7-scenario suite plus RFQ; rfq runs the concise
+#              backend/CLI/Router RFQ walkthrough only (default full).
 #   --keep     Leave Anvil running after the suite (attach a UI / continue the
 #              demo interactively). Otherwise Anvil is killed on exit.
 #
@@ -25,6 +27,7 @@ PORT=8545
 KEEP=0
 ASSET_PROFILE=buidl-like
 BACKEND_PORT=8787
+DEMO_MODE=full
 while [ $# -gt 0 ]; do
   case "$1" in
     --port) PORT="$2"; shift 2 ;;
@@ -33,6 +36,8 @@ while [ $# -gt 0 ]; do
     --profile=*) ASSET_PROFILE="${1#*=}"; shift ;;
     --backend-port) BACKEND_PORT="$2"; shift 2 ;;
     --backend-port=*) BACKEND_PORT="${1#*=}"; shift ;;
+    --mode) DEMO_MODE="$2"; shift 2 ;;
+    --mode=*) DEMO_MODE="${1#*=}"; shift ;;
     --keep) KEEP=1; shift ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -42,6 +47,11 @@ done
 case "$ASSET_PROFILE" in
   buidl-like|reg-d) ;;
   *) echo "invalid --profile: $ASSET_PROFILE (expected buidl-like or reg-d)" >&2; exit 2 ;;
+esac
+
+case "$DEMO_MODE" in
+  full|rfq) ;;
+  *) echo "invalid --mode: $DEMO_MODE (expected full or rfq)" >&2; exit 2 ;;
 esac
 
 RPC="http://127.0.0.1:${PORT}"
@@ -106,10 +116,14 @@ echo "==> Deploying the full stack (script/DeployStack.s.sol)"
 ASSET_PROFILE="$ASSET_PROFILE" forge script script/DeployStack.s.sol:DeployStack \
   --rpc-url "$RPC" --broadcast --offline
 
-echo ""
-echo "==> Running the demo scenario suite (script/DemoScenarios.s.sol)"
-forge script script/DemoScenarios.s.sol:DemoScenarios \
-  --rpc-url "$RPC" --broadcast --offline
+if [ "$DEMO_MODE" = "full" ]; then
+  echo ""
+  echo "==> Running the full 7-scenario demo suite (script/DemoScenarios.s.sol)"
+  forge script script/DemoScenarios.s.sol:DemoScenarios \
+    --rpc-url "$RPC" --broadcast --offline
+else
+  echo "==> RFQ mode: skipping AMM/lifecycle/surveillance scenarios"
+fi
 
 echo ""
 echo "==> Building CLI and RFQ demo backend"
@@ -117,12 +131,14 @@ npm run build --prefix services/cli >/dev/null
 npm run build --prefix services/rfq-demo-backend >/dev/null
 
 CLI=(node services/cli/dist/cli/src/index.js --rpc "$RPC" --artifact deployments/anvil-e2e.json)
-echo "==> Advancing the live chain through the manifest recovery timelock"
-cast rpc --rpc-url "$RPC" evm_increaseTime 86400 >/dev/null
-cast rpc --rpc-url "$RPC" evm_mine >/dev/null
-"${CLI[@]}" manifest resume
-"${CLI[@]}" buy 5000000 --venue amm
-echo "    PASS: delayed manifest recovery restored AMM settlement"
+if [ "$DEMO_MODE" = "full" ]; then
+  echo "==> Advancing the live chain through the manifest recovery timelock"
+  cast rpc --rpc-url "$RPC" evm_increaseTime 86400 >/dev/null
+  cast rpc --rpc-url "$RPC" evm_mine >/dev/null
+  "${CLI[@]}" manifest resume
+  "${CLI[@]}" buy 5000000 --venue amm
+  echo "    PASS: delayed manifest recovery restored AMM settlement"
+fi
 
 echo "==> Running Toolkit artifact preflight and immutable checkpoint"
 if [ "$ASSET_PROFILE" = "reg-d" ]; then
@@ -138,7 +154,7 @@ echo "==> Re-onboarding the selected asset profile through the CLI"
 "${CLI[@]}" onboard --profile "$ASSET_PROFILE"
 
 echo "==> Starting RFQ demo backend on http://127.0.0.1:${BACKEND_PORT}"
-node services/rfq-demo-backend/dist/rfq-demo-backend/src/index.js \
+RFQ_DEMO_ENABLE_SETTLEMENT=1 node services/rfq-demo-backend/dist/rfq-demo-backend/src/index.js \
   --port "$BACKEND_PORT" --rpc "$RPC" >"$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
 
@@ -159,6 +175,16 @@ if [ "$BACKEND_READY" -ne 1 ]; then
   exit 1
 fi
 
+echo "==> Proving the dashboard's click-through settlement endpoint"
+DEMO_SETTLED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
+  -H "content-type: application/json" \
+  -d '{"amountIn":"5000000000000000000000000","action":"settle"}')
+node -e 'const value=JSON.parse(process.argv[1]); if (!value.transaction?.hash || BigInt(value.transaction.rwaDelta) <= 0n) process.exit(1); console.log(`    PASS: dashboard trade settled in block ${value.transaction.blockNumber}`);' "$DEMO_SETTLED"
+DEMO_REJECTED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
+  -H "content-type: application/json" \
+  -d '{"amountIn":"5000000000000000000000000","action":"revoked-maker"}')
+node -e 'const value=JSON.parse(process.argv[1]); if (!value.rejection) process.exit(1); console.log("    PASS: dashboard maker-revocation was rejected");' "$DEMO_REJECTED"
+
 echo "==> Requesting and filling a backend-signed RFQ quote through the Router"
 "${CLI[@]}" rfq-quote --backend "http://127.0.0.1:${BACKEND_PORT}" \
   --amount-in 5000000 --out "$QUOTE_FILE"
@@ -174,5 +200,15 @@ if "${CLI[@]}" buy 0 --venue rfq --quote "$REJECTED_QUOTE_FILE"; then
 fi
 echo "    PASS: revoked maker quote was rejected"
 
+if [ "$KEEP" -eq 1 ]; then
+  echo "==> Restoring the demo maker for the interactive session"
+  "${CLI[@]}" maker approve 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+  echo "    maker restored: request another RFQ quote in a second terminal"
+fi
+
 echo ""
-echo "==> E2E demo complete: scenario suite + backend/CLI/Router RFQ flow passed."
+if [ "$DEMO_MODE" = "full" ]; then
+  echo "==> E2E demo complete: scenario suite + backend/CLI/Router RFQ flow passed."
+else
+  echo "==> RFQ demo complete: mock TA profile + toolkit/CLI + backend/Router RFQ flow passed."
+fi

@@ -18,6 +18,7 @@ library Errors {
     error DecisionMismatch(); // decisionHash != recomputed
     error MaxAmountExceeded();
     error SlippageExceeded();
+    error AMMPoolTokenMismatch();
     error RFQInvalidSignature();
     error RFQQuoteExpired();
     error RFQQuoteUsed();
