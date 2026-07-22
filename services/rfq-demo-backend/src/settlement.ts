@@ -53,14 +53,15 @@ export class DemoSettlementService {
     this.operator = operator.connect(this.provider);
   }
 
-  async trade(amountIn: string, action: DemoTradeAction): Promise<DemoTradeResult> {
-    const signed = await this.quotes.quote({
+  async trade(amountIn: string, action: DemoTradeAction, provided?: SignedRFQQuote): Promise<DemoTradeResult> {
+    const signed = provided ?? await this.quotes.quote({
       taker: asAddress(this.config.artifact.investor, "artifact investor"),
       tokenIn: asAddress(this.config.artifact.quote, "artifact quote"),
       tokenOut: asAddress(this.config.artifact.rwaToken, "artifact rwaToken"),
       amountIn,
       venue: asAddress(this.config.artifact.rfqVenue, "artifact rfqVenue")
     });
+    if (BigInt(signed.quote.amountIn) !== BigInt(amountIn)) throw new Error("quote amount does not match trade amount");
     const trace: DemoTradeResult["trace"] = [
       {stage: "Mock TA profile", detail: "canonical demo investor selected", status: "passed"},
       {stage: "RFQ quote", detail: `maker signed nonce ${signed.quote.nonce}`, status: "passed"}

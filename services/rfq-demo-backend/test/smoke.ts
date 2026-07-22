@@ -48,6 +48,7 @@ async function main(): Promise<void> {
     const healthBody = JSON.parse(health.body) as any;
     assert(healthBody.status === "ok", "health reports ok");
     assert(healthBody.demoSettlementEnabled === false, "settlement is opt-in");
+    assert(healthBody.taker.toLowerCase() === artifact.investor.toLowerCase(), "health exposes the canonical demo taker");
 
     const disabledTrade = await requestJson(`${running.baseUrl}/demo/trade`, "POST", {amountIn: "100", action: "settle"});
     assert(disabledTrade.status === 403, "settlement endpoint is unavailable outside the local runner");
@@ -66,6 +67,11 @@ async function main(): Promise<void> {
     assert(signed.quote.tokenOut.toLowerCase() === artifact.rwaToken.toLowerCase(), "tokenOut is deployment RWA");
     const recovered = verifyTypedData(signed.typedData.domain, RFQ_QUOTE_TYPES, signed.quote, signed.signature);
     assert(recovered.toLowerCase() === artifact.maker.toLowerCase(), "signature recovers configured maker");
+
+    const demoQuoteResponse = await requestJson(`${running.baseUrl}/demo/quote`, "POST", {amountIn: "100"});
+    assert(demoQuoteResponse.status === 200, "demo quote returns 200 with the canonical taker default");
+    const demoQuote = JSON.parse(demoQuoteResponse.body) as any;
+    assert(demoQuote.quote.taker.toLowerCase() === artifact.investor.toLowerCase(), "demo quote uses canonical taker");
 
     const secondResponse = await requestJson(`${running.baseUrl}/quote`, "POST", {
       taker: artifact.investor,

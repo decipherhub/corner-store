@@ -4,8 +4,10 @@ This dashboard has two modes:
 
 - **Operator view** is a read-only view backed by `services/operator-api` through
   the dashboard's same-origin proxy.
-- **RFQ demo** requests a quote from the local `services/rfq-demo-backend` and
-  settles it through the protected Router when you click the trade button.
+- **RFQ demo** requests a live firm quote, lets the trader review the exact
+  signed payload, and settles that same quote through the protected Router.
+  Additional maker rows are explicitly preview fixtures until multi-maker
+  backend support exists.
 
 - It displays the selected asset profile, enabled venues and indexed events.
 - It displays the deployment artifact and the read-only Manifest snapshot generated

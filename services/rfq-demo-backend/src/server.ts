@@ -71,6 +71,7 @@ async function handleRequest(
         venue: config.artifact.rfqVenue,
         tokenIn: config.artifact.quote,
         tokenOut: config.artifact.rwaToken,
+        taker: config.artifact.investor,
         demoSettlementEnabled: Boolean(settlement)
       });
       return;
@@ -83,6 +84,16 @@ async function handleRequest(
       return;
     }
 
+    if (req.method === "POST" && req.url === "/demo/quote") {
+      const body = await readJsonBody(req);
+      const signed = await createQuote({
+        ...(isRecord(body) ? body : {}),
+        taker: isRecord(body) && typeof body.taker === "string" ? body.taker : config.artifact.investor
+      }, config, quoteService);
+      sendJson(res, 200, signed);
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/demo/trade") {
       if (!settlement) {
         sendJson(res, 403, {error: "demo_settlement_disabled", message: "demo settlement is available only from the local e2e runner"});
@@ -90,7 +101,8 @@ async function handleRequest(
       }
       const body = await readJsonBody(req);
       const {amountIn, action} = parseDemoTrade(body);
-      sendJson(res, 200, await settlement.trade(amountIn, action));
+      const signedQuote = isRecord(body) && isRecord(body.quote) ? body.quote as unknown as SignedRFQQuote : undefined;
+      sendJson(res, 200, await settlement.trade(amountIn, action, signedQuote));
       return;
     }
 
