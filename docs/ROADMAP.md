@@ -20,7 +20,8 @@
 - generic ExecutionRouter, VenueRegistry, VenueSelector와 공통 Adapter interface
 - AMM reference adapter와 RFQ v1 reference settlement adapter
 - RFQ quote signer reference service
-- Foundry unit/integration tests, RFQ service smoke와 기본 GitHub Actions
+- Foundry unit/integration tests와 전체 developer/operator service 및 vendored
+  deploy-v3를 검증하는 repository-wide GitHub Actions gate
 
 남은 주요 작업:
 

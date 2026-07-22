@@ -589,3 +589,27 @@ passing
 
 새 정적 분석 의존성을 추가하지 않고 Foundry stable에 내장된 production lint만
 fail-closed gate로 도입한다. Slither와 medium warning 정리는 후속 범위다.
+
+## OPS-002 — Repository-wide CI Parity
+
+### Behavior
+
+- GitHub Actions가 local `scripts/check.sh`와 동일한 repository-wide gate를 실행한다.
+- RFQ SDK, CLI, demo backend, Toolkit, Operator API/dashboard와 vendored deploy-v3가
+  pull request마다 검증된다.
+- npm 서비스는 각 lockfile을 cache key와 deterministic install에 사용한다.
+- vendored deploy-v3는 자체 `yarn.lock`과 directory boundary 안에서만 설치·검증한다.
+
+### Verification
+
+- `scripts/check.sh`
+- GitHub Actions `Run repository-wide checks`
+
+### State
+
+passing
+
+### Scope
+
+기존 local gate와 CI의 범위를 일치시킨다. live Anvil E2E는 별도 실행 비용과
+환경 격리가 필요하므로 이 feature의 PR gate에는 포함하지 않는다.
