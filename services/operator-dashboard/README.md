@@ -8,6 +8,9 @@ This dashboard has two modes:
   signed payload, and settles that same quote through the protected Router.
   Additional maker rows are explicitly preview fixtures until multi-maker
   backend support exists.
+- **Security demo** is an independent flow: create a signed quote, revoke the
+  maker, and submit the stored quote to prove the Router rejects it at fill
+  time. It does not require first visiting the Trader view.
 
 - It displays the selected asset profile, enabled venues and indexed events.
 - It displays the deployment artifact and the read-only Manifest snapshot generated
