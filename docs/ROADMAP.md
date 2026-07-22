@@ -33,7 +33,7 @@
 - config-driven Toolkit: versioned config, validation/simulation, deployment and
   operator workflows
 - live E2E가 profile별 Toolkit preflight/checkpoint와 protected RFQ flow를 검증
-- static analysis, warning budget와 production security/legal review
+- medium warning budget, independent security analysis와 production security/legal review
 
 ## Delivery Strategy
 

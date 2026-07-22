@@ -6,6 +6,7 @@
 
 ```sh
 forge fmt --check
+forge lint --severity high --deny warnings src
 forge build
 ```
 

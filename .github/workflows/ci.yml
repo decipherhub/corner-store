@@ -35,6 +35,9 @@ jobs:
       - name: Check formatting
         run: forge fmt --check
 
+      - name: Run high-severity Solidity lint
+        run: forge lint --severity high --deny warnings src
+
       - name: Build
         run: forge build
 

@@ -31,6 +31,7 @@ source of truth로 사용한다.
 - `DEMO-002 — MVP RFQ Demo Backend`(selectable asset profile + local HTTP quote
   API + CLI/backend→Router live settlement)
 - `TOOLKIT-001 — Versioned Config Foundation`
+- `OPS-001 — High-severity Solidity Lint Gate`
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -82,6 +83,12 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- `OPS-001`에서 production `src`의 Foundry high-severity lint를 local check와
+  GitHub Actions에 fail-closed gate로 연결했다. `VenueSelector`의 venue bitmask를
+  명시적 `uint256(1)` shift로 고쳐 high-severity warning을 제거했다.
+  `forge lint --severity high --deny warnings src`, 전체 Foundry 582/582와
+  `scripts/check.sh`가 통과했다. test fixture의 medium/low warning과 Slither는
+  후속 warning-budget/security-analysis 범위다.
 - `ComplianceEngine`의 pair evaluation과 element collection 상태를
   `ActivePairState`/`ElementAccumulator`로 묶고 recipe별 append를 helper로 분리했다.
   `DecisionHashLib`는 기존 static ABI encoding과 동일한 두 구간 결합으로 stack
