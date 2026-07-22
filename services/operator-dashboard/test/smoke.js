@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-for (const marker of ["/api/v1/config", "/api/v1/deployment", "/api/v1/events", "Active deployment", "No private keys", "multisig", "RFQ demo", "Run compliant RFQ trade", "Revoke maker &amp; retry", "/demo/trade", "Router → RFQAdapter"]) {
+for (const marker of ["/api/v1/config", "/api/v1/deployment", "/api/v1/events", "Active deployment", "Compliance control plane", "policyReg", "recipeReg", "elementReg", "factory", "No private keys", "multisig", "RFQ demo", "Run compliant RFQ trade", "Revoke maker &amp; retry", "/demo/trade", "Router → RFQAdapter"]) {
   if (!html.includes(marker)) throw new Error(`dashboard safety/data marker missing: ${marker}`);
 }
 const server = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
