@@ -81,6 +81,14 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- `ComplianceEngine`의 pair evaluation과 element collection 상태를
+  `ActivePairState`/`ElementAccumulator`로 묶고 recipe별 append를 helper로 분리했다.
+  `DecisionHashLib`는 기존 static ABI encoding과 동일한 두 구간 결합으로 stack
+  사용량을 낮추고 canonical hash 회귀 테스트를 추가했다. 이에 `via_ir = false`로
+  전환했으며 Foundry stable v1.7.1 기준 clean full build(186 files)가 27.96초
+  (wall 29.72초)에 통과했다. targeted Engine 23/23, decision hash 1/1과 전체
+  `forge test --offline` 582/582가 통과했다. 제품 동작 변경이 없는 내부
+  리팩터이므로 live Anvil E2E는 재실행하지 않았다.
 - 기존 `DEMO-002` 작업은 `services/rfq-demo-backend` local HTTP quote API와
   CLI `rfq-quote --backend`를 추가했다.
 - issue #40 정합화 작업에서 live runner와 CLI에 `buidl-like | reg-d` profile

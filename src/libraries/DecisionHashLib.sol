@@ -12,24 +12,10 @@ library DecisionHashLib {
         uint64 policyVersion,
         uint64 validUntil
     ) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                c.initiator,
-                c.buyer,
-                c.seller,
-                c.tokenIn,
-                c.tokenOut,
-                c.amountIn,
-                c.amountOut,
-                c.venueType,
-                c.venue,
-                c.flowType,
-                maxAmount,
-                allowedVenueTypes,
-                allowedVenuesHash,
-                policyVersion,
-                validUntil
-            )
+        bytes memory trade = abi.encode(c.initiator, c.buyer, c.seller, c.tokenIn, c.tokenOut, c.amountIn, c.amountOut);
+        bytes memory execution = abi.encode(
+            c.venueType, c.venue, c.flowType, maxAmount, allowedVenueTypes, allowedVenuesHash, policyVersion, validUntil
         );
+        return keccak256(bytes.concat(trade, execution));
     }
 }
