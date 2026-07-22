@@ -11,7 +11,7 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-- `TOOLKIT-001 — Versioned Config Foundation`
+- 없음
 
 ## Completed
 
@@ -30,6 +30,7 @@ source of truth로 사용한다.
 - `RFQ-SDK-001 — RFQ Backend SDK Interfaces`
 - `DEMO-002 — MVP RFQ Demo Backend`(selectable asset profile + local HTTP quote
   API + CLI/backend→Router live settlement)
+- `TOOLKIT-001 — Versioned Config Foundation`
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
