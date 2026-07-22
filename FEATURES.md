@@ -639,3 +639,60 @@ passing
 
 문서 정합화와 운영 runbook만 추가한다. contract, API 또는 production 운영 정책은
 변경하지 않는다.
+
+## CMP-004 — Wave-3 Illustrative Element Library
+
+### Behavior
+
+- 새로 문서화된 illustrative element 6개를 구현한다: A-06 Affiliate,
+  A-12 Red Flag Knowledge Bar, E-03 Bad Actor Disqualification,
+  F-01 Operator Self-Dealing, F-03 Fraud Surveillance,
+  F-04 Reg M restricted-period buying gate. 각 element는 `docs/elements`
+  브랜치에 추가된 new-format `docs/compliance/elements` walkthrough 문서를
+  근거로 구현한다.
+- attestation setter는 operator-gated(`Governed`/`onlyOperator`)이며 production
+  data source는 각 element 헤더의 approval-gated seam으로 남는다.
+- fail-closed default를 유지한다. F-01 OperatorSelfDealing은 `registryAvailable`
+  default가 false여서 operator가 roster를 적재하고 명시적으로 켜기 전까지 모든
+  거래가 fail-closed된다.
+- monitoring element(A-12, F-03)는 거래를 막지 않는다. A-12는 pre-trade
+  STATELESS로 표시만 하고 `check()`는 항상 pass하며, F-03은 STATEFUL post-trade
+  로 no-tipping-off party-facing surface(operator-gated view)를 통해 감시만 한다.
+- illustrative reference wiring이며 approved production policy가 아니다.
+  element는 `tools/deploy-wave3/DeployWave3Elements.s.sol`에서 opt-in으로만
+  등록하고 active recipe에 붙이지 않는다. 기본 demo 배포 범위는 변경하지 않는다.
+- CLI(`services/cli`)의 reason-decode 테이블이 wave-3 6개 element를 wave-2와
+  동일한 수준(name label + per-element reason-code decode 테이블 + smoke-test
+  enumeration)으로 커버한다. wave-2와 마찬가지로 `attest` 명령
+  (`services/cli/src/elements.ts`의 `ELEMENT_IDS`, 원본 9개)이나 DeployStack에는
+  추가하지 않는다.
+
+### Verification
+
+- `forge test --offline`(전체 770/770, pre-task 582 + 신규 188).
+- `cd services/cli && npm test`(CLI reason-decode 테이블이 이제 wave-3를 커버).
+- per-element unit test: `test/unit/compliance/elements/Affiliate.t.sol`,
+  `test/unit/compliance/elements/RedFlagKnowledgeBar.t.sol`,
+  `test/unit/compliance/elements/BadActorDisqualification.t.sol`,
+  `test/unit/compliance/elements/OperatorSelfDealing.t.sol`,
+  `test/unit/compliance/elements/FraudSurveillance.t.sol`,
+  `test/unit/compliance/elements/RegMIssuerBuying.t.sol`.
+- `forge fmt --check`.
+- `forge lint --severity high --deny warnings src`.
+
+### State
+
+passing
+
+### Notes
+
+- wave-2 precedent은 `TOOLKIT-001` Notes(기본 script discovery 밖 opt-in 등록으로
+  기본 demo의 컴파일 그래프/배포 범위 보존)와 동일하다. wave-3 element는
+  DeployStack이나 active recipe에 추가하지 않는다.
+- production data-source seam은 각 element 헤더에 문서화되어 있다(OFAC/ONCHAINID/
+  EDGAR 등은 approval-gated seam).
+- F-01 OperatorSelfDealing의 `registryAvailable` fail-closed default는 deploy
+  script가 자동으로 켜지 않는다. operator가 roster 적재 후 명시적으로
+  `setRegistryAvailable(true)`를 호출해야 통과가 시작된다.
+- F-03 FraudSurveillance는 STATEFUL(`BaseStatefulElement`)이므로 배포 후
+  `setEngine(engine)` wiring이 필요하다(wave-2 D-01 HolderCount와 동일 패턴).

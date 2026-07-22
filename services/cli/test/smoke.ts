@@ -47,6 +47,10 @@ const A01_RECIPE7 = "0x4ec564787cbeb03d100cec07278646352648e18a22c4b6e3a8549fa92
 // "f(uint16,bytes32,uint32)" 0 $(cast format-bytes32-string "<id>") <code>)`.
 const A01_DIRECT_CODE4 = "0x8bb6a77feb777933299995cf60c2f3d5a4804be0f6077feab1f7390c76179f9c";
 const D01_DIRECT_CODE3 = "0x944f96138687357570c74d60495e55251602230e456018945bdf8e15bc1241ba";
+// Wave-3 (CMP-004): same direct element-level (recipeId 0) ground-truth style.
+// F-03 FraudSurveillance is a monitoring element whose codes surface only in the
+// operator/audit views (reasonCodeOf) — code 2 == STRUCTURING_EVASION.
+const F03_DIRECT_CODE2 = "0x5d92032bfc7789d5259fa504825a7aee201b62bfb2f705423901f179444eb22a";
 
 async function main() {
   // --- asset profile selection -------------------------------------------
@@ -79,18 +83,21 @@ async function main() {
   assert(encodeReason(7, "A-01-v1", 1) === A01_RECIPE7, "encode matches cast (A-01 recipe 7)");
   assert(encodeReason(0, "A-01-v1", 4) === A01_DIRECT_CODE4, "encode matches cast (A-01 direct code 4)");
   assert(encodeReason(0, "D-01-v1", 3) === D01_DIRECT_CODE3, "encode matches cast (D-01 direct code 3)");
+  assert(encodeReason(0, "F-03-v1", 2) === F03_DIRECT_CODE2, "encode matches cast (F-03 direct code 2)");
 
   // table = (recipe-scoped: 3 recipes x codes-per-element-sum) + (direct
   // element-level: 1 x codes-per-element-sum, recipeId 0 — the reasonCode an
   // element's own `check()` actually self-encodes) + 6 policy statuses.
-  // codes-per-element-sum is each of the 17 elements' code count, where an
+  // codes-per-element-sum is each of the 23 elements' code count, where an
   // element without a richer ELEMENT_CODE_NAMES table contributes 1.
   // Wave-2b upgraded 6 elements to multi-code taxonomies (A-01:10, A-03:9,
-  // A-04:9, A-13:9, B-01:6, B-02:6) and the wave-2 illustrative elements
-  // (A-08:8, A-09:2, A-11:5, B-03:6, B-04:7, D-01:4) are also enumerated;
-  // the remaining 5 single-code mocks (A-02, A-05, C-01, E-01, F-02)
-  // contribute 1 each.
-  const CODES_PER_ELEMENT = 10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4; // = 86
+  // A-04:9, A-13:9, B-01:6, B-02:6); the wave-2 illustrative elements
+  // (A-08:8, A-09:2, A-11:5, B-03:6, B-04:7, D-01:4) and the wave-3
+  // illustrative elements (A-06:4, A-12:8, E-03:9, F-01:3, F-03:4, F-04:5) are
+  // also enumerated; the remaining 5 single-code mocks (A-02, A-05, C-01,
+  // E-01, F-02) contribute 1 each.
+  const CODES_PER_ELEMENT =
+    10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5; // = 119
   assert(tableSize() === 4 * CODES_PER_ELEMENT + 6, "reason table size");
 
   const jur = decodeReason(A02_RECIPE1);
@@ -110,6 +117,11 @@ async function main() {
   assert(sanctionsClaim.label.includes("FAIL_NO_SANCTIONS_CLAIM"), "decodes A-01 direct code 4");
   const holderCap = decodeReason(D01_DIRECT_CODE3);
   assert(holderCap.label.includes("HOLDER_CAP_3C1_100"), "decodes D-01 direct code 3");
+  // Wave-3: a monitoring element's audit-surface code still decodes to its
+  // doc-name even though F-03's `check()` never rejects — the code appears only
+  // in operator views / FlagLifecycle events, never as a party-facing reject.
+  const fraudFlag = decodeReason(F03_DIRECT_CODE2);
+  assert(fraudFlag.label.includes("STRUCTURING_EVASION"), "decodes F-03 direct code 2");
   // Legacy code-1 meaning is preserved across the wave-2b upgrade (doc says
   // code 1 keeps the pre-upgrade "blocked wallet" semantics for A-01).
   assert(decodeReason(encodeReason(0, "A-01-v1", 1)).label.includes("FAIL_SDN_WALLET_MATCH"), "A-01 code 1 preserved");

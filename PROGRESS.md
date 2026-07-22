@@ -66,6 +66,13 @@ source of truth로 사용한다.
   `snapshot`/`restore`, `quote-inspect`(서명자 복구/만료/nonce·승인, 실패 시 exit 1).
   reason 디코딩·EIP-712 복구는 기존 lib 재사용. smoke(quote-inspect valid+tampered) +
   full live walkthrough로 검증. `forge test --offline` 238/238 유지.
+- `CMP-004 — Wave-3 Illustrative Element Library`(illustrative element 6개 +
+  per-element unit test + `tools/deploy-wave3` opt-in deploy script): A-06
+  Affiliate, A-12 Red Flag Knowledge Bar, E-03 Bad Actor Disqualification,
+  F-01 Operator Self-Dealing, F-03 Fraud Surveillance, F-04 Reg M
+  restricted-period buying gate. operator-gated setter, fail-closed default,
+  monitoring element(A-12/F-03) non-blocking. active recipe/DeployStack 미변경.
+  `forge test --offline` 770/770.
 
 ## Blocked
 
@@ -85,6 +92,27 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- `CMP-004`에서 wave-3 illustrative element 6개(A-06 Affiliate, A-12 Red Flag
+  Knowledge Bar, E-03 Bad Actor Disqualification, F-01 Operator Self-Dealing,
+  F-03 Fraud Surveillance, F-04 Reg M restricted-period buying gate)와 per-element
+  unit test를 통합하고, `tools/deploy-wave3/DeployWave3Elements.s.sol` opt-in
+  deploy script를 추가했다. wave-2 precedent과 동일하게 기본 Foundry script
+  discovery 밖에서 opt-in으로 등록하며 active recipe/DeployStack에 붙이지 않는다.
+  F-03은 STATEFUL이라 `setEngine(engine)` wiring(D-01 HolderCount 패턴)을 하고,
+  F-01은 `registryAvailable` fail-closed default를 script에서 자동으로 켜지 않는다.
+  script는 `ELEMENT_REGISTRY`/`COMPLIANCE_ENGINE`/`DEPLOYER_PRIVATE_KEY`를 받아
+  등록하며 `forge script … --offline`으로 컴파일만 검증했다(env-var 단계에서만
+  revert). `forge fmt --check`, `forge build`,
+  `forge test --offline` 770/770(pre-task 582 + 신규 188),
+  `forge lint --severity high --deny warnings src`가 모두 통과했다.
+  `scripts/check.sh`는 Foundry·RFQ SDK·CLI·demo backend·Toolkit·Operator
+  API/dashboard 단계를 전부 통과했으나 마지막 vendored deploy-v3 단계는 이 세션
+  환경에 yarn이 없어 실행하지 못했다(deploy-v3는 이번 작업에서 변경 없음, CI
+  parity gate가 커버).
+  wave-2 script(`tools/deploy-wave2`)의 import 경로가 `../src/...`로 한 단계
+  얕아 repo root 기준 컴파일이 안 되는 잠재 버그를 발견했다(컴파일 게이트가
+  없어 미검출). wave-3는 올바른 `../../src/...`를 사용하며, wave-2 수정은 별도
+  follow-up으로 남긴다.
 - `DOC-003`에서 ROADMAP의 Toolkit/API/dashboard/live E2E 완료 상태와 production
   후속 범위를 정렬하고 incident-response runbook을 추가했다. 최신 main에서
   `buidl-like`와 `reg-d`가 각각 7/7 scenario, Toolkit preflight/checkpoint,
