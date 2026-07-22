@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corner Store Operator</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; background: #10131a; color: #e9edf5; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    section { background: #191e28; border: 1px solid #303949; border-radius: 10px; padding: 1rem; }
+    code, pre { color: #b9d6ff; overflow-wrap: anywhere; }
+    .safe { color: #69e0a3; } .muted { color: #a2abbc; }
+    button { padding: .55rem .8rem; border-radius: 6px; border: 1px solid #58657b; background: #252d3b; color: inherit; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Corner Store Operator</h1>
+  <p class="muted">Read-only control plane. Transactions must be proposed and approved through the configured multisig.</p>
+  <button id="refresh">Refresh snapshot</button>
+  <div class="grid">
+    <section><h2>Asset</h2><p id="asset">Loading…</p></section>
+    <section><h2>Venues</h2><p id="venues">Loading…</p></section>
+    <section><h2>Safety boundary</h2><p class="safe">No private keys. No direct transaction endpoint.</p><p class="muted">Use the API snapshot to create an external multisig proposal.</p></section>
+  </div>
+  <section><h2>Indexed events</h2><pre id="events">Loading…</pre></section>
+  <script>
+    async function get(path) { const response = await fetch(path); if (!response.ok) throw new Error(await response.text()); return response.json(); }
+    async function refresh() {
+      try {
+        const [config, events] = await Promise.all([get('/api/v1/config'), get('/api/v1/events')]);
+        document.getElementById('asset').textContent = config.asset.profile;
+        document.getElementById('venues').textContent = Object.entries(config.venues).filter(([, enabled]) => enabled).map(([name]) => name).join(', ');
+        document.getElementById('events').textContent = JSON.stringify(events.events, null, 2);
+      } catch (error) { document.getElementById('events').textContent = String(error); }
+    }
+    document.getElementById('refresh').addEventListener('click', refresh); refresh();
+  </script>
+</body>
+</html>

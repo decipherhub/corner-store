@@ -13,8 +13,82 @@ program
   .version("0.1.0")
   .option("--rpc <url>", "JSON-RPC endpoint", "http://127.0.0.1:8545")
   .option("--artifact <path>", "deployment artifact JSON (defaults to <repo>/deployments/anvil-e2e.json)")
+  .option("--config <path>", "versioned Toolkit config JSON")
   .option("--account <n>", "Anvil mnemonic account index 0-9")
   .option("--key <hex>", "explicit private key (overrides --account)");
+
+program
+  .command("toolkit-init")
+  .description("create a versioned Corner Store Toolkit config")
+  .argument("[path]", "output JSON path", "corner-store.config.json")
+  .action(run((path) => cmd.cmdToolkitInit(path)));
+
+program
+  .command("toolkit-validate")
+  .description("validate a versioned Corner Store Toolkit config")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path) => cmd.cmdToolkitValidate(path)));
+
+program
+  .command("toolkit-simulate")
+  .description("preview Toolkit deployment and venue binding without sending transactions")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, _opts, command) => cmd.cmdToolkitSimulate(path, command.optsWithGlobals().artifact)));
+
+program
+  .command("toolkit-preflight")
+  .description("verify config/profile/venue addresses before deployment or onboarding")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, _opts, command) => cmd.cmdToolkitPreflight(path, command.optsWithGlobals().artifact)));
+
+program
+  .command("toolkit-onboard")
+  .description("preflight a Toolkit config, then onboard its selected asset and venues")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, _opts, command) => cmd.cmdToolkitOnboard(path, command.optsWithGlobals())));
+
+program
+  .command("toolkit-checkpoint")
+  .description("write an immutable, secret-free deployment checkpoint after preflight")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .option("--output <path>", "checkpoint JSON output", "deployments/checkpoint.json")
+  .option("--deployment-id <id>", "stable deployment identifier")
+  .action(run((path, opts, command) => cmd.cmdToolkitCheckpoint(path, opts.output, {...command.optsWithGlobals(), deploymentId: opts.deploymentId})));
+
+program
+  .command("toolkit-proposal")
+  .description("write a draft, secret-free governance proposal for external multisig review")
+  .requiredOption("--target <address>")
+  .requiredOption("--calldata <hex>")
+  .requiredOption("--reason <text>")
+  .requiredOption("--artifact-hash <hash>")
+  .option("--approvals <n>", "required multisig approvals", "2")
+  .option("--output <path>", "proposal JSON output", "proposal.json")
+  .action(run((opts) => cmd.cmdToolkitProposal(opts)));
+
+program
+  .command("toolkit-safe-proposal")
+  .description("export a draft proposal as a Safe-compatible payload; never signs or submits")
+  .requiredOption("--target <address>")
+  .requiredOption("--calldata <hex>")
+  .requiredOption("--reason <text>")
+  .requiredOption("--artifact-hash <hash>")
+  .requiredOption("--chain-id <n>")
+  .option("--approvals <n>", "required multisig approvals", "2")
+  .option("--output <path>", "Safe draft JSON output", "safe-proposal.json")
+  .action(run((opts) => cmd.cmdToolkitSafeProposal(opts)));
+
+program
+  .command("toolkit-deploy")
+  .description("dry-run the existing Foundry deployment; use --broadcast to submit transactions")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .option("--broadcast", "submit deployment transactions (otherwise dry-run)")
+  .action(run((path, opts, command) => cmd.cmdToolkitDeploy(path, {...command.optsWithGlobals(), broadcast: opts.broadcast})));
+
+program
+  .command("toolkit-test")
+  .description("run the repository-wide deterministic Toolkit and contract verification")
+  .action(run(() => cmd.cmdToolkitTest()));
 
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.
@@ -45,6 +119,7 @@ program
   .command("onboard")
   .description("factory one-call onboarding of the RWA token (retires+re-onboards if ACTIVE)")
   .option("--engines <list>", "supported engines, comma-separated (amm,rfq)", "amm,rfq")
+  .option("--profile <profile>", "asset profile: buidl-like or reg-d (must match deployment artifact)")
   .action(run((opts, command) => cmd.cmdOnboard(command.optsWithGlobals())));
 
 program
@@ -64,9 +139,10 @@ program
 
 program
   .command("investor-setup")
-  .description("apply the full investor-side Reg D happy-path attestations + QUOTE funding")
+  .description("apply the selected asset profile's investor attestations + QUOTE funding")
   .argument("<address>")
-  .option("--fund <amount>", "QUOTE to mint to the investor (ether units)", "5000")
+  .option("--profile <profile>", "asset profile: buidl-like or reg-d (must match deployment artifact)")
+  .option("--fund <amount>", "QUOTE to mint to the investor (ether units; profile default when omitted)")
   .action(run((address, opts, command) => cmd.cmdInvestorSetup(address, command.optsWithGlobals())));
 
 program
@@ -86,10 +162,11 @@ program
 
 program
   .command("rfq-quote")
-  .description("sign an EIP-712 RFQ quote (via the services/rfq library) and write it to a file")
-  .requiredOption("--maker-account <n>", "maker/dealer Anvil account index")
+  .description("request a demo-backend quote or sign one locally, then write it to a file")
+  .option("--backend <url>", "RFQ demo backend base URL")
+  .option("--maker-account <n>", "local-signing maker/dealer Anvil account index")
   .requiredOption("--amount-in <x>", "taker QUOTE in (ether units)")
-  .requiredOption("--amount-out <y>", "maker RWA out (ether units)")
+  .option("--amount-out <y>", "local-signing maker RWA out (ether units)")
   .option("--taker <addr>", "taker address (defaults to the artifact investor)")
   .option("--expiry <sec>", "quote TTL in seconds", "3600")
   .option("--out <file>", "output path", "quote.json")

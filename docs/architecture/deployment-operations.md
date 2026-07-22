@@ -85,6 +85,62 @@ deployment ID 파일은 immutable하게 보존한다.
 - `SwapRouter02`, Migrator, Staker, 1bp fee tier는 현재 기본 범위가 아니다.
 - Corner Store 제품 컨트랙트는 Foundry로 관리한다.
 - 통합 manifest가 모든 도구의 결과를 연결한다.
+- Toolkit 설정은 사람이 주소와 policy binding을 직접 조합하는 대신 versioned JSON으로
+  입력하고, CLI와 이후 orchestrator가 동일한 validator를 재사용한다. 자산 profile은
+  `buidl-like` 또는 `reg-d`처럼 명시적으로 선택하며 배포 artifact와 충돌하면
+  fail-closed한다. 설정에는 governance multisig alias와 required approval 수를 기록하지만
+  private key나 signer material은 기록하지 않는다. alias는 배포 환경의 실제
+  Safe/multisig 주소로 별도 검증·handoff되어야 한다.
+
+첫 public workflow는 `toolkit-init`으로 기본 설정을 만들고 `toolkit-validate`로
+배포 전에 schema/profile/venue/account 설정을 검증하는 것이다. `toolkit-preflight`는
+선택된 venue에 필요한 artifact 주소와 profile binding까지 검사한다. 실제 deploy,
+simulation, handoff와 dashboard는 이 설정을 읽는 후속 단계이며, CLI가 임의로
+on-chain 주소나 compliance policy를 새로 결정하지 않는다.
+
+운영 조회는 `services/operator-api`의 read-only API 경계를 사용한다. API는 private
+key나 transaction endpoint를 제공하지 않고, config/deployment snapshot과
+normalized event cursor만 노출한다. 온체인 상태가 source of truth이며, 현재
+in-memory index는 local/demo용이고 production indexer로 교체할 seam이다.
+
+`services/operator-dashboard`는 이 API를 표시하는 read-only 화면이다. UI는 key를
+받거나 transaction을 전송하지 않으며, governance 변경은 별도 multisig proposal로
+검토·승인한다. production authentication, CSRF와 multisig provider 연동은 배포
+환경의 책임으로 남긴다.
+
+배포 환경에서는 `CORNER_STORE_API_TOKEN`을 설정해 health 이외의 API를 Bearer
+token으로 보호한다. token은 config/artifact/event 응답에 포함하지 않으며, 실제
+운영에서는 TLS와 외부 identity-aware proxy도 함께 적용해야 한다.
+`/metrics`는 Prometheus 형식의 비민감 운영 counters만 제공하며, production scrape
+경로도 인증·네트워크 정책 안에 둬야 한다.
+
+배포 전 `toolkit-checkpoint`는 validated config와 deployment artifact의 SHA-256
+hash를 immutable checkpoint로 남긴다. checkpoint는 주소·상태 검증을 위한 기록일
+뿐이며 secret이나 signer material을 포함하지 않는다. Operator API의 file-backed
+event index는 local persistence와 마지막 block cursor를 제공하고, production에서는
+재조직(reorg)·finality 정책을 가진 chain indexer로 교체해야 한다.
+
+현재 `FinalityAwareIndexer`는 그 경계의 reference 구현이다. confirmation depth만큼
+기다린 block을 저장하고, 이미 finalized로 기록한 block hash가 바뀌면 자동으로
+새 이벤트를 덧붙이지 않고 중단한다. rewind/replay 정책은 chain별 운영 설정으로
+명시해야 한다.
+
+`toolkit-proposal`은 이 checkpoint hash와 governance calldata를 비교 가능한
+draft JSON으로 만들 뿐이다. 서명·제출·승인 상태 변경은 외부 multisig provider의
+책임이며, dashboard와 Operator API는 이를 직접 수행하지 않는다.
+Toolkit의 Safe transaction draft adapter도 같은 원칙으로 payload만 export하며,
+Safe Transaction Service나 wallet provider에 네트워크 요청을 보내지 않는다.
+
+`toolkit-deploy`는 기존 `script/DeployStack.s.sol`을 재사용하는 reference/demo
+orchestrator다. 기본 실행은 dry-run이며 `--broadcast`가 없으면 RPC mutation을
+하지 않는다. 이 경계는 production signer custody, confirmation/finality 정책과
+ownership handoff를 reference demo와 분리한다.
+
+Wave-2 illustrative elements는 기본 demo 배포의 컴파일 그래프와 실행 범위를
+불필요하게 키우지 않도록 `tools/deploy-wave2/DeployWave2Elements.s.sol`에서 opt-in으로 배포한다.
+이 script는 `ELEMENT_REGISTRY`, `COMPLIANCE_ENGINE`, `IDENTITY_ELEMENT`,
+`ACCREDITED_ELEMENT`, `DEPLOYER_PRIVATE_KEY`를 외부 환경에서 받아 요소를 등록하며,
+활성 Recipe에 자동으로 추가하지 않는다.
 
 ## Open Decisions
 

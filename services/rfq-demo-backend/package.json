@@ -1,0 +1,18 @@
+{
+  "name": "@corner-store/rfq-demo-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demo-only RFQ quote backend built on the Corner Store RFQ SDK.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/rfq-demo-backend/src/index.js",
+    "test": "npm run build && node dist/rfq-demo-backend/test/smoke.js"
+  },
+  "dependencies": {
+    "ethers": "^6.13.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.3"
+  }
+}

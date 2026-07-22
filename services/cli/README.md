@@ -33,19 +33,52 @@ EIP-712 RFQ quotes REUSE the sibling `services/rfq` signer library.
 | `--account <0-9>` | command-specific (operator=0, buyer=1) | Anvil mnemonic account index |
 | `--key <hex>` | — | explicit private key (overrides `--account`) |
 
+Toolkit workflows use the versioned config file rather than repeating profile and
+venue flags:
+
+```sh
+corner-store toolkit-init corner-store.config.json
+corner-store toolkit-validate corner-store.config.json
+corner-store toolkit-simulate corner-store.config.json
+corner-store --artifact deployments/anvil-e2e.json toolkit-preflight corner-store.config.json
+corner-store --artifact deployments/anvil-e2e.json toolkit-onboard corner-store.config.json
+corner-store --artifact deployments/anvil-e2e.json toolkit-checkpoint corner-store.config.json --output deployments/checkpoint.json
+corner-store toolkit-proposal --target 0x... --calldata 0x... --reason "policy review" --artifact-hash sha256:... --output proposal.json
+corner-store toolkit-safe-proposal --target 0x... --calldata 0x... --reason "policy review" --artifact-hash sha256:... --chain-id 42161
+corner-store toolkit-deploy corner-store.config.json                         # dry-run only
+corner-store --rpc http://127.0.0.1:8545 toolkit-deploy --broadcast          # explicit local/demo deployment
+corner-store toolkit-test                                                   # full deterministic repository check
+```
+
+`toolkit-onboard` always runs the read-only preflight first. A profile or required
+venue address mismatch stops before a lifecycle transaction is sent.
+`toolkit-checkpoint` writes a secret-free immutable record and refuses to overwrite
+an existing deployment id/path.
+`toolkit-proposal` only writes a draft for an external multisig; it never signs or
+submits the proposal.
+`toolkit-safe-proposal` exports the same draft in Safe-compatible format only.
+`toolkit-deploy` reuses `DeployStack.s.sol`; without `--broadcast` it only prints the
+plan. Production orchestration, signer policy and ownership handoff remain separate.
+`toolkit-test` always runs the full repository check rather than a partial user-selected
+scope, so Solidity, SDK, CLI, API and dashboard regressions are not hidden.
+
 Admin commands (`onboard`, `manifest`, `attest`, `investor-setup`, `maker`)
 default to the operator (account 0). `buy` defaults to the buyer (account 1).
+The asset is selected when the stack is deployed. `onboard --profile` and
+`investor-setup --profile` reject a value that conflicts with the deployment
+artifact, so a BUIDL-like token cannot be rebound to a weaker Reg D manifest.
 
 ## Commands
 
 ```
 corner-store status [address] [--json]           # addresses, manifest, venues, per-element attestation state
-corner-store onboard [--engines amm,rfq]         # factory one-call onboarding (retires+re-onboards if ACTIVE)
+corner-store onboard [--profile buidl-like|reg-d] [--engines amm,rfq] # profile must match deployment artifact
 corner-store manifest <status|suspend|resume|retire> [--reason <str>]
 corner-store attest <element> <subject> [value...]   # element in: sanctions,jurisdiction,accredited,identity,us-tax,qp,asset-class,erc3643,form-d
-corner-store investor-setup <addr> [--fund <ether>]  # Reg D happy-path attestations + C-01 seed + QUOTE funding
+corner-store investor-setup <addr> [--profile buidl-like|reg-d] [--fund <ether>] # profile attestations + funding
 corner-store kyc <addr>                           # ERC-3643 identity + KYC claim (forge script; run from repo root)
 corner-store buy <amountIn> [--venue amm|rfq] [--min <amountOut>] [--quote <file>]
+corner-store rfq-quote --backend <url> --amount-in X [--taker <addr>] [--expiry <sec>] [--out <file>]
 corner-store rfq-quote --maker-account N --amount-in X --amount-out Y [--taker <addr>] [--expiry <sec>] [--out <file>]
 corner-store rfq-cancel <nonce> --maker-account N
 corner-store maker <approve|revoke> <addr>
@@ -82,7 +115,7 @@ Start a live node and deploy the stack. Either run the full E2E and keep the
 node, or just deploy:
 
 ```sh
-scripts/e2e-anvil.sh --keep                       # full suite, then leaves Anvil up
+scripts/e2e-anvil.sh --profile buidl-like --keep  # default BUIDL-like suite, then leaves Anvil/backend up
 # ---- or, for a clean pre-onboarding manifest: ----
 anvil --silent &
 forge script script/DeployStack.s.sol:DeployStack --rpc-url http://127.0.0.1:8545 --broadcast --offline
@@ -97,26 +130,28 @@ ACCT4=0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
 
 $CS status $ACCT4                                  # manifest UNKNOWN, account 4 unattested
 $CS onboard                                        # factory: propose -> approve + AMM venue (manifest ACTIVE)
-$CS investor-setup $ACCT4                          # jurisdiction/identity/accredited/sanctions + C-01 seed + QUOTE
+$CS investor-setup $ACCT4                          # artifact profile: Reg D + QP for BUIDL-like + C-01 + QUOTE
 $CS kyc $ACCT4                                     # ERC-3643 identity + KYC claim (forge script)
-$CS --account 4 buy 100                            # AMM buy -> PASS (+100 RWA)
+$CS --account 4 buy 5000000                        # AMM buy -> PASS (BUIDL-like minimum)
 
 # element rejection (auto-decoded)
 $CS attest jurisdiction $ACCT4 ZZ                  # flip to a disallowed jurisdiction
-$CS --account 4 buy 100                            # FAIL: ComplianceRejected -> recipe 1 / A-02-v1 / Jurisdiction
+$CS --account 4 buy 5000000                        # FAIL: recipe 1 / A-02-v1 / Jurisdiction
 $CS attest jurisdiction $ACCT4 US                  # restore
 
 # manifest lifecycle
 $CS manifest suspend --reason DEMO-SUSPEND
-$CS --account 4 buy 100                            # FAIL: ComplianceRejected -> POLICY / SUSPENDED
+$CS --account 4 buy 5000000                        # FAIL: POLICY / SUSPENDED
 $CS manifest resume
-$CS --account 4 buy 100                            # PASS again
+$CS --account 4 buy 5000000                        # PASS again
 
 # RFQ venue
-$CS rfq-quote --maker-account 2 --amount-in 120 --amount-out 200 --taker $ACCT4 --out quote.json
-$CS --account 4 buy 0 --venue rfq --quote quote.json   # PASS (+200 RWA, EIP-712 verified on-chain)
+$CS rfq-quote --backend http://127.0.0.1:8787 --amount-in 5000000 --taker $ACCT4 --out quote.json
+# or sign locally without the demo backend:
+$CS rfq-quote --maker-account 2 --amount-in 5000000 --amount-out 5000000 --taker $ACCT4 --out quote.json
+$CS --account 4 buy 0 --venue rfq --quote quote.json   # PASS (EIP-712 verified on-chain)
 $CS maker revoke 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
-$CS rfq-quote --maker-account 2 --amount-in 120 --amount-out 200 --taker $ACCT4 --out quote2.json
+$CS rfq-quote --maker-account 2 --amount-in 5000000 --amount-out 5000000 --taker $ACCT4 --out quote2.json
 $CS --account 4 buy 0 --venue rfq --quote quote2.json  # FAIL: RFQMakerNotApproved
 ```
 

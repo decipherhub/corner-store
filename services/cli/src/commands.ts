@@ -1,7 +1,15 @@
 import {execFileSync} from "child_process";
+import {writeFileSync} from "fs";
 import {formatEther, parseEther} from "ethers";
 
 import {relative} from "path";
+import {resolve} from "path";
+import {enabledEngineSpec, loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
+import {preflightConfig} from "../../toolkit/src/preflight";
+import {createCheckpoint, writeCheckpoint} from "../../toolkit/src/checkpoint";
+import {createGovernanceProposal} from "../../toolkit/src/proposal";
+import {createDeploymentPlan} from "../../toolkit/src/deploy";
+import {toSafeTransactionDraft} from "../../toolkit/src/multisig";
 
 import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
@@ -27,14 +35,17 @@ import {
   DEFAULT_CHAIN_ID,
 } from "./config";
 import {AbiCoder, Contract, Interface, decodeBytes32String, encodeBytes32String, verifyTypedData} from "ethers";
+import {assetProfileBinding, resolveAssetProfileForArtifact} from "./assetProfiles";
 import {ELEMENT_IDS, applyAttestation, defaultIdentityId} from "./elements";
 import {ELEMENT_LABELS, POLICY_STATUS, RECIPE_LABELS, decodeReason, encodeReason} from "./reason";
 import {
   RFQ_QUOTE_TYPES,
   RFQQuoteService,
+  SignedRFQQuote,
   WalletTypedDataSigner,
   encodeVenueData,
   readQuoteFile,
+  requestBackendQuote,
   rfqDomain,
   writeQuoteFile
 } from "./rfq";
@@ -46,6 +57,118 @@ const CTX_TUPLE =
 const VENUE_TYPE_NAMES = ["AMM", "ORDER_BOOK", "RFQ"];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+export function cmdToolkitInit(path = "corner-store.config.json"): void {
+  const target = resolve(process.cwd(), path);
+  try {
+    writeDefaultConfig(target);
+  } catch (err: any) {
+    throw new CliError(`cannot create toolkit config ${target}: ${err.message}`);
+  }
+  console.log(`created ${target}`);
+}
+
+export function cmdToolkitValidate(path = "corner-store.config.json"): void {
+  const target = resolve(process.cwd(), path);
+  const config = loadConfig(target);
+  console.log(`valid toolkit config: ${target} (schema v${config.schemaVersion}, profile=${config.asset.profile})`);
+}
+
+export function cmdToolkitSimulate(path = "corner-store.config.json", artifactPath?: string): void {
+  const config = loadConfig(resolve(process.cwd(), path));
+  let deployedProfile: string | undefined;
+  if (artifactPath) {
+    const raw = loadArtifact(artifactPath);
+    deployedProfile = raw.assetProfile;
+  }
+  const simulation = simulateConfig(config, deployedProfile);
+  console.log(JSON.stringify(simulation, null, 2));
+}
+
+export function cmdToolkitPreflight(path = "corner-store.config.json", artifactPath?: string): void {
+  if (!artifactPath) throw new CliError("toolkit-preflight requires --artifact <path>");
+  const config = loadConfig(resolve(process.cwd(), path));
+  const artifact = loadArtifact(artifactPath) as unknown as Record<string, unknown>;
+  const result = preflightConfig(config, artifact);
+  console.log(JSON.stringify(result, null, 2));
+  if (!result.ready) process.exitCode = 1;
+}
+
+export async function cmdToolkitOnboard(path = "corner-store.config.json", opts: GlobalOpts): Promise<void> {
+  const config = loadConfig(resolve(process.cwd(), path));
+  const artifact = loadArtifact(opts.artifact) as unknown as Record<string, unknown>;
+  const result = preflightConfig(config, artifact);
+  if (!result.ready) {
+    throw new CliError(`Toolkit preflight failed: ${result.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
+  }
+  await cmdOnboard({...opts, profile: config.asset.profile, engines: enabledEngineSpec(config)});
+}
+
+export function cmdToolkitCheckpoint(path = "corner-store.config.json", output = "deployments/checkpoint.json", opts: GlobalOpts & {deploymentId?: string}): void {
+  if (!opts.artifact) throw new CliError("toolkit-checkpoint requires --artifact <path>");
+  const config = loadConfig(resolve(process.cwd(), path));
+  const artifact = loadArtifact(opts.artifact) as unknown as Record<string, unknown>;
+  const result = preflightConfig(config, artifact);
+  if (!result.ready) throw new CliError(`Toolkit preflight failed: ${result.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
+  const checkpoint = createCheckpoint(config, artifact, opts.deploymentId ?? `${config.deployment.network}-${Date.now()}`);
+  try {
+    writeCheckpoint(resolve(process.cwd(), output), checkpoint);
+  } catch (err: any) {
+    throw new CliError(`cannot write immutable checkpoint: ${err.message}`);
+  }
+  console.log(JSON.stringify(checkpoint, null, 2));
+}
+
+export function cmdToolkitProposal(opts: {target: string; calldata: string; reason: string; artifactHash: string; approvals: string; output: string}): void {
+  const proposal = createGovernanceProposal({
+    target: opts.target,
+    value: "0",
+    calldata: opts.calldata,
+    reason: opts.reason,
+    expectedArtifactHash: opts.artifactHash,
+    requiredApprovals: Number(opts.approvals)
+  });
+  try {
+    writeFileSync(resolve(process.cwd(), opts.output), `${JSON.stringify(proposal, null, 2)}\n`, {flag: "wx"});
+  } catch (err: any) {
+    throw new CliError(`cannot write immutable proposal: ${err.message}`);
+  }
+  console.log(JSON.stringify(proposal, null, 2));
+}
+
+export function cmdToolkitSafeProposal(opts: {target: string; calldata: string; reason: string; artifactHash: string; approvals: string; chainId: string; output: string}): void {
+  const proposal = createGovernanceProposal({target: opts.target, value: "0", calldata: opts.calldata, reason: opts.reason, expectedArtifactHash: opts.artifactHash, requiredApprovals: Number(opts.approvals)});
+  const draft = toSafeTransactionDraft(proposal, Number(opts.chainId));
+  try {
+    writeFileSync(resolve(process.cwd(), opts.output), `${JSON.stringify(draft, null, 2)}\n`, {flag: "wx"});
+  } catch (err: any) {
+    throw new CliError(`cannot write immutable Safe proposal: ${err.message}`);
+  }
+  console.log(JSON.stringify(draft, null, 2));
+}
+
+export function cmdToolkitDeploy(path = "corner-store.config.json", opts: GlobalOpts & {broadcast?: boolean}): void {
+  const config = loadConfig(resolve(process.cwd(), path));
+  const plan = createDeploymentPlan(config, opts.rpc ?? DEFAULT_RPC, opts.broadcast === true);
+  if (!opts.broadcast) {
+    console.log(JSON.stringify(plan, null, 2));
+    return;
+  }
+  const repoRoot = findRepoRoot(process.cwd());
+  if (!repoRoot) throw new CliError("repository root not found; run Toolkit deploy from the Corner Store repository");
+  console.log(JSON.stringify(plan, null, 2));
+  execFileSync("forge", ["script", "script/DeployStack.s.sol:DeployStack", "--rpc-url", opts.rpc ?? DEFAULT_RPC, "--broadcast", "--offline"], {
+    cwd: repoRoot,
+    env: {...process.env, ASSET_PROFILE: config.asset.profile},
+    stdio: "inherit"
+  });
+}
+
+export function cmdToolkitTest(): void {
+  const repoRoot = findRepoRoot(process.cwd());
+  if (!repoRoot) throw new CliError("repository root not found; run Toolkit test from the Corner Store repository");
+  execFileSync("scripts/check.sh", [], {cwd: repoRoot, stdio: "inherit"});
+}
 
 function subjectAddress(opts: GlobalOpts, positional: string | undefined, fallbackAccount: number): string {
   if (positional) return positional;
@@ -167,11 +290,14 @@ function enginesMask(spec: string | undefined): number {
   return mask;
 }
 
-export async function cmdOnboard(opts: GlobalOpts & {engines?: string}): Promise<void> {
+export async function cmdOnboard(opts: GlobalOpts & {engines?: string; profile?: string}): Promise<void> {
   const a = loadArtifact(opts.artifact);
   const provider = makeProvider(opts);
   const signer = resolveSigner(opts, provider, 0); // operator
   const mask = enginesMask(opts.engines);
+  // Validate the requested profile before any lifecycle transaction. The
+  // deployment artifact is authoritative for this token instance.
+  const binding = assetProfileBinding(resolveAssetProfileForArtifact(opts.profile, a.assetProfile));
 
   const policy = policyRegistry(a, signer);
   const current = Number(await policy.statusOf(a.rwaToken));
@@ -185,13 +311,23 @@ export async function cmdOnboard(opts: GlobalOpts & {engines?: string}): Promise
     throw new CliError("manifest is PROPOSED; approve or wait — cannot re-onboard from PROPOSED");
   }
 
-  // ManifestCore: status(ignored),issuanceRecipeId=1,version=1,fundRecipeId=0,
-  // enabledResalePaths=0,supportedEngines=mask,stateScopeId=0,factsPacked=0,
-  // coverageScope=0,fullManifestHash=0,declaredBy(ignored),approvedBy(ignored).
-  const m = [2, 1, 1, 0, 0, mask, 0, 0, 0, ZERO32, ZERO_ADDR, ZERO_ADDR];
+  const m = [
+    2,
+    1,
+    1,
+    binding.fundRecipeId,
+    0,
+    mask,
+    0,
+    binding.factsPacked,
+    0,
+    binding.fullManifestHash,
+    ZERO_ADDR,
+    ZERO_ADDR
+  ];
   const venueCfg = [0, a.ammAdapter, a.pool, ZERO_ADDR, 1, true]; // AMM, custody POOL
   await logTx(await factory(a, signer).registerRWAToken(a.rwaToken, m, a.pool, venueCfg), "registerRWAToken");
-  console.log(`Onboarded RWA ${a.rwaToken} with supportedEngines 0b${mask.toString(2).padStart(3, "0")} + AMM venue ${a.pool}`);
+  console.log(`Onboarded ${binding.profile} RWA ${a.rwaToken} with supportedEngines 0b${mask.toString(2).padStart(3, "0")} + AMM venue ${a.pool}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,13 +389,14 @@ export async function cmdAttest(element: string, subject: string, values: string
 // ---------------------------------------------------------------------------
 // investor-setup <addr>
 // ---------------------------------------------------------------------------
-export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund?: string}): Promise<void> {
+export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund?: string; profile?: string}): Promise<void> {
   const a = loadArtifact(opts.artifact);
   const provider = makeProvider(opts);
   const signer = resolveSigner(opts, provider, 0); // operator
   const reg = provider;
 
-  console.log(`Investor-side Reg D happy-path setup for ${subject}`);
+  const profile = resolveAssetProfileForArtifact(opts.profile, a.assetProfile);
+  console.log(`Investor-side ${profile} happy-path setup for ${subject}`);
   // jurisdiction: US + allow US
   const jur = await elementContract(a, "A-02-v1", signer, reg);
   await logTx(await jur.setJurisdictionAllowed(encodeBytes32String(ALLOWED_JURISDICTION), true), `jurisdiction.setJurisdictionAllowed("${ALLOWED_JURISDICTION}", true)`);
@@ -270,6 +407,10 @@ export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund
   // accredited
   const acc = await elementContract(a, "A-03-v1", signer, reg);
   await logTx(await acc.setAccredited(subject, true), `accredited.setAccredited(${subject}, true)`);
+  if (profile === "buidl-like") {
+    const qp = await elementContract(a, "A-13-v1", signer, reg);
+    await logTx(await qp.setQp(subject, true), `qp.setQp(${subject}, true)`);
+  }
   // sanctions clear
   const san = await elementContract(a, "A-01-v1", signer, reg);
   await logTx(await san.setBlocked(subject, false), `sanctions.setBlocked(${subject}, false)`);
@@ -282,7 +423,7 @@ export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund
   await logTx(await acq.setAcquiredAt(subject, a.rwaToken, 1), `lockup.acquisitionSource.setAcquiredAt(${subject}, rwa, 1)`);
 
   // fund the buyer with QUOTE so it can trade (MockERC20.mint is permissionless).
-  const fund = parseEther(opts.fund ?? "5000");
+  const fund = parseEther(opts.fund ?? (profile === "buidl-like" ? "20000000" : "5000"));
   await logTx(await erc20(a.quote, signer).mint(subject, fund), `quote.mint(${subject}, ${formatEther(fund)})`);
   console.log("Investor attestations applied. Run `corner-store kyc <addr>` to add the ERC-3643 identity/claim.");
 }
@@ -378,6 +519,7 @@ export async function cmdBuy(
 // rfq-quote --maker-account N --amount-in X --amount-out Y [--expiry sec] [--out file]
 // ---------------------------------------------------------------------------
 export async function cmdRfqQuote(opts: GlobalOpts & {
+  backend?: string;
   makerAccount?: string;
   amountIn?: string;
   amountOut?: string;
@@ -386,33 +528,68 @@ export async function cmdRfqQuote(opts: GlobalOpts & {
   out?: string;
 }): Promise<void> {
   const a = loadArtifact(opts.artifact);
-  const provider = makeProvider(opts);
-  if (opts.makerAccount === undefined) throw new CliError("--maker-account <0-9> is required");
-  if (!opts.amountIn || !opts.amountOut) throw new CliError("--amount-in and --amount-out are required");
-  const maker = walletForAccount(Number(opts.makerAccount)).connect(provider);
+  if (!opts.amountIn) throw new CliError("--amount-in is required");
   const taker = opts.taker ?? a.investor;
   const ttl = opts.expiry ? Number(opts.expiry) : 3600;
+  if (!Number.isSafeInteger(ttl) || ttl <= 0) throw new CliError("--expiry must be a positive integer");
+  const amountIn = parseEther(opts.amountIn).toString();
 
-  const service = new RFQQuoteService(
-    {chainId: DEFAULT_CHAIN_ID, verifyingContract: a.rfqAdapter as `0x${string}`, defaultTtlSeconds: ttl},
-    new WalletTypedDataSigner(maker)
-  );
-  const signed = await service.createSignedQuote({
-    maker: (await maker.getAddress()) as `0x${string}`,
-    taker: taker as `0x${string}`,
-    tokenIn: a.quote as `0x${string}`,
-    tokenOut: a.rwaToken as `0x${string}`,
-    amountIn: parseEther(opts.amountIn).toString(),
-    amountOut: parseEther(opts.amountOut).toString(),
-    venue: a.rfqVenue as `0x${string}`,
-    ttlSeconds: ttl
-  });
+  let signed: SignedRFQQuote;
+  if (opts.backend) {
+    if (opts.makerAccount !== undefined || opts.amountOut !== undefined) {
+      throw new CliError("--backend cannot be combined with --maker-account or --amount-out");
+    }
+    signed = await requestBackendQuote(opts.backend, {taker, amountIn, ttlSeconds: ttl});
+    validateBackendQuote(signed, a, taker, amountIn);
+  } else {
+    const provider = makeProvider(opts);
+    if (opts.makerAccount === undefined) throw new CliError("--maker-account is required without --backend");
+    if (!opts.amountOut) throw new CliError("--amount-out is required without --backend");
+    const maker = walletForAccount(Number(opts.makerAccount)).connect(provider);
+
+    const service = new RFQQuoteService(
+      {chainId: DEFAULT_CHAIN_ID, verifyingContract: a.rfqAdapter as `0x${string}`, defaultTtlSeconds: ttl},
+      new WalletTypedDataSigner(maker)
+    );
+    signed = await service.createSignedQuote({
+      maker: (await maker.getAddress()) as `0x${string}`,
+      taker: taker as `0x${string}`,
+      tokenIn: a.quote as `0x${string}`,
+      tokenOut: a.rwaToken as `0x${string}`,
+      amountIn,
+      amountOut: parseEther(opts.amountOut).toString(),
+      venue: a.rfqVenue as `0x${string}`,
+      ttlSeconds: ttl
+    });
+  }
 
   const out = opts.out ?? "quote.json";
   writeQuoteFile(out, signed);
   console.log(`Signed RFQ quote written to ${out}`);
   console.log(`  maker=${signed.quote.maker} taker=${signed.quote.taker}`);
   console.log(`  amountIn=${formatEther(signed.quote.amountIn)} amountOut=${formatEther(signed.quote.amountOut)} nonce=${signed.quote.nonce} expiry=${signed.quote.expiry}`);
+}
+
+function validateBackendQuote(signed: SignedRFQQuote, a: Artifact, taker: string, amountIn: string): void {
+  const q = signed.quote;
+  const expected = [
+    [q.taker, taker, "taker"],
+    [q.tokenIn, a.quote, "tokenIn"],
+    [q.tokenOut, a.rwaToken, "tokenOut"],
+    [q.venue, a.rfqVenue, "venue"]
+  ] as const;
+  for (const [actual, wanted, field] of expected) {
+    if (typeof actual !== "string" || actual.toLowerCase() !== wanted.toLowerCase()) {
+      throw new CliError(`backend quote ${field} does not match the deployment artifact`);
+    }
+  }
+  if (q.amountIn !== amountIn) throw new CliError("backend quote amountIn does not match the request");
+  if (signed.typedData?.domain?.chainId !== DEFAULT_CHAIN_ID) throw new CliError("backend quote chainId is not 31337");
+  if (signed.typedData?.domain?.verifyingContract?.toLowerCase() !== a.rfqAdapter.toLowerCase()) {
+    throw new CliError("backend quote verifyingContract does not match RFQAdapter");
+  }
+  const recovered = verifyTypedData(signed.typedData.domain, RFQ_QUOTE_TYPES, q, signed.signature);
+  if (recovered.toLowerCase() !== q.maker.toLowerCase()) throw new CliError("backend quote signature does not match maker");
 }
 
 // ---------------------------------------------------------------------------
