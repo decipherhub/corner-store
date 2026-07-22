@@ -4,14 +4,15 @@ This dashboard has two modes:
 
 - **Operator view** is a read-only view backed by `services/operator-api` through
   the dashboard's same-origin proxy.
-- **RFQ demo** requests a quote from the local `services/rfq-demo-backend`, then
-  downloads it and copies the protected CLI settlement command.
+- **RFQ demo** requests a quote from the local `services/rfq-demo-backend` and
+  settles it through the protected Router when you click the trade button.
 
 - It displays the selected asset profile, enabled venues and indexed events.
 - It displays the deployment artifact and the read-only Manifest snapshot generated
   after demo onboarding.
 - It never accepts or stores a private key.
-- It does not submit transactions.
+- It submits only the local demo transaction through the backend; it does not
+  hold a private key or expose one to the browser.
 - Governance changes must be prepared as an external multisig proposal and reviewed
   against the deployment artifact before execution.
 

@@ -45,8 +45,9 @@ Router policy decision and on-chain ERC-3643 balance change. Click **Revoke
 maker & retry** to show the same flow being rejected. The browser never holds
 a private key.
 
-If you prefer the terminal instead of the dashboard, request and settle a new
-quote with:
+The dashboard performs the quote request and Router settlement itself; no CLI
+copy/paste is needed for the normal demo. If you prefer the terminal instead,
+request and settle a new quote with:
 
 ```sh
 node services/cli/dist/cli/src/index.js \

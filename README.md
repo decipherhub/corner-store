@@ -138,8 +138,12 @@ scripts/e2e-anvil.sh --profile buidl-like --mode rfq
 Add `--keep` for an interactive follow-up; the runner restores the demo maker
 after its rejection check so a new quote can be filled immediately.
 
-`--keep` leaves both Anvil and the RFQ demo backend running. In another terminal,
-request and settle the quote through the protected Router path:
+`--keep` leaves both Anvil and the RFQ demo backend running. Open the printed
+dashboard URL, select **RFQ demo**, and click **Run compliant RFQ trade**. The
+dashboard requests the quote and asks the local backend to settle it through the
+protected Router; no CLI copy/paste is required.
+
+For a terminal-only flow, request and settle the quote directly:
 
 ```shell
 node services/cli/dist/cli/src/index.js rfq-quote \

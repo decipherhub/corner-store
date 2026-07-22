@@ -98,7 +98,11 @@ trap cleanup EXIT INT TERM
 mkdir -p deployments
 
 echo "==> Starting Anvil on ${RPC} (offline, deterministic mnemonic)"
-anvil --port "$PORT" --silent >"$ANVIL_LOG" 2>&1 &
+if [ "$KEEP" -eq 1 ]; then
+  nohup anvil --port "$PORT" --silent >"$ANVIL_LOG" 2>&1 </dev/null &
+else
+  anvil --port "$PORT" --silent >"$ANVIL_LOG" 2>&1 &
+fi
 ANVIL_PID=$!
 
 echo "==> Waiting for Anvil to accept connections"
@@ -161,8 +165,13 @@ echo "==> Re-onboarding the selected asset profile through the CLI"
 "${CLI[@]}" onboard --profile "$ASSET_PROFILE"
 
 echo "==> Starting RFQ demo backend on http://127.0.0.1:${BACKEND_PORT}"
-RFQ_DEMO_ENABLE_SETTLEMENT=1 node services/rfq-demo-backend/dist/rfq-demo-backend/src/index.js \
-  --port "$BACKEND_PORT" --rpc "$RPC" >"$BACKEND_LOG" 2>&1 &
+if [ "$KEEP" -eq 1 ]; then
+  nohup env RFQ_DEMO_ENABLE_SETTLEMENT=1 node services/rfq-demo-backend/dist/rfq-demo-backend/src/index.js \
+    --port "$BACKEND_PORT" --rpc "$RPC" >"$BACKEND_LOG" 2>&1 </dev/null &
+else
+  RFQ_DEMO_ENABLE_SETTLEMENT=1 node services/rfq-demo-backend/dist/rfq-demo-backend/src/index.js \
+    --port "$BACKEND_PORT" --rpc "$RPC" >"$BACKEND_LOG" 2>&1 &
+fi
 BACKEND_PID=$!
 
 BACKEND_READY=0
