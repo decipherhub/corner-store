@@ -130,13 +130,21 @@ export class DemoSettlementService {
     // keep this backend alive across repeated demos, and an in-memory nonce
     // cache becomes stale when Anvil is restarted or another operator action
     // consumes a deployer nonce.
-    const nonce = await this.provider.getTransactionCount(this.operator.address, "pending");
     const adapter = new Contract(this.config.artifact.rfqAdapter, RFQ_ADAPTER_ABI, this.operator);
-    try {
-      const tx = await adapter.setMakerApproved(this.config.artifact.maker, approved, {nonce});
-      await tx.wait();
-    } catch (error) {
-      throw error;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const nonceHex = await this.provider.send("eth_getTransactionCount", [this.operator.address, "pending"]);
+      const nonce = BigInt(nonceHex);
+      try {
+        const tx = await adapter.setMakerApproved(this.config.artifact.maker, approved, {nonce});
+        await tx.wait();
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (attempt === 0 && /nonce too low|already known|replacement transaction underpriced/i.test(message)) {
+          continue;
+        }
+        throw error;
+      }
     }
   }
 }
