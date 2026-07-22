@@ -32,8 +32,9 @@ Element 추가 기준:
 3. 거래 전, 거래 시점, 거래 후 중 언제 작동하는가?
 4. 현재 거래만 보는가, 누적 상태를 보는가?
 
-stateful Element의 commit hook은 열린 interface 결정이다. 읽기 검사와 상태 갱신을
-분리해야 하며 실패한 settlement가 누적 상태를 남겨서는 안 된다.
+stateful Element는 읽기 검사와 settlement 후 `commit()`을 분리한다. 온체인 commit은
+Router 성공 경로에서만 호출하고, off-chain person-group state는 execution id에
+동일 내용이면 no-op, 다른 내용이면 reject하는 idempotency를 적용한다.
 
 ## Recipe
 
@@ -125,14 +126,16 @@ struct ComplianceDecision {
 - Asset Manifest가 기존 single Recipe mapping/Token Policy 역할을 확장한다.
 - 온체인은 검증·게이팅·집행, 오프체인은 재량 판단·민감 정보·대량 연산을 맡는다.
 - 발행 측 사실은 coverage delta 방식으로 재사용한다.
+- ADR-008의 acquisition lot, reject logging과 Router 밖 surveillance는
+  provider-neutral off-chain data layer로 연결한다. 온체인에는 expiring snapshot과
+  PII-free hash만 둔다.
 
 ## Open Decisions
 
-- acquisition/lot data source
-- stateful Element commit hook
 - Manifest/Recipe set encoding과 duplicate Element key
 - issuer coverage encoding
-- reject audit trail
+- production TA API/authorization, amount-specific lot allocation
+- production WORM/retention과 surveillance hosting
 - production Element/Recipe 목록과 법률 승인
 
 ## References

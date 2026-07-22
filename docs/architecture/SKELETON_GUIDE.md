@@ -126,8 +126,10 @@
    호출 가능(operator가 카운터 직접 못 씀 = §6 불변식). 감사 로거
    (`ComplianceLogger`/`ExecutionLogger`)는 아직 비인증 emit — production 연결 시
    `onlyOperator` 게이트 필요(주석 표시).
-4. **취득시점(Rule 144)** — `Lockup`은 `IAcquisitionSource` 주입형으로만 존재(CR-3).
-   실제 acquisition registry 미구현. 통합 스택엔 미등록(단위 테스트에서만 검증).
+4. **취득시점(Rule 144)** — `Lockup`은 provider-neutral `IAcquisitionSource`의
+   expiring snapshot을 읽고 missing/stale/broken lineage를 fail-closed한다.
+   `AttestedAcquisitionSource`와 mock TA fixture는 구현됐지만 실제 Securitize API,
+   amount-specific lot allocation과 production WORM은 미구현이다.
 5. **`coverageScope`(발행측 중복검사 skip), `reliedClaims`(의존 claim 기록),
    `policyId`(fundRecipe 무시)** 는 구조체 필드/주석으로 자리만 있고 동작은 placeholder.
 6. **엔진은 거래 방향(buy/sell)을 구분하지 않는다.** 항상 `ctx.buyer`를 검사한다.

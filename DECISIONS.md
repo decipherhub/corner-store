@@ -612,3 +612,46 @@ reference stack은 venue suspension과 Manifest status만 있어 global/asset pa
 - `src/factory/CornerStoreFactory.sol`
 - `test/integration/EmergencyPause.t.sol`
 - `scripts/e2e-anvil.sh`
+
+## D012 — 취득 lot와 거절·감시 상태는 provider-neutral off-chain 계층으로 수렴한다
+
+Date: 2026-07-22
+
+### Context
+
+ADR-008은 acquisition source, person-group state, reject logging과 Router 밖 transfer
+감시를 하나의 off-chain compliance data layer로 결정했다. 기존 `Lockup`은 만료나
+lineage 상태 없이 단일 timestamp만 읽었고, 실제 provider 계약이 없다는 이유로
+현재 문서에는 해당 결정을 여전히 open으로 표시한 곳이 남아 있었다.
+
+### Decision
+
+1. Transfer Agent별 API는 `TransferAgentProvider` adapter 뒤에 둔다. Corner Store
+   core는 Securitize 전용 undocumented field를 하드코딩하지 않는다.
+2. per-lot 입력은 acquisition date, payment completion, source type과 lineage를
+   검증한다. 단일 holder×asset 온체인 snapshot은 lot 선택을 과대 추정하지 않도록
+   현재 lot 중 가장 늦은 유효 clock을 사용한다.
+3. 온체인 `AttestedAcquisitionSource`에는 clock, observation/expiry, PII-free
+   source hash와 status만 저장한다. missing, broken lineage, stale과 immature는
+   `Lockup`에서 서로 다른 reason으로 fail-closed한다.
+4. person-group volume/holder state는 execution id로 idempotent하게 commit한다.
+   동일 id+동일 내용은 no-op, 동일 id+다른 내용은 충돌로 거부한다.
+5. rejected attempt와 Router 밖 transfer finding은 off-chain hash-chain audit
+   record로 보존한다. 이 local SDK는 tamper evidence를 제공하지만 production WORM,
+   retention 또는 SAR 시스템이라고 주장하지 않는다.
+
+### Consequences
+
+- mock TA로 전체 경계를 테스트할 수 있으나 실제 Securitize compatibility는 공식
+  API 계약과 provider 인증을 확인하기 전까지 미구현이다.
+- 보수적인 latest-lot clock은 안전하지만 일부 mature lot 매도를 과도하게 막을 수
+  있다. amount-specific lot allocation/FIFO는 provider 계약이 확정될 때 별도
+  versioned adapter로 추가한다.
+- PII, 원본 lot 문서와 감사 원장은 온체인에 저장하지 않는다.
+
+### Related Files
+
+- `docs/decisions/ADR-008-compliance-seam-decisions.md`
+- `services/compliance-data/`
+- `src/registry/AttestedAcquisitionSource.sol`
+- `src/compliance/elements/Lockup.sol`

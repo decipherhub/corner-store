@@ -62,6 +62,15 @@ echo "==> Running read-only Operator API smoke test"
   npm test
 )
 
+echo "==> Running compliance data SDK smoke test"
+(
+  cd services/compliance-data
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
 echo "==> Running read-only Operator dashboard smoke test"
 (
   cd services/operator-dashboard

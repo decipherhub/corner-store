@@ -429,12 +429,17 @@ export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund
   const san = await elementContract(a, "A-01-v1", signer, reg);
   await logTx(await san.setBlocked(subject, false), `sanctions.setBlocked(${subject}, false)`);
 
-  // C-01 Rule 144 lockup: seed the acquisition-time source at t=1 so the (already
-  // elapsed) lockup window passes, mirroring DeployStack's investor seed.
+  // C-01 Rule 144 lockup: seed a PII-free, expiring mock TA snapshot at t=1 so
+  // the elapsed demo lockup passes. Production uses a verified provider adapter.
   const lockupAddr = await elementRegistry(a, reg).elementOf(encodeBytes32String("C-01-v1"));
   const acqAddr = await new Contract(lockupAddr, LOCKUP_ABI, reg).acquisitionSource();
   const acq = new Contract(acqAddr, ACQ_SOURCE_ABI, signer);
-  await logTx(await acq.setAcquiredAt(subject, a.rwaToken, 1), `lockup.acquisitionSource.setAcquiredAt(${subject}, rwa, 1)`);
+  const latest = await provider.getBlock("latest");
+  if (!latest) throw new CliError("cannot read latest block for acquisition snapshot expiry");
+  await logTx(
+    await acq.setSnapshot(subject, a.rwaToken, 1, latest.timestamp + 30 * 24 * 60 * 60, encodeBytes32String("CLI-DEMO-TA"), 1),
+    `lockup.acquisitionSource.setSnapshot(${subject}, rwa)`
+  );
 
   // fund the buyer with QUOTE so it can trade (MockERC20.mint is permissionless).
   const fund = parseEther(opts.fund ?? (profile === "buidl-like" ? "20000000" : "5000"));

@@ -110,10 +110,11 @@ MOCK / illustrative (documented seams):
   `tools/deploy-v3` infrastructure is kept isolated (vendor-isolation rule) and
   the demo does not depend on it. See `tools/deploy-v3/CORNER_STORE_PROFILE.md`.
 - Element data sources (OFAC / ONCHAINID claims / ERC-165 / EDGAR) are
-  operator-settable mocks, and the C-01 Rule 144 lockup reads an injected
-  acquisition-time source. These illustrative wirings and the manifest lifecycle
+  operator-settable mocks, and the C-01 Rule 144 lockup reads an injected,
+  expiring `AttestedAcquisitionSource` snapshot seeded from mock TA data. These
+  illustrative wirings and the manifest lifecycle
   design are recorded in `DECISIONS.md` **D008** (9-element recipe, operator-gated
-  setters, fixture acquisition source) and **D009** (manifest lifecycle state
+  setters, provider-neutral mock acquisition snapshot) and **D009** (manifest lifecycle state
   machine, engine positive-allowlist default-deny, factory register→approve).
 - `QUOTE` is a plain `MockERC20` tagged `UNREGULATED` (out-of-scope cash leg).
 

@@ -112,10 +112,11 @@ export const RFQ_ADAPTER_ABI = [
   "function cancelQuoteNonce(uint256 nonce)"
 ];
 
-// Lockup (C-01) element exposes its injected acquisition-time source; the source
-// itself carries the operator-free demo setter used to seed a holder's clock.
+// Lockup (C-01) consumes a provider-neutral operator-attested snapshot.
 export const LOCKUP_ABI = ["function acquisitionSource() view returns (address)"];
-export const ACQ_SOURCE_ABI = ["function setAcquiredAt(address holder, address asset, uint64 ts)"];
+export const ACQ_SOURCE_ABI = [
+  "function setSnapshot(address holder,address asset,uint64 clockStart,uint64 expiresAt,bytes32 sourceRef,uint8 status)"
+];
 
 export const ERC20_ABI = [
   "function balanceOf(address account) view returns (uint256)",

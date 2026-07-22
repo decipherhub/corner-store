@@ -428,13 +428,19 @@ abstract contract IntegrationBase is TREXSuite {
 /// @dev Test-only settable acquisition-time source for the Lockup (C-01-v1)
 ///      element's injected CR-3 seam. Mirrors the unit-test helper.
 contract MockAcquisitionSource is IAcquisitionSource {
-    mapping(bytes32 => uint64) internal _acquiredAt;
+    mapping(bytes32 => AcquisitionSnapshot) internal _snapshots;
 
     function setAcquiredAt(address holder, address asset, uint64 ts) external {
-        _acquiredAt[keccak256(abi.encode(holder, asset))] = ts;
+        _snapshots[keccak256(abi.encode(holder, asset))] = AcquisitionSnapshot({
+            clockStart: ts,
+            observedAt: uint64(block.timestamp),
+            expiresAt: type(uint64).max,
+            sourceRef: keccak256("integration-fixture"),
+            status: AcquisitionStatus.VALID
+        });
     }
 
-    function acquiredAt(address holder, address asset) external view override returns (uint64) {
-        return _acquiredAt[keccak256(abi.encode(holder, asset))];
+    function acquisitionOf(address holder, address asset) external view override returns (AcquisitionSnapshot memory) {
+        return _snapshots[keccak256(abi.encode(holder, asset))];
     }
 }

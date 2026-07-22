@@ -47,6 +47,18 @@ Backend smoke는 ephemeral HTTP server의 health/quote API, fixed-rate pricing,
 maker signature, monotonic nonce와 numeric amount 거부를 검증한다. CLI smoke는
 backend quote request path와 기존 quote-file/서명 검증 경로를 함께 검증한다.
 
+Compliance data SDK smoke test:
+
+```sh
+cd services/compliance-data
+npm ci
+npm test
+```
+
+TA lot lineage/완납 clock, conservative snapshot, broken-lineage fail-closed,
+idempotent person-group commit, rolling volume/holder counts와 hash-chain 변조 탐지를
+검증한다.
+
 Vendored deploy tool 테스트:
 
 ```sh
@@ -106,6 +118,7 @@ scripts/check.sh
 
 이 명령은 현재 저장소에서 지원하는 format, lint, build와 test를 순서대로 실행한다.
 현재 포함 범위는 Foundry fmt/lint/build/test, RFQ SDK·demo backend·CLI·Toolkit,
+Compliance Data SDK,
 Operator API/dashboard smoke, vendored deploy-v3 test와 whitespace check다. GitHub
 Actions도 동일한 스크립트를 실행한다. Node 서비스는 lockfile 기반 `npm ci`를
 사용하고, vendored deploy-v3는 `yarn.lock` 기반 설치 후 테스트한다.

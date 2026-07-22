@@ -145,7 +145,11 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 - 성공한 regulated evaluation은 Manifest version과 applied Recipe set을 추적할 수
   있어야 한다.
 - revert 시 event가 사라지는 특성을 고려한 reject logging 정책은 별도 설계
-  결정으로 관리한다.
+  결정(ADR-008)에 따라 off-chain hash-chain audit에 기록한다. local hash-chain은
+  tamper evidence일 뿐 production WORM/retention을 대체하지 않는다.
+- acquisition 원본 lot, identity와 provider payload는 온체인에 기록하지 않는다.
+  `AttestedAcquisitionSource`에는 PII-free source hash, conservative clock, freshness와
+  status만 기록하고 stale/missing/broken lineage를 fail-closed한다.
 
 ## Dependency Policy
 

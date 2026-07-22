@@ -23,7 +23,7 @@
 | **A-13 Qualified Purchaser** | bool `setQualifiedPurchaser` — `QualifiedPurchaser.sol` | ONCHAINID claim | claim 존재·issuer·만료 검증 ("Pattern B") | 승인 게이트. **법률 심층 문서 존재**: `docs/compliance/elements/A-13_qualified-purchaser.md` (11개 중 유일한 walkthrough — 나머지 element의 표준 포맷) |
 | **B-01 Asset Classification** | `setClassification(asset, tag)` + 생성자 `requiredClassification` — `AssetClassification.sol` | 발행인 선언 (Listing Agreement) + operator 승인 | Manifest 등록 시 분류를 함께 심사·기록하는 운영 절차와 결합 | 승인 게이트. Q: 분류 선언의 책임 주체(발행인 vs operator), 오분류 발견 시 정정·소급 절차 |
 | **B-02 ERC-3643 Native** | `setErc3643Native` attestation (**의도적 stand-in**, natspec에 seam 명시) — `Erc3643Native.sol` | ERC-165 `supportsInterface`(T-REX `IToken`) 또는 token registry 조회 | `check` 내부를 introspection으로 교체 — **결정론적, 법무 불필요** | **기술 결정만 남음** (vendored T-REX의 ERC-165 지원 여부 검증 필요, D008) |
-| **C-01 Rule 144 Lockup** | 주입식 `IAcquisitionSource` mock — `Lockup.sol` (test fixture에서만 활성, "CR-3" seam) | 취득 시점/lot 데이터 소스 — **미결정** (ROADMAP Decision Backlog 1순위) | acquisition registry 신설 또는 transfer-agent 피드 | **데이터 소스 자체가 open decision** — 결정 전 holding-period Recipe production 비활성이 문서화된 default. Q: lot 회계 방식(FIFO?), 데이터 원천(transfer agent? 체인 이벤트 재구성?), 6개월/1년 기간 기산점 |
+| **C-01 Rule 144 Lockup** | `AttestedAcquisitionSource`의 expiring holder×asset snapshot + mock TA lot resolver | ADR-008의 Transfer Agent adapter; 실제 Securitize API mapping은 미검증 | off-chain per-lot lineage/완납일 검증 → conservative snapshot hash attestation → `Lockup` fail-closed | **foundation 구현, production provider blocked.** Q: 공식 API field/auth, amount-specific lot allocation(FIFO 등), retention/WORM provider |
 | **E-01 Form D Filing** | `setFormDFiled(asset, filed, ref)` + 참조 해시 — `FormDFiling.sol` | EDGAR oracle 또는 hash-anchored Listing Agreement | 제출 확인 봇이 attestation 갱신 + `filingRef`에 accession number 해시 | 승인 게이트. Q: 최초 판매 후 15일 제출 시한의 온체인 반영(유예 처리), amendment 추적 범위 |
 | **F-02 Market Conduct (Surveillance)** | 거래 카운터 임계 초과 시 flag 이벤트 (STATEFUL, 차단 안 함) — `SurveillanceFlag.sol` | Phase 3 operator 시장감시 규칙 | 감시 패턴은 off-chain 분석 + on-chain flag hook 유지 | **Phase 3 범위** (Layer 4). Q: 감시 패턴 정의와 broker-dealer 규제 연구 결과 대기 (Element catalog freeze 노트 참조) |
 
@@ -48,7 +48,8 @@
    표준으로 한다.
 2. **기술 선행 작업** (법무 무관하게 진행 가능): B-02 introspection 전환 검증,
    A-03 4-원자 element 분해 설계, A-05 fail-closed 반전 설계.
-3. **결정 대기**: C-01 acquisition 데이터 소스 (ROADMAP Decision Backlog).
+3. **provider refinement**: C-01의 실제 TA API mapping, amount-specific lot allocation과
+   production audit storage를 검증한다(ADR-008/D012).
 
 관련 문서: D008/D009(`DECISIONS.md`), `docs/demo.md`(mock vs real 경계),
 `docs/compliance/04-element-interface.md`(인터페이스·택소노미),

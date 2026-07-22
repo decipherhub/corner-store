@@ -11,6 +11,7 @@ import {ElementRegistry} from "../src/registry/ElementRegistry.sol";
 import {RecipeRegistry} from "../src/registry/RecipeRegistry.sol";
 import {TokenPolicyRegistry} from "../src/registry/TokenPolicyRegistry.sol";
 import {OperatorRegistry} from "../src/registry/OperatorRegistry.sol";
+import {AttestedAcquisitionSource} from "../src/registry/AttestedAcquisitionSource.sol";
 
 import {ComplianceEngine} from "../src/compliance/ComplianceEngine.sol";
 import {Sanctions} from "../src/compliance/elements/Sanctions.sol";
@@ -83,7 +84,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     Erc3643Native internal erc3643;
     FormDFiling internal formD;
     Lockup internal lockup;
-    DemoAcquisitionSource internal acqSource;
+    AttestedAcquisitionSource internal acqSource;
     QualifiedPurchaser internal qualifiedPurchaser;
 
     ExecutionRouter internal router;
@@ -228,7 +229,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         elementReg.registerElement(bytes32("B-01-v1"), address(assetClass));
         erc3643 = new Erc3643Native();
         elementReg.registerElement(bytes32("B-02-v1"), address(erc3643));
-        acqSource = new DemoAcquisitionSource();
+        acqSource = new AttestedAcquisitionSource();
         lockup = new Lockup(address(acqSource), LOCKUP_SECONDS);
         elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
         formD = new FormDFiling();
@@ -249,7 +250,14 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         IdentityUniqueness(elementReg.elementOf(bytes32("A-04-v1"))).bindIdentity(who, keccak256(abi.encode("ID", who))); // A-04
         AccreditedInvestor(elementReg.elementOf(bytes32("A-03-v1"))).setAccredited(who, true); // A-03
         if (useBuidlLikeProfile) qualifiedPurchaser.setQp(who, true); // A-13
-        acqSource.setAcquiredAt(who, address(rwaToken), uint64(1)); // C-01 seed
+        acqSource.setSnapshot(
+            who,
+            address(rwaToken),
+            uint64(1),
+            uint64(block.timestamp + 30 days),
+            keccak256("demo-ta-fixture"),
+            IAcquisitionSource.AcquisitionStatus.VALID
+        ); // C-01 seed
     }
 
     function _writeArtifact(address deployer, address investor, address maker, address unapprovedMaker) internal {
@@ -297,20 +305,6 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         console2.log("-----------------------------------------------------");
         console2.log("artifact written to       :", ARTIFACT_PATH);
         console2.log("=====================================================");
-    }
-}
-
-/// @dev Live-node acquisition-time source for the Lockup (C-01) element's CR-3
-///      seam. Mirrors the test fixture's `MockAcquisitionSource`.
-contract DemoAcquisitionSource is IAcquisitionSource {
-    mapping(bytes32 => uint64) internal _acquiredAt;
-
-    function setAcquiredAt(address holder, address asset, uint64 ts) external {
-        _acquiredAt[keccak256(abi.encode(holder, asset))] = ts;
-    }
-
-    function acquiredAt(address holder, address asset) external view override returns (uint64) {
-        return _acquiredAt[keccak256(abi.encode(holder, asset))];
     }
 }
 

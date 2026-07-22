@@ -1,8 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.17;
 
-/// @dev CR-3 seam: the real Rule 144 acquisition-time source is unresolved, so the
-///      Lockup element reads acquisition time through this injected interface only.
+/// @notice Provider-neutral on-chain snapshot consumed by the Rule 144 Lockup.
+/// @dev The Transfer Agent/provider remains off-chain. An approved adapter must
+///      compile per-lot records and attest only the conservative clock snapshot.
 interface IAcquisitionSource {
-    function acquiredAt(address holder, address asset) external view returns (uint64);
+    enum AcquisitionStatus {
+        MISSING,
+        VALID,
+        LINEAGE_BROKEN
+    }
+
+    struct AcquisitionSnapshot {
+        uint64 clockStart;
+        uint64 observedAt;
+        uint64 expiresAt;
+        bytes32 sourceRef;
+        AcquisitionStatus status;
+    }
+
+    function acquisitionOf(address holder, address asset) external view returns (AcquisitionSnapshot memory);
 }

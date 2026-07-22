@@ -29,6 +29,8 @@
   multisig-oriented dashboard
 - central global/asset/venue pause enforcement와 delayed unpause, versioned
   Manifest history 및 delayed semantic update control plane
+- provider-neutral compliance data SDK, attested acquisition snapshot과
+  hash-chain rejection/surveillance audit foundation
 - Foundry unit/integration tests와 전체 developer/operator service 및 vendored
   deploy-v3를 검증하는 repository-wide GitHub Actions gate
 
@@ -36,7 +38,8 @@
 
 - RecipeBinding 기반 production Asset Compliance Manifest schema/migration
 - production legal Element 기준과 승인된 operator 입력 모델
-- acquisition/lot data source와 holding-period Recipe 활성화 조건
+- 실제 Securitize/TA provider adapter, production WORM/indexer와 amount-specific
+  lot allocation 정책
 - RFQ production signer custody, persistent nonce, pricing/inventory와 partial-fill 정책
 - 실제 Uniswap v3 pool을 사용하는 AMM deployment/E2E
 - Order Book matching/custody/surveillance 모델
@@ -175,14 +178,15 @@ timelocked semantic update control plane이 구현됨. RecipeBinding schema migr
   자산이 있으면 양쪽 regulated Manifest의 applicable Recipe를 합쳐 평가한다.
 - full off-chain manifest hash와 on-chain core의 version 변경이 추적된다.
 
-### Blocking Design Decisions
+### Design Decisions
 
-1. Rule 144 holding period를 위한 acquisition/lot data source
+1. acquisition/lot source와 reject audit seam은 ADR-008/D012로 결정되고 DATA-001
+   foundation으로 구현되었다.
 2. Manifest scope: token 또는 token×venue
 3. Recipe set와 issuer coverage encoding
-4. reject audit trail
 
-acquisition data가 필요한 Recipe는 data source가 결정되기 전 활성화하지 않는다.
+실제 Rule 144 production 활성화는 provider API, lot allocation과 운영 저장소가
+검증될 때까지 보류한다.
 
 ## Phase 3 — Execution Integration Kit
 
@@ -352,7 +356,7 @@ Reference/demo evidence:
 1. `design(rfq): remaining production RFQ policy` — custody, partial fill, signer,
    nonce, pricing/inventory와 operator 책임.
 2. `feat(compliance): RecipeBinding 기반 production Asset Compliance Manifest schema/migration`
-3. `design(compliance): acquisition/lot data source와 holding-period Recipe 활성화 조건 결정`
+3. `feat(compliance): verified TA provider adapter와 amount-specific lot allocation`
 4. `feat(amm): real Uniswap v3 pool deployment와 protected E2E 연결`
 5. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
 6. `ops(production): TLS, secret rotation, 실제 multisig provider와 live RPC
@@ -363,11 +367,11 @@ Reference/demo evidence:
 
 | 결정 | 영향 Phase | 결정 전 기본값 |
 | --- | --- | --- |
-| acquisition/lot source | 2 | 해당 holding-period Recipe 비활성 |
-| Element commit hook | 1 | stateful Element 구현 보류 |
+| production TA provider/API | 2 | mock provider + conservative snapshot만 사용 |
+| amount-specific lot allocation | 2 | 모든 current lot가 mature해야 통과 |
 | Manifest scope | 2 | 결정 전 external API와 storage 확정 금지 |
 | Manifest 공개 범위 | 2, 5 | full document는 off-chain, 공개 필드는 미정 |
-| reject audit trail | 2, 5 | 방식 확정 전 production claim 금지 |
+| production WORM/retention provider | 2, 5 | local tamper-evident log만 사용 |
 | initial engine/scenario | 4 | 법률 검토된 illustrative scenario만 활성 |
 | production operator/governance | 5 | test-only admin, production 배포 금지 |
 

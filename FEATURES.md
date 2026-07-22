@@ -678,3 +678,44 @@ passing
   n-of-m signer 로직을 구현하지 않는다.
 - issuer disable, production multisig provider와 chain별 timelock 값은 후속 운영
   설정이며, 현재 manifest에 issuer identity가 없으므로 asset pause로 fail-closed한다.
+
+## DATA-001 — Compliance Data Layer Foundation
+
+### Behavior
+
+- ADR-008의 Transfer Agent 경계를 provider-neutral TypeScript SDK로 제공한다.
+- per-lot acquisition 입력은 lineage, 완납일과 freshness를 검증하고 보수적인
+  holder×asset snapshot으로 컴파일한다.
+- `Lockup`은 operator-attested snapshot의 상태와 만료를 fail-closed로 검사한다.
+- 거절 시도와 router 밖 transfer finding은 PII 없이 hash-chain audit trail에
+  append할 수 있다.
+- person-group 단위 volume/holder state는 execution idempotency를 보장한다.
+- 실제 Securitize API, WORM storage와 production surveillance hosting은 adapter
+  교체 지점으로 남기며 구현되었다고 주장하지 않는다.
+
+### Verification
+
+- `forge fmt --check`
+- `forge test --offline --match-path test/unit/compliance/AcquisitionSource.t.sol -vv`
+- `forge test --offline --match-path test/unit/compliance/Elements.t.sol -vv`
+- `cd services/compliance-data && npm test`
+- `scripts/check.sh`
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획: `docs/exec-plans/completed/DATA-001-compliance-data-layer.md`
+- 실제 Securitize/TA field mapping은 공식 API 계약이 제공될 때 별도 provider
+  adapter로 구현한다.
+- 단일 holder×asset snapshot은 모든 현재 lot 중 가장 늦은 clock을 사용하므로
+  amount-specific lot allocation 전까지 일부 mature lot 매도를 보수적으로 막을 수 있다.
+
+### Related Files
+
+- `services/compliance-data/`
+- `src/registry/AttestedAcquisitionSource.sol`
+- `src/compliance/elements/Lockup.sol`
+- `test/unit/compliance/AcquisitionSource.t.sol`

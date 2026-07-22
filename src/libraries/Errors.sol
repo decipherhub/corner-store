@@ -31,4 +31,6 @@ library Errors {
     error PendingActionNotFound();
     error PendingActionExists();
     error InvalidManifestHash();
+    error ZeroAddress();
+    error InvalidAcquisitionSnapshot();
 }

@@ -37,6 +37,9 @@ source of truth로 사용한다.
 - `PROD-001 — Production Control Plane`(central global/asset/venue pause,
   delayed unpause와 Manifest resume/update, monotonic version/history,
   Factory governance forwarding)
+- `DATA-001 — Compliance Data Layer Foundation`(provider-neutral TA lot resolver,
+  expiring attested acquisition snapshot, fail-closed Lockup, idempotent
+  person-group state와 hash-chain rejection/surveillance audit)
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -76,8 +79,8 @@ source of truth로 사용한다.
 
 ## Next
 
-1. ADR-008 기준 off-chain compliance data layer와 acquisition/lot adapter를
-   구현한다.
+1. 실제 TA provider API/authorization, amount-specific lot allocation과 production
+   WORM/indexer를 별도 refinement로 구현한다.
 2. RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
    production dealer/operator 책임.
 3. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
@@ -88,6 +91,14 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- `DATA-001`에서 per-lot acquisition/완납/lineage를 검증하는 provider-neutral SDK,
+  operator-attested on-chain snapshot과 missing/broken/stale/immature를 구분하는
+  fail-closed Lockup을 구현했다. `SECONDARY` lot의 과거 lineage 상속을 거부하고,
+  cyclic lineage, holder 상태 변경, conflicting replay와 audit 변조 회귀를 고정했다.
+  `scripts/check.sh`(Foundry 618/618, 모든 service smoke, deploy-v3 10/10)와
+  `buidl-like`/`reg-d` live E2E(각 7/7 + delayed recovery + AMM/RFQ)가 통과했다.
+  실제 Securitize API, amount-specific allocation과 production WORM은 외부 계약
+  확정 전까지 후속 범위다.
 - `PROD-001`에서 `OperatorRegistry`를 global/asset/venue pause source of truth로
   만들고 Router의 nonce/evaluation 전에 fail-closed enforcement를 추가했다.
   unpause와 Manifest resume/update는 owner schedule + 1일 timelock으로 분리했고,

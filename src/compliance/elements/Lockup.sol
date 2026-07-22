@@ -13,8 +13,9 @@ import {
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
-/// @dev C-01-v1 Rule 144 lockup (mock). Reads acquisition time from an INJECTED
-///      source (CR-3 seam) — this contract does NOT maintain an acquisition registry.
+/// @dev C-01-v1 Rule 144 lockup. Reads a conservative, expiring acquisition
+///      snapshot from an injected provider-neutral source. Per-lot/PII data stays
+///      off-chain and this contract fails closed on missing or broken lineage.
 contract Lockup is BaseElement {
     bytes32 internal constant ELEMENT_ID = "C-01-v1";
 
@@ -42,8 +43,17 @@ contract Lockup is BaseElement {
         override
         returns (bool passed, bytes32 reasonCode)
     {
-        uint64 acquired = acquisitionSource.acquiredAt(user, asset);
-        passed = acquired != 0 && block.timestamp >= uint256(acquired) + lockupSeconds;
-        reasonCode = passed ? bytes32(0) : ReasonCodes.encode(0, ELEMENT_ID, 1);
+        IAcquisitionSource.AcquisitionSnapshot memory snapshot = acquisitionSource.acquisitionOf(user, asset);
+        if (snapshot.status == IAcquisitionSource.AcquisitionStatus.MISSING) {
+            return (false, ReasonCodes.encode(0, ELEMENT_ID, 1));
+        }
+        if (snapshot.status == IAcquisitionSource.AcquisitionStatus.LINEAGE_BROKEN) {
+            return (false, ReasonCodes.encode(0, ELEMENT_ID, 2));
+        }
+        if (snapshot.expiresAt == 0 || block.timestamp > snapshot.expiresAt) {
+            return (false, ReasonCodes.encode(0, ELEMENT_ID, 3));
+        }
+        passed = snapshot.clockStart != 0 && block.timestamp >= uint256(snapshot.clockStart) + lockupSeconds;
+        reasonCode = passed ? bytes32(0) : ReasonCodes.encode(0, ELEMENT_ID, 4);
     }
 }

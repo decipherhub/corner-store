@@ -58,7 +58,8 @@ reference execution adapters including AMM and RFQ settlement paths.
 Required tools:
 
 - Foundry stable (`forge`, `anvil`; live E2E verified with v1.7.1)
-- Node.js and npm for `services/rfq`, `services/rfq-demo-backend` and `services/cli`
+- Node.js and npm for the TypeScript services under `services/`, including RFQ,
+  CLI, Toolkit, Operator API and Compliance Data SDK
 - Yarn for `tools/deploy-v3`
 
 Foundry 버전을 바꾼 뒤 script broadcast에서 constructor decoding 오류가 나면
@@ -138,6 +139,19 @@ node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
 
 See [`services/rfq-demo-backend/README.md`](./services/rfq-demo-backend/README.md)
 for the complete local flow and production replacement boundaries.
+
+### Compliance Data SDK
+
+`services/compliance-data` implements the provider-neutral ADR-008 foundation:
+TA lot/lineage resolution, conservative acquisition snapshots, person-group
+state and tamper-evident rejection/surveillance records. It does not include or
+claim compatibility with an undocumented production Securitize API.
+
+```shell
+cd services/compliance-data
+npm ci
+npm test
+```
 
 ### Check All
 
