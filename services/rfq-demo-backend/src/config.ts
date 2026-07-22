@@ -31,6 +31,7 @@ export interface DemoBackendConfig {
   defaultTtlSeconds: number;
   priceNumerator: string;
   priceDenominator: string;
+  eventsPath?: string;
   demoSettlement: {
     enabled: boolean;
     operatorAccount: number;
@@ -58,6 +59,7 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env): Dem
     defaultTtlSeconds,
     priceNumerator: parsePositiveBigIntString(args.priceNumerator ?? env.RFQ_DEMO_PRICE_NUMERATOR, "1", "price-numerator"),
     priceDenominator: parsePositiveBigIntString(args.priceDenominator ?? env.RFQ_DEMO_PRICE_DENOMINATOR, "1", "price-denominator"),
+    eventsPath: env.CORNER_STORE_EVENTS,
     demoSettlement: {
       enabled: env.RFQ_DEMO_ENABLE_SETTLEMENT === "1",
       operatorAccount: parseAccountIndex(env.RFQ_DEMO_OPERATOR_ACCOUNT ?? "0"),

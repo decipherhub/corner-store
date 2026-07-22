@@ -46,6 +46,7 @@ export class FileEventIndex implements EventStore {
   }
 
   list(): IndexedEvent[] {
+    if (existsSync(this.path)) this.events = JSON.parse(readFileSync(this.path, "utf8")).events ?? [];
     return [...this.events];
   }
 }
@@ -82,7 +83,7 @@ export function createOperatorApi(options: OperatorApiOptions): Server {
     if (path === "/api/v1/config") return send(res, 200, sanitizeConfig(config));
     if (path === "/api/v1/deployment") return send(res, 200, artifact ?? {configured: false});
     if (path === "/api/v1/manifest") return send(res, 200, manifest ?? {configured: false});
-    if (path === "/api/v1/events") return send(res, 200, {events: index.list(), source: "in-memory-index"});
+    if (path === "/api/v1/events") return send(res, 200, {events: index.list(), source: options.eventsPath ? "file-index" : "in-memory-index"});
     return send(res, 404, {error: "not found"});
   });
 }

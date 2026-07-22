@@ -1,4 +1,5 @@
 import {AbiCoder, Contract, HDNodeWallet, JsonRpcProvider, MaxUint256, NonceManager, formatEther} from "ethers";
+import {existsSync, readFileSync, writeFileSync} from "fs";
 
 import {RFQBackendSDK, SignedRFQQuote} from "../../rfq/src";
 
@@ -73,7 +74,16 @@ export class DemoSettlementService {
         makerRevoked = true;
         trace.push({stage: "Maker policy", detail: "operator revoked maker before fill", status: "rejected"});
       }
-      return await this.execute(signed, action, trace);
+      const result = await this.execute(signed, action, trace);
+      if (result.transaction) {
+        this.appendEvent({
+          blockNumber: result.transaction.blockNumber,
+          transactionHash: result.transaction.hash,
+          name: "RFQSettled",
+          args: {maker: signed.quote.maker, taker: signed.quote.taker, amountIn: signed.quote.amountIn, amountOut: signed.quote.amountOut}
+        });
+      }
+      return result;
     } finally {
       if (makerRevoked) await this.setMakerApproval(true);
     }
@@ -136,7 +146,13 @@ export class DemoSettlementService {
       const nonce = BigInt(nonceHex);
       try {
         const tx = await adapter.setMakerApproved(this.config.artifact.maker, approved, {nonce});
-        await tx.wait();
+        const receipt = await tx.wait();
+        this.appendEvent({
+          blockNumber: receipt?.blockNumber ?? 0,
+          transactionHash: tx.hash,
+          name: "MakerApprovalSet",
+          args: {maker: this.config.artifact.maker, approved: String(approved)}
+        });
         return;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -146,6 +162,17 @@ export class DemoSettlementService {
         throw error;
       }
     }
+  }
+
+  private appendEvent(event: {blockNumber: number; transactionHash: string; name: string; args: Record<string, string>}): void {
+    if (!this.config.eventsPath) return;
+    const current = existsSync(this.config.eventsPath)
+      ? JSON.parse(readFileSync(this.config.eventsPath, "utf8"))
+      : {schemaVersion: 1, lastBlock: 0, events: []};
+    const events = Array.isArray(current.events) ? current.events : [];
+    events.push(event);
+    events.sort((a: {blockNumber: number}, b: {blockNumber: number}) => a.blockNumber - b.blockNumber);
+    writeFileSync(this.config.eventsPath, `${JSON.stringify({schemaVersion: 1, lastBlock: events[events.length - 1]?.blockNumber ?? 0, events}, null, 2)}\n`);
   }
 }
 

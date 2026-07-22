@@ -32,6 +32,7 @@ done
 
 STATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/corner-store-demo.XXXXXX")
 PID_FILE="$STATE_DIR/pids"
+EVENTS_FILE="$STATE_DIR/events.json"
 OPERATOR_API_PID=""
 DASHBOARD_PID=""
 
@@ -57,7 +58,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "==> Starting Corner Store local demo"
-scripts/e2e-anvil.sh --profile "$PROFILE" --mode "$MODE" \
+CORNER_STORE_EVENTS="$EVENTS_FILE" scripts/e2e-anvil.sh --profile "$PROFILE" --mode "$MODE" \
   --port "$ANVIL_PORT" --backend-port "$BACKEND_PORT" --pid-file "$PID_FILE" --keep
 
 echo "==> Starting read-only Operator API"
@@ -69,6 +70,7 @@ fi
 CORNER_STORE_CONFIG="$CORNER_STORE_CONFIG" \
 CORNER_STORE_ARTIFACT="deployments/anvil-e2e.json" \
 CORNER_STORE_MANIFEST="deployments/operator-manifest.json" \
+CORNER_STORE_EVENTS="$EVENTS_FILE" \
 PORT="$OPERATOR_API_PORT" \
 node services/operator-api/dist/src/index.js >"$STATE_DIR/operator-api.log" 2>&1 &
 OPERATOR_API_PID=$!
