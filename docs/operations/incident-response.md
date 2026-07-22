@@ -32,17 +32,24 @@ reason을 기록한다. private key, API token, claim 원문이나 PII는 ticket
 1. 영향 범위를 모르면 fail-closed로 취급한다.
 2. RFQ signer 또는 backend가 의심되면 새 quote 발급을 중지하고 maker approval을
    철회한다.
-3. venue 단위 사고는 `OperatorRegistry.setVenueSuspended`로 차단한다.
-4. 자산·Manifest 단위 사고는 `TokenPolicyRegistry.suspendManifest`로 차단한다.
-5. ERC-3643 token/identity/claim provider 사고는 해당 외부 운영자에게 pause, freeze,
+3. 전체 실행을 즉시 중단해야 하면 `OperatorRegistry.setGlobalPaused(true, reason)`을
+   사용한다.
+4. venue 단위 사고는 `OperatorRegistry.setVenueSuspended(venue, true, reason)`로
+   차단한다.
+5. 자산 단위 사고는 `OperatorRegistry.setAssetSuspended(token, true, reason)`으로
+   Router 실행을 차단하고, Manifest 자체가 의심되면
+   `TokenPolicyRegistry.suspendManifest`도 함께 사용한다.
+6. ERC-3643 token/identity/claim provider 사고는 해당 외부 운영자에게 pause, freeze,
    issuer revocation을 요청한다. Corner Store가 외부 trust boundary를 소유한다고
    가정하지 않는다.
-6. direct adapter 호출로 우회하지 않는다. 모든 복구 시험도 승인된 Router 경로를
+7. direct adapter 호출로 우회하지 않는다. 모든 복구 시험도 승인된 Router 경로를
    사용한다.
 
-현재 reference contracts에는 ADR-007이 목표로 하는 central `PauseController`가 아직
-없다. 전역 차단이 필요하면 등록된 regulated asset과 venue를 모두 suspend하고,
-누락 여부를 deployment artifact와 Operator API snapshot으로 대조한다.
+`OperatorRegistry`가 global/asset/venue pause의 중앙 source of truth이며 Router는
+nonce 소비와 compliance evaluation 전에 세 범위를 모두 검사한다. 중단은 operator가
+즉시 수행할 수 있지만, 재개는 owner가 예약하고 최소 1일 timelock 뒤 owner가
+실행한다. Manifest 재개는 Factory owner가 예약하고 registry operator가 delay 뒤
+실행한다.
 
 ## 3. Evidence preservation
 
@@ -80,7 +87,9 @@ recipe 제거와 unpause는 외부 multisig 승인과 적용 가능한 timelock�
 5. `scripts/check.sh`가 통과했다.
 6. 영향 profile의 `scripts/e2e-anvil.sh --profile <profile>`이 7/7 scenario와
    protected RFQ success/rejection path를 통과했다.
-7. 한 자산·venue부터 단계적으로 resume하고 Operator API events/metrics를 관찰한다.
+7. global/asset/venue unpause 또는 Manifest resume를 예약하고 timelock 동안 새 증거와
+   취소 필요성을 재검토한다.
+8. 한 자산·venue부터 단계적으로 resume하고 Operator API events/metrics를 관찰한다.
 
 ## 6. Post-incident
 

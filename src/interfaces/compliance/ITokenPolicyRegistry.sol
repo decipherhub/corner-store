@@ -5,13 +5,25 @@ import {ManifestCore, PolicyStatus} from "../../types/ComplianceTypes.sol";
 
 // ITokenPolicyRegistry  (Manifest store)
 interface ITokenPolicyRegistry {
+    function MIN_MANIFEST_DELAY() external view returns (uint64);
+
     function registerManifest(address token, ManifestCore calldata m) external; // -> PROPOSED
 
     function approveManifest(address token) external; // PROPOSED -> ACTIVE
 
     function suspendManifest(address token, bytes32 reasonCode) external; // ACTIVE -> SUSPENDED
 
-    function resumeManifest(address token) external; // SUSPENDED -> ACTIVE
+    function scheduleManifestResume(address token, bytes32 reasonCode) external; // SUSPENDED -> pending ACTIVE
+
+    function cancelManifestResume(address token) external;
+
+    function resumeManifest(address token) external; // executes pending SUSPENDED -> ACTIVE after delay
+
+    function scheduleManifestUpdate(address token, ManifestCore calldata m, bytes32 reasonCode) external;
+
+    function cancelManifestUpdate(address token) external;
+
+    function activateManifestUpdate(address token) external;
 
     function retireManifest(address token, bytes32 reasonCode) external; // ACTIVE/SUSPENDED -> RETIRED
 
@@ -22,6 +34,17 @@ interface ITokenPolicyRegistry {
     function manifestOf(address token) external view returns (ManifestCore memory);
 
     function statusOf(address token) external view returns (PolicyStatus);
+
+    function manifestVersionOf(address token) external view returns (uint64);
+
+    function manifestHistoryHashOf(address token) external view returns (bytes32);
+
+    function pendingManifestUpdateOf(address token)
+        external
+        view
+        returns (ManifestCore memory manifest, uint64 effectiveTime, bytes32 reasonCode);
+
+    function pendingManifestResumeOf(address token) external view returns (uint64 effectiveTime, bytes32 reasonCode);
 
     function setFact(address token, uint256 factsPacked) external; // strengthen-only
 }

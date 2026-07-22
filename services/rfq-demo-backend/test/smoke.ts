@@ -27,12 +27,14 @@ async function main(): Promise<void> {
     host: "127.0.0.1",
     port: 0,
     chainId: 31337,
+    rpcUrl: "http://127.0.0.1:8545",
     artifactPath,
     artifact,
     makerWallet,
     defaultTtlSeconds: 3600,
     priceNumerator: "2",
-    priceDenominator: "1"
+    priceDenominator: "1",
+    now: () => 1_700_000_000
   };
   const running = await startDemoServer(config);
 
@@ -51,6 +53,7 @@ async function main(): Promise<void> {
     const signed = JSON.parse(quoteResponse.body) as any;
     assert(signed.quote.amountIn === "100", "amountIn round-trips");
     assert(signed.quote.amountOut === "200", "fixed-rate pricing is applied");
+    assert(signed.quote.expiry === 1_700_000_120, "expiry uses injected chain clock");
     assert(signed.quote.tokenIn.toLowerCase() === artifact.quote.toLowerCase(), "tokenIn is deployment QUOTE");
     assert(signed.quote.tokenOut.toLowerCase() === artifact.rwaToken.toLowerCase(), "tokenOut is deployment RWA");
     const recovered = verifyTypedData(signed.typedData.domain, RFQ_QUOTE_TYPES, signed.quote, signed.signature);

@@ -23,7 +23,8 @@ npm start
 ```
 
 The defaults use `deployments/anvil-e2e.json`, Anvil account 2 as the approved
-maker, chain id 31337, a 1:1 fixed rate and one-hour quote expiry.
+maker, chain id 31337, `http://127.0.0.1:8545` for the current chain timestamp,
+a 1:1 fixed rate and one-hour quote expiry.
 
 ## API
 
@@ -60,7 +61,7 @@ signature before writing the quote file.
 
 Command flags have matching `RFQ_DEMO_*` environment variables:
 
-- `--host`, `--port`, `--artifact`, `--chain-id`
+- `--host`, `--port`, `--artifact`, `--chain-id`, `--rpc`
 - `--maker-account` or `--maker-key`
 - `--ttl`
 - `--price-numerator`, `--price-denominator`

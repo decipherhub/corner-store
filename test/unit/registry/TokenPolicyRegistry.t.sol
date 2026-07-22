@@ -57,6 +57,8 @@ contract TokenPolicyRegistryTest is Test {
         assertEq(got.declaredBy, owner, "declaredBy = register caller");
         assertEq(got.approvedBy, address(0), "not yet approved");
         assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.PROPOSED));
+        assertEq(reg.manifestVersionOf(token), 1, "first semantic version");
+        assertNotEq(reg.manifestHistoryHashOf(token), bytes32(0), "history anchored");
     }
 
     function test_register_records_caller_as_declaredBy() public {
@@ -115,13 +117,31 @@ contract TokenPolicyRegistryTest is Test {
 
     function test_resume_SUSPENDED_to_ACTIVE() public {
         _activate(token);
-        vm.startPrank(operator);
+        vm.prank(operator);
         reg.suspendManifest(token, bytes32("HALT"));
+        reg.scheduleManifestResume(token, bytes32("RECOVERED"));
+        vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
+        vm.startPrank(operator);
         vm.expectEmit(true, false, false, true);
-        emit Events.ManifestStatusChanged(token, PolicyStatus.ACTIVE, bytes32(0));
+        emit Events.ManifestStatusChanged(token, PolicyStatus.ACTIVE, bytes32("RECOVERED"));
         reg.resumeManifest(token);
         vm.stopPrank();
         assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.ACTIVE));
+    }
+
+    function test_resume_requiresScheduleAndDelay() public {
+        _activate(token);
+        vm.prank(operator);
+        reg.suspendManifest(token, bytes32("HALT"));
+
+        vm.prank(operator);
+        vm.expectRevert(Errors.PendingActionNotFound.selector);
+        reg.resumeManifest(token);
+
+        reg.scheduleManifestResume(token, bytes32("RECOVERED"));
+        vm.prank(operator);
+        vm.expectPartialRevert(Errors.TimelockNotReady.selector);
+        reg.resumeManifest(token);
     }
 
     function test_suspend_reverts_for_non_operator() public {
@@ -138,6 +158,28 @@ contract TokenPolicyRegistryTest is Test {
         vm.prank(stranger);
         vm.expectRevert(Errors.NotAuthorized.selector);
         reg.resumeManifest(token);
+    }
+
+    function test_resume_schedule_reverts_for_non_owner() public {
+        _activate(token);
+        vm.prank(operator);
+        reg.suspendManifest(token, bytes32("HALT"));
+        vm.prank(operator);
+        vm.expectRevert("Ownable: caller is not the owner");
+        reg.scheduleManifestResume(token, bytes32("RECOVERED"));
+    }
+
+    function test_resume_cancelInvalidatesPendingResume() public {
+        _activate(token);
+        vm.prank(operator);
+        reg.suspendManifest(token, bytes32("HALT"));
+        reg.scheduleManifestResume(token, bytes32("RECOVERED"));
+        reg.cancelManifestResume(token);
+        vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
+        vm.prank(operator);
+        vm.expectRevert(Errors.PendingActionNotFound.selector);
+        reg.resumeManifest(token);
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.SUSPENDED));
     }
 
     // --- retire -----------------------------------------------------------
@@ -178,6 +220,7 @@ contract TokenPolicyRegistryTest is Test {
         reg.registerManifest(token, _manifest());
         assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.PROPOSED));
         assertEq(reg.manifestOf(token).approvedBy, address(0), "approver cleared on re-register");
+        assertEq(reg.manifestVersionOf(token), 2, "reissue increments semantic version");
     }
 
     function test_reregister_from_PROPOSED_reverts() public {
@@ -397,6 +440,109 @@ contract TokenPolicyRegistryTest is Test {
         reg.registerManifest(token, _manifest());
         vm.prank(stranger);
         vm.expectRevert(Errors.NotAuthorized.selector);
+        reg.setFact(token, 0x0F);
+    }
+
+    // --- delayed semantic update -----------------------------------------
+
+    function test_manifestUpdate_activatesAfterDelayAndIncrementsVersion() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        reg.registerManifest(token, initial);
+        vm.prank(operator);
+        reg.approveManifest(token);
+        bytes32 historyBefore = reg.manifestHistoryHashOf(token);
+
+        ManifestCore memory next = initial;
+        next.issuanceRecipeVersion = 2;
+        next.fullManifestHash = keccak256("manifest-v2");
+        reg.scheduleManifestUpdate(token, next, bytes32("REGULATORY_UPDATE"));
+
+        (, uint64 effectiveTime, bytes32 reasonCode) = reg.pendingManifestUpdateOf(token);
+        assertEq(reasonCode, bytes32("REGULATORY_UPDATE"));
+        vm.prank(operator);
+        vm.expectPartialRevert(Errors.TimelockNotReady.selector);
+        reg.activateManifestUpdate(token);
+
+        vm.warp(effectiveTime);
+        vm.prank(operator);
+        reg.activateManifestUpdate(token);
+
+        assertEq(reg.manifestVersionOf(token), 2);
+        assertEq(reg.manifestOf(token).fullManifestHash, next.fullManifestHash);
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.ACTIVE));
+        assertNotEq(reg.manifestHistoryHashOf(token), historyBefore);
+    }
+
+    function test_manifestUpdate_preservesSuspendedState() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        reg.registerManifest(token, initial);
+        vm.startPrank(operator);
+        reg.approveManifest(token);
+        reg.suspendManifest(token, bytes32("INCIDENT"));
+        vm.stopPrank();
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+        vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
+        vm.prank(operator);
+        reg.activateManifestUpdate(token);
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.SUSPENDED));
+    }
+
+    function test_manifestUpdate_rejectsMissingOrUnchangedHash() public {
+        _activate(token);
+        ManifestCore memory next = _manifest();
+        vm.expectRevert(Errors.InvalidManifestHash.selector);
+        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+    }
+
+    function test_manifestUpdate_scheduleRevertsForNonOwner() public {
+        _activate(token);
+        ManifestCore memory next = _manifest();
+        next.fullManifestHash = keccak256("manifest-v2");
+        vm.prank(operator);
+        vm.expectRevert("Ownable: caller is not the owner");
+        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+    }
+
+    function test_manifestUpdate_cancelPreservesManifestAndVersion() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        bytes32 initialHash = initial.fullManifestHash;
+        reg.registerManifest(token, initial);
+        vm.prank(operator);
+        reg.approveManifest(token);
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+        reg.cancelManifestUpdate(token);
+        vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
+        vm.prank(operator);
+        vm.expectRevert(Errors.PendingActionNotFound.selector);
+        reg.activateManifestUpdate(token);
+
+        assertEq(reg.manifestVersionOf(token), 1);
+        assertEq(reg.manifestOf(token).fullManifestHash, initialHash);
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.ACTIVE));
+    }
+
+    function test_setFact_revertsWhenActive_toPreventTimelockBypass() public {
+        _activate(token);
+        vm.prank(operator);
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
+        reg.setFact(token, 0x0F);
+    }
+
+    function test_setFact_revertsWhenRetired_toPreserveHistory() public {
+        _activate(token);
+        vm.prank(operator);
+        reg.retireManifest(token, bytes32("EOL"));
+        vm.prank(operator);
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
         reg.setFact(token, 0x0F);
     }
 }

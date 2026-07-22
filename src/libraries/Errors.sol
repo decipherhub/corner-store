@@ -5,6 +5,9 @@ library Errors {
     error NotAuthorized();
     error PolicyNotActive(); // UNKNOWN/SUSPENDED
     error ComplianceRejected(bytes32 reasonCode);
+    error GlobalPaused();
+    error TokenInPaused();
+    error TokenOutPaused();
     error VenueNotAllowed();
     error VenueTypeMismatch();
     error VenueSuspended();
@@ -24,4 +27,8 @@ library Errors {
     error RecipeNotRegistered(uint16 recipeId);
     error LooseningForbidden(); // strengthen-only override
     error InvalidManifestTransition(); // illegal PolicyStatus lifecycle move
+    error TimelockNotReady(uint256 readyAt);
+    error PendingActionNotFound();
+    error PendingActionExists();
+    error InvalidManifestHash();
 }

@@ -39,7 +39,9 @@ Manifest 최소 상태:
 `UNREGULATED`일 때만 pass-through하며, 하나 이상의 regulated 자산이 있으면 해당
 자산들의 `ACTIVE` Manifest를 모두 evaluation 입력으로 사용한다.
 
-version 변경 시 기존 order/quote의 처리와 grandfather 정책을 명시해야 한다.
+현재 semantic update는 별도 pending 값으로 예약되며 최소 1일 뒤에만 활성화된다.
+활성화 시 version이 단조 증가하고 old/new manifest hash와 history hash가 event에
+남는다. SUSPENDED 상태에서 update를 활성화해도 상태는 SUSPENDED로 유지된다.
 
 ## Responsibility Boundary
 
@@ -63,6 +65,7 @@ hot path에 필요한 compact core만 온체인에 둔다. 법률 문서, 심사
 - pair 거래에서 양쪽 자산의 classification과 regulated Manifest를 누락하지 않는다.
 - Recipe set, version, engine과 scope가 decision에 바인딩된다.
 - full manifest hash가 변경되면 새로운 version 또는 명시적 update가 필요하다.
+- ACTIVE/SUSPENDED core fact를 직접 덮어써 timelock을 우회할 수 없다.
 - issuer coverage는 검증된 범위보다 넓게 해석하지 않는다.
 - 명시적 `UNREGULATED` public path에는 SDK compliance 보장을 표시하지 않는다.
 - Manifest와 `UNREGULATED` 분류가 모두 없으면 fail-closed한다.
@@ -73,6 +76,10 @@ hot path에 필요한 compact core만 온체인에 둔다. 법률 문서, 심사
 - Manifest는 복수 Recipe orchestration의 입력이다.
 - full data는 off-chain, compact core와 hash는 on-chain을 기본 방향으로 한다.
 - 발행자 선언과 DEX 검토·승인 경계를 기록한다.
+- critical lifecycle state는 `TokenPolicyRegistry`에 보존하며 full document는
+  `fullManifestHash`로 anchor한다.
+- registry ownership이 Factory로 이전된 배포에서는 외부 governance가 Factory의
+  forwarding API로 resume/update를 예약하고 operator가 delay 후 실행한다.
 
 ## Open Decisions
 
@@ -80,4 +87,5 @@ hot path에 필요한 compact core만 온체인에 둔다. 법률 문서, 심사
 - 공개 필드와 비공개 자료의 경계
 - Recipe set encoding과 version migration
 - coverage field와 claim lookup 최적화
-- Manifest proposal/approval role 구성
+- RecipeBinding schema와 기존 `issuanceRecipeId + fundRecipeId` migration
+- token 단위 version 변경이 기존 signed order/quote에 미치는 정책

@@ -117,6 +117,13 @@ npm run build --prefix services/cli >/dev/null
 npm run build --prefix services/rfq-demo-backend >/dev/null
 
 CLI=(node services/cli/dist/cli/src/index.js --rpc "$RPC" --artifact deployments/anvil-e2e.json)
+echo "==> Advancing the live chain through the manifest recovery timelock"
+cast rpc --rpc-url "$RPC" evm_increaseTime 86400 >/dev/null
+cast rpc --rpc-url "$RPC" evm_mine >/dev/null
+"${CLI[@]}" manifest resume
+"${CLI[@]}" buy 5000000 --venue amm
+echo "    PASS: delayed manifest recovery restored AMM settlement"
+
 echo "==> Running Toolkit artifact preflight and immutable checkpoint"
 if [ "$ASSET_PROFILE" = "reg-d" ]; then
   TOOLKIT_CONFIG=services/toolkit/examples/corner-store.reg-d.config.json
@@ -132,7 +139,7 @@ echo "==> Re-onboarding the selected asset profile through the CLI"
 
 echo "==> Starting RFQ demo backend on http://127.0.0.1:${BACKEND_PORT}"
 node services/rfq-demo-backend/dist/rfq-demo-backend/src/index.js \
-  --port "$BACKEND_PORT" >"$BACKEND_LOG" 2>&1 &
+  --port "$BACKEND_PORT" --rpc "$RPC" >"$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
 
 BACKEND_READY=0

@@ -142,7 +142,9 @@ $CS attest jurisdiction $ACCT4 US                  # restore
 # manifest lifecycle
 $CS manifest suspend --reason DEMO-SUSPEND
 $CS --account 4 buy 5000000                        # FAIL: POLICY / SUSPENDED
-$CS manifest resume
+$CS manifest resume                               # first call schedules timelocked resume
+# after the reported delay:
+$CS manifest resume                               # second call executes resume
 $CS --account 4 buy 5000000                        # PASS again
 
 # RFQ venue

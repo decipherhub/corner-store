@@ -119,6 +119,24 @@ async function highLevelSdkSmoke() {
   assert(signer.calls === 1, "SDK signed once");
   assert(signed.typedData.message.amountOut === signed.quote.amountOut, "SDK typed data binds price");
 
+  const asyncClock = createRFQService({
+    chainId: 31337,
+    verifyingContract: ADAPTER,
+    maker: MAKER,
+    signer,
+    pricing: new FixedRatePricingProvider({numerator: 1n, denominator: 1n}),
+    now: async () => 1_800_000_000,
+    defaultTtlSeconds: 60
+  });
+  const chainTimed = await asyncClock.quote({
+    taker: TAKER,
+    tokenIn: TOKEN_IN,
+    tokenOut: TOKEN_OUT,
+    amountIn: 10n,
+    venue: VENUE
+  });
+  assert(chainTimed.quote.expiry === 1_800_000_060, "SDK supports async chain clock");
+
   const second = await rfq.quote({taker: TAKER, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, amountIn: 10n, venue: VENUE});
   assert(BigInt(second.quote.nonce) > BigInt(signed.quote.nonce), "SDK nonce store is monotonic");
 

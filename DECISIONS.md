@@ -486,7 +486,7 @@ custom error `Errors.InvalidManifestTransition`으로 revert한다.
 | UNKNOWN 또는 RETIRED | `registerManifest` | PROPOSED | onlyOwner |
 | PROPOSED | `approveManifest` | ACTIVE | onlyOperator (issuance recipe 필수) |
 | ACTIVE | `suspendManifest(reasonCode)` | SUSPENDED | onlyOperator |
-| SUSPENDED | `resumeManifest` | ACTIVE | onlyOperator |
+| SUSPENDED | `scheduleManifestResume` 후 `resumeManifest` | ACTIVE | owner schedule + timelock + operator execute |
 | ACTIVE 또는 SUSPENDED | `retireManifest(reasonCode)` | RETIRED (terminal) | onlyOperator |
 | UNKNOWN | `setUnregulated` | UNREGULATED | onlyOwner |
 | UNREGULATED | `clearUnregulated` | UNKNOWN | onlyOwner |
@@ -496,7 +496,8 @@ custom error `Errors.InvalidManifestTransition`으로 revert한다.
 기록하고 `issuanceRecipeId == 0`이면 registry-level completeness floor로 revert한다.
 RETIRED는 terminal이며 재발행은 RETIRED→register→approve 경로로만 가능하다. gating
 model: owner가 자산을 classify/declare(register/setUnregulated/clearUnregulated)하고,
-operator가 기존 manifest의 lifecycle(approve/suspend/resume/retire)을 구동한다.
+operator가 approve/suspend/retire와 예약된 resume 실행을 구동한다. resume 예약과
+semantic update 예약은 D011에 따라 owner governance가 담당한다.
 
 **2. Enum-append storage rationale.** `PolicyStatus`에 PROPOSED(4)와 RETIRED(5)를
 SUSPENDED(3) 뒤에 APPEND한다. 기존 numeric value(UNKNOWN=0, UNREGULATED=1,
@@ -565,3 +566,49 @@ token의 `declaredBy`/`approvedBy`는 factory 주소이며, attribution은 facto
   `test/unit/registry/TokenPolicyRegistry.t.sol`
 - `test/integration/EmergencyPause.t.sol`, `test/integration/IntegrationBase.sol`,
   `test/integration/Surveillance.t.sol`
+
+## D011 — 위험 중단은 즉시, 재개와 Manifest 의미 변경은 timelock으로 분리한다
+
+Date: 2026-07-22
+
+### Context
+
+ADR-007은 모든 Router가 공유하는 central pause state, 즉시 containment, 지연된
+compliance relaxation, Manifest semantic version/history 보존을 요구한다. 기존
+reference stack은 venue suspension과 Manifest status만 있어 global/asset pause가
+없었고, 재개와 core fact 변경을 즉시 수행할 수 있었다. 배포 후
+`TokenPolicyRegistry.owner()`가 Factory가 되므로 owner-only governance 호출을 EOA가
+직접 실행할 수도 없었다.
+
+### Decision
+
+1. `OperatorRegistry`를 global/asset/venue pause의 source of truth로 사용하고 Router는
+   nonce 소비와 compliance evaluation 전에 세 범위를 모두 fail-closed로 검사한다.
+2. operator는 pause와 Manifest suspend처럼 위험을 줄이는 동작을 즉시 수행한다.
+   unpause는 owner가 예약하고 최소 1일 뒤 owner가 실행한다.
+3. Manifest resume와 ACTIVE/SUSPENDED semantic update도 owner 예약과 최소 1일
+   timelock을 요구한다. update activation은 version을 증가시키며 기존 SUSPENDED
+   상태를 해제하지 않는다.
+4. Manifest version, current hash, chained history hash와 pause history hash를
+   보존하고 actor, old/new, reason, effective time을 append-only event로 남긴다.
+5. 배포 후 registry owner인 `CornerStoreFactory`가 resume/update schedule/cancel을
+   forwarding한다. Factory owner는 production에서 외부 Safe-style governance다.
+   registry operator는 delay가 지난 동작의 실행과 즉시 tightening을 담당한다.
+
+### Consequences
+
+- 사고 containment는 timelock 없이 가능하지만 재개는 같은 actor가 즉시 우회할 수
+  없다.
+- Factory ownership wiring을 유지하면서 governance 호출이 실제 배포에서도
+  도달 가능하다.
+- chain별 delay, 실제 Safe provider, issuer-level disable과 RecipeBinding migration은
+  후속 production 설정/feature다.
+
+### Related Files
+
+- `src/registry/OperatorRegistry.sol`
+- `src/registry/TokenPolicyRegistry.sol`
+- `src/execution/ExecutionRouter.sol`
+- `src/factory/CornerStoreFactory.sol`
+- `test/integration/EmergencyPause.t.sol`
+- `scripts/e2e-anvil.sh`

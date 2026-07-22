@@ -34,6 +34,9 @@ source of truth로 사용한다.
 - `OPS-001 — High-severity Solidity Lint Gate`
 - `OPS-002 — Repository-wide CI Parity`
 - `DOC-003 — Goal Completion and Operations Alignment`
+- `PROD-001 — Production Control Plane`(central global/asset/venue pause,
+  delayed unpause와 Manifest resume/update, monotonic version/history,
+  Factory governance forwarding)
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -73,10 +76,10 @@ source of truth로 사용한다.
 
 ## Next
 
-1. RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
+1. ADR-008 기준 off-chain compliance data layer와 acquisition/lot adapter를
+   구현한다.
+2. RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
    production dealer/operator 책임.
-2. acquisition/lot data source와 holding-period Recipe 활성화 조건을 결정한다
-   (C-01 Lockup은 현재 fixture-only mock acquisition source).
 3. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
 4. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
@@ -85,6 +88,14 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- `PROD-001`에서 `OperatorRegistry`를 global/asset/venue pause source of truth로
+  만들고 Router의 nonce/evaluation 전에 fail-closed enforcement를 추가했다.
+  unpause와 Manifest resume/update는 owner schedule + 1일 timelock으로 분리했고,
+  version/history hash와 governance event를 보존한다. registry ownership이
+  Factory로 이전된 실제 배포에서도 schedule이 가능하도록 governance forwarding을
+  추가했다. `scripts/check.sh`(Foundry 609/609, 모든 service smoke, deploy-v3
+  10/10)와 `buidl-like`/`reg-d` live E2E(각 7/7 + 실제 delayed resume 후 AMM/RFQ)가
+  통과했다.
 - `DOC-003`에서 ROADMAP의 Toolkit/API/dashboard/live E2E 완료 상태와 production
   후속 범위를 정렬하고 incident-response runbook을 추가했다. 최신 main에서
   `buidl-like`와 `reg-d`가 각각 7/7 scenario, Toolkit preflight/checkpoint,

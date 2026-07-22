@@ -84,10 +84,13 @@ contract DemoScenarios is Script, DemoConstants {
         _scenario1_onboarding();
         _scenario2_compliantTrade();
         _scenario3_elementRejection();
-        _scenario4_lifecycle();
         _scenario5_rfq();
         _scenario6_surveillance();
         _scenario7_bypass();
+        // Keep the asset suspended with a pending recovery at the end of this
+        // broadcast. scripts/e2e-anvil.sh advances the real Anvil clock, then
+        // executes the delayed resume and proves settlement through the CLI.
+        _scenario4_lifecycle();
 
         _summary();
     }
@@ -179,7 +182,7 @@ contract DemoScenarios is Script, DemoConstants {
     // Scenario 4 — Lifecycle (suspend blocks, resume settles)
     // ---------------------------------------------------------------------
     function _scenario4_lifecycle() internal {
-        _title(4, "Lifecycle: suspendManifest blocks the trade; resumeManifest settles it again");
+        _title(4, "Lifecycle: suspension blocks trading and governance schedules delayed recovery");
 
         vm.broadcast(deployerPk);
         policyReg.suspendManifest(address(rwa), bytes32("DEMO-SUSPEND"));
@@ -193,16 +196,12 @@ contract DemoScenarios is Script, DemoConstants {
         console2.log("    evidence: while SUSPENDED, trade reverts ComplianceRejected ->", blockedOk);
 
         vm.broadcast(deployerPk);
-        policyReg.resumeManifest(address(rwa));
+        factory.scheduleManifestResume(address(rwa), bytes32("DEMO-RECOVERED"));
+        (uint64 effectiveTime,) = policyReg.pendingManifestResumeOf(address(rwa));
+        bool recoveryScheduled = effectiveTime == block.timestamp + policyReg.MIN_MANIFEST_DELAY();
+        console2.log("    evidence: governance scheduled delayed recovery ->", recoveryScheduled);
 
-        uint256 before = rwa.balanceOf(investor);
-        ExecutionRequest memory okReq = _buyRequest(AMM_TRADE);
-        vm.broadcast(investorPk);
-        router.execute(okReq);
-        uint256 delta = rwa.balanceOf(investor) - before;
-        console2.log("    evidence: after RESUME, trade settles; RWA delta (wei):", delta);
-
-        _record(4, blockedOk && delta == AMM_TRADE);
+        _record(4, blockedOk && recoveryScheduled);
     }
 
     // ---------------------------------------------------------------------

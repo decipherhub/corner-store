@@ -58,6 +58,31 @@ contract CornerStoreFactory is Governed {
         emit RWATokenRegistered(token, venue);
     }
 
+    /// @notice Schedule a delayed manifest reopening through the registry owner.
+    /// @dev The factory owns the registry after deployment, while this factory's
+    ///      owner is the external governance account (a Safe in production).
+    function scheduleManifestResume(address token, bytes32 reasonCode) external onlyOwner {
+        tokenPolicyRegistry.scheduleManifestResume(token, reasonCode);
+    }
+
+    /// @notice Cancel a pending manifest reopening through governance.
+    function cancelManifestResume(address token) external onlyOwner {
+        tokenPolicyRegistry.cancelManifestResume(token);
+    }
+
+    /// @notice Schedule a delayed semantic manifest update through governance.
+    function scheduleManifestUpdate(address token, ManifestCore calldata manifest, bytes32 reasonCode)
+        external
+        onlyOwner
+    {
+        tokenPolicyRegistry.scheduleManifestUpdate(token, manifest, reasonCode);
+    }
+
+    /// @notice Cancel a pending semantic manifest update through governance.
+    function cancelManifestUpdate(address token) external onlyOwner {
+        tokenPolicyRegistry.cancelManifestUpdate(token);
+    }
+
     /// @notice Deterministic pool-address derivation STUB.
     /// @dev This is NOT the real Uniswap V3 pool address: it does not use the
     /// canonical factory init-code-hash or the v3 pool salt layout. It is a

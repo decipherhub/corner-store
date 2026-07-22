@@ -351,7 +351,21 @@ export async function cmdManifest(action: string, opts: GlobalOpts & {reason?: s
       await logTx(await policy.suspendManifest(a.rwaToken, reason), "suspendManifest");
       break;
     case "resume":
-      await logTx(await policy.resumeManifest(a.rwaToken), "resumeManifest");
+      {
+        const pending = await policy.pendingManifestResumeOf(a.rwaToken);
+        const effectiveTime = Number(pending.effectiveTime);
+        if (effectiveTime === 0) {
+          await logTx(await factory(a, signer).scheduleManifestResume(a.rwaToken, reason), "scheduleManifestResume");
+          const delay = Number(await policy.MIN_MANIFEST_DELAY());
+          console.log(`  resume scheduled; run the same command again after ${delay}s timelock`);
+          return;
+        }
+        const latest = await provider.getBlock("latest");
+        if (!latest || latest.timestamp < effectiveTime) {
+          throw new CliError(`manifest resume timelock not ready; effective at unix ${effectiveTime}`);
+        }
+        await logTx(await policy.resumeManifest(a.rwaToken), "resumeManifest");
+      }
       break;
     case "retire":
       await logTx(await policy.retireManifest(a.rwaToken, reason), "retireManifest");
@@ -507,7 +521,9 @@ export async function cmdBuy(
     await logTx(await quoteToken.approve(adapterForApproval, (1n << 256n) - 1n), "approve");
   }
 
-  const req = [ctx, amountOutMin, BigInt(Math.floor(Date.now() / 1000) + 3600), nonce, venueData];
+  const latest = await provider.getBlock("latest");
+  if (!latest) throw new CliError("cannot read latest block for execution deadline");
+  const req = [ctx, amountOutMin, BigInt(latest.timestamp + 3600), nonce, venueData];
   console.log(`Executing ${venue.toUpperCase()} buy: amountIn=${formatEther(amountIn)} as ${buyer}`);
   await logTx(await router(a, signer).execute(req), "execute");
 
@@ -548,7 +564,16 @@ export async function cmdRfqQuote(opts: GlobalOpts & {
     const maker = walletForAccount(Number(opts.makerAccount)).connect(provider);
 
     const service = new RFQQuoteService(
-      {chainId: DEFAULT_CHAIN_ID, verifyingContract: a.rfqAdapter as `0x${string}`, defaultTtlSeconds: ttl},
+      {
+        chainId: DEFAULT_CHAIN_ID,
+        verifyingContract: a.rfqAdapter as `0x${string}`,
+        defaultTtlSeconds: ttl,
+        now: async () => {
+          const latest = await provider.getBlock("latest");
+          if (!latest) throw new CliError("cannot read latest block for RFQ expiry");
+          return latest.timestamp;
+        }
+      },
       new WalletTypedDataSigner(maker)
     );
     signed = await service.createSignedQuote({
@@ -790,7 +815,9 @@ export async function cmdSell(amountInArg: string, opts: GlobalOpts & {min?: str
 
   const rwaBefore = await erc20(a.rwaToken, provider).balanceOf(seller);
   const quoteBefore = await erc20(a.quote, provider).balanceOf(seller);
-  const req = [ctx, amountOutMin, BigInt(Math.floor(Date.now() / 1000) + 3600), nonce, venueData];
+  const latest = await provider.getBlock("latest");
+  if (!latest) throw new CliError("cannot read latest block for execution deadline");
+  const req = [ctx, amountOutMin, BigInt(latest.timestamp + 3600), nonce, venueData];
   console.log(`Executing AMM sell: amountIn=${formatEther(amountIn)} RWA as ${seller}`);
   await logTx(await router(a, signer).execute(req), "execute");
 
@@ -1045,7 +1072,9 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
     recovered = `<recovery failed: ${e?.shortMessage ?? e?.message ?? e}>`;
   }
 
-  const now = Math.floor(Date.now() / 1000);
+  const latest = await provider.getBlock("latest");
+  if (!latest) throw new CliError("cannot read latest block for quote expiry");
+  const now = latest.timestamp;
   const secsLeft = Number(q.expiry) - now;
   const expired = secsLeft <= 0;
 

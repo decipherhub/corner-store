@@ -639,3 +639,42 @@ passing
 
 문서 정합화와 운영 runbook만 추가한다. contract, API 또는 production 운영 정책은
 변경하지 않는다.
+
+## PROD-001 — Production Control Plane
+
+### Behavior
+
+- `OperatorRegistry`가 global, asset, venue pause의 단일 source of truth가 된다.
+- operator는 위험을 즉시 중단할 수 있지만 unpause는 owner가 예약한 뒤 최소
+  timelock이 지난 후에만 실행할 수 있다.
+- `ExecutionRouter`는 compliance evaluation과 venue dispatch 전에 global, 양쪽
+  asset, venue pause를 fail-closed로 검사한다.
+- Manifest lifecycle은 현재 version, pending update, full manifest hash와
+  append-only history hash를 보존한다.
+- ACTIVE/SUSPENDED Manifest의 semantic update는 별도 pending proposal로 저장되고
+  timelock 이후 승인되며, suspended asset을 update만으로 재개할 수 없다.
+- lifecycle/pause 변경은 actor, old/new value, reasonCode/reasonHash와 effective time을
+  event로 남긴다.
+
+### Verification
+
+- `forge fmt --check`
+- `forge lint --severity high --deny warnings src`
+- `forge test --offline --match-path test/unit/registry/OperatorRegistry.t.sol -vv`
+- `forge test --offline --match-path test/unit/registry/TokenPolicyRegistry.t.sol -vv`
+- `forge test --offline --match-path test/unit/execution/Router.t.sol -vv`
+- `forge test --offline --match-path test/integration/EmergencyPause.t.sol -vv`
+- `forge test --offline`
+- `scripts/check.sh`
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획: `docs/exec-plans/completed/PROD-001-production-control-plane.md`
+- governance owner는 외부 Safe-style multisig를 전제로 하며 컨트랙트 내부에
+  n-of-m signer 로직을 구현하지 않는다.
+- issuer disable, production multisig provider와 chain별 timelock 값은 후속 운영
+  설정이며, 현재 manifest에 issuer identity가 없으므로 asset pause로 fail-closed한다.

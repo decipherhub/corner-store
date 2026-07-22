@@ -27,12 +27,14 @@
 - Element/Recipe/Adapter/provider template metadata와 required-input validation
 - read-only Operator API, finality-aware/file-backed event index와 safe
   multisig-oriented dashboard
+- central global/asset/venue pause enforcement와 delayed unpause, versioned
+  Manifest history 및 delayed semantic update control plane
 - Foundry unit/integration tests와 전체 developer/operator service 및 vendored
   deploy-v3를 검증하는 repository-wide GitHub Actions gate
 
 남은 주요 작업:
 
-- production Asset Compliance Manifest lifecycle/schema/proposal/activation
+- RecipeBinding 기반 production Asset Compliance Manifest schema/migration
 - production legal Element 기준과 승인된 operator 입력 모델
 - acquisition/lot data source와 holding-period Recipe 활성화 조건
 - RFQ production signer custody, persistent nonce, pricing/inventory와 partial-fill 정책
@@ -143,8 +145,9 @@ IElement 최초 확정 전에 stateful Element commit hook을 결정한다.
 
 자산별 규제·engine binding과 cumulative multi-Recipe evaluation을 구현한다.
 
-Status: cumulative evaluation and token policy registry are implemented for the
-reference proof; full production Manifest lifecycle/schema remains open.
+Status: cumulative evaluation, validated lifecycle, monotonic history/version과
+timelocked semantic update control plane이 구현됨. RecipeBinding schema migration은
+후속 작업이다.
 
 ### Deliverables
 
@@ -348,7 +351,7 @@ Reference/demo evidence:
 
 1. `design(rfq): remaining production RFQ policy` — custody, partial fill, signer,
    nonce, pricing/inventory와 operator 책임.
-2. `feat(compliance): production Asset Compliance Manifest lifecycle/schema 구현`
+2. `feat(compliance): RecipeBinding 기반 production Asset Compliance Manifest schema/migration`
 3. `design(compliance): acquisition/lot data source와 holding-period Recipe 활성화 조건 결정`
 4. `feat(amm): real Uniswap v3 pool deployment와 protected E2E 연결`
 5. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`

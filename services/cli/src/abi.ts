@@ -10,6 +10,9 @@ export const ROUTER_ABI = [
 // ExecutionRouter (and adapters) surface these custom errors on the revert path.
 export const ERRORS_ABI = [
   "error ComplianceRejected(bytes32 reasonCode)",
+  "error GlobalPaused()",
+  "error TokenInPaused()",
+  "error TokenOutPaused()",
   "error DeadlineExpired()",
   "error NotAuthorized()",
   "error NonceUsed()",
@@ -82,12 +85,19 @@ export const TOKEN_POLICY_REGISTRY_ABI = [
   "function statusOf(address token) view returns (uint8)",
   "function manifestOf(address token) view returns (tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy))",
   "function suspendManifest(address token, bytes32 reasonCode)",
+  "function scheduleManifestResume(address token, bytes32 reasonCode)",
+  "function pendingManifestResumeOf(address token) view returns (uint64 effectiveTime,bytes32 reasonCode)",
+  "function MIN_MANIFEST_DELAY() view returns (uint64)",
   "function resumeManifest(address token)",
   "function retireManifest(address token, bytes32 reasonCode)"
 ];
 
 export const FACTORY_ABI = [
   "function registerRWAToken(address token, tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) manifest, address venue, tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active) venueCfg)",
+  "function scheduleManifestResume(address token, bytes32 reasonCode)",
+  "function cancelManifestResume(address token)",
+  "function scheduleManifestUpdate(address token, tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) manifest, bytes32 reasonCode)",
+  "function cancelManifestUpdate(address token)",
   "event RWATokenRegistered(address indexed token, address indexed venue)"
 ];
 

@@ -76,6 +76,10 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   변경은 실행 권한과 분리한다.
 - privileged action은 명시적인 owner/role 검사를 가져야 한다.
 - production multisig와 governance는 외부 운영 결정 전 임의로 확정하지 않는다.
+- 위험 중단(global/asset/venue pause, Manifest suspend)은 operator가 즉시 수행한다.
+  unpause, Manifest resume와 semantic update는 owner 예약과 timelock을 거친다.
+- 배포 후 `TokenPolicyRegistry.owner()`가 Factory인 구조에서는 governance가 Factory
+  forwarding API를 사용한다. registry를 EOA가 직접 소유한다고 가정하지 않는다.
 
 ## Input Validation
 

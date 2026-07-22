@@ -178,6 +178,31 @@ contract RouterTest is Test {
         vm.prank(BUYER);
         vm.expectRevert(Errors.VenueSuspended.selector);
         router.execute(_defaultReq());
+        assertFalse(router.usedNonce(BUYER, 1));
+    }
+
+    function test_revert_globalPaused_withoutConsumingNonce() public {
+        operatorReg.setGlobalPaused(true, bytes32("kill"));
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.GlobalPaused.selector);
+        router.execute(_defaultReq());
+        assertFalse(router.usedNonce(BUYER, 1));
+    }
+
+    function test_revert_tokenInPaused() public {
+        operatorReg.setAssetSuspended(TOKEN_IN, true, bytes32("kill"));
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.TokenInPaused.selector);
+        router.execute(_defaultReq());
+        assertFalse(router.usedNonce(BUYER, 1));
+    }
+
+    function test_revert_tokenOutPaused() public {
+        operatorReg.setAssetSuspended(TOKEN_OUT, true, bytes32("kill"));
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.TokenOutPaused.selector);
+        router.execute(_defaultReq());
+        assertFalse(router.usedNonce(BUYER, 1));
     }
 
     function test_revert_venueNotAllowed_typeMaskMiss() public {
