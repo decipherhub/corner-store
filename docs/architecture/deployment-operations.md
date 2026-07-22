@@ -144,15 +144,14 @@ Wave-2 illustrative elements는 기본 demo 배포의 컴파일 그래프와 실
 
 ## Open Decisions
 
-- manifest JSON schema와 validation 도구
-- orchestrator 구현 언어와 signer interface
 - production chain과 confirmation 정책
-- multisig, governance, emergency role
+- 실제 multisig provider, signer custody와 emergency role assignment
 - upgradeability
-- source verification과 indexer 운영 방식
+- production source verification, indexer rewind/replay와 disaster recovery
 
 ## References
 
 - [`CORNER_STORE_PROFILE.md`](../../tools/deploy-v3/CORNER_STORE_PROFILE.md)
 - [`UPSTREAM.md`](../../tools/deploy-v3/UPSTREAM.md)
 - [`ROADMAP.md` - Deployment and Operations](../ROADMAP.md#phase-5--deployment-and-operations)
+- [`Incident Response Runbook`](../operations/incident-response.md)

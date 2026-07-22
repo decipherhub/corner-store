@@ -613,3 +613,29 @@ passing
 
 기존 local gate와 CI의 범위를 일치시킨다. live Anvil E2E는 별도 실행 비용과
 환경 격리가 필요하므로 이 feature의 PR gate에는 포함하지 않는다.
+
+## DOC-003 — Goal Completion and Operations Alignment
+
+### Behavior
+
+- ROADMAP이 이미 구현된 Toolkit, Operator API/dashboard와 profile별 live E2E를
+  완료 상태로 기록하고 production 후속 범위와 구분한다.
+- incident response가 현재의 asset/venue/maker containment 경로, 외부
+  ERC-3643/ONCHAINID boundary와 multisig/timelock recovery gate를 따른다.
+- 미구현 central pause, production custody/hosting/finality를 구현된 기능처럼
+  표현하지 않는다.
+
+### Verification
+
+- `scripts/e2e-anvil.sh --profile buidl-like`
+- `scripts/e2e-anvil.sh --profile reg-d`
+- Markdown link와 `git diff --check` 검토
+
+### State
+
+passing
+
+### Scope
+
+문서 정합화와 운영 runbook만 추가한다. contract, API 또는 production 운영 정책은
+변경하지 않는다.

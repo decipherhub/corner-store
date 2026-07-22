@@ -33,6 +33,7 @@ source of truth로 사용한다.
 - `TOOLKIT-001 — Versioned Config Foundation`
 - `OPS-001 — High-severity Solidity Lint Gate`
 - `OPS-002 — Repository-wide CI Parity`
+- `DOC-003 — Goal Completion and Operations Alignment`
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -84,6 +85,10 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- `DOC-003`에서 ROADMAP의 Toolkit/API/dashboard/live E2E 완료 상태와 production
+  후속 범위를 정렬하고 incident-response runbook을 추가했다. 최신 main에서
+  `buidl-like`와 `reg-d`가 각각 7/7 scenario, Toolkit preflight/checkpoint,
+  backend-signed RFQ settlement와 revoked-maker rejection을 통과했다.
 - `OPS-002`에서 GitHub Actions가 local `scripts/check.sh`와 동일한 repository-wide
   gate를 실행하도록 통합했다. Foundry fmt/high-severity lint/build와 582/582 tests,
   RFQ SDK·CLI·demo backend·Toolkit·Operator API/dashboard smoke, vendored deploy-v3

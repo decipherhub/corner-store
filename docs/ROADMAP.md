@@ -19,7 +19,14 @@
 - Token policy registry와 cumulative multi-Recipe evaluation
 - generic ExecutionRouter, VenueRegistry, VenueSelector와 공통 Adapter interface
 - AMM reference adapter와 RFQ v1 reference settlement adapter
-- RFQ quote signer reference service
+- RFQ quote signer SDK, local MVP backend와 CLI/Router settlement flow
+- `buidl-like`/`reg-d` profile별 live Anvil deployment, Toolkit preflight/checkpoint와
+  protected AMM/RFQ E2E
+- versioned Toolkit config, validation/simulation, deploy/test/onboard/checkpoint와
+  multisig proposal handoff
+- Element/Recipe/Adapter/provider template metadata와 required-input validation
+- read-only Operator API, finality-aware/file-backed event index와 safe
+  multisig-oriented dashboard
 - Foundry unit/integration tests와 전체 developer/operator service 및 vendored
   deploy-v3를 검증하는 repository-wide GitHub Actions gate
 
@@ -28,12 +35,11 @@
 - production Asset Compliance Manifest lifecycle/schema/proposal/activation
 - production legal Element 기준과 승인된 operator 입력 모델
 - acquisition/lot data source와 holding-period Recipe 활성화 조건
-- RFQ dealer/operator approval, quote cancellation, custody와 partial-fill 정책
+- RFQ production signer custody, persistent nonce, pricing/inventory와 partial-fill 정책
+- 실제 Uniswap v3 pool을 사용하는 AMM deployment/E2E
 - Order Book matching/custody/surveillance 모델
-- 자동 live Anvil deployment/E2E, monitoring, incident runbook
-- config-driven Toolkit: versioned config, validation/simulation, deployment and
-  operator workflows
-- live E2E가 profile별 Toolkit preflight/checkpoint와 protected RFQ flow를 검증
+- production TLS, secret rotation, 실제 multisig provider와 live RPC
+  finality/recovery 운영
 - medium warning budget, independent security analysis와 production security/legal review
 
 ## Delivery Strategy
@@ -219,6 +225,9 @@ Corner Store reference DEX의 구체 Venue는 공통 SDK/Router 기반 위에서
 
 ### 4A. Uniswap v3 AMM
 
+Status: Router-protected reference adapter와 MockPool 기반 live E2E는 구현됨.
+실제 Uniswap v3 pool deployment/E2E는 후속 작업이다.
+
 Deliverables:
 
 - `UniswapV3Adapter`
@@ -240,7 +249,6 @@ Completion:
 
 Blockers:
 
-- initial testnet asset/scenario
 - fee tier와 Pool IdentityRegistry onboarding
 - 해당 시나리오의 AMM 허용에 대한 법률 검토
 
@@ -267,9 +275,8 @@ Completion:
 
 Blockers:
 
-- dealer/operator approval
-- exact taker 또는 taker class
 - custody와 partial fill 모델
+- production signer custody, persistent nonce와 pricing/inventory policy
 
 ### 4C. Order Book
 
@@ -297,6 +304,10 @@ Blockers:
 
 SDK와 reference DEX를 반복 배포하고 Manifest/권한 상태를 검증 가능하게 운영한다.
 
+Status: reference/demo Toolkit, checkpoint/proposal handoff, Operator API/indexer,
+dashboard, metrics와 incident runbook은 구현됨. production hosting, key custody,
+실제 multisig provider와 chain별 recovery 정책은 후속 작업이다.
+
 ### Deliverables
 
 - integrated deployment orchestrator
@@ -314,6 +325,16 @@ SDK와 reference DEX를 반복 배포하고 Manifest/권한 상태를 검증 가
 - Manifest activation/suspension incident drill을 수행한다.
 - reject logging 결정에 따른 audit path를 검증한다.
 
+Reference/demo evidence:
+
+- `toolkit-init` → validate/simulate/preflight/deploy/test/onboard/checkpoint/proposal
+  workflow가 같은 versioned config를 사용한다.
+- `buidl-like`와 `reg-d` live E2E가 7/7 scenario, protected RFQ settlement와
+  revoked-maker rejection을 검증한다.
+- Operator API/dashboard는 read-only이며 signer material이나 transaction endpoint를
+  노출하지 않는다.
+- incident containment/recovery 절차는 [`operations/incident-response.md`](./operations/incident-response.md)를 따른다.
+
 ### Blockers
 
 - production chain
@@ -325,14 +346,15 @@ SDK와 reference DEX를 반복 배포하고 Manifest/권한 상태를 검증 가
 
 가까운 후속 이슈:
 
-1. `feat(demo): add an optional dashboard over the CLI/backend flow`
-2. `design(rfq): remaining production RFQ policy` — custody, partial fill, production dealer/operator 책임.
-3. `security(rfq): signer custody, authentication, rate limiting과 persistent nonce 위협 모델 보강`
-4. `feat(compliance): production Asset Compliance Manifest lifecycle/schema 구현`
-5. `design(compliance): acquisition/lot data source와 holding-period Recipe 활성화 조건 결정`
-6. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
-7. `chore(ci): static analysis, lint/warning budget 추가`
-8. `docs(ops): Manifest activation/suspension runbook과 incident drill 문서화`
+1. `design(rfq): remaining production RFQ policy` — custody, partial fill, signer,
+   nonce, pricing/inventory와 operator 책임.
+2. `feat(compliance): production Asset Compliance Manifest lifecycle/schema 구현`
+3. `design(compliance): acquisition/lot data source와 holding-period Recipe 활성화 조건 결정`
+4. `feat(amm): real Uniswap v3 pool deployment와 protected E2E 연결`
+5. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
+6. `ops(production): TLS, secret rotation, 실제 multisig provider와 live RPC
+   finality/recovery 구현`
+7. `security: medium warning budget, independent analysis와 production review`
 
 ## Decision Backlog
 
