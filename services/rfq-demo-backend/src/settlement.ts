@@ -127,7 +127,10 @@ export class DemoSettlementService {
     // The operator account also performed deployment/onboarding transactions.
     // Refresh before each policy toggle so a revoke/finally-restore pair cannot
     // reuse a stale cached nonce in the long-lived demo backend.
-    const nonce = this.operatorNonce ?? await this.operator.getNonce("pending");
+    // Read the mined nonce directly from the provider. JsonRpcSigner nonce
+    // caching can lag after the deployment script and cause the first
+    // maker-policy toggle to reuse an already-consumed deployer nonce.
+    const nonce = this.operatorNonce ?? await this.provider.getTransactionCount(this.operator.address, "latest");
     this.operatorNonce = nonce + 1;
     const adapter = new Contract(this.config.artifact.rfqAdapter, RFQ_ADAPTER_ABI, this.operator);
     try {
