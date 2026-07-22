@@ -11,26 +11,32 @@ This is feature `E2E-001` (see `FEATURES.md`).
 ## How To Run
 
 ```sh
-scripts/e2e-anvil.sh            # start Anvil, deploy, run scenarios, tear down
+scripts/e2e-anvil.sh            # BUIDL-like default: scenarios + backend/CLI RFQ flow
+scripts/e2e-anvil.sh --profile reg-d
 scripts/e2e-anvil.sh --port 8600
 scripts/e2e-anvil.sh --keep     # leave Anvil running afterwards (attach a UI / continue interactively)
 ```
 
 - Runs fully offline (`forge script ... --offline` against a local Anvil).
 - Exit code is non-zero if any scenario fails (`DemoScenarios` reverts).
-- `--keep` prints the Anvil PID and RPC URL and leaves the node up; stop it with
-  `kill <pid>`.
+- `--keep` prints the Anvil/backend PIDs and leaves both processes up; stop them
+  with the printed `kill <pid>` commands.
 
-Under the hood the runner executes two forge scripts:
+Under the hood the runner executes two forge scripts and one backend/CLI stage:
 
 1. `script/DeployStack.s.sol` — deploys registries (Element/Recipe/TokenPolicy/
    Operator), `ComplianceEngine`, `ExecutionRouter` + `VenueRegistry` +
-   `VenueSelector`, `CornerStoreFactory`, all 11 elements, both recipes (Reg D
-   506(c) id 1, 3(c)(7) id 2) plus a surveillance-enabled RegD variant (id 7),
+   `VenueSelector`, `CornerStoreFactory`, all 12 elements, Reg D 506(c), generic
+   3(c)(7), BUIDL-like QP/minimum and surveillance recipes,
    the AMM `MockPool` venue, the `RFQAdapter` venue, and a REAL ERC-3643 token +
    OnchainID stack (via the shared `test/fixtures/TREXCore.sol`). It prints an
    address summary and writes it to `deployments/anvil-e2e.json` (gitignored).
-2. `script/DemoScenarios.s.sol` — reads that artifact and runs the suite below.
+2. `script/DemoScenarios.s.sol` — reads the selected profile from that artifact
+   and runs the suite below.
+3. The shell runner selects the matching Toolkit config fixture, runs artifact preflight, writes a temporary immutable
+   checkpoint, re-onboards the selected profile through the CLI, starts the
+   RFQ demo backend, requests a quote through the CLI, fills it through
+   `ExecutionRouter → RFQAdapter`, then proves a revoked maker quote is rejected.
 
 Accounts are Anvil's well-known mnemonic (`test test ... junk`):
 account 0 = deployer/owner/operator, 1 = investor (buyer/taker),
@@ -130,6 +136,27 @@ reason-code 디코딩), demo용 QUOTE 민팅 `faucet`, anvil `snapshot`/`restore
 `check`(정확히 A-02 하나 FAIL) → `restore`로 원복하는 흐름.
 
 설치/실행법과 전체 walkthrough 레시피는 `services/cli/README.md`를 참고한다.
+
+## RFQ demo backend로 quote 받기
+
+`services/rfq-demo-backend`는 위 live Anvil artifact와 `services/rfq` SDK를
+재사용하는 local-only HTTP application이다. 별도 배포 경로나 컴플라이언스 판정을
+만들지 않는다.
+
+```sh
+# terminal 1: live stack + mock maker quote API
+scripts/e2e-anvil.sh --profile buidl-like --keep
+
+# terminal 2: user flow
+node services/cli/dist/cli/src/index.js rfq-quote \
+  --backend http://127.0.0.1:8787 --amount-in 5000000 --out quote.json
+node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
+```
+
+Backend는 quote를 가격 산정·서명할 뿐이다. maker revoke, Manifest suspend 또는
+Element 실패가 있으면 동일한 signed quote라도 Router fill 시점의 최신 compliance로
+거부된다. 자세한 API와 production 교체 지점은
+`services/rfq-demo-backend/README.md`를 참고한다.
 
 ## Related
 

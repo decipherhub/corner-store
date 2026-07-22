@@ -1,5 +1,40 @@
 # Decisions
 
+## D010 — Configuration-driven Toolkit is the operator entry point
+
+Date: 2026-07-22
+
+### Context
+
+CLI 명령과 Foundry 배포 스크립트를 사용자가 각각 조합하면 자산 profile, venue,
+deployment artifact가 서로 어긋날 수 있고, 같은 설정을 dashboard/backend가
+재사용하기 어렵다.
+
+### Decision
+
+versioned JSON Toolkit config를 사용자 입력의 source of truth로 둔다. 초기 schema는
+asset profile, deployment artifact/network, 활성 venue와 operator/investor/maker
+role reference를 포함하며, 공통 validator가 CLI와 이후 deployer/API/dashboard에서
+재사용된다. CLI는 `toolkit-init`과 `toolkit-validate`를 제공하고, 배포 artifact의
+profile과 설정이 충돌하면 fail-closed한다.
+
+### Alternatives Considered
+
+- CLI별 옵션과 Foundry env만 유지: 반복 입력과 profile drift를 막지 못해 제외
+- YAML을 먼저 도입: 새 parser dependency와 두 개의 설정 문법을 만들게 되어 JSON
+  schema를 먼저 확정한 뒤 adapter로 확장하기로 함
+
+### Consequences
+
+- deployment/simulation/operator workflow가 동일한 설정 계약을 소비할 수 있다.
+- schema migration과 secret custody는 별도 단계로 남는다.
+
+### Related Files
+
+- `services/toolkit/src/config.ts`
+- `docs/architecture/deployment-operations.md`
+- `FEATURES.md`
+
 ## D001 — Repository-managed Harness를 사용한다
 
 Date: 2026-06-09

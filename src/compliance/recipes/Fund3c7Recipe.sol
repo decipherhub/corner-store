@@ -15,7 +15,7 @@ contract Fund3c7Recipe is BaseRecipe {
 
     /// @dev The engine passes `abi.encode(factsPacked, ctx)`; we decode only the
     ///      leading word and gate on bit 0. Keep this consistent with the engine.
-    function isApplicable(bytes calldata context) external view override returns (bool) {
+    function isApplicable(bytes calldata context) external pure override returns (bool) {
         uint256 factsPacked = abi.decode(context, (uint256));
         return (factsPacked & 1) == 1;
     }

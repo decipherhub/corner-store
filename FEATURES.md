@@ -361,6 +361,41 @@ passing
 - Product spec: `docs/product-specs/rfq-backend-sdk-and-demo.md`
 - MVP demo backend는 이 SDK를 기반으로 후속 feature에서 구현한다.
 
+## DEMO-002 — MVP RFQ Demo Backend
+
+### Behavior
+
+- `services/rfq-demo-backend`가 RFQ SDK를 사용해 local Anvil용 signed quote HTTP API를 제공한다.
+- backend는 deployment artifact의 approved maker, RFQ adapter, venue와 QUOTE/RWA pair에 고정되며 mock fixed-rate pricing을 사용한다.
+- CLI `rfq-quote --backend <url>`가 backend quote를 기존 quote JSON 형식으로 저장하고 기존 `buy --venue rfq` protected Router flow에서 사용한다.
+- live runner와 CLI는 `buidl-like | reg-d` asset profile을 선택하며, issue #40의
+  기본값은 BUIDL-like metadata + Reg D/QP/minimum-investment Manifest다.
+- live runner가 backend quote → CLI → Router/RFQAdapter 성공과 revoked-maker
+  실패를 자동 실행한다.
+- backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
+- production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
+
+### Verification
+
+- `cd services/rfq-demo-backend && npm test`
+- `cd services/cli && npm test`
+- `scripts/check.sh`
+- `scripts/e2e-anvil.sh --profile buidl-like`
+- `scripts/e2e-anvil.sh --profile reg-d`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- `scripts/check.sh` 통과: Foundry 248/248, RFQ SDK, CLI, RFQ demo backend와 deploy-v3.
+- backend smoke가 HTTP quote, fixed pricing, maker signature, monotonic nonce와 invalid amount를 검증한다.
+- CLI smoke가 `--backend` request path를 검증하고 기존 `RFQFlow.t.sol`이 protected Router settlement의 성공/거부 경로를 검증한다.
+- Foundry v1.7.1 clean build에서 `buidl-like`과 `reg-d` 두 profile 모두
+  통과: 각각 7/7 scenarios, backend-signed quote settlement, revoked-maker 거부.
+
 ## CLI-001 — corner-store Reference CLI
 
 ### Behavior
@@ -372,7 +407,7 @@ passing
 - 명령: `status`(주소/manifest/venue/per-element attestation 상태, `--json`),
   `onboard`(factory 1-call, ACTIVE면 retire→register→approve),
   `manifest <status|suspend|resume|retire>`, `attest <element> <subject> [value...]`
-  (9개 element setter), `investor-setup <addr>`(Reg D happy-path attestation +
+  (9개 element setter), `investor-setup <addr> --profile ...`(선택 profile attestation +
   C-01 acquisition seed + QUOTE funding), `kyc <addr>`(ERC-3643 identity/claim,
   `script/KycInvestor.s.sol` forge 스크립트로 위임), `buy <amountIn>`
   (`--venue amm|rfq`, `--min`, `--quote`), `rfq-quote`/`rfq-cancel`(services/rfq
@@ -393,7 +428,7 @@ passing
   `kyc` → `buy`(AMM PASS, +100 RWA) → `attest jurisdiction ZZ` → `buy`(FAIL, decoded
   `recipe 1 / A-02-v1 / Jurisdiction`) → restore → `manifest suspend` → `buy`(FAIL,
   `POLICY / SUSPENDED`) → `resume` → `buy`(PASS) → `rfq-quote` → `buy --venue rfq`
-  (PASS, +200 RWA) → `maker revoke` → `buy --venue rfq`(FAIL, `RFQMakerNotApproved`).
+  (PASS) → `maker revoke` → `buy --venue rfq`(FAIL, `RFQMakerNotApproved`).
   전 실패 경로 non-zero 종료 + 디코딩 확인.
 - `forge test --offline` 238/238 유지(Solidity 측 추가는 `KycInvestor.s.sol`뿐).
 
@@ -462,3 +497,145 @@ passing
 - `check`는 엔진이 direction-aware가 아니라는 점을 도움말·표기로 명시(asset-side 라벨).
 - `snapshot`/`restore`는 anvil 전용; `restore`는 이후 스냅샷을 무효화(문서화).
 - Non-goals: CLI-001과 동일(프로덕션 key 관리, out/ ABI 커플링, 2차 web3 라이브러리).
+
+## TOOLKIT-001 — Versioned Config Foundation
+
+### Behavior
+
+- 사용자가 자산 profile과 사용할 venue를 JSON 설정에서 선택한다.
+- `schemaVersion`으로 설정 형식을 고정하고, 잘못된 profile·venue·operator 계정은
+  배포 전에 fail-closed 검증한다.
+- `services/toolkit`의 validator를 CLI가 재사용한다.
+- `corner-store toolkit-init`과 `corner-store toolkit-validate`로 설정 생성·검증을
+  같은 인터페이스에서 수행한다.
+- `corner-store toolkit-simulate`로 artifact/profile/venue binding과 read-only 실행
+  순서를 트랜잭션 전에 확인한다.
+- `corner-store toolkit-preflight`로 실제 deployment artifact의 주소와 선택 profile,
+  venue 구성을 mutation 전에 검증한다.
+- `corner-store toolkit-onboard`가 같은 config를 preflight한 뒤에만 선택한 profile과
+  venue를 manifest에 반영한다.
+- `corner-store toolkit-checkpoint`가 config/artifact hash와 deployment state를
+  secret-free immutable JSON으로 기록하고 기존 checkpoint 덮어쓰기를 거부한다.
+- `corner-store toolkit-proposal`이 target/calldata/reason/artifact hash를 담은
+  draft governance proposal만 생성하며 multisig 실행은 수행하지 않는다.
+- draft proposal을 Safe-compatible transaction payload로 export할 수 있지만, Toolkit은
+  서명·제출·승인 상태 변경을 수행하지 않는다.
+- `corner-store toolkit-deploy`가 기존 `DeployStack.s.sol`을 config profile에 맞춰
+  호출하며, 기본은 dry-run이고 `--broadcast`를 명시해야만 mutation한다.
+- `corner-store toolkit-test`가 동일한 사용자 진입점에서 repository-wide
+  `scripts/check.sh`를 실행한다.
+- live Anvil E2E가 실제 deployment artifact에 대해 Toolkit preflight와 immutable
+  checkpoint를 실행한 뒤 CLI onboarding/RFQ settlement를 수행한다.
+- BUIDL-like와 Reg D profile별 Toolkit config fixture를 각각 검증한다.
+- Toolkit config는 governance multisig alias와 required approval 수를 명시하며 private key나
+  signer material은 포함하지 않는다.
+- Element/Recipe/Adapter/provider 템플릿과 required input/trust-boundary 검증을
+  제공해 확장 시 기존 compliance/router 경계를 복사하지 않도록 한다.
+- private key를 받지 않는 read-only Operator API로 config/deployment snapshot과
+  normalized event index를 제공한다.
+- read-only Operator dashboard가 profile/venue/event snapshot을 표시하고,
+  변경은 외부 multisig proposal 검토 후 실행하도록 경계를 둔다.
+- Operator API가 local/demo in-memory index와 교체 가능한 file-backed event index를
+  제공하며 마지막 block cursor를 보존한다.
+- finality-aware indexer가 confirmation depth 이후 block만 저장하고 finalized block
+  hash가 바뀌면 fail-closed로 중단한다.
+- Operator API가 선택적 Bearer token 인증을 지원하며 health endpoint 외 조회를
+  인증 없이 노출하지 않는다.
+- `/metrics`가 요청 수·인증 실패·indexed event count를 Prometheus 형식으로
+  노출하며 주소·token 값은 포함하지 않는다.
+- Wave-2 illustrative elements는 기본 Foundry script discovery 경로 밖의
+  `tools/deploy-wave2/DeployWave2Elements.s.sol`에서 opt-in으로 등록해 기본
+  BUIDL-like/Reg D demo의 배포 범위와 컴파일 그래프를 보존한다.
+
+### Verification
+
+- `cd services/toolkit && npm test` (simulation/template/preflight mismatch 포함)
+- `cd services/operator-api && npm test`
+- `cd services/operator-dashboard && npm test`
+- `cd services/cli && npm test`
+- `scripts/check.sh`
+
+### State
+
+passing
+
+### Scope
+
+이번 단계에서 공통 설정 계약, validation/simulation, preflight/onboard/deploy/test,
+checkpoint와 governance handoff, operator API/indexer 및 read-only dashboard까지
+구현·검증했다. production TLS/secret rotation, 실제 multisig provider, live RPC
+finality/recovery와 production RFQ custody는 별도 후속 feature다.
+
+## OPS-001 — High-severity Solidity Lint Gate
+
+### Behavior
+
+- production Solidity source에 Foundry의 high-severity lint를 실행한다.
+- high-severity warning이 하나라도 있으면 local repository check와 CI가 실패한다.
+- test fixture의 medium/low 경고는 별도 warning-budget feature로 분리한다.
+- venue bitmask는 명시적 `uint256(1)`을 사용해 shift operand 폭을 고정한다.
+
+### Verification
+
+- `forge lint --severity high --deny warnings src`
+- `forge test --offline`
+- `scripts/check.sh`
+
+### State
+
+passing
+
+### Scope
+
+새 정적 분석 의존성을 추가하지 않고 Foundry stable에 내장된 production lint만
+fail-closed gate로 도입한다. Slither와 medium warning 정리는 후속 범위다.
+
+## OPS-002 — Repository-wide CI Parity
+
+### Behavior
+
+- GitHub Actions가 local `scripts/check.sh`와 동일한 repository-wide gate를 실행한다.
+- RFQ SDK, CLI, demo backend, Toolkit, Operator API/dashboard와 vendored deploy-v3가
+  pull request마다 검증된다.
+- npm 서비스는 각 lockfile을 cache key와 deterministic install에 사용한다.
+- vendored deploy-v3는 자체 `yarn.lock`과 directory boundary 안에서만 설치·검증한다.
+
+### Verification
+
+- `scripts/check.sh`
+- GitHub Actions `Run repository-wide checks`
+
+### State
+
+passing
+
+### Scope
+
+기존 local gate와 CI의 범위를 일치시킨다. live Anvil E2E는 별도 실행 비용과
+환경 격리가 필요하므로 이 feature의 PR gate에는 포함하지 않는다.
+
+## DOC-003 — Goal Completion and Operations Alignment
+
+### Behavior
+
+- ROADMAP이 이미 구현된 Toolkit, Operator API/dashboard와 profile별 live E2E를
+  완료 상태로 기록하고 production 후속 범위와 구분한다.
+- incident response가 현재의 asset/venue/maker containment 경로, 외부
+  ERC-3643/ONCHAINID boundary와 multisig/timelock recovery gate를 따른다.
+- 미구현 central pause, production custody/hosting/finality를 구현된 기능처럼
+  표현하지 않는다.
+
+### Verification
+
+- `scripts/e2e-anvil.sh --profile buidl-like`
+- `scripts/e2e-anvil.sh --profile reg-d`
+- Markdown link와 `git diff --check` 검토
+
+### State
+
+passing
+
+### Scope
+
+문서 정합화와 운영 runbook만 추가한다. contract, API 또는 production 운영 정책은
+변경하지 않는다.

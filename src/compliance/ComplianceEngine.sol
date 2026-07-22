@@ -12,7 +12,6 @@ import {
     ComplianceDecision,
     ManifestCore,
     PolicyStatus,
-    ElementMetadata,
     Statefulness
 } from "../types/ComplianceTypes.sol";
 import {DecisionHashLib} from "../libraries/DecisionHashLib.sol";
@@ -20,10 +19,28 @@ import {ReasonCodes} from "../libraries/ReasonCodes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Governed} from "../auth/Governed.sol";
 
-/// @dev Multi-recipe cumulative-AND compliance engine. Resolves the regulated
-///      token from a context, collects applicable recipes, unions their required
-///      elements, and ANDs every element's check. Fail-closed on UNKNOWN/SUSPENDED.
+/// @dev Multi-recipe cumulative-AND compliance engine. Resolves every ACTIVE
+///      side in a context, collects applicable recipes, unions their required
+///      elements, and ANDs every element's check. Any side that is neither
+///      ACTIVE nor explicitly UNREGULATED fails closed.
 contract ComplianceEngine is IComplianceEngine, Governed {
+    struct ElementAccumulator {
+        bytes32[] ids;
+        address[] tokens;
+        uint16[] contributingRecipeIds;
+        uint256 count;
+    }
+
+    struct ActivePairState {
+        ManifestCore manifestIn;
+        ManifestCore manifestOut;
+        uint256 elementCapacity;
+        uint256 allowedVenueTypes;
+        uint64 policyVersion;
+        bytes32 policyId;
+        ElementAccumulator elements;
+    }
+
     ITokenPolicyRegistry public immutable policyReg;
     IElementRegistry public immutable elementReg;
     IRecipeRegistry public immutable recipeReg;
@@ -107,43 +124,36 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         view
         returns (ComplianceDecision memory d)
     {
-        ManifestCore memory mIn;
-        ManifestCore memory mOut;
-        uint256 cap;
-        uint256 allowedVenueTypes = type(uint256).max;
-        uint64 policyVersion;
-        bytes32 policyId;
+        ActivePairState memory s;
+        s.allowedVenueTypes = type(uint256).max;
 
         if (statusIn == PolicyStatus.ACTIVE) {
-            mIn = policyReg.manifestOf(ctx.tokenIn);
-            cap += _maxElements(mIn);
-            allowedVenueTypes &= uint256(mIn.supportedEngines);
-            policyVersion = _max64(policyVersion, mIn.issuanceRecipeVersion);
-            policyId = _accumulatePolicyId(policyId, ctx.tokenIn, mIn);
+            s.manifestIn = policyReg.manifestOf(ctx.tokenIn);
+            s.elementCapacity += _maxElements(s.manifestIn);
+            s.allowedVenueTypes &= uint256(s.manifestIn.supportedEngines);
+            s.policyVersion = _max64(s.policyVersion, s.manifestIn.issuanceRecipeVersion);
+            s.policyId = _accumulatePolicyId(s.policyId, ctx.tokenIn, s.manifestIn);
         }
         if (statusOut == PolicyStatus.ACTIVE) {
-            mOut = policyReg.manifestOf(ctx.tokenOut);
-            cap += _maxElements(mOut);
-            allowedVenueTypes &= uint256(mOut.supportedEngines);
-            policyVersion = _max64(policyVersion, mOut.issuanceRecipeVersion);
-            policyId = _accumulatePolicyId(policyId, ctx.tokenOut, mOut);
+            s.manifestOut = policyReg.manifestOf(ctx.tokenOut);
+            s.elementCapacity += _maxElements(s.manifestOut);
+            s.allowedVenueTypes &= uint256(s.manifestOut.supportedEngines);
+            s.policyVersion = _max64(s.policyVersion, s.manifestOut.issuanceRecipeVersion);
+            s.policyId = _accumulatePolicyId(s.policyId, ctx.tokenOut, s.manifestOut);
         }
 
-        bytes32[] memory elementIds = new bytes32[](cap);
-        address[] memory tokens = new address[](cap);
-        uint16[] memory contributingRecipe = new uint16[](cap);
-        uint256 count;
+        s.elements = _newAccumulator(s.elementCapacity);
 
         if (statusIn == PolicyStatus.ACTIVE) {
-            count = _appendApplicableElements(ctx, ctx.tokenIn, mIn, elementIds, tokens, contributingRecipe, count);
+            _appendApplicableElements(ctx, ctx.tokenIn, s.manifestIn, s.elements);
         }
         if (statusOut == PolicyStatus.ACTIVE) {
-            count = _appendApplicableElements(ctx, ctx.tokenOut, mOut, elementIds, tokens, contributingRecipe, count);
+            _appendApplicableElements(ctx, ctx.tokenOut, s.manifestOut, s.elements);
         }
 
-        (bool allowed, bytes32 reasonCode) = _runChecks(ctx, elementIds, tokens, contributingRecipe, count);
+        (bool allowed, bytes32 reasonCode) = _runChecks(ctx, s.elements);
 
-        return _buildDecision(ctx, policyId, policyVersion, allowedVenueTypes, allowed, reasonCode);
+        return _buildDecision(ctx, s.policyId, s.policyVersion, s.allowedVenueTypes, allowed, reasonCode);
     }
 
     /// @dev Resolve recipes → union/dedup their required elements. coverageScope
@@ -152,11 +162,8 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         ComplianceContext calldata ctx,
         address token,
         ManifestCore memory m,
-        bytes32[] memory elementIds,
-        address[] memory tokens,
-        uint16[] memory contributingRecipe,
-        uint256 count
-    ) internal view returns (uint256) {
+        ElementAccumulator memory elements
+    ) internal view {
         bytes memory recipeContext = abi.encode(m.factsPacked, ctx);
         uint16[2] memory candidates = [m.issuanceRecipeId, m.fundRecipeId];
         for (uint256 c = 0; c < candidates.length; c++) {
@@ -167,41 +174,47 @@ contract ComplianceEngine is IComplianceEngine, Governed {
             }
             address recipeAddr = recipeReg.recipeOf(rid);
             if (recipeAddr == address(0)) revert Errors.RecipeNotRegistered(rid);
-            IRecipe recipe = IRecipe(recipeAddr);
-            if (!recipe.isApplicable(recipeContext)) continue;
+            _appendRecipeElements(IRecipe(recipeAddr), recipeContext, token, rid, elements);
+        }
+    }
 
-            bytes32[] memory req = recipe.requiredElements();
-            for (uint256 i = 0; i < req.length; i++) {
-                if (!_seenForToken(elementIds, tokens, count, req[i], token)) {
-                    elementIds[count] = req[i];
-                    tokens[count] = token;
-                    contributingRecipe[count] = rid;
-                    count++;
-                }
+    function _appendRecipeElements(
+        IRecipe recipe,
+        bytes memory recipeContext,
+        address token,
+        uint16 rid,
+        ElementAccumulator memory elements
+    ) internal view {
+        if (!recipe.isApplicable(recipeContext)) return;
+        bytes32[] memory required = recipe.requiredElements();
+        for (uint256 i = 0; i < required.length; i++) {
+            bytes32 elementId = required[i];
+            if (!_seenForToken(elements, elementId, token)) {
+                elements.ids[elements.count] = elementId;
+                elements.tokens[elements.count] = token;
+                elements.contributingRecipeIds[elements.count] = rid;
+                elements.count++;
             }
         }
-        return count;
     }
 
     /// @dev Cumulative AND across every unique element. First failure stops.
-    function _runChecks(
-        ComplianceContext calldata ctx,
-        bytes32[] memory elementIds,
-        address[] memory tokens,
-        uint16[] memory contributingRecipe,
-        uint256 count
-    ) internal view returns (bool allowed, bytes32 reasonCode) {
+    function _runChecks(ComplianceContext calldata ctx, ElementAccumulator memory elements)
+        internal
+        view
+        returns (bool allowed, bytes32 reasonCode)
+    {
         bytes memory elementContext = abi.encode(ctx);
-        for (uint256 i = 0; i < count; i++) {
-            address token = tokens[i];
+        for (uint256 i = 0; i < elements.count; i++) {
+            address token = elements.tokens[i];
             // RWA-side amount: amountOut when the regulated token is tokenOut,
             // else amountIn. This is the amount of the regulated asset moving.
             uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
-            address el = elementReg.elementOf(elementIds[i]);
-            if (el == address(0)) revert Errors.ElementNotRegistered(elementIds[i]);
+            address el = elementReg.elementOf(elements.ids[i]);
+            if (el == address(0)) revert Errors.ElementNotRegistered(elements.ids[i]);
             (bool passed,) = IComplianceElement(el).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext);
             if (!passed) {
-                return (false, ReasonCodes.encode(contributingRecipe[i], elementIds[i], 1));
+                return (false, ReasonCodes.encode(elements.contributingRecipeIds[i], elements.ids[i], 1));
             }
         }
         return (true, bytes32(0));
@@ -316,14 +329,12 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
 
         uint256 cap = _maxElements(m);
-        bytes32[] memory elementIds = new bytes32[](cap);
-        address[] memory tokens = new address[](cap);
-        uint16[] memory contributingRecipe = new uint16[](cap);
-        uint256 count = _appendApplicableElements(ctx, token, m, elementIds, tokens, contributingRecipe, 0);
+        ElementAccumulator memory elements = _newAccumulator(cap);
+        _appendApplicableElements(ctx, token, m, elements);
 
-        for (uint256 i = 0; i < count; i++) {
-            address el = elementReg.elementOf(elementIds[i]);
-            if (el == address(0)) revert Errors.ElementNotRegistered(elementIds[i]);
+        for (uint256 i = 0; i < elements.count; i++) {
+            address el = elementReg.elementOf(elements.ids[i]);
+            if (el == address(0)) revert Errors.ElementNotRegistered(elements.ids[i]);
             if (IComplianceElement(el).elementMetadata().statefulness == Statefulness.STATEFUL) {
                 IStatefulElement(el).onTransfer(ctx.seller, ctx.buyer, rwaAmount);
             }
@@ -332,13 +343,15 @@ contract ComplianceEngine is IComplianceEngine, Governed {
 
     // ---- helpers ----
 
-    function _seenForToken(bytes32[] memory ids, address[] memory tokens, uint256 count, bytes32 id, address token)
-        private
-        pure
-        returns (bool)
-    {
-        for (uint256 i = 0; i < count; i++) {
-            if (ids[i] == id && tokens[i] == token) return true;
+    function _newAccumulator(uint256 capacity) private pure returns (ElementAccumulator memory elements) {
+        elements.ids = new bytes32[](capacity);
+        elements.tokens = new address[](capacity);
+        elements.contributingRecipeIds = new uint16[](capacity);
+    }
+
+    function _seenForToken(ElementAccumulator memory elements, bytes32 id, address token) private pure returns (bool) {
+        for (uint256 i = 0; i < elements.count; i++) {
+            if (elements.ids[i] == id && elements.tokens[i] == token) return true;
         }
         return false;
     }

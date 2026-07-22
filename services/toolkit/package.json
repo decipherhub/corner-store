@@ -1,0 +1,16 @@
+{
+  "name": "@corner-store/toolkit",
+  "version": "0.1.0",
+  "main": "dist/src/config.js",
+  "types": "dist/src/config.d.ts",
+  "private": true,
+  "description": "Versioned configuration and validation primitives for Corner Store deployments.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node dist/test/smoke.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.7.3"
+  }
+}
