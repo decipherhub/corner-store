@@ -788,3 +788,30 @@ passing
 - 완료 계획: `docs/exec-plans/completed/AMM-001-real-uniswap-v3-e2e.md`
 - vendored Solidity source를 제품 `src/`로 복사하지 않는다.
 - production fee-tier 승인, LP 운영 정책과 unified deploy CLI는 별도 후속 범위다.
+
+## OPS-003 — Operator Deployment and Manifest Snapshot
+
+### Behavior
+
+- read-only Operator Dashboard가 배포 artifact의 execution/control-plane 주소를 표시한다.
+- Demo onboarding 직후 Manifest status, version과 RecipeBinding 수를 snapshot으로 저장한다.
+- Operator API가 snapshot을 `/api/v1/manifest`로 제공하고 Dashboard가 이를 표시한다.
+- Dashboard, CLI와 RFQ backend가 연결된 local BUIDL-like walkthrough를 한 번에 실행할 수 있다.
+
+### Verification
+
+- `npm test --prefix services/operator-api`
+- `npm test --prefix services/operator-dashboard`
+- `npm test --prefix services/cli`
+- `forge build --offline --jobs 1`
+- `scripts/e2e-anvil.sh --profile buidl-like`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- snapshot은 demo/reference checkpoint이며 production indexer나 live RPC provider가 아니다.
+- production Manifest lifecycle mutation과 governance action은 별도 범위다.

@@ -78,6 +78,9 @@ source of truth로 사용한다.
   `snapshot`/`restore`, `quote-inspect`(서명자 복구/만료/nonce·승인, 실패 시 exit 1).
   reason 디코딩·EIP-712 복구는 기존 lib 재사용. smoke(quote-inspect valid+tampered) +
   full live walkthrough로 검증. `forge test --offline` 238/238 유지.
+- `OPS-003 — Operator Deployment and Manifest Snapshot`(read-only Dashboard에
+  execution/control-plane 주소와 onboarding Manifest status/version/RecipeBinding
+  snapshot 표시, CLI nonce refresh와 전체 BUIDL-like RFQ walkthrough 검증).
 
 ## Blocked
 
