@@ -8,7 +8,7 @@
 | Foundry tests | B | unit/integration 테스트, RFQ failure path와 live Anvil E2E 존재 | 추가 adversarial/security tests |
 | RFQ reference service | B | EIP-712 SDK와 local demo HTTP API/CLI, nonce·입력·서명 smoke test 존재 | signer custody, persistent nonce, production pricing/inventory는 별도 feature에서 결정 |
 | `tools/deploy-v3` | B | profile 단위 테스트와 문서 존재 | 자동 Anvil integration test 추가 |
-| CI / static analysis | C | GitHub Actions가 Foundry와 RFQ service smoke를 실행함 | deploy-v3 CI, slither 등 정적 분석, warning budget 도입 |
+| CI / static analysis | B- | GitHub Actions와 local check가 Foundry high-severity production lint를 fail-closed로 실행함 | medium warning budget, deploy-v3 CI와 독립 보안 분석 도입 |
 | Security documentation | B | trust boundary, direct venue boundary와 구현 전 보안 규칙을 문서화함 | RFQ/dealer/custody 위협 모델과 production review 체크리스트 보강 |
 
 ## Grade Guide

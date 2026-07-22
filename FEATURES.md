@@ -565,3 +565,27 @@ passing
 checkpoint와 governance handoff, operator API/indexer 및 read-only dashboard까지
 구현·검증했다. production TLS/secret rotation, 실제 multisig provider, live RPC
 finality/recovery와 production RFQ custody는 별도 후속 feature다.
+
+## OPS-001 — High-severity Solidity Lint Gate
+
+### Behavior
+
+- production Solidity source에 Foundry의 high-severity lint를 실행한다.
+- high-severity warning이 하나라도 있으면 local repository check와 CI가 실패한다.
+- test fixture의 medium/low 경고는 별도 warning-budget feature로 분리한다.
+- venue bitmask는 명시적 `uint256(1)`을 사용해 shift operand 폭을 고정한다.
+
+### Verification
+
+- `forge lint --severity high --deny warnings src`
+- `forge test --offline`
+- `scripts/check.sh`
+
+### State
+
+passing
+
+### Scope
+
+새 정적 분석 의존성을 추가하지 않고 Foundry stable에 내장된 production lint만
+fail-closed gate로 도입한다. Slither와 medium warning 정리는 후속 범위다.

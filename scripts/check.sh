@@ -8,6 +8,9 @@ cd "$ROOT_DIR"
 echo "==> Checking Solidity formatting"
 forge fmt --check
 
+echo "==> Running high-severity Solidity lint"
+forge lint --severity high --deny warnings src
+
 echo "==> Building Solidity"
 forge build
 

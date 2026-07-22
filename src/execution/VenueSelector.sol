@@ -16,7 +16,7 @@ import {ComplianceDecision, VenueType} from "../types/ComplianceTypes.sol";
 ///        - otherwise   => must equal keccak256(abi.encode(venue)), binding this exact venue.
 contract VenueSelector is IVenueSelector {
     function validate(address venue, VenueType vtype, ComplianceDecision calldata d) external pure returns (bool) {
-        return d.allowed && (d.allowedVenueTypes & (1 << uint256(vtype))) != 0
+        return d.allowed && (d.allowedVenueTypes & (uint256(1) << uint256(vtype))) != 0
             && (d.allowedVenuesHash == bytes32(0) || d.allowedVenuesHash == keccak256(abi.encode(venue)));
     }
 }
