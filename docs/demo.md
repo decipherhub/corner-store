@@ -13,6 +13,7 @@ This is feature `E2E-001` (see `FEATURES.md`).
 ```sh
 scripts/e2e-anvil.sh            # BUIDL-like default: scenarios + backend/CLI RFQ flow
 scripts/e2e-anvil.sh --profile reg-d
+scripts/e2e-anvil.sh --mode rfq # concise mock TA → SDK/CLI → backend RFQ walkthrough
 scripts/e2e-anvil.sh --port 8600
 scripts/e2e-anvil.sh --keep     # leave Anvil running afterwards (attach a UI / continue interactively)
 ```
@@ -21,6 +22,12 @@ scripts/e2e-anvil.sh --keep     # leave Anvil running afterwards (attach a UI / 
 - Exit code is non-zero if any scenario fails (`DemoScenarios` reverts).
 - `--keep` prints the Anvil/backend PIDs and leaves both processes up; stop them
   with the printed `kill <pid>` commands.
+- With `--keep`, the runner restores the maker after proving the revoked-maker
+  rejection, so the next RFQ quote can be settled interactively without reset.
+- `--mode rfq` skips the AMM, lifecycle and surveillance walkthrough. It keeps
+  the MVP path focused on a mock-TA-seeded investor receiving a backend-signed
+  RFQ quote, settling through `ExecutionRouter → RFQAdapter`, and rejecting the
+  same flow after the maker is revoked.
 
 Under the hood the runner executes two forge scripts and one backend/CLI stage:
 
@@ -105,10 +112,11 @@ REAL, genuinely enforced on-chain:
 
 MOCK / illustrative (documented seams):
 
-- The AMM venue is the in-repo `MockPool` (1:1 rate), **not** a real Uniswap v3
-  pool. A real Uniswap v3 pool deployment is a separate follow-up: the vendored
-  `tools/deploy-v3` infrastructure is kept isolated (vendor-isolation rule) and
-  the demo does not depend on it. See `tools/deploy-v3/CORNER_STORE_PROFILE.md`.
+- The fast interactive demo intentionally uses the deterministic in-repo
+  `MockPool` (1:1 rate). Canonical Uniswap v3 factory/pool behavior is separately
+  automated in `test/integration/RealUniswapV3.t.sol`, while the vendored
+  `tools/deploy-v3` infrastructure remains isolated. A unified deployment command
+  for both stacks is still a follow-up. See `tools/deploy-v3/CORNER_STORE_PROFILE.md`.
 - Element data sources (OFAC / ONCHAINID claims / ERC-165 / EDGAR) are
   operator-settable mocks, and the C-01 Rule 144 lockup reads an injected,
   expiring `AttestedAcquisitionSource` snapshot seeded from mock TA data. These

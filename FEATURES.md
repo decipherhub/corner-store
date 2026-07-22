@@ -372,6 +372,12 @@ passing
   기본값은 BUIDL-like metadata + Reg D/QP/minimum-investment Manifest다.
 - live runner가 backend quote → CLI → Router/RFQAdapter 성공과 revoked-maker
   실패를 자동 실행한다.
+- `scripts/e2e-anvil.sh --mode rfq`는 AMM·lifecycle·surveillance 설명을 건너뛰고
+  mock TA profile → Toolkit/CLI → backend-signed quote → protected RFQ settlement
+  → revoked-maker rejection만 보여주는 짧은 MVP 시연 경로를 제공한다.
+- 기존 Operator dashboard는 `Operator view`(read-only snapshot)와 `RFQ demo`
+  (local quote request/download/CLI settlement handoff) 모드를 제공하며, browser에
+  private key나 direct transaction endpoint를 추가하지 않는다.
 - backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
 - production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
 
@@ -382,6 +388,7 @@ passing
 - `scripts/check.sh`
 - `scripts/e2e-anvil.sh --profile buidl-like`
 - `scripts/e2e-anvil.sh --profile reg-d`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
 - `git diff --check`
 
 ### State
@@ -395,6 +402,9 @@ passing
 - CLI smoke가 `--backend` request path를 검증하고 기존 `RFQFlow.t.sol`이 protected Router settlement의 성공/거부 경로를 검증한다.
 - Foundry v1.7.1 clean build에서 `buidl-like`과 `reg-d` 두 profile 모두
   통과: 각각 7/7 scenarios, backend-signed quote settlement, revoked-maker 거부.
+- RFQ-first dashboard/runbook: `services/operator-dashboard`의 두 모드와 local
+  HTTP server smoke, `--mode rfq` live E2E를 검증했다. 시연 순서는
+  `docs/rfq-demo-guide.md`를 기준으로 한다.
 
 ## CLI-001 — corner-store Reference CLI
 
@@ -751,3 +761,30 @@ passing
 - 완료 계획: `docs/exec-plans/completed/MANIFEST-002-recipe-binding-migration.md`
 - canonical `bytes32 recipeKey` alias와 per-element enforcement override compiler는
   별도 versioned refinement로 남긴다.
+
+## AMM-001 — Canonical Uniswap v3 Pool E2E
+
+### Behavior
+
+- vendored `@uniswap/v3-core` artifact로 canonical factory/pool을 배포한다.
+- CREATE2 예상 주소와 factory가 생성한 pool 주소가 일치해야 한다.
+- 실제 pool을 verified ERC-3643 holder, venue와 adapter allowlist에 등록한다.
+- 초기화·유동성 공급 후 `ExecutionRouter → UniswapV3Adapter → pool` exact-input
+  swap이 실제 callback과 ERC-3643 transfer를 거쳐 성공한다.
+- 미등록 pool/callback은 계속 fail-closed이고 Router/Adapter는 잔액을 보유하지 않는다.
+
+### Verification
+
+- canonical factory/pool deployment와 CREATE2 preflight integration test
+- protected buy/sell, compliance rejection와 callback authorization tests
+- `scripts/check.sh`
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획: `docs/exec-plans/completed/AMM-001-real-uniswap-v3-e2e.md`
+- vendored Solidity source를 제품 `src/`로 복사하지 않는다.
+- production fee-tier 승인, LP 운영 정책과 unified deploy CLI는 별도 후속 범위다.

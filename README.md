@@ -129,6 +129,15 @@ not a hosted or production RFQ operator service.
 scripts/e2e-anvil.sh --profile buidl-like --keep
 ```
 
+For the short RFQ-first stakeholder walkthrough, omit the AMM scenario suite:
+
+```shell
+scripts/e2e-anvil.sh --profile buidl-like --mode rfq
+```
+
+Add `--keep` for an interactive follow-up; the runner restores the demo maker
+after its rejection check so a new quote can be filled immediately.
+
 `--keep` leaves both Anvil and the RFQ demo backend running. In another terminal,
 request and settle the quote through the protected Router path:
 

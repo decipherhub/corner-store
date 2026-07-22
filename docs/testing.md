@@ -71,7 +71,10 @@ yarn test
 Foundry integration tests는 mock/ERC-3643 fixture를 사용해 regulated swap,
 multi-Recipe, surveillance, emergency pause와 invariant path를 검증한다.
 `tools/deploy-v3`의 Corner Store profile은 unit test로 구성과 순서를 검증하며,
-과거 수동 Anvil 배포 검증 기록은 `tools/deploy-v3/CORNER_STORE_PROFILE.md`에 있다.
+canonical Uniswap v3 integration test는 같은 pinned package artifact로 factory와
+pool을 배포해 CREATE2, mint/swap callback과 실제 ERC-3643 transfer를 검증한다.
+따라서 fresh checkout에서는 `tools/deploy-v3`의 `yarn install --frozen-lockfile`이
+먼저 필요하며 `scripts/check.sh`가 이를 자동 bootstrap한다.
 
 자동화된 live Anvil deployment/E2E는 `scripts/e2e-anvil.sh`로 제공된다(아래 E2E
 Tests 및 `docs/demo.md` 참조).

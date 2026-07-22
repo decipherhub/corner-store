@@ -10,12 +10,14 @@ export const DEFAULT_PORT = 8787;
 export const DEFAULT_TTL_SECONDS = 3600;
 
 export interface Artifact {
+  deployer: string;
   investor: string;
   maker: string;
   quote: string;
   rfqAdapter: string;
   rfqVenue: string;
   rwaToken: string;
+  router: string;
 }
 
 export interface DemoBackendConfig {
@@ -29,6 +31,11 @@ export interface DemoBackendConfig {
   defaultTtlSeconds: number;
   priceNumerator: string;
   priceDenominator: string;
+  demoSettlement: {
+    enabled: boolean;
+    operatorAccount: number;
+    investorAccount: number;
+  };
   now?: () => number | Promise<number>;
 }
 
@@ -50,7 +57,12 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env): Dem
     makerWallet,
     defaultTtlSeconds,
     priceNumerator: parsePositiveBigIntString(args.priceNumerator ?? env.RFQ_DEMO_PRICE_NUMERATOR, "1", "price-numerator"),
-    priceDenominator: parsePositiveBigIntString(args.priceDenominator ?? env.RFQ_DEMO_PRICE_DENOMINATOR, "1", "price-denominator")
+    priceDenominator: parsePositiveBigIntString(args.priceDenominator ?? env.RFQ_DEMO_PRICE_DENOMINATOR, "1", "price-denominator"),
+    demoSettlement: {
+      enabled: env.RFQ_DEMO_ENABLE_SETTLEMENT === "1",
+      operatorAccount: parseAccountIndex(env.RFQ_DEMO_OPERATOR_ACCOUNT ?? "0"),
+      investorAccount: parseAccountIndex(env.RFQ_DEMO_INVESTOR_ACCOUNT ?? "1")
+    }
   };
 }
 

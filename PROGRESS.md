@@ -42,6 +42,10 @@ source of truth로 사용한다.
   person-group state와 hash-chain rejection/surveillance audit)
 - `MANIFEST-002 — RecipeBinding Manifest Migration`(bounded registry-backed
   bindings, required/path/flag 평가, delayed lifecycle update와 CLI/demo ABI migration)
+- `AMM-001 — Canonical Uniswap v3 Pool E2E`(pinned core artifact factory/pool,
+  CREATE2 preflight, real mint/swap callback와 ERC-3643 protected buy/sell)
+- RFQ-first MVP demo refinement(`scripts/e2e-anvil.sh --mode rfq` + existing
+  Operator dashboard의 `RFQ demo` mode + `docs/rfq-demo-guide.md`)
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -93,6 +97,18 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- RFQ MVP demo는 mock TA-seeded BUIDL-like profile, Toolkit preflight/onboard,
+  backend EIP-712 quote, protected Router settlement와 revoked-maker rejection을
+  `--mode rfq` 한 경로로 시연한다. 기존 Operator dashboard는 read-only
+  Operator view와 quote request/download/CLI handoff용 RFQ demo를 구분하며,
+  browser private key·direct transaction 권한을 갖지 않는다. `scripts/check.sh`
+  (641/641 Foundry 포함)과 RFQ-only live E2E가 통과했다.
+- `AMM-001`에서 vendored pinned Uniswap v3 core artifact로 canonical factory와
+  pool을 배포하고 CREATE2 주소, 초기화, 실제 liquidity mint/swap callback,
+  Router-protected ERC-3643 buy/sell을 검증했다. Adapter는 pool token 방향과
+  callback positive delta를 binding해 잘못된 token pull을 거부한다.
+  `scripts/check.sh`가 Foundry 641/641, 모든 service smoke와 deploy-v3 10/10을
+  통과했고 독립 리뷰 지적은 exact compliance reason 회귀로 반영했다.
 - `MANIFEST-002`에서 고정 issuance/fund 두 필드 대신 bounded
   `RecipeBinding[]`를 runtime source of truth로 도입했다. required AND,
   path-group OR/그룹 간 AND, non-blocking flag bitmap과 deterministic failure를

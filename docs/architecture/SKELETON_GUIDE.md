@@ -100,10 +100,10 @@
 | 라우팅·게이트·nonce·재진입 가드 | **진짜 동작** |
 | 다중 Recipe required/path/flag 조합, 조건부 활성화, fail-closed, commit dedup | **진짜 동작** |
 | Registry 저장/조회, 권한 분리(owner/operator) | **진짜 동작** |
-| AMM adapter ↔ pool 콜백, non-custodial(잔액 0) | **진짜 동작** (MockPool 대상) |
+| AMM adapter ↔ pool 콜백, token-direction binding, non-custodial(잔액 0) | **진짜 동작** (MockPool + canonical v3 pool) |
 | ERC-3643 `isVerified`/`canTransfer`, OnchainID claim | **진짜 동작** (테스트에서 실제 T-REX 배포) |
 | Element의 법률 판정(적격투자자·제재·QP·lockup 등) | **mock** (설정 가능한 bool/주입값) |
-| Uniswap v3 실제 pool 수학 | **mock** (MockPool 1:1) |
+| Uniswap v3 실제 pool 수학 | **canonical artifact integration test** (interactive demo는 MockPool 1:1) |
 | RFQ adapter | **v1 reference 동작** (Router-only, exact-taker full-fill EIP-712 quote settlement) |
 | OrderBook adapter | **스텁** (revert) |
 | `computePoolAddress` | **스텁** (결정론적 keccak, 실제 init-code-hash 아님) |

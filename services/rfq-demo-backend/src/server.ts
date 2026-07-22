@@ -4,6 +4,7 @@ import {RFQBackendSDK, SignedRFQQuote} from "../../rfq/src";
 
 import {DemoBackendConfig, asAddress} from "./config";
 import {createDemoQuoteService} from "./service";
+import {DemoSettlementService, DemoTradeAction} from "./settlement";
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -21,8 +22,9 @@ export interface DemoServer {
 
 export async function startDemoServer(config: DemoBackendConfig): Promise<DemoServer> {
   const quoteService = await createDemoQuoteService(config);
+  const settlement = config.demoSettlement.enabled ? new DemoSettlementService(config, quoteService) : undefined;
   const server = createServer((req, res) => {
-    void handleRequest(req, res, config, quoteService);
+    void handleRequest(req, res, config, quoteService, settlement);
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -49,9 +51,16 @@ async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
   config: DemoBackendConfig,
-  quoteService: RFQBackendSDK
+  quoteService: RFQBackendSDK,
+  settlement?: DemoSettlementService
 ): Promise<void> {
   try {
+    setDemoCors(req, res);
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     if (req.method === "GET" && req.url === "/health") {
       sendJson(res, 200, {
         status: "ok",
@@ -61,7 +70,8 @@ async function handleRequest(
         verifyingContract: config.artifact.rfqAdapter,
         venue: config.artifact.rfqVenue,
         tokenIn: config.artifact.quote,
-        tokenOut: config.artifact.rwaToken
+        tokenOut: config.artifact.rwaToken,
+        demoSettlementEnabled: Boolean(settlement)
       });
       return;
     }
@@ -73,11 +83,44 @@ async function handleRequest(
       return;
     }
 
+    if (req.method === "POST" && req.url === "/demo/trade") {
+      if (!settlement) {
+        sendJson(res, 403, {error: "demo_settlement_disabled", message: "demo settlement is available only from the local e2e runner"});
+        return;
+      }
+      const body = await readJsonBody(req);
+      const {amountIn, action} = parseDemoTrade(body);
+      sendJson(res, 200, await settlement.trade(amountIn, action));
+      return;
+    }
+
     sendJson(res, 404, {error: "not_found"});
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     sendJson(res, 400, {error: "invalid_request", message});
   }
+}
+
+function parseDemoTrade(body: unknown): {amountIn: string; action: DemoTradeAction} {
+  if (!isRecord(body)) throw new Error("request body must be a JSON object");
+  if (typeof body.amountIn !== "string" || !/^\d+$/.test(body.amountIn) || BigInt(body.amountIn) <= 0n) {
+    throw new Error("amountIn must be a positive base-unit uint string");
+  }
+  const action = body.action ?? "settle";
+  if (action !== "settle" && action !== "revoked-maker") throw new Error("action must be settle or revoked-maker");
+  return {amountIn: body.amountIn, action};
+}
+
+function setDemoCors(req: IncomingMessage, res: ServerResponse): void {
+  // This service is intentionally local-only. Permit only the shipped local
+  // dashboard origin rather than letting arbitrary web pages query a signer.
+  const origin = req.headers.origin;
+  if (origin === "http://127.0.0.1:8790" || origin === "http://localhost:8790") {
+    res.setHeader("access-control-allow-origin", origin);
+    res.setHeader("vary", "origin");
+  }
+  res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+  res.setHeader("access-control-allow-headers", "content-type");
 }
 
 async function createQuote(

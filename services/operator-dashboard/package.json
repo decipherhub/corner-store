@@ -4,6 +4,7 @@
   "private": true,
   "description": "Read-only operator dashboard for the Corner Store API.",
   "scripts": {
+    "start": "node server.js",
     "test": "node test/smoke.js"
   }
 }

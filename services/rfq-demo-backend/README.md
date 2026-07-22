@@ -46,16 +46,18 @@ The backend fixes `tokenIn`, `tokenOut`, RFQ venue and verifying contract to the
 deployment artifact. The response is the existing `{quote, signature,
 typedData}` format consumed by the CLI and `RFQAdapter`.
 
-The easiest end-user flow is:
+For the click-through local demo, run:
 
 ```sh
-node services/cli/dist/cli/src/index.js rfq-quote \
-  --backend http://127.0.0.1:8787 --amount-in 5000000 --out quote.json
-node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
+scripts/e2e-anvil.sh --profile buidl-like --mode rfq --keep
+npm run start --prefix services/operator-dashboard
 ```
 
-`rfq-quote` verifies the returned taker, pair, venue, chain, RFQ adapter and maker
-signature before writing the quote file.
+Open `http://127.0.0.1:8790`, select **RFQ demo**, and click **Run compliant
+RFQ trade**. The runner enables `/demo/trade` only for this local Anvil setup:
+it uses the selected local demo profile, submits through `ExecutionRouter`, and
+never sends a private key to the browser. **Revoke maker & retry** proves that
+current policy still rejects a previously signable quote.
 
 ## Configuration
 
@@ -65,6 +67,12 @@ Command flags have matching `RFQ_DEMO_*` environment variables:
 - `--maker-account` or `--maker-key`
 - `--ttl`
 - `--price-numerator`, `--price-denominator`
+- `RFQ_DEMO_OPERATOR_ACCOUNT`, `RFQ_DEMO_INVESTOR_ACCOUNT` (local Anvil
+  account indexes used only when demo settlement is explicitly enabled)
+
+`RFQ_DEMO_ENABLE_SETTLEMENT=1` additionally enables the click-through settlement
+endpoint. It is set by `scripts/e2e-anvil.sh` only after it has started local
+Anvil. Do not enable or expose this endpoint for a hosted service.
 
 Run `npm start -- --help` for defaults. Never commit a maker key.
 

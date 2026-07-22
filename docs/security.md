@@ -108,7 +108,8 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 
 - Uniswap-style callback은 등록되었거나 계산으로 검증한 pool에서만 수락한다.
   callback `data`가 payer/token을 포함하더라도 callback origin 검증 없이 신뢰하지
-  않는다.
+  않는다. positive delta, pool의 canonical token0/token1과 요청 token 방향도 서로
+  일치해야 하며 다른 token을 `transferFrom`하도록 바꾼 callback은 거부한다.
 - Pool/venue 등록은 compliance 보장의 일부다. 잘못된 venue 또는 악성 adapter가
   등록되면 Router를 타더라도 settlement 결과가 왜곡될 수 있으므로 governance와
   preflight 검증 대상이다.

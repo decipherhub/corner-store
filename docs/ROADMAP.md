@@ -19,6 +19,8 @@
 - Token policy registry와 bounded RecipeBinding(required/path/flag) evaluation
 - generic ExecutionRouter, VenueRegistry, VenueSelector와 공통 Adapter interface
 - AMM reference adapter와 RFQ v1 reference settlement adapter
+- pinned canonical Uniswap v3 factory/pool CREATE2, liquidity callback와
+  Router-protected ERC-3643 buy/sell integration test
 - RFQ quote signer SDK, local MVP backend와 CLI/Router settlement flow
 - `buidl-like`/`reg-d` profile별 live Anvil deployment, Toolkit preflight/checkpoint와
   protected AMM/RFQ E2E
@@ -41,7 +43,7 @@
 - 실제 Securitize/TA provider adapter, production WORM/indexer와 amount-specific
   lot allocation 정책
 - RFQ production signer custody, persistent nonce, pricing/inventory와 partial-fill 정책
-- 실제 Uniswap v3 pool을 사용하는 AMM deployment/E2E
+- production Uniswap v3 pool/LP onboarding과 unified deployment orchestration
 - Order Book matching/custody/surveillance 모델
 - production TLS, secret rotation, 실제 multisig provider와 live RPC
   finality/recovery 운영
@@ -235,8 +237,9 @@ Corner Store reference DEX의 구체 Venue는 공통 SDK/Router 기반 위에서
 
 ### 4A. Uniswap v3 AMM
 
-Status: Router-protected reference adapter와 MockPool 기반 live E2E는 구현됨.
-실제 Uniswap v3 pool deployment/E2E는 후속 작업이다.
+Status: Router-protected reference adapter, MockPool live demo와 pinned canonical
+Uniswap v3 core factory/pool integration E2E가 구현됨. production pool/LP onboarding과
+unified deploy command는 후속 작업이다.
 
 Deliverables:
 
@@ -360,7 +363,7 @@ Reference/demo evidence:
    nonce, pricing/inventory와 operator 책임.
 2. `feat(compliance): RecipeBinding 기반 production Asset Compliance Manifest schema/migration`
 3. `feat(compliance): verified TA provider adapter와 amount-specific lot allocation`
-4. `feat(amm): real Uniswap v3 pool deployment와 protected E2E 연결`
+4. `feat(amm): production pool/LP onboarding과 unified deployment 연결`
 5. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
 6. `ops(production): TLS, secret rotation, 실제 multisig provider와 live RPC
    finality/recovery 구현`
