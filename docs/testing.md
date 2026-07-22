@@ -10,7 +10,8 @@ forge lint --severity high --deny warnings src
 forge build
 ```
 
-현재 별도 Solidity linter나 static analyzer는 구성되어 있지 않다.
+Foundry high-severity production lint를 fail-closed gate로 사용한다. medium/low
+warning budget과 별도 보안 분석기는 후속 범위다.
 
 ### Unit Tests
 
@@ -103,9 +104,11 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 scripts/check.sh
 ```
 
-이 명령은 현재 저장소에서 지원하는 format, build와 test를 순서대로 실행한다.
-현재 포함 범위는 Foundry fmt/build/test, RFQ SDK·demo backend·CLI smoke,
-vendored deploy-v3 test와 whitespace check다.
+이 명령은 현재 저장소에서 지원하는 format, lint, build와 test를 순서대로 실행한다.
+현재 포함 범위는 Foundry fmt/lint/build/test, RFQ SDK·demo backend·CLI·Toolkit,
+Operator API/dashboard smoke, vendored deploy-v3 test와 whitespace check다. GitHub
+Actions도 동일한 스크립트를 실행한다. Node 서비스는 lockfile 기반 `npm ci`를
+사용하고, vendored deploy-v3는 `yarn.lock` 기반 설치 후 테스트한다.
 
 ## Manual Verification
 

@@ -71,6 +71,9 @@ echo "==> Running read-only Operator dashboard smoke test"
 echo "==> Running vendored deploy-v3 tests"
 (
   cd tools/deploy-v3
+  if [ ! -x node_modules/.bin/mocha ]; then
+    yarn install --frozen-lockfile
+  fi
   yarn test
 )
 

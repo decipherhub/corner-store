@@ -30,22 +30,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: services/rfq/package-lock.json
+          cache-dependency-path: |
+            services/rfq/package-lock.json
+            services/cli/package-lock.json
+            services/rfq-demo-backend/package-lock.json
+            services/toolkit/package-lock.json
+            services/operator-api/package-lock.json
 
-      - name: Check formatting
-        run: forge fmt --check
-
-      - name: Run high-severity Solidity lint
-        run: forge lint --severity high --deny warnings src
-
-      - name: Build
-        run: forge build
-
-      - name: Run tests
-        run: forge test -vv
-
-      - name: Run RFQ service smoke
-        working-directory: services/rfq
-        run: |
-          npm ci
-          npm test
+      - name: Run repository-wide checks
+        run: scripts/check.sh

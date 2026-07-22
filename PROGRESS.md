@@ -32,6 +32,7 @@ source of truth로 사용한다.
   API + CLI/backend→Router live settlement)
 - `TOOLKIT-001 — Versioned Config Foundation`
 - `OPS-001 — High-severity Solidity Lint Gate`
+- `OPS-002 — Repository-wide CI Parity`
 - multi-venue 아키텍처와 책임 문서 작성
 - Corner Store용 Uniswap v3 최소 배포 profile 분리와 테스트
 - ExecutionRouter/VenueRegistry/VenueSelector와 AMM reference adapter skeleton
@@ -83,6 +84,11 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- `OPS-002`에서 GitHub Actions가 local `scripts/check.sh`와 동일한 repository-wide
+  gate를 실행하도록 통합했다. Foundry fmt/high-severity lint/build와 582/582 tests,
+  RFQ SDK·CLI·demo backend·Toolkit·Operator API/dashboard smoke, vendored deploy-v3
+  10/10 tests와 whitespace 검사가 통과했다. deploy-v3 dependency는 vendor directory의
+  `yarn.lock`으로만 설치해 격리 경계를 유지한다.
 - `OPS-001`에서 production `src`의 Foundry high-severity lint를 local check와
   GitHub Actions에 fail-closed gate로 연결했다. `VenueSelector`의 venue bitmask를
   명시적 `uint256(1)` shift로 고쳐 high-severity warning을 제거했다.
