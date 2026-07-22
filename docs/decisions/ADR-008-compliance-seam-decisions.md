@@ -1,10 +1,10 @@
-# ADR-DRAFT — Compliance Seam Decisions (acquisition source · stateful counting · reject logging · out-of-router surveillance)
+# ADR-008 — 컴플라이언스 이음매(seam) 4종 결정: 취득 출처 · 상태 카운팅 · 거절 로깅 · 라우터 밖 감시
 
-- **Status:** Proposed (legal/PM 결정 초안 — dev 확인·구현 명세화 대기)
-- **Date:** 2026-07-22
-- **Author:** 승준 (리걸/PM) + Cowork 리서치
-- **Resolves (repo open decisions):** D004("acquisition source, stateful commit hook, reject logging은 열린 결정으로 남는다"), D006(out-of-router path), D009(C-01 acquisition seam / CR-3)
-- **Primary sources:** 17 CFR §230.144 (eCFR) · 15 U.S.C. §78l(g)/§80a-3(c)(7) (uscode) · Securitize DS Protocol / BUIDL on-chain 구조 · 미국변호사(염보경) C-01·D-01·A-06 검토
+- **상태:** Accepted (2026-07-22)
+- **결정자:** 승준 (리걸/PM) + Cowork 리서치
+- **유형:** 컴플라이언스 seam 확정 (legal/PM 결정 → dev 구현 명세화)
+- **해소하는 열린 결정(repo):** D004(취득 출처·stateful commit hook·거절 로깅) · D006(라우터 밖 경로) · D009(C-01 취득 이음매 / CR-3)
+- **1차 출처:** 17 CFR §230.144 (eCFR) · 15 U.S.C. §78l(g)/§80a-3(c)(7) (uscode) · Securitize DS Protocol / BUIDL on-chain 구조 · 미국변호사(염보경) C-01·D-01·A-06 검토
 
 > **이 문서가 뭔가.** 개발팀이 mock으로 우회 구현하고 "열린 결정"으로 남긴 컴플라이언스 이음매(seam) 4개를, 정식 법률검토 결과로 **어떻게 채울지** 확정한다. 4개는 독립이 아니라 **하나의 off-chain 컴플라이언스 데이터 레이어 + Securitize(TA) 어댑터**로 수렴한다(§5). 데모(Gasok)엔 mock으로 충분하고, 본 문서는 *production 적용 규격이 확정됐다*는 증빙이다.
 
