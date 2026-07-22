@@ -1,6 +1,6 @@
 import {execFileSync} from "child_process";
 import {writeFileSync} from "fs";
-import {formatEther, parseEther} from "ethers";
+import {formatEther, NonceManager, parseEther} from "ethers";
 
 import {relative} from "path";
 import {resolve} from "path";
@@ -376,6 +376,9 @@ export async function cmdOnboard(opts: GlobalOpts & {engines?: string; profile?:
   if (current === 2 || current === 3) {
     console.log("  manifest in-flight — retiring before re-onboarding");
     await logTx(await policy.retireManifest(a.rwaToken, encodeBytes32String("CLI-REONBOARD")), "retire");
+    // A separate forge broadcast may have advanced the account nonce while
+    // this process was starting. Refresh before the follow-up factory call.
+    (signer as NonceManager).reset();
   } else if (current === 4) {
     throw new CliError("manifest is PROPOSED; approve or wait — cannot re-onboard from PROPOSED");
   }
@@ -395,7 +398,11 @@ export async function cmdOnboard(opts: GlobalOpts & {engines?: string; profile?:
     ZERO_ADDR
   ];
   const venueCfg = [0, a.ammAdapter, a.pool, ZERO_ADDR, 1, true]; // AMM, custody POOL
-  await logTx(await factory(a, signer).registerRWAToken(a.rwaToken, m, binding.bindings, a.pool, venueCfg), "registerRWAToken");
+  const nextNonce = await provider.getTransactionCount(await signer.getAddress(), "latest");
+  await logTx(
+    await factory(a, walletForAccount(0).connect(provider)).registerRWAToken(a.rwaToken, m, binding.bindings, a.pool, venueCfg, {nonce: nextNonce}),
+    "registerRWAToken"
+  );
   console.log(`Onboarded ${binding.profile} RWA ${a.rwaToken} with supportedEngines 0b${mask.toString(2).padStart(3, "0")} + AMM venue ${a.pool}`);
 }
 
