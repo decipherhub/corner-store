@@ -375,9 +375,11 @@ passing
 - `scripts/e2e-anvil.sh --mode rfq`는 AMM·lifecycle·surveillance 설명을 건너뛰고
   mock TA profile → Toolkit/CLI → backend-signed quote → protected RFQ settlement
   → revoked-maker rejection만 보여주는 짧은 MVP 시연 경로를 제공한다.
-- Operator dashboard는 Trader, Security demo와 read-only Operator view를
-  제공한다. Trader는 local backend에서 exact signed quote를 요청·검토한 뒤 protected
-  Router settlement를 실행하고, Security demo는 on-chain maker revoke 상태를
+- Dashboard는 사용자 중심의 Dashboard → RFQ 거래 → My RFQs → Portfolio 흐름을
+  기본 navigation으로 제공하고 Security proof와 read-only Operator view는 Advanced로
+  분리한다. 사용자는 local backend에서 exact signed quote를 요청·비교·검토한 뒤
+  protected Router settlement를 실행하고 실제 session balance delta를 Portfolio에서
+  확인한다. Security proof는 on-chain maker revoke 상태를
   명시적 restore 전까지 유지해 현재 정책 enforcement를 가시화한다. 브라우저에는
   private key가 전달되지 않는다.
 - Trader의 live firm rate는 `/demo/quote` 금액에서 계산한다. 비교 maker, 가격 곡선,
@@ -387,6 +389,14 @@ passing
   live/fixture 경계와 각 버튼의 실제 backend/Operator API 연결을 대시보드 안에서
   설명한다.
 - backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
+- long-lived demo backend는 CLI와 동일한 Anvil 계정을 함께 사용해도 각 transaction의
+  pending nonce를 다시 조회하고 settlement action을 직렬화해 stale nonce와 중복 제출을
+  방지한다. live E2E는 UI와 동일하게 quote 요청 후 그 exact quote를 trade endpoint에
+  제출하고, CLI activity 이후 backend 재체결까지 검증한다.
+- dashboard는 `/rfq-api` same-origin proxy로 backend에 연결되어 custom launcher
+  port에서도 frontend 수정 없이 동작한다. trade endpoint는 제출된 quote의
+  maker/taker/token pair/venue/domain/signature를 deployment artifact와 대조한 뒤에만
+  local settlement를 실행한다.
 - production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
 
 ### Verification
@@ -410,8 +420,9 @@ passing
 - CLI smoke가 `--backend` request path를 검증하고 기존 `RFQFlow.t.sol`이 protected Router settlement의 성공/거부 경로를 검증한다.
 - Foundry v1.7.1 clean build에서 `buidl-like`과 `reg-d` 두 profile 모두
   통과: 각각 7/7 scenarios, backend-signed quote settlement, revoked-maker 거부.
-- RFQ-first dashboard/runbook: `services/operator-dashboard`의 두 모드와 local
-  HTTP server smoke, `--mode rfq` live E2E를 검증했다. 시연 순서는
+- RFQ-first dashboard/runbook: `services/operator-dashboard`의 사용자 중심 4개
+  기본 화면과 2개 Advanced 화면, local HTTP server smoke, `--mode rfq` live E2E를
+  검증했다. 시연 순서는
   `docs/rfq-demo-guide.md`를 기준으로 한다.
 
 ## CLI-001 — corner-store Reference CLI

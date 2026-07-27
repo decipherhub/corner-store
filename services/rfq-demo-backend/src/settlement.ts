@@ -1,7 +1,7 @@
-import {AbiCoder, Contract, HDNodeWallet, JsonRpcProvider, MaxUint256, NonceManager, formatEther, id} from "ethers";
+import {AbiCoder, Contract, HDNodeWallet, JsonRpcProvider, MaxUint256, formatEther, id, verifyTypedData} from "ethers";
 import {existsSync, readFileSync, writeFileSync} from "fs";
 
-import {RFQBackendSDK, SignedRFQQuote} from "../../rfq/src";
+import {RFQBackendSDK, RFQ_QUOTE_TYPES, SignedRFQQuote} from "../../rfq/src";
 
 import {ANVIL_MNEMONIC, DemoBackendConfig, asAddress} from "./config";
 
@@ -34,10 +34,11 @@ export interface DemoTradeResult {
 /** Local-Anvil-only facilitator. Never use this pattern for a hosted service. */
 export class DemoSettlementService {
   private readonly provider: JsonRpcProvider;
-  private readonly investor: NonceManager;
+  private readonly investor: HDNodeWallet;
   private readonly operator: HDNodeWallet;
   private readonly investorAddress: string;
   private nextRouterNonce = BigInt(Date.now());
+  private actionQueue: Promise<void> = Promise.resolve();
 
   constructor(private readonly config: DemoBackendConfig, private readonly quotes: RFQBackendSDK) {
     if (!config.demoSettlement.enabled) throw new Error("demo settlement is disabled");
@@ -54,7 +55,7 @@ export class DemoSettlementService {
     }
 
     this.provider = new JsonRpcProvider(config.rpcUrl, config.chainId);
-    this.investor = new NonceManager(investor.connect(this.provider));
+    this.investor = investor.connect(this.provider);
     this.operator = operator.connect(this.provider);
   }
 
@@ -72,18 +73,26 @@ export class DemoSettlementService {
   }
 
   async prepare(): Promise<{ready: boolean; makerApproved: boolean; chainId: number; maker: string; investor: string}> {
-    const current = await this.state();
-    if (!current.makerApproved) await this.setMakerApproval(true);
-    return this.state();
+    return this.enqueue(async () => {
+      const current = await this.state();
+      if (!current.makerApproved) await this.setMakerApproval(true);
+      return this.state();
+    });
   }
 
   async restoreMaker(): Promise<{ready: boolean; makerApproved: boolean; chainId: number; maker: string; investor: string}> {
-    const current = await this.state();
-    if (!current.makerApproved) await this.setMakerApproval(true);
-    return this.state();
+    return this.enqueue(async () => {
+      const current = await this.state();
+      if (!current.makerApproved) await this.setMakerApproval(true);
+      return this.state();
+    });
   }
 
   async trade(amountIn: string, action: DemoTradeAction, provided?: SignedRFQQuote): Promise<DemoTradeResult> {
+    return this.enqueue(() => this.tradeUnlocked(amountIn, action, provided));
+  }
+
+  private async tradeUnlocked(amountIn: string, action: DemoTradeAction, provided?: SignedRFQQuote): Promise<DemoTradeResult> {
     const signed = provided ?? await this.quotes.quote({
       taker: asAddress(this.config.artifact.investor, "artifact investor"),
       tokenIn: asAddress(this.config.artifact.quote, "artifact quote"),
@@ -91,6 +100,7 @@ export class DemoSettlementService {
       amountIn,
       venue: asAddress(this.config.artifact.rfqVenue, "artifact rfqVenue")
     });
+    this.validateQuote(signed);
     if (BigInt(signed.quote.amountIn) !== BigInt(amountIn)) throw new Error("quote amount does not match trade amount");
     const trace: DemoTradeResult["trace"] = [
       {stage: "Mock TA profile", detail: "canonical demo investor selected", status: "passed"},
@@ -122,7 +132,11 @@ export class DemoSettlementService {
     const amountIn = BigInt(q.amountIn);
     const allowance = await quote.allowance(this.investorAddress, this.config.artifact.rfqAdapter) as bigint;
     if (allowance < amountIn) {
-      const approval = await quote.approve(this.config.artifact.rfqAdapter, MaxUint256);
+      const approval = await quote.approve(
+        this.config.artifact.rfqAdapter,
+        MaxUint256,
+        {nonce: await this.pendingNonce(this.investorAddress)}
+      );
       await approval.wait();
       trace.push({stage: "Quote allowance", detail: "demo investor approved RFQAdapter", status: "passed"});
     }
@@ -137,7 +151,7 @@ export class DemoSettlementService {
     const request = [context, q.amountOut, BigInt(latest.timestamp + 3600), this.nextRouterNonce++, venueData];
 
     try {
-      const tx = await router.execute(request);
+      const tx = await router.execute(request, {nonce: await this.pendingNonce(this.investorAddress)});
       const receipt = await tx.wait();
       const after = await rwa.balanceOf(this.investorAddress) as bigint;
       trace.push({stage: "ComplianceEngine", detail: "latest policy accepted at fill time", status: "passed"});
@@ -167,8 +181,7 @@ export class DemoSettlementService {
     // consumes a deployer nonce.
     const adapter = new Contract(this.config.artifact.rfqAdapter, RFQ_ADAPTER_ABI, this.operator);
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const nonceHex = await this.provider.send("eth_getTransactionCount", [this.operator.address, "pending"]);
-      const nonce = BigInt(nonceHex);
+      const nonce = await this.pendingNonce(this.operator.address);
       try {
         const tx = await adapter.setMakerApproved(this.config.artifact.maker, approved, {nonce});
         const receipt = await tx.wait();
@@ -187,6 +200,64 @@ export class DemoSettlementService {
         throw error;
       }
     }
+  }
+
+  private async pendingNonce(address: string): Promise<bigint> {
+    const nonceHex = await this.provider.send("eth_getTransactionCount", [address, "pending"]);
+    return BigInt(nonceHex);
+  }
+
+  private validateQuote(signed: SignedRFQQuote): void {
+    if (!signed || typeof signed !== "object" || !signed.quote || typeof signed.signature !== "string") {
+      throw new Error("signed quote is malformed");
+    }
+    const q = signed.quote;
+    const expected = {
+      maker: asAddress(this.config.artifact.maker, "artifact maker"),
+      taker: asAddress(this.config.artifact.investor, "artifact investor"),
+      tokenIn: asAddress(this.config.artifact.quote, "artifact quote"),
+      tokenOut: asAddress(this.config.artifact.rwaToken, "artifact rwaToken"),
+      venue: asAddress(this.config.artifact.rfqVenue, "artifact rfqVenue"),
+      verifyingContract: asAddress(this.config.artifact.rfqAdapter, "artifact rfqAdapter")
+    };
+    for (const key of ["maker", "taker", "tokenIn", "tokenOut", "venue"] as const) {
+      if (asAddress(q[key], `quote ${key}`).toLowerCase() !== expected[key].toLowerCase()) {
+        throw new Error(`quote ${key} does not match the deployment artifact`);
+      }
+    }
+    const domain = signed.typedData?.domain;
+    if (
+      !domain
+      || domain.name !== "CornerStoreRFQ"
+      || domain.version !== "1"
+      || Number(domain.chainId) !== this.config.chainId
+      || asAddress(domain.verifyingContract, "quote verifyingContract").toLowerCase() !== expected.verifyingContract.toLowerCase()
+    ) {
+      throw new Error("quote domain does not match the deployment artifact");
+    }
+    if (signed.typedData.primaryType !== "RFQQuote" || !signed.typedData.message) {
+      throw new Error("quote typed data is malformed");
+    }
+    for (const key of ["maker", "taker", "tokenIn", "tokenOut", "venue", "amountIn", "amountOut", "nonce", "expiry"] as const) {
+      if (String(signed.typedData.message[key]).toLowerCase() !== String(q[key]).toLowerCase()) {
+        throw new Error(`quote typed data ${key} does not match the signed quote`);
+      }
+    }
+    const recovered = verifyTypedData(
+      {name: "CornerStoreRFQ", version: "1", chainId: this.config.chainId, verifyingContract: expected.verifyingContract},
+      RFQ_QUOTE_TYPES,
+      q,
+      signed.signature
+    );
+    if (recovered.toLowerCase() !== expected.maker.toLowerCase()) {
+      throw new Error("quote signature does not recover the approved maker");
+    }
+  }
+
+  private enqueue<T>(action: () => Promise<T>): Promise<T> {
+    const pending = this.actionQueue.then(action, action);
+    this.actionQueue = pending.then(() => undefined, () => undefined);
+    return pending;
   }
 
   private appendEvent(event: {blockNumber: number; transactionHash: string; name: string; args: Record<string, string>}): void {

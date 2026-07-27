@@ -2,8 +2,8 @@
 
 ## Source of truth
 - Status: Active
-- Last refreshed: 2026-07-23
-- Primary product surfaces: RFQ Trader, Security demo, read-only Operator view
+- Last refreshed: 2026-07-27
+- Primary product surfaces: Dashboard, RFQ creation, My RFQs, Portfolio; Security proof and read-only Operator view remain advanced surfaces
 - Evidence reviewed: `services/operator-dashboard/index.html`, `services/operator-dashboard/README.md`, `share/RFQ Trading Console (standalone).html`, RFQ and Operator API contracts
 
 ## Brand
@@ -12,19 +12,20 @@
 - Avoid: consumer-exchange spectacle, unexplained mock data, hidden signing, decorative charts presented as live market data
 
 ## Product goals
-- Goals: demonstrate quote request → review → compliant settlement without CLI steps; make policy enforcement and operator state visible
+- Goals: let a first-time user move from portfolio context → RFQ request → quote comparison → exact review → compliant settlement without CLI steps; keep policy and operator evidence available without making it the primary journey
 - Non-goals: production custody, hosted signing, real Securitize/TA integration, fake multi-maker liquidity
 - Success signals: a first-time viewer can complete and explain the demo; every displayed datum has visible provenance
 
 ## Personas and jobs
-- Primary personas: trader/demo viewer, compliance or product reviewer, protocol operator
+- Primary personas: tokenized-asset investor/trader and demo viewer; compliance/product reviewer and protocol operator are secondary
 - User jobs: request and settle a quote; prove stale signatures cannot bypass current policy; inspect deployment, manifest and confirmed demo events
 - Key contexts of use: local Anvil demo, partner presentation, SDK integration review
 
 ## Information architecture
-- Primary navigation: Trader · RFQ / Security demo / Operator
-- Core routes/screens: single dashboard with three role-focused views
-- Content hierarchy: environment → action → review → result → audit evidence
+- Primary navigation: Dashboard / RFQ 거래 / My RFQs / Portfolio
+- Advanced navigation: Security proof / Operator view
+- Core routes/screens: six client-side views in one dependency-free dashboard
+- Content hierarchy: holdings and status → transaction intent → executable quote → exact review → settlement result; audit evidence is available on demand
 
 ## Design principles
 - Label provenance: Live, Preview, Demo fixture and Follow-up must never be visually conflated.
@@ -41,10 +42,10 @@
 - Imagery/iconography: text and status-first; no unverified logos
 
 ## Components
-- Existing components to reuse: status blocks, fact rows, quote cards, execution trace, event list, metrics strip
-- New/changed components: compliance pre-check, session trade history, live indexed-event summary and log, live firm-rate marker over clearly labeled fixture market context, header help control and in-product presenter guide
+- Existing components to reuse: status blocks, fact rows, quote cards, event list, metrics strip
+- New/changed components: user dashboard summary, RFQ creation form, RFQ lifecycle table, live/preview quote comparison, exact-review modal, portfolio session delta, environment preparation, header help control and in-product presenter guide
 - Variants and states: live/preview, available/expired, loading/empty/error/success/rejected
-- Token/component ownership: dashboard CSS variables and classes in `services/operator-dashboard/index.html`
+- Token/component ownership: dashboard CSS variables and classes in `services/operator-dashboard/styles.css`
 
 ## Accessibility
 - Target standard: WCAG 2.1 AA for core demo controls
@@ -68,11 +69,11 @@
 
 ## Content voice
 - Tone: concise, technical and demonstrable
-- Terminology: quote, maker, Router, RFQAdapter, manifest, settlement, indexed event
+- Terminology: RFQ, firm quote, maker and settlement on user screens; Router, RFQAdapter, manifest and indexed event primarily in advanced/evidence views
 - Microcopy rules: distinguish pre-check from fill-time enforcement; distinguish session state from persisted/indexed state
 
 ## Implementation constraints
-- Framework/styling system: dependency-free vanilla HTML/CSS/JS served by Node
+- Framework/styling system: dependency-free vanilla HTML/CSS/JS split into `index.html`, `styles.css` and `app.js`, served by Node
 - Design-token constraints: reuse existing CSS variables; no new frontend dependency for the MVP
 - Performance constraints: no blockchain calls or signing in the browser
 - Compatibility constraints: current backend returns one live `SignedRFQQuote`; preview makers are non-selectable
