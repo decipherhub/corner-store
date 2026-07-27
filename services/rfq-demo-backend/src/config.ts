@@ -10,14 +10,21 @@ export const DEFAULT_PORT = 8787;
 export const DEFAULT_TTL_SECONDS = 3600;
 
 export interface Artifact {
+  assetProfile: "buidl-like" | "reg-d";
   deployer: string;
   investor: string;
+  eligibleInvestorB?: string;
+  ineligibleInvestor?: string;
   maker: string;
   quote: string;
   rfqAdapter: string;
   rfqVenue: string;
   rwaToken: string;
   router: string;
+  engine?: string;
+  policyReg?: string;
+  elementReg?: string;
+  qualifiedPurchaser?: string;
 }
 
 export interface DemoBackendConfig {
@@ -36,6 +43,8 @@ export interface DemoBackendConfig {
     enabled: boolean;
     operatorAccount: number;
     investorAccount: number;
+    eligibleInvestorBAccount: number;
+    ineligibleInvestorAccount: number;
   };
   now?: () => number | Promise<number>;
 }
@@ -63,7 +72,9 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env): Dem
     demoSettlement: {
       enabled: env.RFQ_DEMO_ENABLE_SETTLEMENT === "1",
       operatorAccount: parseAccountIndex(env.RFQ_DEMO_OPERATOR_ACCOUNT ?? "0"),
-      investorAccount: parseAccountIndex(env.RFQ_DEMO_INVESTOR_ACCOUNT ?? "1")
+      investorAccount: parseAccountIndex(env.RFQ_DEMO_INVESTOR_ACCOUNT ?? "1"),
+      eligibleInvestorBAccount: parseAccountIndex(env.RFQ_DEMO_ELIGIBLE_B_ACCOUNT ?? "4"),
+      ineligibleInvestorAccount: parseAccountIndex(env.RFQ_DEMO_INELIGIBLE_ACCOUNT ?? "5")
     }
   };
 }

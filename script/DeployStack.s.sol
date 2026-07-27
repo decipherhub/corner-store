@@ -103,10 +103,14 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         uint256 deployerPk = vm.deriveKey(MNEMONIC, 0);
         uint256 investorPk = vm.deriveKey(MNEMONIC, 1);
         uint256 makerPk = vm.deriveKey(MNEMONIC, 2);
+        uint256 eligibleInvestorBPk = vm.deriveKey(MNEMONIC, 4);
+        uint256 ineligibleInvestorPk = vm.deriveKey(MNEMONIC, 5);
         address deployer = vm.addr(deployerPk);
         address investor = vm.addr(investorPk);
         address maker = vm.addr(makerPk);
         address unapprovedMaker = vm.addr(vm.deriveKey(MNEMONIC, 3));
+        address eligibleInvestorB = vm.addr(eligibleInvestorBPk);
+        address ineligibleInvestor = vm.addr(ineligibleInvestorPk);
 
         assetProfile = vm.envOr("ASSET_PROFILE", string("buidl-like"));
         bytes32 profileHash = keccak256(bytes(assetProfile));
@@ -173,10 +177,17 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         //    pool (custody-as-holder). Investor gets full engine attestations.
         verifyInvestor(investor);
         _attestInvestor(investor);
+        verifyInvestor(eligibleInvestorB);
+        _attestInvestor(eligibleInvestorB);
+        verifyInvestor(ineligibleInvestor);
+        _attestInvestor(ineligibleInvestor);
+        if (useBuidlLikeProfile) qualifiedPurchaser.setQp(ineligibleInvestor, false);
         verifyInvestor(maker);
         registerVenueIdentity(address(pool));
 
         quote.mint(investor, INVESTOR_QUOTE);
+        quote.mint(eligibleInvestorB, INVESTOR_QUOTE);
+        quote.mint(ineligibleInvestor, INVESTOR_QUOTE);
         mint(maker, MAKER_RWA);
         mint(address(pool), POOL_RWA);
 
@@ -210,11 +221,21 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         quote.approve(address(rfqAdapter), type(uint256).max);
         vm.stopBroadcast();
 
+        vm.startBroadcast(eligibleInvestorBPk);
+        quote.approve(address(ammAdapter), type(uint256).max);
+        quote.approve(address(rfqAdapter), type(uint256).max);
+        vm.stopBroadcast();
+
+        vm.startBroadcast(ineligibleInvestorPk);
+        quote.approve(address(ammAdapter), type(uint256).max);
+        quote.approve(address(rfqAdapter), type(uint256).max);
+        vm.stopBroadcast();
+
         vm.startBroadcast(makerPk);
         rwaToken.approve(address(rfqAdapter), type(uint256).max);
         vm.stopBroadcast();
 
-        _writeArtifact(deployer, investor, maker, unapprovedMaker);
+        _writeArtifact(deployer, investor, eligibleInvestorB, ineligibleInvestor, maker, unapprovedMaker);
         _printSummary(deployer, investor, maker);
     }
 
@@ -260,11 +281,20 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         ); // C-01 seed
     }
 
-    function _writeArtifact(address deployer, address investor, address maker, address unapprovedMaker) internal {
+    function _writeArtifact(
+        address deployer,
+        address investor,
+        address eligibleInvestorB,
+        address ineligibleInvestor,
+        address maker,
+        address unapprovedMaker
+    ) internal {
         vm.createDir("deployments", true); // idempotent (recursive)
         string memory k = "corner-store-e2e";
         vm.serializeAddress(k, "deployer", deployer);
         vm.serializeAddress(k, "investor", investor);
+        vm.serializeAddress(k, "eligibleInvestorB", eligibleInvestorB);
+        vm.serializeAddress(k, "ineligibleInvestor", ineligibleInvestor);
         vm.serializeAddress(k, "maker", maker);
         vm.serializeAddress(k, "unapprovedMaker", unapprovedMaker);
         vm.serializeString(k, "assetProfile", assetProfile);
@@ -284,6 +314,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         vm.serializeAddress(k, "router", address(router));
         vm.serializeAddress(k, "factory", address(factory));
         vm.serializeAddress(k, "jurisdiction", address(jurisdiction));
+        vm.serializeAddress(k, "qualifiedPurchaser", address(qualifiedPurchaser));
         string memory json = vm.serializeAddress(k, "surveillance", address(surveillance));
         vm.writeJson(json, ARTIFACT_PATH);
     }

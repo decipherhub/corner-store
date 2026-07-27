@@ -4,7 +4,7 @@ import {RFQBackendSDK, SignedRFQQuote} from "../../rfq/src";
 
 import {DemoBackendConfig, asAddress} from "./config";
 import {createDemoQuoteService} from "./service";
-import {DemoSettlementService, DemoTradeAction} from "./settlement";
+import {DemoSettlementService, DemoTradeAction, DemoWalletId} from "./settlement";
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -106,6 +106,39 @@ async function handleRequest(
       return;
     }
 
+    if (req.method === "POST" && req.url === "/demo/precheck") {
+      requireSettlement(settlement);
+      const body = await readJsonBody(req);
+      if (!isRecord(body) || typeof body.taker !== "string") throw new Error("taker is required");
+      const amountIn = parseAmount(body.amountIn);
+      sendJson(res, 200, await settlement.precheck(asAddress(body.taker, "taker"), amountIn));
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/demo/admin/state") {
+      requireSettlement(settlement);
+      sendJson(res, 200, await settlement.state());
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/demo/admin/user") {
+      requireSettlement(settlement);
+      const body = await readJsonBody(req);
+      if (!isRecord(body) || !isWalletId(body.walletId) || typeof body.eligible !== "boolean") {
+        throw new Error("walletId and eligible are required");
+      }
+      sendJson(res, 200, await settlement.setUserEligibility(body.walletId, body.eligible));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/demo/admin/maker") {
+      requireSettlement(settlement);
+      const body = await readJsonBody(req);
+      if (!isRecord(body) || typeof body.approved !== "boolean") throw new Error("approved is required");
+      sendJson(res, 200, await settlement.setMakerApproved(body.approved));
+      return;
+    }
+
     if (req.method === "POST" && (req.url === "/rfq/quote" || req.url === "/quote")) {
       const body = await readJsonBody(req);
       const signed = await createQuote(body, config, quoteService);
@@ -144,12 +177,12 @@ async function handleRequest(
 
 function parseDemoTrade(body: unknown): {amountIn: string; action: DemoTradeAction} {
   if (!isRecord(body)) throw new Error("request body must be a JSON object");
-  if (typeof body.amountIn !== "string" || !/^\d+$/.test(body.amountIn) || BigInt(body.amountIn) <= 0n) {
-    throw new Error("amountIn must be a positive base-unit uint string");
-  }
+  const amountIn = parseAmount(body.amountIn);
   const action = body.action ?? "settle";
-  if (action !== "settle" && action !== "revoked-maker") throw new Error("action must be settle or revoked-maker");
-  return {amountIn: body.amountIn, action};
+  if (action !== "settle" && action !== "revoked-maker" && action !== "compliance-proof") {
+    throw new Error("action must be settle, revoked-maker or compliance-proof");
+  }
+  return {amountIn, action};
 }
 
 function setDemoCors(req: IncomingMessage, res: ServerResponse): void {
@@ -214,6 +247,23 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isWalletId(value: unknown): value is DemoWalletId {
+  return value === "eligible-a" || value === "eligible-b" || value === "ineligible";
+}
+
+function parseAmount(value: unknown): string {
+  if (typeof value !== "string" || !/^\d+$/.test(value) || BigInt(value) <= 0n) {
+    throw new Error("amountIn must be a positive base-unit uint string");
+  }
+  return value;
+}
+
+function requireSettlement(
+  settlement: DemoSettlementService | undefined
+): asserts settlement is DemoSettlementService {
+  if (!settlement) throw new Error("demo settlement is available only from the local e2e runner");
 }
 
 function sendJson(res: ServerResponse, status: number, value: unknown): void {

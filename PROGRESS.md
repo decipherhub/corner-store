@@ -83,6 +83,9 @@ source of truth로 사용한다.
 - `OPS-003 — Operator Deployment and Manifest Snapshot`(read-only Dashboard에
   execution/control-plane 주소와 onboarding Manifest status/version/RecipeBinding
   snapshot 표시, CLI nonce refresh와 전체 BUIDL-like RFQ walkthrough 검증).
+- `DEMO-003 — Role-aware RFQ Compliance Walkthrough`(Admin/적격 A·B/비적격
+  persona, 실제 QP·maker·asset pre-check, Admin 온체인 fixture 제어와
+  비적격 signed quote의 fill-time Router 거부 증명).
 
 ## Blocked
 
@@ -102,6 +105,15 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- RFQ 데모에 Admin, 적격투자자 A/B와 비적격투자자 persona를 추가했다. 선택된
+  지갑별 실제 Anvil signer로 quote와 Router transaction을 실행하고, QP·maker·
+  Manifest/minimum 정책을 생성·수락 전에 검사한다. 비적격 일반 거래는 UI에서
+  차단되며 별도 proof는 signed quote도 최종 Router 검사에서
+  `Qualified Purchaser claim missing`으로 거부됨을 증명한다.
+- Admin 화면의 사용자 적격 토글과 maker 취소/복구는 cosmetic fixture가 아니라
+  `QualifiedPurchaser.setQp`와 `RFQAdapter.setMakerApproved` 트랜잭션이다.
+  RFQ-only live E2E가 적격 B pre-check, 비적격 pre-check/최종 거부, Admin QP
+  round-trip, 정상 체결과 maker revoke 거부를 모두 통과했다.
 - RFQ 데모를 운영자 도구 중심에서 사용자 중심 4단계 흐름으로 재구성했다. 실제
   실행 가능한 Meridian quote와 Falcon/Nomos preview fixture를 구분하고, exact quote
   검토 후 Router 체결, Portfolio의 실제 session balance delta까지 연결했다.

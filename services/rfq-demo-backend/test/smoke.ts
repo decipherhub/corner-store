@@ -14,8 +14,11 @@ async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "corner-store-rfq-demo-"));
   const artifactPath = join(dir, "anvil-e2e.json");
   const artifact = {
+    assetProfile: "buidl-like" as const,
     deployer: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     investor: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+    eligibleInvestorB: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+    ineligibleInvestor: "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
     maker: await makerWallet.getAddress(),
     quote: "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
     rfqAdapter: "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0",
@@ -36,7 +39,13 @@ async function main(): Promise<void> {
     defaultTtlSeconds: 3600,
     priceNumerator: "2",
     priceDenominator: "1",
-    demoSettlement: {enabled: false, operatorAccount: 0, investorAccount: 1},
+    demoSettlement: {
+      enabled: false,
+      operatorAccount: 0,
+      investorAccount: 1,
+      eligibleInvestorBAccount: 4,
+      ineligibleInvestorAccount: 5
+    },
     now: () => 1_700_000_000
   };
   const running = await startDemoServer(config);

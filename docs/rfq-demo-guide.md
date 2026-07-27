@@ -26,33 +26,37 @@ The command exits non-zero on failure. A successful run proves, in order:
 4. the RFQ backend creates an EIP-712-signed quote;
 5. the dashboard-style API path submits that exact quote through
    `ExecutionRouter → RFQAdapter`;
-6. revoking the maker prevents a stored signed quote from settling;
-7. the backend can settle again after CLI activity without reusing a stale
+6. eligible investor B passes and the ineligible investor fails live pre-check;
+7. a signed quote for the ineligible investor is rejected by the Router's final
+   `ComplianceEngine` evaluation;
+8. Admin can change and restore the local QP fixture on chain;
+9. revoking the maker prevents a stored signed quote from settling;
+10. the backend can settle again after CLI activity without reusing a stale
    account nonce.
 
 ## Presenter flow
 
 Use the one-command launcher and open `http://127.0.0.1:8790`.
 
-1. **Dashboard** — click **데모 환경 확인 및 준비**. Explain that this checks
-   the backend, deployed Router, Manifest and current maker approval.
-2. **RFQ 거래** — click **새 RFQ 만들기**, choose the BUIDL-like asset, enter
-   the amount and request a quote.
-3. **My RFQs** — compare the one live executable Meridian quote with disabled
-   preview fixtures. Select the live quote, review its nonce/signature/base-unit
-   amounts and confirm settlement.
-4. **Portfolio** — show the current-session on-chain balance delta separately
-   from the presentation fixture valuation.
+1. Select **비적격투자자**. Show the failed QP pre-check and run **최종 온체인
+   거부 시연** to prove that a signed quote still cannot bypass the Router.
+2. Select **적격투자자 A**. Request a fresh quote, compare it with disabled
+   preview fixtures and settle it through the Router.
+3. Request another eligible quote, switch to **Admin**, revoke Meridian in
+   **Maker 관리**, then return to the same eligible wallet and submit the stored
+   quote. The final fill-time check rejects it.
+4. In **사용자/화이트리스트**, show that QP fixture changes are actual local-chain
+   transactions. Restore any changed state before ending the demo.
+5. Open **Portfolio** to show that holdings remain readable even when trading is
+   blocked.
 
 The additional makers and portfolio valuation are presentation fixtures and
 are labeled accordingly; they are not executable quotes, persistent account
 data or an external market-data feed.
 
-Open **Security proof** under **Advanced demo**, create a fresh test quote, then
-click **Maker 취소 후 체결**. The maker approval is changed on chain and the stored quote is
-rejected at fill time. The maker deliberately stays revoked so the UI and
-Operator event log show the real state transition. Click **Restore maker**
-before returning to normal trading. The browser never holds a private key.
+The browser never holds a private key. Quotes are taker-bound: switching to a
+different investor does not transfer ownership of an existing quote. Return to
+the original taker or request a fresh quote.
 
 The dashboard performs the quote request and Router settlement itself; no CLI
 copy/paste is needed for the normal demo. If you prefer the terminal instead,

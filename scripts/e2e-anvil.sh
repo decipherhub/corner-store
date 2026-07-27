@@ -225,6 +225,37 @@ DEMO_RESTORED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/restore
   -d '{}')
 node -e 'const value=JSON.parse(process.argv[1]); if (!value.ready || !value.makerApproved) { console.error(value); process.exit(1); } console.log("    PASS: dashboard restore re-approved the maker on chain");' "$DEMO_RESTORED"
 
+if [[ "$ASSET_PROFILE" == "buidl-like" ]]; then
+  echo "==> Proving BUIDL-like role-aware pre-check and final compliance enforcement"
+  DEMO_STATE=$(curl -fsS "http://127.0.0.1:${BACKEND_PORT}/demo/state")
+  ELIGIBLE_B=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.wallets.find((wallet) => wallet.id === "eligible-b").address);' "$DEMO_STATE")
+  INELIGIBLE=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.wallets.find((wallet) => wallet.id === "ineligible").address);' "$DEMO_STATE")
+  ELIGIBLE_PRECHECK=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/precheck" \
+    -H "content-type: application/json" \
+    -d "{\"taker\":\"${ELIGIBLE_B}\",\"amountIn\":\"5000000000000000000000000\"}")
+  node -e 'const value=JSON.parse(process.argv[1]); if (!value.allowed || !value.wallet.qualifiedPurchaser) { console.error(value); process.exit(1); } console.log("    PASS: eligible investor B passed the live pre-check");' "$ELIGIBLE_PRECHECK"
+  INELIGIBLE_PRECHECK=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/precheck" \
+    -H "content-type: application/json" \
+    -d "{\"taker\":\"${INELIGIBLE}\",\"amountIn\":\"5000000000000000000000000\"}")
+  node -e 'const value=JSON.parse(process.argv[1]); if (value.allowed || value.wallet.qualifiedPurchaser || value.verdict.reason !== "Qualified Purchaser claim missing") { console.error(value); process.exit(1); } console.log("    PASS: ineligible investor failed pre-check with the QP reason");' "$INELIGIBLE_PRECHECK"
+  INELIGIBLE_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
+    -H "content-type: application/json" \
+    -d "{\"taker\":\"${INELIGIBLE}\",\"amountIn\":\"5000000000000000000000000\",\"ttlSeconds\":300}")
+  INELIGIBLE_TRADE_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"compliance-proof",quote}));' "$INELIGIBLE_QUOTE")
+  INELIGIBLE_REJECTED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
+    -H "content-type: application/json" \
+    -d "$INELIGIBLE_TRADE_BODY")
+  node -e 'const value=JSON.parse(process.argv[1]); if (value.rejection !== "Qualified Purchaser claim missing" || !value.reasonCode) { console.error(value); process.exit(1); } console.log("    PASS: Router final check rejected the signed ineligible quote");' "$INELIGIBLE_REJECTED"
+  ADMIN_ELIGIBLE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/admin/user" \
+    -H "content-type: application/json" \
+    -d '{"walletId":"ineligible","eligible":true}')
+  node -e 'const value=JSON.parse(process.argv[1]); if (!value.qualifiedPurchaser) { console.error(value); process.exit(1); }' "$ADMIN_ELIGIBLE"
+  ADMIN_RESTORED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/admin/user" \
+    -H "content-type: application/json" \
+    -d '{"walletId":"ineligible","eligible":false}')
+  node -e 'const value=JSON.parse(process.argv[1]); if (value.qualifiedPurchaser) { console.error(value); process.exit(1); } console.log("    PASS: Admin eligibility control changed and restored the live QP fixture");' "$ADMIN_RESTORED"
+fi
+
 echo "==> Requesting and filling a backend-signed RFQ quote through the Router"
 "${CLI[@]}" rfq-quote --backend "http://127.0.0.1:${BACKEND_PORT}" \
   --amount-in 5000000 --out "$QUOTE_FILE"
