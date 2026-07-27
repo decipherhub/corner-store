@@ -15,7 +15,8 @@ The launcher starts Anvil, deploys the selected profile, starts the RFQ backend,
 starts the read-only Operator API and serves the dashboard. Open the printed URL
 and press Ctrl-C to stop all local services. The same presenter sequence and a
 button-to-endpoint map are available from the **?** button in the dashboard
-header.
+header. Non-default ports are supported because the browser uses the dashboard's
+same-origin RFQ proxy rather than a hardcoded backend origin.
 
 The command exits non-zero on failure. A successful run proves, in order:
 
@@ -23,34 +24,32 @@ The command exits non-zero on failure. A successful run proves, in order:
 2. the Toolkit preflight and checkpoint accept its configuration;
 3. the CLI onboards the ERC-3643 asset and policy Manifest;
 4. the RFQ backend creates an EIP-712-signed quote;
-5. the CLI settles that quote only through `ExecutionRouter → RFQAdapter`;
-6. revoking the maker prevents a newly signed quote from settling.
+5. the dashboard-style API path submits that exact quote through
+   `ExecutionRouter → RFQAdapter`;
+6. revoking the maker prevents a stored signed quote from settling;
+7. the backend can settle again after CLI activity without reusing a stale
+   account nonce.
 
 ## Presenter flow
 
-For an interactive session, leave Anvil and the demo backend running:
+Use the one-command launcher and open `http://127.0.0.1:8790`.
 
-```sh
-scripts/e2e-anvil.sh --profile buidl-like --mode rfq --keep
-```
+1. **Dashboard** — click **데모 환경 확인 및 준비**. Explain that this checks
+   the backend, deployed Router, Manifest and current maker approval.
+2. **RFQ 거래** — click **새 RFQ 만들기**, choose the BUIDL-like asset, enter
+   the amount and request a quote.
+3. **My RFQs** — compare the one live executable Meridian quote with disabled
+   preview fixtures. Select the live quote, review its nonce/signature/base-unit
+   amounts and confirm settlement.
+4. **Portfolio** — show the current-session on-chain balance delta separately
+   from the presentation fixture valuation.
 
-Then start the existing operator dashboard in a second terminal and open
-`http://127.0.0.1:8790`:
+The additional makers and portfolio valuation are presentation fixtures and
+are labeled accordingly; they are not executable quotes, persistent account
+data or an external market-data feed.
 
-```sh
-npm run start --prefix services/operator-dashboard
-```
-
-Select **Trader · RFQ** and click **Check & prepare demo**. Then request a firm
-quote, select it for review, and execute the selected quote. The four visible
-stages show the mock TA profile, EIP-712 quote, Router policy decision and
-on-chain ERC-3643 balance change. The price-context panel marks the live firm
-rate returned by the backend. Its comparison curves, spread statistics and
-additional makers are presentation fixtures and are labeled accordingly; they
-are not executable quotes or an external market-data feed.
-
-Open **Security demo**, create a fresh test quote, then click **Revoke maker &
-execute**. The maker approval is changed on chain and the stored quote is
+Open **Security proof** under **Advanced demo**, create a fresh test quote, then
+click **Maker 취소 후 체결**. The maker approval is changed on chain and the stored quote is
 rejected at fill time. The maker deliberately stays revoked so the UI and
 Operator event log show the real state transition. Click **Restore maker**
 before returning to normal trading. The browser never holds a private key.

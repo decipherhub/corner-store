@@ -30,6 +30,8 @@ source of truth로 사용한다.
 - `RFQ-SDK-001 — RFQ Backend SDK Interfaces`
 - `DEMO-002 — MVP RFQ Demo Backend`(selectable asset profile + local HTTP quote
   API + CLI/backend→Router live settlement)
+- 사용자 중심 RFQ 데모 화면(Dashboard → RFQ 거래 → My RFQs → Portfolio,
+  Security/Operator Advanced 유지)
 - `TOOLKIT-001 — Versioned Config Foundation`
 - `OPS-001 — High-severity Solidity Lint Gate`
 - `OPS-002 — Repository-wide CI Parity`
@@ -100,6 +102,17 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- RFQ 데모를 운영자 도구 중심에서 사용자 중심 4단계 흐름으로 재구성했다. 실제
+  실행 가능한 Meridian quote와 Falcon/Nomos preview fixture를 구분하고, exact quote
+  검토 후 Router 체결, Portfolio의 실제 session balance delta까지 연결했다.
+- long-lived backend가 CLI와 동일한 Anvil 계정을 사용할 때 발생하던 stale nonce를
+  제거했다. transaction마다 pending nonce를 조회하고 settlement action을 직렬화했으며,
+  E2E가 UI와 동일한 exact quote 제출 및 CLI activity 이후 backend 재체결을 검증한다.
+- custom port에서도 동작하는 dashboard same-origin RFQ proxy를 추가하고, backend가
+  caller-provided quote의 deployment binding과 maker signature를 재검증하도록
+  hardening했다. tampered token quote 거부와 proxy 경유 실제 체결을 live E2E로 확인했다.
+- `scripts/demo.sh`는 사용 중인 포트를 사전에 거부하고, 실패한 `--keep` E2E는
+  프로세스를 남기지 않도록 정리해 반복 데모의 예측 가능성을 높였다.
 - 대시보드의 모든 정적·동적 버튼을 endpoint/상태 전이와 대조하고 연결 회귀 검사를
   추가했다. 체결된 single-use quote의 재실행을 차단하고 Operator API 오류 처리,
   탭 활성 상태와 중복 실행 방지를 보강했으며, 헤더 **?**에서 정상 거래·Security
@@ -109,8 +122,8 @@ source of truth로 사용한다.
 - RFQ MVP dashboard의 준비·상태 확인·quote 요청·검토·Router 체결·maker revoke·
   명시적 restore를 실제 local backend와 온체인 상태에 연결했다. revoke는 restore
   전까지 유지되고 Operator event index에 settlement와 maker false/true 전이가
-  기록된다. live quote rate와 indicative comparison chart를 추가하되, 외부 market
-  feed가 없는 곡선·spread·추가 maker는 fixture/preview로 명확히 구분했다. 브라우저에는
+  기록된다. live quote rate와 추가 maker preview를 제공하되, 외부 market
+  feed나 실제 multi-maker 연결이 없는 값은 fixture/preview로 명확히 구분했다. 브라우저에는
   private key가 전달되지 않는다. `scripts/check.sh`
   (641/641 Foundry 포함)과 RFQ-only live E2E가 통과했다.
 - `AMM-001`에서 vendored pinned Uniswap v3 core artifact로 canonical factory와

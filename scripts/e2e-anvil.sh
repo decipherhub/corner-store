@@ -68,7 +68,8 @@ REJECTED_QUOTE_FILE=$(mktemp -t corner-store-rfq-rejected.XXXXXX)
 CHECKPOINT_FILE="${TMPDIR:-/tmp}/corner-store-e2e-checkpoint.$$"
 
 cleanup() {
-  if [ "$KEEP" -eq 1 ]; then
+  local status=$?
+  if [ "$KEEP" -eq 1 ] && [ "$status" -eq 0 ]; then
     if [ -n "$PID_FILE" ]; then
       printf '%s\n%s\n' "$ANVIL_PID" "$BACKEND_PID" > "$PID_FILE"
     fi
@@ -196,13 +197,26 @@ DEMO_READY=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/setup" \
   -H "content-type: application/json" \
   -d '{}')
 node -e 'const value=JSON.parse(process.argv[1]); if (!value.ready || !value.makerApproved) { console.error(value); process.exit(1); } console.log("    PASS: dashboard setup prepared the on-chain maker");' "$DEMO_READY"
+DEMO_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
+  -H "content-type: application/json" \
+  -d '{"amountIn":"5000000000000000000000000","ttlSeconds":900}')
+DEMO_TAMPER_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); quote.quote.tokenOut="0x0000000000000000000000000000000000000001"; process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"settle",quote}));' "$DEMO_QUOTE")
+DEMO_TAMPERED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
+  -H "content-type: application/json" \
+  -d "$DEMO_TAMPER_BODY")
+node -e 'const value=JSON.parse(process.argv[1]); if (value.error !== "invalid_request" || !/tokenOut does not match/.test(value.message || "")) { console.error(value); process.exit(1); } console.log("    PASS: dashboard trade rejected a tampered quote payload");' "$DEMO_TAMPERED"
+DEMO_TRADE_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"settle",quote}));' "$DEMO_QUOTE")
 DEMO_SETTLED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
-  -d '{"amountIn":"5000000000000000000000000","action":"settle"}')
+  -d "$DEMO_TRADE_BODY")
 node -e 'const value=JSON.parse(process.argv[1]); if (!value.transaction?.hash || BigInt(value.transaction.rwaDelta) <= 0n) process.exit(1); console.log(`    PASS: dashboard trade settled in block ${value.transaction.blockNumber}`);' "$DEMO_SETTLED"
+DEMO_REJECT_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
+  -H "content-type: application/json" \
+  -d '{"amountIn":"5000000000000000000000000","ttlSeconds":900}')
+DEMO_REJECT_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"revoked-maker",quote}));' "$DEMO_REJECT_QUOTE")
 DEMO_REJECTED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
-  -d '{"amountIn":"5000000000000000000000000","action":"revoked-maker"}')
+  -d "$DEMO_REJECT_BODY")
 node -e 'const value=JSON.parse(process.argv[1]); if (value.rejection !== "RFQMakerNotApproved") { console.error(value); process.exit(1); } console.log("    PASS: dashboard maker-revocation returned RFQMakerNotApproved");' "$DEMO_REJECTED"
 DEMO_REVOKED_STATE=$(curl -fsS "http://127.0.0.1:${BACKEND_PORT}/demo/state")
 node -e 'const value=JSON.parse(process.argv[1]); if (value.makerApproved) { console.error(value); process.exit(1); } console.log("    PASS: maker remains revoked until an explicit restore");' "$DEMO_REVOKED_STATE"
@@ -226,9 +240,18 @@ if "${CLI[@]}" buy 0 --venue rfq --quote "$REJECTED_QUOTE_FILE"; then
 fi
 echo "    PASS: revoked maker quote was rejected"
 
+echo "==> Restoring the demo maker and proving backend nonce refresh after CLI activity"
+"${CLI[@]}" maker approve 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+POST_CLI_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
+  -H "content-type: application/json" \
+  -d '{"amountIn":"5000000000000000000000000","ttlSeconds":900}')
+POST_CLI_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"settle",quote}));' "$POST_CLI_QUOTE")
+POST_CLI_SETTLED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
+  -H "content-type: application/json" \
+  -d "$POST_CLI_BODY")
+node -e 'const value=JSON.parse(process.argv[1]); if (!value.transaction?.hash || BigInt(value.transaction.rwaDelta) <= 0n) process.exit(1); console.log(`    PASS: backend settled again after CLI activity in block ${value.transaction.blockNumber}`);' "$POST_CLI_SETTLED"
+
 if [ "$KEEP" -eq 1 ]; then
-  echo "==> Restoring the demo maker for the interactive session"
-  "${CLI[@]}" maker approve 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
   echo "    maker restored: request another RFQ quote in a second terminal"
 fi
 
