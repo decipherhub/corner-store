@@ -101,6 +101,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .wallet small, .wallet strong { display: block; }
 .wallet small { color: var(--muted); font-size: 10px; }
 .wallet strong { margin-top: 2px; font: 700 11px ui-monospace, monospace; }
+.wallet-select { min-width: 245px; }
+.wallet-select select {
+  width: 180px; padding: 3px 20px 3px 0; border: 0; background: transparent;
+  color: var(--ink); font-size: 12px; font-weight: 800;
+}
+.wallet-select strong { color: var(--muted); }
 .notification-panel {
   position: absolute; z-index: 5; right: 200px; top: 76px; width: min(340px, calc(100vw - 40px));
   padding: 13px 15px; border: 1px solid var(--line); background: #fff; box-shadow: var(--shadow); font-size: 12px; color: var(--muted);
@@ -111,6 +117,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 @keyframes enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .view { animation: none; } }
 .hidden { display: none !important; }
+.role-banner {
+  margin-bottom: 18px; padding: 14px 17px; border-left: 4px solid var(--red);
+  color: #842a33; background: var(--red-soft); font-size: 12px;
+}
+.role-banner strong { margin-right: 8px; }
 
 .hero-balance {
   min-height: 196px; display: flex; align-items: end; justify-content: space-between; gap: 28px;
@@ -209,6 +220,20 @@ select { appearance: auto; }
 .asset-facts { margin-top: 18px; border: 1px solid var(--line); }
 .positive { color: var(--green); }
 .compliance-note { margin-top: 16px; padding: 12px; color: #095b4c; background: var(--green-soft); border-left: 3px solid var(--green); font-size: 11px; line-height: 1.5; }
+.compliance-note.blocked { color: #842a33; background: var(--red-soft); border-color: var(--red); }
+.negative { color: var(--red); }
+.precheck-card {
+  margin: 18px 0; padding: 14px; border: 1px solid #8bc9b9; background: var(--green-soft);
+}
+.precheck-card.blocked { border-color: #e4a6ab; background: var(--red-soft); }
+.precheck-card > strong, .precheck-card > b { display: block; margin-bottom: 10px; }
+.precheck-card > b { margin: 10px 0 0; font-size: 11px; }
+.precheck-card #precheckRows > div, .precheck-card.compact > div {
+  display: flex; justify-content: space-between; gap: 14px; padding: 7px 0; border-top: 1px solid rgba(16,35,61,.1); font-size: 10px;
+}
+.precheck-card .pass span { color: var(--green); }
+.precheck-card .fail span, .precheck-card .fail strong { color: var(--red); }
+.precheck-card.compact { margin: 15px 0; }
 
 .filter-tabs { display: flex; gap: 3px; margin-bottom: 12px; overflow-x: auto; }
 .filter-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 10px 15px; background: transparent; color: var(--muted); font-weight: 700; white-space: nowrap; }
@@ -316,7 +341,9 @@ select { appearance: auto; }
   .nav-item span { font-size: 15px; }
   .topbar { min-height: 78px; padding: 15px 18px; }
   .topbar h1 { font-size: 22px; }
-  .wallet { display: none; }
+  .wallet { min-width: 155px; margin-left: 0; padding-left: 8px; }
+  .wallet-select select { width: 135px; font-size: 10px; }
+  .wallet-select strong { display: none; }
   .notification-panel { right: 18px; top: 66px; }
   .content { padding: 20px 15px 95px; }
   .mobile-advanced-nav { display: grid; grid-template-columns: auto 1fr 1fr; align-items: center; gap: 7px; margin-bottom: 16px; padding: 8px; border: 1px solid var(--line); background: #fff; }

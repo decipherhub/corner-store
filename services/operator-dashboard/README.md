@@ -1,6 +1,8 @@
 # Corner Store RFQ Demo Dashboard
 
-The primary demo is a user journey with four screens:
+The primary demo is a role-aware journey. The header switches between Admin,
+eligible investor A/B and an ineligible investor. This is a local Anvil persona
+selector, not authentication.
 
 - **Dashboard** shows presentation fixtures separately from current-session
   live RFQ and settlement counts, and prepares the local demo environment.
@@ -10,12 +12,9 @@ The primary demo is a user journey with four screens:
 - **Portfolio** shows fixture holdings plus the real balance delta produced by
   the current session's Router settlement.
 
-Two advanced views preserve implementation and enforcement evidence:
-
-- **Security proof** signs a quote, revokes the maker, and submits that exact
-  stored quote to prove current Router policy rejects it at fill time.
-- **Operator view** reads deployment, Manifest and indexed demo events from
-  `services/operator-api` through the dashboard's same-origin proxy.
+Admin gets separate monitoring, user/QP fixture control, maker control and
+transaction-history screens. Those controls send real local-chain transactions;
+they are not cosmetic state.
 
 The executable flow requests a live firm quote, lets the trader review the exact
 signed payload, and settles that same quote through the protected Router.
@@ -41,9 +40,10 @@ scripts/demo.sh --profile buidl-like
 ```
 
 Open the printed URL, prepare the environment and follow the four primary
-screens. Press Ctrl-C to stop all local services. Use the **?** button in the
-dashboard header for the presenter flow, the
-security scenario, live-versus-fixture labeling, and a button-to-endpoint map.
+screens. Switch to the ineligible fixture to show pre-check failure and the
+explicit final-enforcement proof. Switch to Admin to change QP or maker state.
+Press Ctrl-C to stop all local services. Use the **?** button for the presenter
+sequence and the taker-binding warning.
 The launcher refuses to start when one of its ports is already occupied instead
 of accidentally attaching to a stale local process. Browser RFQ calls use the
 dashboard's `/rfq-api` same-origin proxy, so custom launcher ports do not require

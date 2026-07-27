@@ -62,11 +62,14 @@ restore the maker. The private keys remain in the local backend.
 
 The local-only dashboard control endpoints are:
 
-- `GET /demo/state`: read chain id and current maker approval.
+- `GET /demo/state`: read maker approval and the three demo wallet/QP states.
 - `POST /demo/setup`: prepare the reusable demo state and return its status.
 - `POST /demo/restore`: explicitly re-approve the demo maker.
-- `POST /demo/quote`: issue a signed quote for the canonical demo taker.
-- `POST /demo/trade`: settle or run the revoked-maker rejection scenario.
+- `POST /demo/precheck`: evaluate current QP, maker and asset policy for a wallet.
+- `POST /demo/quote`: issue a taker-bound signed quote for a configured demo wallet.
+- `POST /demo/trade`: settle or run maker/compliance final-enforcement proofs.
+- `POST /demo/admin/user`: set a demo wallet's live QP fixture.
+- `POST /demo/admin/maker`: set the live maker approval.
 
 The state/setup/restore/trade controls are disabled unless
 `RFQ_DEMO_ENABLE_SETTLEMENT=1` is set by the local runner. `/demo/quote` remains
@@ -83,6 +86,7 @@ Command flags have matching `RFQ_DEMO_*` environment variables:
 - `--price-numerator`, `--price-denominator`
 - `RFQ_DEMO_OPERATOR_ACCOUNT`, `RFQ_DEMO_INVESTOR_ACCOUNT` (local Anvil
   account indexes used only when demo settlement is explicitly enabled)
+- `RFQ_DEMO_ELIGIBLE_B_ACCOUNT`, `RFQ_DEMO_INELIGIBLE_ACCOUNT`
 
 `RFQ_DEMO_ENABLE_SETTLEMENT=1` additionally enables the click-through settlement
 endpoint. It is set by `scripts/e2e-anvil.sh` only after it has started local
@@ -108,4 +112,5 @@ The smoke test starts an ephemeral local server, requests two quotes, verifies
 the maker signature and monotonic nonce, rejects numeric on-chain amounts, and
 confirms demo controls remain disabled outside the local runner. The live runner
 additionally proves setup → protected Router fill → persistent revoke state →
-explicit restore against the selected asset profile.
+explicit restore, role-aware pre-check, ineligible final rejection and Admin QP
+round-trip against the selected asset profile.

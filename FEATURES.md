@@ -834,3 +834,33 @@ passing
 
 - snapshot은 demo/reference checkpoint이며 production indexer나 live RPC provider가 아니다.
 - production Manifest lifecycle mutation과 governance action은 별도 범위다.
+
+## DEMO-003 — Role-aware RFQ Compliance Walkthrough
+
+### Behavior
+
+- 헤더에서 Admin, 적격투자자 A/B와 비적격투자자 fixture를 전환한다.
+- 사용자 RFQ 생성·수락 전에 현재 온체인 QP, maker 승인과 자산 정책을 pre-check한다.
+- quote는 선택한 taker 지갑에 EIP-712로 binding되고 다른 지갑이 재사용할 수 없다.
+- 비적격 사용자의 일반 quote 요청은 차단되며, 별도 proof action은 signed quote도
+  Router의 최신 `ComplianceEngine` 검사에서 거부됨을 보여준다.
+- Admin은 로컬 Anvil의 QP fixture와 maker 승인을 실제 트랜잭션으로 변경하고,
+  체결·거부·정책 변경 내역을 조회한다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `forge build --offline --force`
+- `forge test --offline`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- 지갑 선택은 local demo persona이며 production authentication/custody가 아니다.
+- pre-check는 UX용 사전 판단이고 최종 권한은 Router fill-time evaluation에 있다.

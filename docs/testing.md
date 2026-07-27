@@ -112,6 +112,9 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - `buidl-like | reg-d` asset profile 선택과 동일한 protected execution path
 - backend-signed quote의 CLI 요청과 Router/RFQAdapter settlement
 - backend quote 발급 후 maker revoke 시 fill-time 거부
+- 적격 A/B와 비적격 wallet fixture의 실제 QP pre-check
+- 비적격 taker-bound signed quote의 Router fill-time compliance 거부
+- Admin QP fixture 변경과 원상복구
 
 ### Integrated Check
 
