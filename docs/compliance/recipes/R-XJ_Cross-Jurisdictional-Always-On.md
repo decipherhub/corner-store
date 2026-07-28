@@ -1,196 +1,142 @@
 ---
-type: recipe-spec-sheet
+type: recipe-requirement-spec
 recipe-id: R-XJ
 recipe-name: Cross-Jurisdictional Always-On (제재·관할·Reg M 횡단 전제)
-internal-id: RCP.R-XJ
-legal-effect: "거래가 제재(OFAC)·관할(Reg S)·시장행위(Reg M) 횡단 금지에 저촉되지 않음 — 모든 거래의 *진입 전제*(면제 아님)"
-status: v1.0 — 조문별 논증 (baseline 전제층·fail-closed·무과실 제재 우선)
-audience: 개발팀·법무팀·외부 consultant·학회원
-related-external-sources:
-  - "50 U.S.C. § 1701 et seq. — IEEPA(제재 권한): https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title50-section1701&num=0&edition=prelim"
-  - "31 CFR Chapter V — OFAC 규정(SDN·blocked·50% Rule): https://www.ecfr.gov/current/title-31/subtitle-B/chapter-V"
-  - "17 CFR § 230.901–905·902(k) — Regulation S(역외 safe harbor·US person): https://www.ecfr.gov/current/title-17/section-230.901"
-  - "Morrison v. National Australia Bank, 561 U.S. 247 (2010) — 역외적용 transactional test: https://supreme.justia.com/cases/federal/us/561/247/"
-  - "17 CFR § 242.101·102 — Reg M(판매 중 매수 제한, 분배기간 always-on): https://www.ecfr.gov/current/title-17/section-242.101"
-created: 2026-06-17
-updated: 2026-06-17
-tags: [recipe, R-XJ, cross-jurisdictional, ofac, sanctions, reg-s, jurisdiction, reg-m, always-on, baseline, fail-closed, spec-sheet]
+project: RWA DEX (Giwa) · corner-store
+status: v2.0 (2026-07-28) — 2부 구성(제1부 법률논증 산문 + 제2부 목표 규격). 전용 Recipe 컨트랙트 미구현(target spec).
+substance-sot: "승준 recipe walkthrough — R-XJ_Cross-Jurisdictional-Always-On.md v1.0 (2026-06-17, baseline 전제층·fail-closed). 보경 recipe 검토본 없음 — 법률 검토 필요."
+implements: "전용 컨트랙트 미구현 — 목표 규격. 구성 요소(A-01·A-02·F-04)는 개별 Element로 스펙됨."
+reflects-decisions: [ADR-001, ADR-002, ADR-006]
+umbrella: "SPEC.md — 공유 개념(Element/Recipe/Manifest·Router·fail-closed)은 여기에 의한다"
+legal-effect: "거래가 제재(OFAC)·관할(Reg S)·시장행위(Reg M) 횡단 금지에 저촉되지 않음 — 모든 거래의 진입 전제(면제 아님)"
+review-required: legal
+tags: [recipe-requirement-spec, R-XJ, cross-jurisdictional, ofac, sanctions, reg-s, reg-m, always-on, baseline, fail-closed, target-spec]
 ---
 
-# R-XJ — Cross-Jurisdictional Always-On (Recipe 명세 = 모든 거래의 진입 전제층)
+# R-XJ Cross-Jurisdictional Always-On — 요구사항 명세서 (Recipe)
 
-> **이 문서는 무엇인가.** Recipe = *하나의 법률효과를 논증.* 그런데 R-XJ는 **면제 recipe가 아니다.** R1~R3은 *"~의 자격으로 면제를 성립"*시키고, R4는 *"행태 금지를 감시"*한다. **R-XJ는 그 *아래에 깔리는 전제층(baseline)* — *어떤 거래든, 어떤 경로든* 가장 먼저 통과해야 하는 *횡단(cross-cutting) 관문*이다.**
-> **세 횡단 규범.** ① **제재(OFAC/IEEPA)** — SDN과 거래 절대 금지(*무과실·strict liability*). ② **관할(Reg S·상대국법·포괄제재국)** — 매수인이 *어느 나라 사람*인지로 제한. ③ **Reg M** — *판매(distribution) 중* 발행자측 매수 금지(분배기간 always-on). 이들은 *면제 여부와 무관하게* 모든 거래에 *무조건* 적용된다.
-> **왜 "Cross-Jurisdictional".** 제재·관할은 *본질상 다국적(초국경)* 규범 — 한 거래가 *복수 관할*의 법에 동시에 걸린다. R-XJ는 이 *다국적 관할* 차원을 거래 진입 직전에 검문한다.
-> **fail-closed 원칙.** R-XJ, 특히 제재(A-01)는 *무과실 책임*이라 — *불확실하면 막는다*(가장 보수적). 면제(R1~R3)가 아무리 충족돼도 R-XJ가 막으면 *거래 불가.*
-> **자산 일반성(ADR-006):** 제재(A-01)는 *완전 보편*(자산별 값 0). 관할(A-02)은 `Manifest.allowedJurisdictions`. Reg M(F-04)은 R1 발행상태. → 자산 무관.
+> **저술 지위 고지.** 본 Recipe의 법적 논증은 승준 recipe walkthrough(2026-06-17)를 산문 2부 형식으로 재구성한 것이며, 대응 보경 recipe 검토본은 없다 — 법률 검토 전(제4절). R-XJ 전용 Recipe 컨트랙트는 미구현이므로 제2부는 목표 규격이다. 구성 요소(A-01·A-02·F-04)는 각각 개별 Element로 스펙되어 있다.
+
+> **정체성 유의.** R-XJ는 면제 Recipe가 아니다. R1~R3은 자격으로 면제를 성립시키고 R4는 행태를 감시하나, R-XJ는 그 아래에 깔리는 전제층(baseline)이다 — 어떤 거래든, 어떤 경로든 가장 먼저 통과해야 하는 횡단 관문이다. 비유하자면 R1~R3이 비자, R4가 기내 행동수칙이라면 R-XJ는 입국심사이다. 비자가 있어도 입국심사를 넘지 못하면 들어갈 수 없다.
+
+본 문서는 컴플라이언스 **Recipe** R-XJ(횡단 전제층)의 요구사항 명세서이다. **제1부**는 R-XJ가 검문하는 세 횡단 금지의 근거와 조문별 도출을, **제2부**는 그 목표 구현 규격을 규정한다.
 
 ---
 
-## §1. 법률효과 + 구조 (전제층)
+# 제1부. 법적 근거 및 논증
 
-**효과(소결론): "이 거래는 제재·관할·Reg M 횡단 금지에 저촉되지 않는다 — 따라서 *거래 진입의 전제가 충족*된다."** (면제 *성립*이 아니라 *진입 허용*.)
+## 1. 개요
 
-```
-[모든 거래]
-   │
-   ▼  ┌──────────────────────────────────────────────┐
-      │  R-XJ (전제층 — 가장 먼저, fail-closed)        │
-      │   ① A-01 제재(OFAC)   — 무과실, SDN 절대 차단   │
-      │   ② A-02 관할(Reg S)  — 허용 관할만             │
-      │   ③ F-04 Reg M        — 분배기간 발행자 매수 차단│
-      └──────────────────────────────────────────────┘
-   │  (R-XJ PASS여야 아래로)
-   ▼
-   ├─ 발행? → R1 (×R3 if 펀드)
-   ├─ 전매? → R2 (×R3 if 펀드)
-   └─ 모든 거래 → R4 (행태 감시)
-```
-→ R-XJ 과제: **세 횡단 금지에 *미저촉*임을 보이면 → 진입 전제 충족.** *그 위에* 면제(R1~R3)·행태(R4)가 얹힌다.
+R-XJ는 모든 거래가 자격·행태 규범에 앞서 통과해야 하는 세 가지 횡단 금지 — 제재(OFAC), 관할(Regulation S), 판매 중 매수 제한(Regulation M) — 에의 미저촉을 검문하는 전제층 Recipe이다. 이 세 규범은 면제 성립 여부와 무관하게 모든 거래에 무조건 적용되며, 특히 제재는 무과실 책임이어서 R-XJ 전체가 fail-closed(불확실하면 차단) 원칙으로 작동한다. R-XJ가 차단하면 어떤 면제가 충족되어도 거래는 성립하지 아니한다.
+
+## 2. 규범적 근거
+
+첫째, 제재이다. 국제비상경제권한법(IEEPA)과 그에 근거한 OFAC 규정은 특별지정국민(SDN)·차단대상자, 그리고 그들이 50% 이상 소유한 자(50% Rule)와의 거래를 금지하며, 그 위반은 무과실 책임이어서 알지 못하였더라도 책임을 진다(50 U.S.C. § 1701 이하; 31 C.F.R. Chapter V). 둘째, 관할이다. 미국 증권법은 미국인(U.S. person, Rule 902(k)) 대상 거래에 등록을 요구하고, Regulation S는 역외 거래에 대한 안전항을 제공하며(17 C.F.R. §§ 230.901–905), 역외적용의 범위는 거래 기준으로 판단된다(Morrison v. National Australia Bank, 561 U.S. 247 (2010)). 또한 포괄제재국(embargoed) 거주자와의 거래는 국가 단위 제재로 금지된다. 셋째, Regulation M은 배포 제한기간 중 발행자·관여자의 대상증권 매수를 금지한다(17 C.F.R. § 242.101·102). 이 세 규범은 다국적 관할에 동시에 걸리는 성격을 가지며, 그래서 횡단(cross-jurisdictional)이다.
+
+## 3. 쟁점별 논증
+
+### 3.1 제재 — 무과실·최우선 (fail-closed)
+
+제재 대상과의 거래는 예외나 최소기준(de minimis) 없이 절대적으로 금지되며, 위반이 무과실이라는 점에서 다른 어떤 규범보다 보수적으로 다루어져야 한다. Element A-01이 거래 당사자를 SDN·제재 명단과 대조하여 일치하거나 의심되는 경우 차단한다. 명단 대조 자체는 결정론이나(패턴 A), 당사자의 실제 신원은 off-chain KYC claim에 의존하므로, claim이 의심스러우면 통과가 아니라 차단으로 귀결한다(fail-closed). 어떤 면제가 충족되어도 A-01의 차단은 거래를 불가능하게 하며, 이것이 시스템에서 가장 보수적인 지점이다.
+
+### 3.2 관할 — Reg S와 역외적용
+
+매수인의 관할(거주·국적)에 따라 적용 법이 달라진다. 미국인 대상 거래에는 미국 증권법이 전면 적용되고, 허용 관할 외 또는 금수국 거주자와의 거래는 제한·금지된다. Element A-02가 매수인의 관할을 `Manifest.allowedJurisdictions`·금수국 목록과 대조하여 비허용·금수 관할을 차단한다. 미국인 판정은 Rule 902(k) 기준에 의한다. 관할 코드 대조는 결정론이나(패턴 A), 거주지·국적이라는 입력은 claim이다.
+
+### 3.3 Reg M — 분배기간 중 발행자측 매수 (시간조건부)
+
+판매 진행 중에는 발행자·관여자·계열 매수자가 그 증권을 매수할 수 없다(가격 조작 방지). Element F-04가 제한기간(R1 발행 상태에서 도출)과 매수자 신원으로 결정론 차단한다. F-04는 시장행위(R4)이자 분배기간 횡단 전제(R-XJ)로 이중 소속이며, 분배기간에만 활성이라는 점에서 R-XJ 중 유일한 시간조건부 항목이다.
+
+### 3.4 전제층의 위상 — 곱셈의 맨 앞 인수
+
+R-XJ는 모든 Recipe의 앞에 곱해지는 보편 prefactor이다. 어떤 거래도 R-XJ 없이 성립하지 아니하며(R-XJ = 0이면 전체 = 0), R-XJ가 실패하면 이후 자격·행태 Recipe의 평가는 무의미해지므로 진입 자체를 차단한다(short-circuit). 다른 모든 Recipe가 "R-XJ cumulative always-on"이라 적는 것의 정의가 여기에 있다.
+
+## 4. 확정 사항 및 잔여 쟁점
+
+세 횡단 금지의 구조와 fail-closed 원칙은 위와 같이 확정되었다. 잔여 쟁점은 다음과 같다. 첫째, OFAC 제재 명단의 실시간 갱신 피드의 신뢰성이 관건이며 갱신 지연은 곧 위험이다. 둘째, A-01·A-02가 받는 신원·거주 claim의 스키마와 신뢰사슬(Trusted Issuer)이 정의되어야 한다. 셋째, SDN 50% 간접소유의 자동 탐지는 off-chain 조사 영역으로 코드는 조사 결과 claim을 수용하며 그 한계를 명시하여야 한다. 넷째, OFAC 라이선스(특별허가)는 법무 재량으로 코드 자동화 대상이 아니며 예외는 수동·off-chain으로 처리한다. 다섯째, F-04 분배기간 산정 규칙(분배 시작·종료 정의)이 확정되어야 한다. 여섯째, 본 Recipe의 법적 논증은 보경 검토 전이다.
 
 ---
 
-## §2. 📋 메타 + 요약
+# 제2부. 목표 규격 (전용 컨트랙트 미구현)
+
+## 5. 시스템 내 위치
 
 | 항목 | 값 |
 |---|---|
-| Recipe / ID | Cross-Jurisdictional Always-On / **R-XJ** |
-| ① 법률효과 | **제재·관할·Reg M 미저촉 → 거래 진입 전제 충족** (면제 아님) |
-| ② 논증 | 횡단 금지 조문별(IEEPA/OFAC · Reg S §902(k)·Morrison · Reg M 101/102) |
-| ③ Activation | **모든 거래·항상**(baseline, 가장 먼저 평가) |
-| ④ Composition | A-01 ∧ A-02 ∧ (분배기간 → F-04) — **fail-closed** |
-| ⑤ 거절 | `R-XJ_BLOCK_SANCTION`(무과실·최우선)·`_JURISDICTION`·`_REGM` |
-| ⑥ Conflict | **R1·R2·R3·R4 *전부에 곱해지는* 보편 prefactor** |
+| Recipe | R-XJ(횡단 전제층) |
+| 컨트랙트 | **미구현** — 목표 규격. 구성 요소는 개별 Element(A-01·A-02·F-04) |
+| 법률효과 | 제재·관할·Reg M 미저촉 → 거래 진입 전제 충족(면제 아님) |
+| 활성화 | 모든 거래·항상, 가장 먼저(baseline) |
+| 원칙 | fail-closed(제재는 불확실 시 차단) + short-circuit |
 
----
+## 6. 활성화 (Activation)
 
-## §3. ① 법률효과 — "면제"가 아니라 "전제"
+- **REQ-RXJ-1 (최우선·상시).** 시스템은 모든 거래에 대하여 R-XJ를 가장 먼저 평가하여야 한다. A-01·A-02는 무조건, F-04는 R1 분배기간에만 활성이다.
+- **REQ-RXJ-2 (short-circuit).** R-XJ가 실패하면 이후 Recipe(R1~R4) 평가 없이 거래를 차단하여야 한다.
 
-- R1~R3: *"이 자격이면 등록 면제"* (효과 = 면제 성립).
-- R4: *"이 행태는 금지 감시"* (효과 = 차단·표시).
-- **R-XJ: *"이 거래는 횡단 금지에 안 걸린다"* (효과 = *진입 허용의 전제*).** 면제를 *주는* 게 아니라, *모든 면제·거래의 *발 밑*에 깔린 통과 조건*.
+## 7. 구성 (Composition) — fail-closed 전제 AND
 
-> 비유: R1~R3가 *비자(자격)*, R4가 *기내 행동수칙*이면, **R-XJ는 *입국심사(여권·제재명단·금수국)* — 비자가 있어도 입국심사를 못 넘으면 못 들어간다.**
+- **REQ-RXJ-3 (제재).** A-01(SDN·50% 미일치)이 통과하여야 하며, 의심 매칭은 차단 쪽으로 처리한다(fail-closed).
+- **REQ-RXJ-4 (관할).** A-02(허용 관할·비금수국)가 통과하여야 한다.
+- **REQ-RXJ-5 (Reg M).** R1 분배기간인 경우 F-04(관여자 매수 아님)가 통과하여야 한다.
+- **REQ-RXJ-6 (곱셈 전제).** 전체 거래 적법 = R-XJ ∧ (해당 면제 R1|R2) ∧ (펀드면 R3) ∧ R4. R-XJ는 맨 앞 인수이다.
 
----
+## 8. 거절 (reasonCode)
 
-## §4. ② 법률 논증 — 횡단 금지규범 조문별
+`R-XJ_BLOCK_SANCTION`(A-01)은 최우선·예외 없이 SDN·50% 의심 시 즉시 차단하며 면제를 불문한다. `R-XJ_BLOCK_JURISDICTION`(A-02)은 비허용 관할·금수국을 차단한다. `R-XJ_BLOCK_REGM`(F-04)은 분배기간 중 발행자측 매수를 차단한다. 예외 메커니즘은 최소화하며, 특히 제재는 재량 예외가 없다(OFAC 라이선스는 별도 법무 영역).
 
-> **읽는 법.** §4.1(제재)·§4.2(관할)·§4.3(Reg M) 각 횡단 금지를 조문 삼단논법으로. *방향은 R4처럼 역(금지 저촉→차단)*이되, R-XJ는 *진입 전제*라 *가장 먼저·fail-closed.*
-
-### §4.1 제재 — IEEPA/OFAC (무과실, 최우선) → **A-01**
-
-> **50 U.S.C. §1701 et seq.(IEEPA)** + **31 CFR Chapter V(OFAC)**(요지): *SDN·blocked person*과의 거래, 그리고 SDN이 *50% 이상 소유*한 자(**50% Rule**)와의 거래를 *금지.* **위반은 무과실(strict liability)** — 몰랐어도 책임.
-
-- **대전제:** *제재 대상(SDN·blocked·50% 피소유)*과는 *절대* 거래 불가. (예외·de minimis 없음.)
-- **소전제(부품):** **A-01** — 당사자를 *SDN/제재 명단과 대조*(결정론 매칭) → 일치·의심 시 *차단.* *무과실*이라 *불확실하면 막음*(fail-closed).
-- **소결론:** ∴ A-01 미일치 ⟹ 제재 미저촉. *명단 대조는 결정 가능 → 패턴 A.* (단 신원 claim 정확성은 off-chain — §9.)
-
-> **최우선·예외 없음:** 면제(R1~R3)가 충족돼도 A-01 차단이면 *거래 불가.* 시스템에서 *가장 보수적* 부품.
-
-### §4.2 관할 — Reg S·역외적용·포괄제재국 → **A-02**
-
-> **17 CFR §230.901–905(Reg S)** + **§902(k)(U.S. person 정의)** + **Morrison v. NAB(2010)**(요지): 미국 증권법은 *US person 대상 거래*엔 등록을 요구(Reg S는 *역외 거래 safe harbor*). 또 *포괄제재국(embargoed)* 거주자와는 거래 금지(OFAC 국가 제재).
-
-- **대전제:** 매수인의 *관할(거주·국적)*에 따라 — US person이면 미국법 full 적용, 허용 관할 외/금수국이면 *제한·금지.*
-- **소전제(부품):** **A-02** — 매수인 관할을 `Manifest.allowedJurisdictions`·금수국 목록과 *대조*(결정론) → 비허용·금수국 *차단.* (US person 판정 = §902(k) 기준.)
-- **소결론:** ∴ A-02 허용 관할 ⟹ 관할 미저촉. *관할 코드 대조 = 결정 → 패턴 A* (거주지 claim은 off-chain).
-
-### §4.3 Reg M — 분배기간 발행자측 매수 금지 (always-on during distribution) → **F-04**
-
-> **17 CFR §242.101·102**(요지): *distribution 제한기간 중* 발행자·관여자·affiliated purchaser의 대상증권 *매수 금지*(가격 조작 방지).
-
-- **대전제:** *판매 진행 중*엔 발행자측이 그 증권을 *사면 안 된다.*
-- **소전제(부품):** **F-04**(R4와 공유) — *제한기간(R1 발행상태) ∧ 매수자 신원*으로 결정론 차단.
-- **소결론:** ∴ 분배기간 ∧ 관여자 매수면 BLOCK ⟹ Reg M 미저촉. *날짜·신원 = 결정 → 패턴 A.*
-
-> **F-04 이중 소속:** Reg M은 *시장행위*(R4)이자 *분배기간 always-on 횡단*(R-XJ). frontmatter에 R-XJ·R1·R4 연동 표기. *분배기간에만* 활성이라 R-XJ 중 유일한 *시간조건부* 항목.
-
-### §4.4 경계 분석 (결정성·claim)
-
-| 이슈 | 분류 | 처리 |
-|---|---|---|
-| SDN 명단 대조 | **(a→결정)** | 명단 매칭은 결정론 — 단 *명단 최신성*은 시스템 피드(오프체인 갱신) |
-| 당사자 *신원* 정확성 | **(b)** | 거래자가 진짜 누구인지 = *KYC claim*(off-chain). A-01/A-02는 *claim된 신원*으로 판정 |
-| 거주지/US person 판정 | **(b)** | 거주·국적 = claim. §902(k) 적용은 결정, *사실 입력*은 claim |
-| 50% Rule 간접소유 | **(b)** | 소유구조 추적 = off-chain 조사 → claim/attestation |
-
-→ **결론: R-XJ 본체는 *결정론 대조(A-01·A-02·F-04, 패턴 A)*.** 단 *입력(신원·거주·소유구조)은 KYC claim*에 의존 — 코드는 *claim 위에서 결정론 판정*, claim 진위는 off-chain. 신규 부품 불요.
-
----
-
-## §5. ③ Activation Logic
-
-- **모든 거래·항상**, 그리고 *가장 먼저* 평가(전제층). A-01·A-02는 *무조건*, F-04는 *R1 분배기간*에만.
-- R-XJ FAIL이면 *이후 recipe(R1~R4) 평가 불요* — 진입 자체 차단(short-circuit).
-
----
-
-## §6. ④ Composition — fail-closed 전제 AND
-
-```
-R-XJ_PASS(tx) ⟺  A-01.notSanctioned          # 무과실, 최우선, 불확실시 차단
-              ∧  A-02.allowedJurisdiction     # 허용 관할·비금수국
-              ∧  (R1.distributionWindow → F-04.ok)   # 분배기간만
-
-전체 거래 적법 ⟺  R-XJ_PASS  ∧  (해당 면제: R1 | R2)  ∧  (펀드면 R3)  ∧  R4
-              └── 전제층 ──┘   └────── 자격층 ──────┘  └─ 누적 ─┘   └행태┘
-```
-- **R-XJ는 *곱셈의 맨 앞 인수*.** 어떤 거래든 `R-XJ ∧ (…)` 형태 — R-XJ=0이면 전체=0.
-- **fail-closed:** A-01은 *불확실(의심 매칭)도 차단* 쪽으로. 다른 부품이 "애매하면 통과"여도 A-01은 "애매하면 차단"(무과실 책임 때문).
-
----
-
-## §7. ⑤ 거절·예외 처리
-
-- `R-XJ_BLOCK_SANCTION`(A-01) — **최우선·예외 없음.** SDN/50% 의심 → 즉시 차단, *면제 불문.*
-- `R-XJ_BLOCK_JURISDICTION`(A-02) — 비허용 관할·금수국 → 차단.
-- `R-XJ_BLOCK_REGM`(F-04) — 분배기간 발행자측 매수 → 차단.
-- *예외 메커니즘 최소화* — 특히 제재는 *예외·재량 없음*(OFAC 라이선스는 별도 법무 영역, 코드 자동화 대상 아님).
-
----
-
-## §8. ⑥ Conflict·Interaction — 보편 prefactor
+## 9. Conflict·Interaction
 
 | 상대 | 패턴 | 설명 |
 |---|---|---|
-| **R1·R2·R3·R4 전부** | **Cumulative(곱·always-on)** | R-XJ는 *모든 recipe의 앞에 곱해지는 전제.* 어느 것도 R-XJ 없이 성립 못 함 |
-| 면제 recipe 일반 | **상위 전제(우선)** | R-XJ FAIL이면 면제 충족 여부 *무의미*(short-circuit) |
-| R4(행태) | **층 구분** | R-XJ=진입 전제(제재·관할), R4=거래 행태(조작·사기). F-04(Reg M)만 양쪽 공유 |
+| R1·R2·R3·R4 전부 | Cumulative(곱·always-on) | R-XJ는 모든 Recipe 앞에 곱해지는 전제. 어느 것도 R-XJ 없이 성립 못 함 |
+| 면제 Recipe 일반 | 상위 전제(우선) | R-XJ 실패면 면제 충족 여부 무의미(short-circuit) |
+| R4(행태) | 층 구분 | R-XJ=진입 전제(제재·관할), R4=행태(조작·사기). F-04(Reg M)만 양쪽 공유 |
 
-> **핵심:** 다른 모든 recipe의 §8이 *"R-XJ cumulative always-on"*이라 적은 게 *여기서 정의*된다. R-XJ는 *시스템의 토대* — 자격(R1~R3)·행태(R4) *모두의 발 밑*.
+## 10. 목표 구현 요건 (컨트랙트 미구현)
 
----
+R-XJ는 자체 Recipe 컨트랙트보다는 Router가 모든 거래에 대하여 A-01·A-02(및 분배기간 F-04)를 최우선·short-circuit으로 평가하는 배선으로 실현되는 성격이 강하다. A-01의 fail-closed는 다른 요소가 "애매하면 통과"이더라도 A-01만은 "애매하면 차단"으로 동작하여야 함을 뜻한다. 제재 명단 최신성은 off-chain 피드에, 신원·거주·소유구조 입력은 KYC claim에 의존하며, 코드는 claim 위에서 결정론으로 판정한다. 전용 Recipe 컨트랙트를 둘 경우 `isApplicable`은 상시 참이되 평가 순서상 최선행이 보장되어야 한다.
 
-## §9. 📐 결정론 경계
+## 11. 인수 기준
 
-| ✅ 온체인(결정론) | 🔵 off-chain(claim) |
-|---|---|
-| SDN/제재명단 대조·관할코드 대조·금수국 목록·Reg M 기간×신원·fail-closed 차단·short-circuit | 당사자 *실신원*(KYC claim)·거주/국적·50% 간접소유 추적·OFAC 라이선스(법무 재량)·명단 최신성 피드 |
+| # | 시나리오 | 기대 결과 |
+|---|---|---|
+| 1 | 당사자 SDN 일치/의심 | R-XJ_BLOCK_SANCTION(최우선, 면제 불문) |
+| 2 | 비허용 관할·금수국 매수인 | R-XJ_BLOCK_JURISDICTION |
+| 3 | 분배기간 중 발행자측 매수 | R-XJ_BLOCK_REGM |
+| 4 | 셋 다 미저촉 | R-XJ PASS → 하위 Recipe 평가 진행 |
+| 5 | R-XJ 실패 | short-circuit(하위 Recipe 미평가) |
 
-> **R-XJ의 경계:** *대조·판정은 결정론*(명단·코드 매칭), *그 입력(누구·어디·소유구조)은 claim.* 코드는 *claim 위에서* 결정론으로 막되, *claim 진위*는 KYC·off-chain. 제재는 *claim이 의심스러우면 fail-closed.*
+## 12. 잔여 확정 항목
 
----
-
-## §10. 자산 적용 (BUIDL = 예시)
-
-- BUIDL 포함 *모든 자산* 거래에 R-XJ 항상 선평가. 제재(A-01)는 *자산 무관 완전 보편.*
-- BUIDL `allowedJurisdictions`(Manifest)로 A-02 분기 — 값은 자산별, *코드는 동일.*
-- BUIDL 발행 분배기간엔 F-04(Reg M)로 발행자측 매수 차단.
-- *다른 자산*도 R-XJ 코드 동일 — 제재·관할은 보편, 관할 목록만 Manifest(ADR-006).
-
----
-
-## §11. Open Issues
-
-1. **명단 최신성 피드** 🔵 — OFAC SDN·제재 목록의 *실시간 갱신* 오라클/피드 신뢰성(오프체인). 갱신 지연 = 위험.
-2. **KYC claim ↔ 결정론 판정 인터페이스** 🟡 — A-01/A-02가 받는 신원·거주 claim 스키마와 attestation 신뢰사슬(Trusted Issuer).
-3. **50% Rule 간접소유** 🔴 — SDN 50% 피소유 자동 탐지는 *오프체인 조사* 영역 — 코드는 *조사 결과 claim* 수용. 한계 명시 필요.
-4. **OFAC 라이선스 예외** 🟢(정리됨) — 라이선스(특별허가)는 *법무 재량* — 코드 자동화 대상 아님. 예외는 수동·오프체인.
-5. **F-04 분배기간 산정** 🟡 — R1 발행상태에서 Reg M 제한기간 윈도우 도출 규칙(분배 시작·종료 정의).
+1. OFAC 명단 실시간 갱신 피드 신뢰성.
+2. A-01/A-02 KYC claim 스키마·신뢰사슬.
+3. SDN 50% 간접소유 off-chain 조사 claim 수용·한계 명시.
+4. OFAC 라이선스 예외의 수동·off-chain 처리.
+5. F-04 분배기간 산정 규칙.
+6. R-XJ 전용 Recipe 컨트랙트 실장 여부(또는 Router 배선 유지).
+7. 본 Recipe 법적 논증의 보경 검토(review-required: legal).
 
 ---
 
-## §12. 변경 로그
+# 부록. 출처 및 연혁
 
-- [2026-06-17] v1.0 작성(태스크 R-XJ). **R-XJ = 면제가 아니라 *전제층(baseline)*** 으로 R1~R4와 정체성 구분("입국심사" 비유). 세 횡단 금지 조문별 삼단논법 — ① 제재 IEEPA/OFAC(무과실·50% Rule)→A-01(fail-closed·최우선) / ② 관할 Reg S §902(k)·Morrison→A-02 / ③ Reg M 101/102 분배기간→F-04(R4 공유, 유일 시간조건부). **fail-closed 원칙 명시**(제재는 불확실시 차단). **보편 prefactor** — 다른 모든 recipe §8의 "R-XJ cumulative always-on"이 여기서 정의(§8). 경계: 대조·판정은 결정론, 입력(신원·거주·소유)은 KYC claim(§9). *가장 자산 무관*(제재 완전 보편, 관할만 Manifest). uscode/eCFR/판례 인용.
+## A. 절별 출처
+
+| 절 | 성격 | 출처 |
+|---|---|---|
+| 제1~4절 (법적 근거·논증) | 파생(승준 walkthrough 재구성, 보경 미검토) | 승준 recipe walkthrough R-XJ v1.0 (2026-06-17) §4 |
+| 제5~12절 (목표 규격) | 목표(컨트랙트 미구현) | 본 명세 + A-01·A-02·F-04 Element 스펙 참조 |
+
+## B. 근거 문헌
+
+- 원 출처(substance): 승준 recipe walkthrough `R-XJ_Cross-Jurisdictional-Always-On.md` v1.0 (2026-06-17). 보경 recipe 검토본 없음.
+- 구현: 전용 컨트랙트 미구현. 구성 요소 = Element `A-01`·`A-02`·`F-04`. Router 최선행·short-circuit 배선.
+- 결정: `ADR-001`(F-04 Reg M) · `ADR-002`(cross-jurisdictional recipe) · `ADR-006`(asset-agnostic)
+- 공유 개념: `SPEC.md`
+- 1차 출처: 50 U.S.C. § 1701 이하(IEEPA) · 31 C.F.R. Chapter V(OFAC) · 17 C.F.R. §§ 230.901–905 · § 230.902(k) · Morrison v. National Australia Bank, 561 U.S. 247 (2010) · 17 C.F.R. § 242.101·102
+
+## C. 변경 로그
+
+- [2026-07-28] v2.0 — element spec과 동일한 2부 형식(제1부 법률논증 산문 + 제2부 목표 규격)으로 재작성. 기존 v1.0(2026-06-17, baseline 전제층 단일부)을 대체. 제1부는 세 횡단 금지(제재 IEEPA/OFAC·관할 Reg S/Morrison·Reg M)와 fail-closed·short-circuit·곱셈 전제를 산문화. 제2부는 전용 컨트랙트 미구현이라 목표 규격(REQ-RXJ-1~6). 제재 무과실·최우선·예외 없음 명시. review-required: legal.
+- [2026-06-17] v1.0 — (구) baseline 전제층 walkthrough(fail-closed).
