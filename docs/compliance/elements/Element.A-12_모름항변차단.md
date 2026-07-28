@@ -1,0 +1,646 @@
+# ELE.A-12_red-flag-knowledge-bar
+
+# A-12 모름 항변 차단(Red Flag Knowledge Bar) — 부품 심층 인수인계 문서 (Walkthrough)
+
+**이 문서는 무엇인가.** Decipher RWA DEX의 컴플라이언스 부품 중 하나인 「모름 항변 차단」 부품(내부 식별자 A-12)을, 미국 증권 규제를 처음 보는 사람도 이해할 수 있도록 풀어 쓴 인수인계 문서다. 개발자·법무팀·외부 자문 변호사·학회원이 각자 작업의 base로 그대로 쓸 수 있도록 — ① 이 규제가 어디서 왔고 왜 존재하는지, ② 어떤 사실을 입력받아 ③ 어떤 로직으로 판정하고 ④ 적신호가 잡히면 어떻게 처리하며 ⑤ 어떤 테스트로 검증하는지를, 기술 요소마다 풀이를 함께 붙여 설명한다.
+
+**한 줄 정의.** A-12는 *"이 거래에서 발행자·매도인·플랫폼이 나중에 '몰랐다'고 항변할 수 없게 만드는 객관적 적신호(red flag)가 존재하는가"*를 거래 직전에 스크리닝한다. 적신호가 잡히면 **차단하지 않고** 표시(flag)하여 운영자 검토 큐로 라우팅한다 — 이것이 A-12가 다른 자격 부품(A-03·A-06·A-11)과 결이 다른 이유다. 저들은 서명된 자격 증명서를 확인하는 게이트지만, A-12는 그 증명서가 액면상 유효해도 그것으로 가려지지 않는 위험 신호를 감시하는 부품이다.
+
+**자체완결 원칙.** 이 문서는 다른 내부 문서를 열지 않아도 단독으로 이해되도록 작성했다. 인용은 미국 연방법·연방규칙·SEC·판례 등 외부 공식 자료만 사용한다.
+
+**출처 기준 (Version 1.0, 2026-07-22).** 본 부품의 미국 증권법 인용은 다음 1차 출처를 기준으로 한다 — 15 U.S.C. §77b(a)(11)·§77d·§77q(a)는 uscode.house.gov 현행본(§77d는 "in effect on June 5, 2026", §77q는 "in effect on May 10, 2026"), 17 CFR §230.502·§230.506·§240.10b-5는 eCFR 현행본(Title 17 up to date as of 2026-07-17), JOBS Act §201(a)(Pub. L. 112-106)와 SEC Release No. 33-9415(78 FR 44771, 2013-07-24)는 각각 uscode.house.gov note와 sec.gov다. Rule 144·Rule 405 자구는 A-06 검증분(ecfr.gov, 2026-07-01 현행)을 재사용한다. 제정법 출처는 uscode.house.gov로 통일했으며, govinfo.gov 딥링크도 동일한 1차 출처다.
+
+**테스트 토큰 전제 (중요).** 본 문서는 실제 BlackRock BUIDL의 발행 표준, transfer architecture, 또는 현재 운영 조건을 단정하지 않는다. 본 프로젝트는 BUIDL-like §3(c)(7) private fund interest를 ERC-3643 테스트 토큰으로 모델링하여, 자격 게이트와 나란히 작동하는 red-flag pre-trade 스크리닝을 검증하는 것이다. 이하 'BUIDL'·'ERC-3643' 관련 서술은 모두 이 모델링 전제 하의 것이다.
+
+## §1. 규제 맥락 — 이 부품이 다루는 규제는 어디서 왔는가 (Context First)
+
+**왜 맥락부터 읽어야 하나.** A-12는 특정 조문 하나를 판정하는 부품이 아니다. 미국 증권법 여러 곳에 흩어져 있는 하나의 공통 원리 — *"면제·안전항·항변이 행위자의 '합리적 신뢰(reasonable belief)' 또는 '알 만한 이유(reason to know)'에 걸려 있을 때, 객관적 적신호를 무시하면 그 신뢰·항변이 깨진다"* — 를 코드로 옮긴다. 그래서 조문만 들이밀면 왜 이런 부품이 필요한지 알 수 없다. 큰 그림(미국 증권법의 구조 → 이 원리가 생긴 이유 → 두 개의 다른 축 → 우리 시스템에서의 의미)을 먼저 깐다.
+
+### 1.1 미국 증권법의 4개 기둥(4 Pillar)과 A-12의 자리
+
+미국 연방 증권규제는 한국처럼 하나의 「자본시장법」으로 통합돼 있지 않고, 시대별로 따로 만들어진 4개의 큰 법률이 각자 다른 국면을 맡는다. 쉽게 말하면 한국은 증권 규제가 한 건물 안의 여러 부서라면, 미국은 길 건너 따로 선 4개의 건물이다.
+
+| 기둥(법률) | 맡는 국면 | 핵심 관심사 | 한국법 대응(직관용) |
+| --- | --- | --- | --- |
+| Securities Act of 1933(1933년법) | 증권의 발행·재판매(거래) | "등록 없이 팔아도 되나 + 사기 아닌가" | 자본시장법 증권신고서·공모·부정거래 규제 |
+| Securities Exchange Act of 1934(1934년법) | 유통·거래소·중개업자(2차 시장) | "시세조종·사기 없는 공정한 시장인가" | 자본시장법 유통시장·불공정거래 규정 |
+| Investment Company Act of 1940(ICA) | 집합투자기구(펀드) 자체 | "펀드 구조가 투자자를 착취하지 않는가" | 자본시장법 집합투자(펀드) 규제 |
+| Investment Advisers Act of 1940 | 투자자문업자 | "남의 돈을 굴리는 자의 신인의무" | 자본시장법 투자자문·일임업 |
+
+본 부품(A-12)은 첫 번째와 두 번째 기둥에 걸쳐 있다. 구체적으로 두 갈래다. **재판매 면제 축**은 1933년법 §4(a)(1)·§4(a)(7)과 그 하위 Reg D Rule 502(d)에서 나온다 — "이 재판매가 등록 없이 적법하려면 매도인이 underwriter(유통 도관)가 아니어야 하고, 그러려면 매수인이 되팔 의도가 있는지 등을 reasonable inquiry로 확인해야 한다." **사기·시세조종 축**은 1933년법 §17(a)와 1934년법 §10(b)·Rule 10b-5에서 나온다 — "발행·매매에서 기망·부실표시·시세조종을 하면 안 되고, 적신호를 알면서 눈감은(reckless) 것도 여기에 포함된다."
+
+**쉽게 말하면:** 같은 토큰 한 건의 거래라도 A-12가 보는 것은 "자격이 있느냐"(그건 A-03·A-13의 몫)가 아니라 *"이 거래에 나중에 '몰랐다'로 빠져나갈 수 없는 위험 신호가 있느냐"*다. A-13이 "이 사람은 펀드를 살 자격이 있는가"를 묻는 검사원이라면, A-12는 "액면상 서류는 멀쩡한데, 이 거래에 눈에 띄는 이상한 점은 없는가"를 살피는 감시원이다.
+
+### 1.2 왜 이 원리가 존재하는가 — 등록 면제의 조건과 willful blindness
+
+1933년법의 대원칙은 "증권을 팔려면 SEC에 등록(공시)하라"이고, §4·§17은 그 예외와 한계를 정한다. 여기서 A-12의 뿌리가 되는 두 가지 긴장이 나온다.
+
+**첫째, 등록 면제는 공짜가 아니다 — 도관(conduit) 방지.** 사모(§4(a)(2)·506)로 산 사람이 그걸 대중에게 되팔면, 결국 등록 없는 공모가 완성된다. 그래서 법은 재판매하는 자가 "underwriter"(§2(a)(11): 발행자로부터 *유통 목적으로* 매수했거나 발행자를 위해 파는 자)가 아닐 것을 요구한다. 재판매 면제(§4(a)(1)·§4(a)(7)·Rule 144)는 이 underwriter 리스크에 대한 안전항이고, 그 핵심은 *"매도인이 도관 역할을 하고 있지 않은가"*의 판단이다. Rule 502(d)가 발행자에게 "매수인이 underwriter가 아님을 보증할 reasonable care"와 그 예시인 "reasonable inquiry(매수인이 자기 것으로 사는지, 남을 위해 사는지 확인)"를 요구하는 것이 그 구현이다. 적신호 — 예컨대 방금 받은 토큰을 즉시 되파는 패턴 — 를 무시하면 이 reasonable care가 깨진다.
+
+**둘째, '몰랐다'는 그냥 통하지 않는다 — willful blindness.** 사기금지 조항(§17(a)·§10(b)·Rule 10b-5)의 위반에는 scienter(고의)가 필요한데, 미국 법원은 여기에 **recklessness(중대한 부주의)** 를 포함시킨다. 즉 명백한 위험 신호를 의도적으로 외면하는 "willful blindness(고의적 외면)"는 "몰랐다"는 항변으로 면책되지 않는다. 플랫폼이 자전거래·시세조종의 뚜렷한 패턴을 보고도 기계적으로 통과시키면, 나중에 "우리는 자동화된 코드일 뿐이라 몰랐다"고 해도 그 무지 자체가 reckless로 평가될 수 있다.
+
+**세 문장 요약.** ① 면제·안전항·항변은 행위자의 상태(무엇을 알았거나 알 만했는가)에 걸린다. ② 법은 그 상태를 판단할 때 객관적 적신호를 무시한 자에게 "몰랐다"를 허용하지 않는다. ③ 따라서 컴플라이언스 시스템은 자격 서류만 확인하고 끝낼 게 아니라, 서류로 가려지지 않는 적신호를 별도로 감시해야 한다 — 그 감시가 A-12다.
+
+### 1.3 두 개의 다른 축 — 재판매 안전항과 사기금지
+
+A-12를 헷갈리게 만드는 지점은, 이 부품이 *서로 다른 두 법적 축*을 하나의 적신호 감시로 묶는다는 데 있다. 두 축은 목적도, 걸리는 시점도, 위반의 효과도 다르다.
+
+| 구분 | 축 A — 재판매 안전항(underwriter 회피) | 축 B — 사기·시세조종 금지 |
+| --- | --- | --- |
+| 근거 | §4(a)(1)·§4(a)(7)+§4(d) · Rule 502(d) · §2(a)(11) | §17(a) · §10(b)+Rule 10b-5 · §9(a) |
+| 묻는 질문 | "이 재판매가 등록 면제를 유지하는가(매도인이 도관 아닌가)" | "이 거래가 사기·기만·시세조종이 아닌가" |
+| A-12가 보는 적신호 | 되팔 의도·지배관계 미공개·자격 claim과 모순되는 사실 | 자전거래 클러스터·임계 회피 분할·NAV 이탈 가격 |
+| 위반의 효과 | 면제 상실 → §5 등록 위반(발행자·매도인 책임) | 사기 책임(민·형사) + 시장 신뢰 훼손 |
+| 상태 요건 | 매도인의 reasonable care·reason to know | 행위자의 scienter(recklessness 포함) |
+| Decipher Recipe | R2(재판매) 조건부 부착(affiliate 매도 시) | R4(시장행위) 핵심 부착 |
+
+두 축은 "1차=A, 2차=B"처럼 단계로 갈리지 않는다. 축 A는 재판매(2차) 거래에서, 축 B는 발행·유통 어디서든 걸린다. A-12가 이 둘을 하나의 부품으로 묶는 이유는 *실행 메커니즘이 동일*하기 때문이다 — 둘 다 "객관적 적신호를 자동 탐지 → 사람의 판단이 필요한 위험으로 표시"라는 패턴 C(감시형) 구조를 쓴다. 다만 A-12는 이 두 축의 적신호를 *taxonomy(분류 체계)로 정의하고 pre-trade에서 스크리닝*할 뿐, 축 B의 시계열·누적 패턴 탐지(자전거래를 여러 거래에 걸쳐 추적)는 별도 상태추적형 부품 F-02·F-03의 몫이다(§9.6에서 경계 상술).
+
+### 1.4 Decipher 시스템에서 왜 중요한가 — willful blindness 책임과 audit trail
+
+**핵심 위험.** DEX는 본질적으로 자동화된 거래 체결 인프라다. 그런데 자동화는 양날의 검이다 — 코드가 액면상 유효한 claim을 기계적으로 통과시키는 동안, 사람이라면 즉시 알아챘을 적신호(방금 발행받은 물량을 곧바로 되파는 매도인, 같은 실소유자가 양측에 선 거래, 임계선 바로 아래로 쪼갠 주문)를 그냥 지나칠 수 있다. 문제는 이 "몰랐음"이 법적으로 방패가 되지 못한다는 것이다. 오히려 *명백한 적신호를 감지·처리할 능력이 있었는데 그러지 않은 설계*는 recklessness의 증거가 된다.
+
+**A-12가 하는 일.** A-12는 이 위험을 두 방향에서 막는다. 첫째, 거래 직전에 객관적 적신호를 스캔해 위험한 거래가 아무 기록 없이 통과되는 것을 막는다. 둘째 — 이게 더 중요한데 — 적신호가 잡히면 그것을 *표시하고 운영자 검토로 라우팅*함으로써, "우리는 위험을 감지했고, 사람이 판단하도록 절차를 밟았다"는 **reasonable inquiry의 audit trail**을 남긴다. 이 audit trail이야말로 나중에 willful blindness 주장에 대한 방어가 된다. 즉 A-12의 산출물은 "차단"이 아니라 "기록된 주의(documented diligence)"다.
+
+**왜 차단이 아니라 표시인가.** 적신호의 존재 자체는 위법을 확정하지 않는다. "되파는 것처럼 보인다"가 실제 underwriter 도관인지, "같은 클러스터"가 실제 자전거래인지, "임계 바로 아래"가 실제 회피 의도인지는 — 고의·목적·정황을 따지는 *사람의 법적 판단*이다. 코드가 이걸 자동으로 "위법"으로 확정해 차단하면, 정당한 거래를 막아 별도 책임(거래 방해)을 지고, 코드가 할 수 없는 판단을 하는 척하게 된다. 그래서 A-12는 패턴 C를 쓴다 — 객관 신호는 기계가 탐지하되, "그래서 위법인가"의 판단은 사람에게 넘긴다. (이 설계 선택의 법적 근거는 §8에서, 사람 판단 층의 구조는 §11에서 상술한다.)
+
+**한국 실무자를 위한 대비.** 한국 자본시장법의 부정거래(§178)·시장질서 교란행위(§178-2)·의심거래보고(자금세탁방지)에서도 유사한 구조가 있다 — 객관적 이상거래를 탐지해 보고·검토하는 체계. A-12는 그 미국판을 온체인 pre-trade 스크리닝으로 구현한 것으로 보면 직관이 맞는다. 다만 미국법의 willful blindness·recklessness 기준은 "몰랐다"의 방어 여지를 한국법보다 좁게 보는 경향이 있어, 적신호 감지 능력을 갖춘 플랫폼일수록 그것을 실제로 작동시킬 책임이 무겁다는 점이 핵심이다.
+
+## §2. 메타 정보 (Internal Identifier Box)
+
+| 항목 | 값 |
+| --- | --- |
+| 부품 ID | A-12 |
+| 부품 이름 | 모름 항변 차단 (Red Flag Knowledge Bar) |
+| 도메인 | A — 신원·자격 (매수인·매도인 측) |
+| 검증 대상 | 재판매·시장행위에서 reasonable belief·reason to know·scienter를 깨는 객관적 red flag의 존재 |
+| 성숙도 | 부분(R-3 클러스터에 통합 — A-06·F-01과 함께) |
+| 검증 패턴 | 패턴 C — 감시형(flag, 차단 아님) |
+| Timing | pre-trade (거래 직전 스크리닝) |
+| Stateful? | STATELESS (거래시점 판정 가능분만 · 시계열 누적 탐지는 F-02·F-03) |
+| 소속 Recipe | R2(§4(a)(7)·Rule 144 재판매) 조건부 · R4(시장행위 감시) 핵심 |
+| 활성 조건 | R2: 매도인이 affiliate일 때 / R4: 항상 |
+| 주요 조문 | §2(a)(11) · §4(a)(1)·§4(a)(7)+§4(d) · Rule 502(d) · §17(a) · §10(b)+Rule 10b-5 |
+| 직접 cascade | A-06(affiliate 판정) · A-03(AI 검증) · F-02·F-03(시계열 시장감시) · C-08·D-01(임계) |
+| 출력 | disposition ∈ {CLEAR, FLAG, REVIEW} — BLOCK 없음 |
+| 거절(표시) 코드 | FLAG_RESALE_INTENT · FLAG_CONTROL_UNDISCLOSED · FLAG_AI_INCONSISTENT · FLAG_WASH_CLUSTER · FLAG_STRUCTURING · FLAG_PRICE_ANOMALY · FLAG_SUSPICIOUS_PATTERN · REVIEW_REDFLAG_UNCERTAIN |
+| ERC-3643 매핑 | Compliance 모듈의 pre-trade hook에서 red-flag 평가 → REVIEW 큐(onchain event) · 자격 claim 게이트와 별개 layer |
+| 파일 | A-12_모름항변차단.md (+ 패치된 .docx) |
+
+## §3. 법적 근거 (Layer 1 → 2 → 3)
+
+**이 절의 구성.** A-13 v1 형식을 따라, 아래 표의 "종류" 칸이 그대로 Layer에 대응한다 — Statute = Layer 1, SEC Rule = Layer 2, SEC Release·Case = Layer 3. 다만 A-12는 하나의 조문이 아니라 *두 축(재판매 안전항·사기금지)에 걸친 조문 묶음*을 다루므로, 각 조문을 Layer 묶음 헤더 없이 논리 흐름 순서(§3.1~§3.9)로 독립 번호를 매긴다. 각 조문 블록은 6-필드(조항·핵심 원문·한국어·쉬운 설명·적신호 반영·ERC-3643 변환)로 통일했다.
+
+### 3.0 법조문 관계 플로우차트 (개발자용)
+
+아래 그림(fig30)은 A-12의 법적 뼈대다. 위쪽의 공통 문제("몰랐다"가 통하지 않는 구조)에서 두 축이 갈라진다 — 왼쪽 R2 축(재판매·underwriter)은 §2(a)(11) → §4(a)(1)·§4(a)(7)+§4(d) → Rule 502(d)로, 오른쪽 R4 축(사기·시세조종)은 §17(a) → §10(b)/Rule 10b-5 → recklessness로. 두 축은 모두 "객관적 red flag 탐지 → 더 이상 몰랐다 불가 → 가중 심사"로 수렴하고, 그것을 감시형(Pattern C)으로 구현한 것이 A-12다.
+
+![fig30 A-12 법조문·논리 흐름](fig/fig30_a12_statute.png)
+
+**범례.** 파랑 = 재판매(R2) 축 · 보라 = 사기(R4) 축 · 주황 = 두 축의 수렴점 · ★ = 축의 핵심 조문(§4(d)(3)(K)·Rule 502(d)·10b-5).
+
+### 3.0.1 실제 BUIDL은 어떻게 적용되나
+
+BUIDL-like §3(c)(7) 토큰의 한 거래(예: BlackRock affiliate인 김 부장이 자기 물량을 DEX에서 Acme Capital에 매도)를 생각하면, A-12는 두 축에서 동시에 걸린다.
+
+- **R2 축(재판매).** 김 부장은 affiliate이므로 그의 재판매는 §2(a)(11) underwriter 리스크를 피해야 §4(a)(7)/Rule 144 안전항이 성립한다. A-12는 여기서 "김 부장이 사실상 발행자를 위한 도관 아닌가", "Acme가 되팔 의도로 사는 것 아닌가", "김 부장이 §4(d)(3)(K)의 '위반 없다는 믿음'을 진정으로 가질 수 있는가"를 깨는 적신호(즉시 전매·지배관계 미공개·자격 모순)를 스캔한다.
+- **R4 축(시장행위).** 이 거래 자체가 §17(a)·10b-5의 사기·시세조종이 아니어야 한다. A-12는 "김 부장과 Acme가 같은 실소유 클러스터 아닌가(자전거래)", "주문이 임계(2,000-holder·물량)를 회피하려 쪼개졌나", "가격이 NAV에서 이상하게 이탈했나"를 스캔한다.
+
+두 축의 어느 적신호든 잡히면 A-12는 거래를 차단하지 않고 표시하여 운영자 검토로 보낸다. 실제 BUIDL의 발행·거래 조건은 본 문서가 단정하지 않으며, 위는 모델링 전제 하의 예시다.
+
+### 3.0.2 조문 순서·중요성 한눈에 보기 (법 리스트)
+
+**표 1 — Authority(근거 자료)**
+
+| 종류 | Authority | 내용 | A-12 관련성 | 태그 | Official URL |
+| --- | --- | --- | --- | --- | --- |
+| Statute | §2(a)(11) · 15 U.S.C. §77b(a)(11) | underwriter 정의(distribution 도관) + issuer에 지배관계인 포함 | 재판매 적신호가 회피하려는 리스크 자체 | Direct | uscode.house.gov |
+| Statute | §4(a)(1) · 15 U.S.C. §77d(a)(1) | issuer·underwriter·dealer 아닌 자의 거래 면제 | underwriter면 이 면제가 없음 | Supporting | uscode.house.gov |
+| Statute | §4(a)(7)+§4(d) · 15 U.S.C. §77d(a)(7)·(d) | AI 전용 재판매 면제 + 요건((d)(1)AI·(d)(2)무권유·(d)(3)(K)무위반믿음·(d)(7)underwriter금지) | R2 적신호의 직접 조문 근거 | Direct | uscode.house.gov |
+| Statute | §4(e)(1)(B) · 15 U.S.C. §77d(e)(1)(B) | §4(a)(7) 거래는 §2(a)(11) distribution 아님(면책) | 적신호가 깨뜨리는 안전항의 효과 | Conditional | uscode.house.gov |
+| SEC Rule | Rule 502(d) · 17 CFR §230.502(d) | 매수인이 underwriter 아님을 보증할 reasonable care + reasonable inquiry | R2 적신호 스크리닝의 규칙상 뿌리 | Direct | ecfr.gov |
+| Statute/Rule | JOBS Act §201(a) · Rule 506(c) reasonable steps | AI 검증의 "reasonable steps to verify" mandate | reason-to-question(적신호) 패러다임(A-03 소관) | Supporting | uscode.house.gov · ecfr.gov |
+| Statute | §17(a) · 15 U.S.C. §77q(a) | 증권 발행·매도의 사기금지(3 prong) | R4 적신호의 직접 조문 근거 | Direct | uscode.house.gov |
+| SEC Rule | Rule 10b-5 · 17 CFR §240.10b-5 | 매매 관련 기망·부실표시·사기 금지(§10(b) 하위) | R4 적신호의 직접 조문 근거 | Direct | ecfr.gov |
+| Statute | §9(a) · 15 U.S.C. §78i(a) | 시세조종(wash sale·matched order 등) 금지 | 시세조종 적신호의 배경 근거 | Background | uscode.house.gov |
+| SEC Release | Release No. 33-9415 (78 FR 44771) | Rule 506(c) 채택 — reasonable steps는 objective facts-and-circumstances; reason-to-question 시 부담 상승 | red-flag 판단 기준의 해석 자료 | Supporting | sec.gov |
+| Case | recklessness = scienter (10b-5 willful blindness) | 적신호에 대한 고의적 외면 = 몰랐다 불성립 | scienter 기준의 해석 자료 | Supporting | govinfo.gov |
+| Rule(재사용) | Rule 144(a)(1)·(b)(1)·(b)(2)·(a)(2) · Rule 405 Control | affiliate·control 정의(A-06 검증분) | 지배관계 적신호의 참조 축 | Background | ecfr.gov |
+
+**표 2 — 조문 순서·중요성 한눈에 보기**
+
+| 순서 | 조문 | 중요성 | A-12가 그걸로 하는 일 |
+| --- | --- | --- | --- |
+| §3.1 | §2(a)(11) underwriter | 핵심 | 재판매 적신호가 무엇을 회피하려는지 정의(도관 리스크) |
+| §3.2 | §4(a)(1) 재판매 면제 | 보조 | underwriter면 면제 없음 — 적신호의 이해관계 확정 |
+| §3.3 | §4(a)(7)+§4(d) | 핵심 | R2 적신호를 직접 도출((d)(3)(K)·(d)(1)·(d)(7)) |
+| §3.4 | §4(e)(1)(B) safe harbor | 조건부 | 적신호가 깨뜨리는 not-a-distribution 효과 |
+| §3.5 | Rule 502(d) reasonable care | 핵심 | RF_RESALE_INTENT의 규칙상 근거(reasonable inquiry) |
+| §3.6 | §201(a)·Rule 506(c) 검증 | 보조 | RF_AI_INCONSISTENT의 패러다임(reason-to-question) |
+| §3.7 | §17(a) 사기금지 | 핵심 | R4 적신호를 직접 도출(발행·매도 사기) |
+| §3.8 | §10(b)+Rule 10b-5 | 핵심 | R4 적신호를 직접 도출(매매 사기·시세조종) |
+| §3.9 | Release 33-9415 · 판례(Layer 3) | 보조 | 안 함 — 적신호 판단·scienter 해석 자료 |
+| §3.10 | Sub-요건 분해 매트릭스 | — | 위 조문을 red-flag 카테고리로 분해 |
+| §3.11 | ERC-3643 변환·redFlag.category 총정리 | — | §3.1~§3.8의 적신호 매핑을 한 표로 |
+
+**경계 — 이 부품이 다루지 않는 것.** 아래는 같은 거래에 걸리지만 A-12가 아니라 다른 부품·레이어가 책임진다 — 누락이 아니라 소관 분리다.
+
+- **자격 판정 그 자체.** "매수인이 AI인가/QP인가"는 A-03·A-13의 몫이다. A-12는 그 자격 claim을 *깨뜨리는 적신호*만 본다(claim의 존재·진위·신선도는 A-03·A-11·A-06).
+- **누가 affiliate인가.** control의 질적 판정은 A-06의 몫이다. A-12는 A-06의 결과와 *모순되는 지배관계 징표*(적신호)만 표시한다.
+- **시계열·누적 시장감시.** 자전거래·허수주문을 여러 거래에 걸쳐 STATEFUL하게 추적하는 것은 F-02·F-03의 몫이다. A-12는 *거래시점에 판정 가능한* 적신호만 pre-trade에서 스크리닝한다(§9.6에서 경계 상술).
+
+### 3.1 §2(a)(11) — Underwriter 정의와 지배관계인 확장 [출처: uscode.house.gov]
+
+**핵심 원문:** The term "underwriter" means any person who has purchased from an issuer with a view to, or offers or sells for an issuer in connection with, the distribution of any security, or participates or has a direct or indirect participation in any such undertaking, or participates or has a participation in the direct or indirect underwriting of any such undertaking; but such term shall not include a person whose interest is limited to a commission from an underwriter or dealer not in excess of the usual and customary distributors' or sellers' commission. As used in this paragraph the term "issuer" shall include, in addition to an issuer, any person directly or indirectly controlling or controlled by the issuer, or any person under direct or indirect common control with the issuer.
+
+**한국어:** "underwriter"란 발행자로부터 증권의 distribution을 목적으로(with a view to) 매수하였거나, 발행자를 위하여(for an issuer) 그 distribution과 관련하여 청약·매도하는 모든 자, 또는 그러한 사업에 직접·간접으로 참여하거나 그 직접·간접 인수에 참여하는 모든 자를 뜻한다; 다만 그 이익이 underwriter 또는 dealer로부터 통상적·관례적 유통·판매 수수료를 넘지 않는 수수료에 한정되는 자는 제외한다. 이 항에서 "issuer"에는 발행자에 더하여, 발행자를 직접 또는 간접으로 지배하거나 발행자에 의하여 지배되는 모든 자, 또는 발행자와 직접·간접의 공동지배 아래 있는 모든 자가 포함된다.
+
+**쉬운 설명:** 사모로 산 증권을 대중에게 되파는 "도관"이 되면 underwriter가 되고, underwriter가 되면 §4(a)(1)의 재판매 면제를 못 쓴다. 마지막 문장이 A-12의 R2 축 뿌리다 — "issuer"에 지배관계인(affiliate)이 포함되므로, *affiliate로부터 유통 목적으로 매수하거나 affiliate를 위해 파는 자*도 underwriter가 될 수 있다. 그래서 affiliate(예: 김 부장)가 매도하는 재판매는 특히 조심스럽고, "매수인이 되팔 의도로 사는가", "매도인이 사실상 도관인가" 같은 적신호가 여기서 의미를 갖는다.
+
+**적신호 반영:** 직접 ○ — RF_RESALE_INTENT의 법정 뿌리. underwriter 리스크가 있다는 것 자체는 차단 사유가 아니라, "이 재판매가 도관이 아님을 확인할 가중 주의가 필요하다"는 표시 사유다.
+
+**ERC-3643 변환:** redFlag.axis = RESALE. 온체인 코드는 매도인의 affiliate 여부(A-06 결과)와 거래 패턴(취득 후 경과·즉시 전매 여부)을 입력받아 RF_RESALE_INTENT 후보를 평가. 판단은 off-chain 운영자, 온체인엔 flag event만.
+
+### 3.2 §4(a)(1) — 발행자·underwriter·dealer 아닌 자의 거래 면제 [출처: uscode.house.gov]
+
+**핵심 원문:** The provisions of section 77e of this title shall not apply to— (1) transactions by any person other than an issuer, underwriter, or dealer.
+
+**한국어:** 이 편 §77e(§5 등록의무)의 규정은 다음에 적용되지 아니한다 — (1) 발행자, underwriter 또는 dealer가 아닌 모든 자에 의한 거래.
+
+**쉬운 설명:** 일반 투자자가 자기 증권을 되파는 것은 등록 없이 가능하다는 기본 재판매 면제다. 핵심은 조건이 "underwriter가 아닐 것"이라는 데 있다 — §3.1과 연결하면, affiliate가 되팔거나 매수인이 도관이면 이 "아닌 자" 요건이 깨져 면제가 사라진다. A-12의 R2 적신호는 결국 이 요건이 깨질 위험 신호를 잡는 것이다.
+
+**적신호 반영:** 간접 ✕ — 직접 red-flag 근거는 아니고, RF_RESALE_INTENT가 걸릴 때 "무엇을 잃는가"(이 면제)를 확정하는 이해관계 조문이다.
+
+**ERC-3643 변환:** (온체인 직접 구현 없음) — 재판매 Recipe(R2)가 의존하는 면제 전제. A-12는 이 면제가 위태로워질 적신호를 표시하는 역할.
+
+### 3.3 §4(a)(7) + §4(d) — AI 전용 재판매 면제와 그 요건 [출처: uscode.house.gov]
+
+**핵심 원문:** [§4(a)(7)] (7) transactions meeting the requirements of subsection (d). [§4(d), 발췌] The transactions referred to in subsection (a)(7) are transactions meeting the following requirements: (1) Accredited investor requirement.—Each purchaser is an accredited investor, as that term is defined in section 230.501(a) of title 17, Code of Federal Regulations (or any successor regulation). (2) Prohibition on general solicitation or advertising.—Neither the seller, nor any person acting on the seller's behalf, offers or sells securities by any form of general solicitation or general advertising. ... (3) ... (K) To the extent that the seller is a control person with respect to the issuer, a brief statement regarding the nature of the affiliation, and a statement certified by such seller that they have no reasonable grounds to believe that the issuer is in violation of the securities laws or regulations. ... (7) Underwriter prohibition.—The transaction is not with respect to a security that constitutes the whole or part of an unsold allotment to, or a subscription or participation by, a broker or dealer as an underwriter of the security or a redistribution.
+
+**한국어:** [§4(a)(7)] (7) subsection (d)의 요건을 충족하는 거래. [§4(d)] subsection (a)(7)이 지칭하는 거래는 다음 요건을 충족하는 거래이다: (1) 적격투자자 요건 — 각 매수인은 17 CFR §230.501(a)에 정의된 accredited investor이다. (2) 일반청약권유·광고 금지 — 매도인도, 매도인을 위하여 행위하는 자도, 어떠한 형태의 general solicitation·general advertising으로도 증권을 청약·매도하지 아니한다. … (3) … (K) 매도인이 발행자에 대한 control person인 한도에서, 그 지배관계의 성격에 관한 간략한 진술, 그리고 발행자가 증권법령을 위반하고 있다고 믿을 reasonable grounds가 없다는(no reasonable grounds to believe) 매도인의 인증서. … (7) underwriter 금지 — 그 거래는 broker·dealer가 underwriter로서 보유한 미판매 배정분의 전부·일부, 또는 그에 의한 subscription·participation, 또는 재유통(redistribution)에 관한 것이 아니다.
+
+**쉬운 설명:** §4(a)(7)은 "각 매수인이 AI인 재판매"를 위한 법정 면제다. A-12에 결정적인 것은 두 조각이다. **(d)(3)(K)** — 매도인이 affiliate(control person)이면, "발행자가 증권법을 위반하고 있다고 믿을 만한 reasonable grounds가 없다"고 인증해야 한다. 이것이 교과서적 "모름 항변 차단" 조항이다: 적신호가 있으면 매도인은 이 인증을 진정으로 할 수 없다(위반을 의심할 근거가 생기므로). **(d)(1)** — 각 매수인이 AI여야 하므로, 매수인의 AI claim과 모순되는 적신호(RF_AI_INCONSISTENT)는 이 요건을 위태롭게 한다. **(d)(7)** — 그 거래가 underwriter의 재유통이 아니어야 하므로, 도관 신호(RF_RESALE_INTENT)가 여기 걸린다.
+
+**적신호 반영:** 직접 ○ — (d)(3)(K)는 RF_CONTROL_UNDISCLOSED·RF_SUSPICIOUS_PATTERN의, (d)(1)은 RF_AI_INCONSISTENT의, (d)(7)은 RF_RESALE_INTENT의 직접 근거. 어느 적신호도 이 요건들을 "자동 위반"으로 만들지 않고, "인증을 진정으로 할 수 있는지 사람이 확인하라"는 표시로 이어진다.
+
+**ERC-3643 변환:** redFlag.axis = RESALE. (d)(3)(K) 인증서는 off-chain 매도인 attestation으로 수집되고, 그 인증을 무효화할 적신호가 잡히면 A-12가 REVIEW로 라우팅. claim.controlPersonCert = {PRESENT, ABSENT, CONTRADICTED}.
+
+### 3.4 §4(e)(1)(B) — §4(a)(7) 거래의 not-a-distribution 안전항 [출처: uscode.house.gov]
+
+**핵심 원문:** (1) In general.—With respect to an exempted transaction described under subsection (a)(7): (A) Securities acquired in such transaction shall be deemed to have been acquired in a transaction not involving any public offering. (B) Such transaction shall be deemed not to be a distribution for purposes of section 77b(a)(11) of this title. (C) Securities involved in such transaction shall be deemed to be restricted securities within the meaning of Rule 144 (17 CFR 230.144).
+
+**한국어:** (1) 총칙 — subsection (a)(7)에 기술된 면제 거래에 관하여: (A) 그 거래에서 취득한 증권은 어떠한 public offering도 수반하지 아니하는 거래에서 취득한 것으로 간주된다. (B) 그 거래는 §77b(a)(11)(§2(a)(11)) 목적상 distribution이 아닌 것으로 간주된다. (C) 그 거래에 관련된 증권은 Rule 144상 restricted securities로 간주된다.
+
+**쉬운 설명:** §4(a)(7)을 제대로 충족하면, 그 거래는 §2(a)(11)의 "distribution"이 아닌 것으로 간주되어 매도인이 underwriter가 되는 리스크를 차단한다. 이것이 R2 축이 지키려는 안전항의 효과다. A-12의 관점에서 중요한 함의는 — 적신호가 §4(a)(7) 요건(§3.3)을 깨면 이 (B)의 간주가 무너지고, 매도인이 다시 underwriter 리스크에 노출된다는 것이다. 즉 적신호는 "안전항이 성립하는지"를 사람이 재확인해야 할 신호다.
+
+**적신호 반영:** 조건부 △ — 직접 red-flag를 만드는 조문은 아니지만, R2 적신호가 걸릴 때 그 법적 파장(안전항 상실)을 규정하는 조건 조문. A-12가 표시로 그치고 차단하지 않는 이유의 일부이기도 하다(안전항 성립 여부는 사람이 판단).
+
+**ERC-3643 변환:** (온체인 직접 구현 없음) — R2 Recipe의 안전항 상태 판단 입력. A-12의 flag가 이 상태를 "재확인 필요"로 표시.
+
+### 3.5 Rule 502(d) — 재판매 제한과 reasonable care [출처: ecfr.gov]
+
+**핵심 원문:** (d) Limitations on resale. Except as provided in § 230.504(b)(1), securities acquired in a transaction under Regulation D shall have the status of securities acquired in a transaction under section 4(a)(2) of the Act and cannot be resold without registration under the Act or an exemption therefrom. The issuer shall exercise reasonable care to assure that the purchasers of the securities are not underwriters within the meaning of section 2(a)(11) of the Act, which reasonable care may be demonstrated by the following: (1) Reasonable inquiry to determine if the purchaser is acquiring the securities for himself or for other persons; (2) Written disclosure to each purchaser prior to sale that the securities have not been registered under the Act and, therefore, cannot be resold unless they are registered under the Act or unless an exemption from registration is available; and (3) Placement of a legend on the certificate or other document that evidences the securities stating that the securities have not been registered under the Act and setting forth or referring to the restrictions on transferability and sale of the securities. While taking these actions will establish the requisite reasonable care, it is not the exclusive method to demonstrate such care. Other actions by the issuer may satisfy this provision. In addition, § 230.502(b)(2)(vii) requires the delivery of written disclosure of the limitations on resale to investors in certain instances.
+
+**한국어:** (d) 재판매의 제한. §230.504(b)(1)에 정한 경우를 제외하고, Regulation D 거래에서 취득한 증권은 §4(a)(2) 거래에서 취득한 증권의 지위를 가지며, 등록 또는 면제 없이는 재판매될 수 없다. 발행자는 그 증권의 매수인이 §2(a)(11)상 underwriter가 아님을 보증할 reasonable care를 다하여야 하며, 그 reasonable care는 다음으로 증명될 수 있다: (1) 매수인이 그 증권을 자기를 위하여 취득하는지 아니면 타인을 위하여(for other persons) 취득하는지를 판단하기 위한 reasonable inquiry; (2) 매도 전에 각 매수인에게, 그 증권이 이 법에 따라 등록되지 아니하였으므로 등록되거나 면제가 이용가능하지 아니하면 재판매될 수 없다는 서면 고지; 그리고 (3) 그 증권을 표창하는 증서 등에, 그 증권이 미등록이며 양도·매도에 제한이 있음을 기재하거나 참조하는 legend의 부착. 이러한 조치를 취하면 요구되는 reasonable care가 성립하나, 그것이 유일한 증명 방법은 아니다. 발행자의 다른 조치도 이 규정을 충족할 수 있다. 또한 §230.502(b)(2)(vii)은 특정 경우 재판매 제한의 서면 고지 교부를 요구한다.
+
+**쉬운 설명:** 이 규칙이 A-12의 R2 축에서 가장 실무적인 근거다. (1)의 "reasonable inquiry to determine if the purchaser is acquiring the securities for himself or for other persons"가 핵심 — 매수인이 자기 것으로 사는지, 남을 위해(도관으로) 사는지를 합리적으로 조사할 의무를 못 박는다. 방금 발행받은 물량을 즉시 되파는 매도인, 또는 사자마자 되팔 정황이 있는 매수인은 이 "타인을 위한 취득"의 적신호다. A-12가 그 적신호를 자동 탐지해 표시하면, 운영자가 실제 inquiry를 수행한 기록(§1.4의 audit trail)이 되어 reasonable care를 뒷받침한다. (2)·(3)의 고지·legend는 Decipher 토큰이 어차피 restricted flag·transfer 제한(B-03)으로 구현하므로, A-12는 (1)의 inquiry 축에 집중한다.
+
+**적신호 반영:** 직접 ○ — RF_RESALE_INTENT의 규칙상 직접 근거. "reasonable care"는 규칙 문언 그대로이며, 실무상 상당한 주의가 요구된다는 취지와 규칙 문언을 구분한다(규칙은 예시적 3조치를 든다).
+
+**ERC-3643 변환:** redFlag.axis = RESALE. inquiry.result = {SELF, FOR_OTHERS, UNKNOWN}. A-12가 FOR_OTHERS 또는 UNKNOWN 적신호를 잡으면 REVIEW. legend·고지는 B-03(transfer restriction metadata)이 별도 담당.
+
+### 3.6 JOBS Act §201(a) · Rule 506(c) — reasonable steps to verify (패러다임) [출처: uscode.house.gov · ecfr.gov]
+
+**핵심 원문:** [JOBS Act §201(a), Pub. L. 112-106 note] Such rules shall require the issuer to take reasonable steps to verify that purchasers of the securities are accredited investors, using such methods as determined by the Commission. [Rule 506(c)(2)(i)] All purchasers of securities sold in any offering under paragraph (c) of this section are accredited investors.
+
+**한국어:** [JOBS Act §201(a)] 그 규칙은 발행자에게, 증권의 매수인이 accredited investor임을 verify할 reasonable steps를, Commission이 정하는 방법으로 취할 것을 요구하여야 한다. [Rule 506(c)(2)(i)] paragraph (c)에 따른 모든 offering에서 매도된 증권의 모든 매수인은 accredited investor이다.
+
+**쉬운 설명:** 이 조항 자체는 발행(R1) 단계의 AI 검증 mandate이고, 그 검증의 본체는 부품 A-03의 소관이다. A-12가 이를 인용하는 이유는 *"reasonable steps to verify"의 판단 기준이 red-flag 패러다임이기 때문*이다. SEC의 채택 release(33-9415, §3.9)는 이 verification이 objective한 facts-and-circumstances 판단이고, *발행자가 매수인의 AI 지위를 의심할 "reason to question"이 있으면(즉 적신호가 있으면) 요구되는 검증 강도가 올라간다*고 설명한다. 이 "적신호가 있으면 더 파고들어야 한다"는 원리가 A-12의 RF_AI_INCONSISTENT를 정당화한다 — 매수인 자격 claim과 모순되는 사실은, A-03이 발급·신뢰한 claim에도 불구하고 사람이 재확인해야 할 신호다.
+
+**적신호 반영:** 조건부 △ — RF_AI_INCONSISTENT의 패러다임 근거(직접 조문은 §4(d)(1)·§3.3). 검증 자체는 A-03, A-12는 그 검증을 흔드는 사후 모순 신호를 표시.
+
+**ERC-3643 변환:** (온체인 직접 구현 없음, A-03 소관) — A-12는 A-03이 발급한 AI claim과 거래시점 사실의 불일치를 RF_AI_INCONSISTENT로 표시. verify.reasonToQuestion = true → REVIEW.
+
+### 3.7 §17(a) — 증권 발행·매도의 사기금지 [출처: uscode.house.gov]
+
+**핵심 원문:** It shall be unlawful for any person in the offer or sale of any securities (including security-based swaps) or any security-based swap agreement (as defined in section 78c(a)(78) of this title) by the use of any means or instruments of transportation or communication in interstate commerce or by use of the mails, directly or indirectly— (1) to employ any device, scheme, or artifice to defraud, or (2) to obtain money or property by means of any untrue statement of a material fact or any omission to state a material fact necessary in order to make the statements made, in light of the circumstances under which they were made, not misleading; or (3) to engage in any transaction, practice, or course of business which operates or would operate as a fraud or deceit upon the purchaser.
+
+**한국어:** 누구든지 증권(security-based swaps 포함)의 offer 또는 sale에서 주간(州間) 통상의 운송·통신 수단이나 우편을 사용하여 직접·간접으로 다음의 행위를 하는 것은 위법이다 — (1) 기망하기 위한 device·scheme·artifice를 사용하는 것, 또는 (2) 중요한 사실에 관한 untrue statement, 또는 그 진술을 하게 된 정황에 비추어 진술이 오해를 일으키지 않도록 하기 위하여 필요한 중요 사실의 omission을 수단으로 금전·재산을 취득하는 것, 또는 (3) 매수인에 대하여 사기 또는 기만으로 작용하거나 작용할 수 있는 transaction·practice·course of business에 종사하는 것.
+
+**쉬운 설명:** §17(a)는 증권을 팔 때의 사기를 금지하는 1933년법의 반사기 조항이다. A-12의 R4 축에서, (3)의 "any transaction, practice, or course of business which operates or would operate as a fraud or deceit"가 특히 넓다 — 자전거래로 거래량을 부풀리거나, 임계를 회피하려 거래를 쪼개거나, NAV와 동떨어진 가격으로 조작적으로 매매하는 것은 이 "사기로 작용하는 거래·관행"의 적신호다. 중요한 점은 §17(a)(2)·(3)은 판례상 scienter 없이도(즉 과실로도) 성립할 수 있다고 해석되어 왔다는 것 — 그래서 플랫폼이 적신호를 감지·처리할 능력을 갖추고도 방치하면 책임 위험이 더 커진다.
+
+**적신호 반영:** 직접 ○ — RF_WASH_CLUSTER·RF_STRUCTURING·RF_PRICE_ANOMALY·RF_SUSPICIOUS_PATTERN의 직접 근거(발행·매도 국면). 적신호는 위법의 확정이 아니라, 사기·기만으로 "작용할 수 있는지" 사람이 판단해야 할 표시.
+
+**ERC-3643 변환:** redFlag.axis = MARKET_CONDUCT. 온체인 pre-trade hook이 상대방 클러스터·주문 구조·가격-NAV 괴리를 평가해 후보 적신호를 표시. 판단(사기·기만 여부)은 off-chain 운영자.
+
+### 3.8 §10(b) + Rule 10b-5 — 매매 관련 기망·시세조종 금지 [출처: uscode.house.gov · ecfr.gov]
+
+**핵심 원문:** [Rule 10b-5] It shall be unlawful for any person, directly or indirectly, by the use of any means or instrumentality of interstate commerce, or of the mails or of any facility of any national securities exchange, (a) To employ any device, scheme, or artifice to defraud, (b) To make any untrue statement of a material fact or to omit to state a material fact necessary in order to make the statements made, in the light of the circumstances under which they were made, not misleading, or (c) To engage in any act, practice, or course of business which operates or would operate as a fraud or deceit upon any person, in connection with the purchase or sale of any security.
+
+**한국어:** [Rule 10b-5] 누구든지 주간 통상의 수단, 우편, 또는 national securities exchange의 설비를 사용하여 직접·간접으로, 증권의 purchase 또는 sale과 관련하여(in connection with) 다음의 행위를 하는 것은 위법이다 — (a) 기망하기 위한 device·scheme·artifice를 사용하는 것, (b) 중요한 사실에 관한 untrue statement를 하거나, 진술이 오해를 일으키지 않도록 하기 위하여 필요한 중요 사실을 omission하는 것, 또는 (c) 누구에 대하여든 사기 또는 기만으로 작용하거나 작용할 수 있는 act·practice·course of business에 종사하는 것.
+
+**쉬운 설명:** Rule 10b-5는 §10(b) 하위의 가장 넓은 반사기·반시세조종 규칙으로, "매매와 관련한" 모든 기망을 포괄한다. §17(a)와 달리 10b-5 위반에는 scienter가 필요한데, 미국 순회법원들은 그 scienter에 recklessness를 포함시킨다 — 즉 명백한 적신호를 알면서 눈감은 것(willful blindness)은 "몰랐다"로 면책되지 않는다. 이것이 §1.2·§1.4에서 말한 A-12의 존재 이유를 법문으로 못 박는 지점이다. 자전거래(같은 실소유자 양측), 허수성 주문, 조작적 가격은 10b-5(c)의 "사기로 작용하는 행위"의 적신호이고, 플랫폼이 이를 감지하고도 표시·검토 없이 통과시키면 recklessness가 인정될 여지가 커진다.
+
+**적신호 반영:** 직접 ○ — RF_WASH_CLUSTER·RF_PRICE_ANOMALY·RF_SUSPICIOUS_PATTERN의 직접 근거(매매 국면). scienter의 recklessness 포함이 "감지 능력 있으면 작동시킬 책임"의 근거.
+
+**ERC-3643 변환:** redFlag.axis = MARKET_CONDUCT. A-12는 거래시점 판정 가능분(양측 identity 동일 클러스터·가격-NAV 괴리)을 표시. 시계열 wash-trade·spoofing 패턴은 F-02(STATEFUL, post-trade)가 담당하며 A-12의 taxonomy를 공유.
+
+### 3.9 판례·발행문서 (Layer 3)
+
+A-12의 적신호 판단·scienter 해석은 아래 자료가 배경이 된다. 어느 것도 A-12가 직접 "판정"하지 않으며, 운영자 판단(§11)과 변호사 follow-up(§12)의 기준으로 참조된다.
+
+- **SEC Release No. 33-9415 (78 FR 44771, 2013-07-24)** — Rule 506(c) 채택 release. "reasonable steps to verify"는 획일적 방법이 아니라 objective facts-and-circumstances 판단이며, 발행자가 매수인의 AI 지위를 의심할 "reason to question"이 있을수록 요구되는 검증 강도가 높아진다고 설명한다. 이것이 RF_AI_INCONSISTENT의 "적신호가 있으면 더 파고들어야 한다"는 원리의 해석 근거다.
+- **recklessness = scienter (Rule 10b-5)** — 미국 순회법원들은 10b-5의 scienter에 recklessness(명백한 위험의 고의적 외면, willful blindness)를 포함시켜 왔다. A-12가 "몰랐다"를 방어로 쓸 수 없게 하는 법리적 근거이며, 정확한 기준선(무엇이 reckless인가)은 사실관계별 판단이므로 §12 Open Issue.
+- **SEC v. Ralston Purina Co., 346 U.S. 119 (1953)** — public offering의 기능적 기준(투자자가 스스로 보호할 수 있는가). R2 축에서 "이 재판매·유통이 사실상 공모로 흐르는가"의 배경 기준으로, DEX 2차 거래 환경의 공모 유발 여부(A-13 §9.6·Recipe-level 쟁점)와 연결된다.
+
+### 3.10 Sub-요건 분해 매트릭스
+
+위 조문·규칙을 A-12가 실제로 스크리닝하는 red-flag 카테고리로 분해하면 두 축·일곱 갈래가 된다. 각 행은 소리 내 읽어도 문장이 되도록 풀어 썼다. **연산자 주의 ⚠ — 이 매트릭스의 어떤 임계 수치도 PASS/FAIL 규칙이 아니다.** 수치·패턴은 오직 "표시(flag)와 REVIEW 라우팅"의 입력이며, 위법 확정은 사람이 한다(A-06의 bright-line 금지 원칙과 동일).
+
+| 축 | red-flag 카테고리 | 트리거(풀어 읽기) | 근거 | Decipher 연동 |
+| --- | --- | --- | --- | --- |
+| 재판매(R2) | RF_RESALE_INTENT | 매수인이 자기가 아니라 타인을 위해 취득하는 정황이거나, 매도인이 방금 취득한 물량을 즉시 되파는 도관 패턴이다 | §2(a)(11)·§4(d)(7)·Rule 502(d)(1) | C-01(보유기간)·A-06 |
+| 재판매(R2) | RF_CONTROL_UNDISCLOSED | 매도인의 지배관계 징표가 (d)(3)(K) 인증·A-06 판정과 불일치한다 | §4(d)(3)(K)·§2(a)(11) | A-06 |
+| 재판매(R2) | RF_AI_INCONSISTENT | 매수인의 자격(AI/QP) claim과 거래시점 사실이 실질적으로 모순된다(reason to question) | §4(d)(1)·§201(a)·506(c) | A-03·A-13·A-11 |
+| 시장행위(R4) | RF_WASH_CLUSTER | 매수인과 매도인이 같은 실소유 클러스터에 속한다(자전거래 정황) | §17(a)(3)·10b-5(c)·§9(a) | F-02·A-04 |
+| 시장행위(R4) | RF_STRUCTURING | 거래가 임계(2,000-holder·물량·금액) 바로 아래로 쪼개진 정황이다 | §17(a)(3)·10b-5(c) | C-08·D-01 |
+| 시장행위(R4) | RF_PRICE_ANOMALY | 체결 가격이 기준가(NAV)에서 조작적으로 이탈한다 | §17(a)·10b-5·§9(a) | (오라클 NAV) |
+| 시장행위(R4) | RF_SUSPICIOUS_PATTERN | 위 유형에 딱 들어맞지 않으나 사기·시세조종으로 작용할 수 있는 기타 객관 패턴이다 | §17(a)(3)·10b-5(c) | F-03 |
+
+**해설:** 재판매 축 셋(RF_RESALE_INTENT·RF_CONTROL_UNDISCLOSED·RF_AI_INCONSISTENT)은 R2에서 매도인이 affiliate일 때 활성화되고, 시장행위 축 넷은 R4에서 항상 활성화된다. 어느 카테고리든 결과는 "차단"이 아니라 "표시 + REVIEW"이며, 이 일곱 갈래가 §4(어떤 증거가 필요한가)와 §5(어떻게 스크리닝하는가)의 토대다.
+
+### 3.11 ERC-3643 변환·redFlag.category 총정리
+
+A-12의 법조문이 실제 ERC-3643/T-REX 토큰에서 어떻게 구현되는지를 두 표로 정리한다. 핵심 원칙 하나 — A-12는 자격 claim 게이트(Identity Registry의 isVerified())와 *별개 layer*다. 자격 게이트는 "claim이 없으면 transfer 거부"로 차단하지만, A-12는 "claim이 있어도 적신호가 있으면 표시 + REVIEW"로 사람에게 넘긴다. 위법 판정은 전부 off-chain 운영자가 하고, 온체인에는 그 표시(flag event)만 기록된다.
+
+**표 1 — 조항 → ERC-3643 변환**
+
+| 조항 | ERC-3643 변환 | 간략 설명 |
+| --- | --- | --- |
+| §2(a)(11)·§4(d)(7)·Rule 502(d)(1) | Compliance pre-trade hook의 RF_RESALE_INTENT 평가 | 매도인 affiliate 여부(A-06)·취득 후 경과(C-01)·즉시 전매 패턴을 입력 |
+| §4(d)(3)(K) | controlPersonCert 상태 확인 + 불일치 시 RF_CONTROL_UNDISCLOSED | off-chain 인증서와 A-06 판정의 정합을 온체인 flag로 |
+| §4(d)(1)·§201(a)·506(c) | AI/QP claim과 거래시점 사실 대조 → RF_AI_INCONSISTENT | A-03·A-13 claim은 그대로 두고, 모순 신호만 표시 |
+| §17(a)·10b-5·§9(a) (자전거래) | 양측 ONCHAINID 실소유 클러스터 대조 → RF_WASH_CLUSTER | A-04(신원 dedup) 클러스터 데이터 활용, 시계열은 F-02 |
+| §17(a)·10b-5 (구조화) | 주문 분할·임계 근접 탐지 → RF_STRUCTURING | C-08·D-01 임계 근처의 반복 쪼개기 표시 |
+| §17(a)·10b-5·§9(a) (가격) | NAV 오라클 대비 체결가 괴리 → RF_PRICE_ANOMALY | 오라클 NAV 입력, 괴리 임계는 REVIEW 라우팅 입력일 뿐 |
+| §17(a)(3)·10b-5(c) (기타) | 기타 객관 패턴 → RF_SUSPICIOUS_PATTERN | 미분류 위험을 포괄, F-03 SAR 경로와 연동 |
+
+**표 2 — 판정 결과 → disposition / 플래그 값**
+
+| 항목 | disposition / 플래그 값 | 간략 설명 |
+| --- | --- | --- |
+| 적신호 없음 | disposition = CLEAR | A-12는 통과 사유를 추가하지 않고 "red flag 없음"만 기록 |
+| 재판매 도관 신호 | FLAG_RESALE_INTENT → REVIEW | 502(d) reasonable inquiry 필요 표시 |
+| 지배관계 불일치 | FLAG_CONTROL_UNDISCLOSED → REVIEW | (d)(3)(K) 인증 진정성 확인 필요 |
+| 자격 모순 | FLAG_AI_INCONSISTENT → REVIEW | AI/QP 재확인 필요(A-03·A-13 재검토 트리거) |
+| 자전거래 정황 | FLAG_WASH_CLUSTER → REVIEW | 동일 클러스터 양측 — F-02 시계열 검토 연계 |
+| 임계 회피 정황 | FLAG_STRUCTURING → REVIEW | 쪼개기 의도 확인 필요 |
+| 가격 이탈 | FLAG_PRICE_ANOMALY → REVIEW | NAV 괴리 사유 확인 필요 |
+| 기타 위험 패턴 | FLAG_SUSPICIOUS_PATTERN → REVIEW | 미분류 위험 — SAR 판단 연계 |
+| 경계·복합 | REVIEW_REDFLAG_UNCERTAIN | 자동 분류 애매 — 운영자 큐로 직행 |
+| redFlag 축 | redFlag.axis ∈ {RESALE, MARKET_CONDUCT} | 어느 법적 축의 신호인지 |
+| 감지 시점 | screenedAt = block.timestamp | pre-trade 스크리닝 시점 스냅샷 |
+
+## §4. 입력 사실 — 스크리닝에 필요한 데이터
+
+### 4.1 본 부품이 스크리닝하려면 어떤 증거가 필요한가
+
+쉽게 말하면, A-12가 "이 거래에 적신호가 있다/없다"고 말하려면 세 종류의 입력이 거래시점에 모여 있어야 한다.
+
+- **거래 자체의 사실.** 매도인·매수인의 지갑, 체결 물량·가격, 주문 구조, 그리고 매도인이 그 물량을 언제 취득했는지(즉시 전매 판정용).
+- **다른 부품의 산출.** 매도인의 affiliate 여부(A-06), 매수인의 AI/QP claim(A-03·A-13), 양측의 실소유 클러스터(A-04), 임계 근접 상태(C-08·D-01), 기준가 NAV(오라클).
+- **off-chain attestation.** 매도인이 affiliate이면 (d)(3)(K)의 "무위반 믿음" 인증서, 그리고 매수인의 취득 목적(자기/타인) 자기신고.
+
+이 입력을 모으는 주체는 DEX의 Compliance layer이고, A-12는 이들을 대조해 red-flag 카테고리별로 "신호 있음/없음/애매"를 결정한다. 핵심은 — A-12는 새로운 실사를 하는 게 아니라, *이미 다른 부품이 만든 사실들 사이의 모순·이상을 포착*한다는 것이다.
+
+### 4.2 Data field — DEX가 실제로 읽는 항목
+
+아래 필드 이름·ONCHAINID 구조 등은 Decipher의 ERC-3643 호환 구현을 전제한 예시 스펙이다(구현 시 확정). 각 행에 "이 필드가 왜 필요한가"를 함께 적었다.
+
+| 필드 | 유형 | 출처 | 무엇을 말해주나 |
+| --- | --- | --- | --- |
+| seller.isAffiliate | enum | A-06 결과 | R2 재판매 축 활성 여부(affiliate 매도인) |
+| seller.controlPersonCert | enum | off-chain attestation | (d)(3)(K) 인증서 존재·내용({PRESENT, ABSENT, CONTRADICTED}) |
+| seller.acquiredAt | timestamp | blockchain | 매도인의 취득 시점(즉시 전매 판정용, C-01 연계) |
+| buyer.acquisitionPurpose | enum | 매수인 자기신고 | 자기/타인 취득({SELF, FOR_OTHERS, UNKNOWN}) |
+| buyer.claim.basis | enum | A-03·A-13 claim | 매수인 자격 갈래(모순 대조용) |
+| parties.ownerCluster[] | array | A-04(신원 dedup) | 양측 실소유 클러스터(자전거래 대조용) |
+| order.split / order.threshold | struct | Compliance | 주문 분할·임계 근접(구조화 대조용, C-08·D-01) |
+| trade.price / oracle.nav | uint256 | 체결·NAV 오라클 | 체결가·기준가(가격 이탈 대조용) |
+| block.timestamp | timestamp | blockchain | 스크리닝 시점 스냅샷(screenedAt) |
+
+**쉽게 말하면:** A-12는 매수인의 자산 명세나 KYC 원본을 직접 보지 않는다. 대신 *다른 부품이 이미 정리해 둔 결과값들*(affiliate 여부·claim·클러스터·임계·NAV)을 한자리에 모아 대조한다. 대조에서 모순·이상이 나오면 적신호다.
+
+### 4.3 수집 경로 — 4단계 흐름
+
+```
+1단계 전제 부품 실행 A-06(affiliate)·A-03/A-13(claim)·A-04(클러스터) 선행 판정
+↓
+2단계 거래 컨텍스트 조립 체결 물량·가격·주문 구조·취득시점 + 오라클 NAV 수집
+↓
+3단계 A-12 스크리닝 red-flag 카테고리별 대조 → CLEAR / FLAG / REVIEW
+↓
+4단계 라우팅 FLAG·REVIEW면 운영자 큐 + flag event 기록(audit trail)
+```
+
+**각 단계 누가·무엇을·결과:** 1단계(전제 부품들이, 자격·지배관계·클러스터를 판정하고, A-12의 대조 재료가 준비된다) → 2단계(Compliance layer가, 거래·시장 데이터를 모으고, 스크리닝 입력이 완성된다) → 3단계(A-12가, 카테고리별로 대조하고, disposition이 정해진다) → 4단계(FLAG/REVIEW면, 운영자 큐로 보내고, 감지 기록이 남는다). CLEAR면 거래는 다른 게이트들의 결과에 따라 진행된다.
+
+### 4.4 red-flag 카테고리별 확인 항목 (전부 필요)
+
+| 카테고리 | 필수 확인 항목(전부 필요) | 무엇을 포착하나 |
+| --- | --- | --- |
+| (공통 — 모든 카테고리) | ① 거래 컨텍스트(당사자·물량·가격) · ② A-12 활성 여부(R2 affiliate / R4 항상) · ③ 감지 시점 스냅샷 | 스크리닝의 전제 |
+| RF_RESALE_INTENT | ① seller.isAffiliate · ② seller.acquiredAt vs 현재(즉시 전매) · ③ buyer.acquisitionPurpose(타인) | 도관·재유통 정황(§2(a)(11)·502(d)(1)·§4(d)(7)) |
+| RF_CONTROL_UNDISCLOSED | ① A-06 affiliate 판정 · ② controlPersonCert 내용 · ③ 양자 정합 | (d)(3)(K) 인증과 실제 지배관계의 불일치 |
+| RF_AI_INCONSISTENT | ① buyer.claim.basis · ② 거래시점 사실(자산·행태) · ③ 모순 여부(reason to question) | 자격 claim을 흔드는 사후 모순(§4(d)(1)·506(c)) |
+| RF_WASH_CLUSTER | ① 매수인 ownerCluster · ② 매도인 ownerCluster · ③ 동일 여부 | 자전거래 정황(§17(a)(3)·10b-5(c)·§9(a)) |
+| RF_STRUCTURING | ① 임계 근접(C-08·D-01) · ② 주문 분할 패턴 · ③ 반복성 | 임계 회피 쪼개기(§17(a)(3)·10b-5(c)) |
+| RF_PRICE_ANOMALY | ① 체결가 · ② 오라클 NAV · ③ 괴리 정도 | 조작적 가격 이탈(§17(a)·10b-5·§9(a)) |
+| RF_SUSPICIOUS_PATTERN | ① 미분류 객관 패턴 · ② 사기·기만 작용 가능성 · ③ F-03 SAR 연계 | 위 유형 밖의 위험(§17(a)(3)·10b-5(c)) |
+
+**주의 ⚠ — 확인 항목은 "표시 근거"이지 "차단 규칙"이 아니다.** 예컨대 RF_STRUCTURING의 "임계 근접"은 특정 %·금액을 넘으면 자동 차단하는 규칙이 아니라, 그 근처에서 반복 쪼개기가 보이면 사람이 회피 의도를 검토하도록 라우팅하는 입력일 뿐이다.
+
+## §5. 판정 로직 — 어떻게 CLEAR / FLAG / REVIEW가 결정되는가
+
+### 5.0 판정 흐름 플로우차트
+
+아래 그림(fig50)은 §5.2의 스크리닝 pseudocode를 흐름으로 옮긴 것이다 — 거래 컨텍스트 조립부터 A-12 활성 여부, red-flag 카테고리별 스캔, 그리고 CLEAR·FLAG·REVIEW disposition 반환까지. **차단(BLOCK) 경로가 없다**는 점이 자격 게이트 부품과의 결정적 차이다.
+
+![fig50 A-12 런타임 판정 흐름](fig/fig50_a12_runtime.png)
+
+**범례.** 파랑 = 입력 · 회색 = 분기 노드 · 초록 = CLEAR(적신호 없음) · 빨강 = FLAG(표시) · 주황 = REVIEW(운영자 판단).
+
+### 5.1 전체 흐름 (사람 말로)
+
+거래 컨텍스트가 조립된 뒤, 온체인 코드는 다음 순서로 확인한다 — ① A-12가 이 거래에 활성인가(R2 affiliate 매도 또는 R4) → ② 재판매 축·시장행위 축의 red-flag 카테고리를 하나씩 대조 → ③ 적신호가 하나도 없으면 CLEAR, 하나라도 있으면 그 카테고리 코드를 붙여 FLAG하고 REVIEW 큐로 라우팅. A-12는 거래를 차단하지 않는다 — 거래의 최종 진행·suspend는 Recipe 정책과 운영자 판단이 결정한다.
+
+### 5.2 Pseudocode + 단계별 해설
+
+**검사 순서 한눈에 보기 — 왜 이 순서인가**
+
+| 순서 | 검사 | 무엇을 확인 | 출력(표시) | 비용 | 왜 이 위치인가 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 활성 여부 | R2(affiliate 매도) 또는 R4인가 | CLEAR(비활성) | 매우 낮음 | 비활성이면 스크리닝 대상 자체가 없음 |
+| 2 | 재판매 축 | RESALE 카테고리 3종 대조 | FLAG_RESALE_* | 낮음(결과값 대조) | affiliate 매도일 때만 활성 |
+| 3 | 시장행위 축 | MARKET_CONDUCT 카테고리 4종 대조 | FLAG_WASH_* 등 | 중(클러스터·NAV 조회) | R4에서 항상 활성 |
+| 4 | 종합·라우팅 | 적신호 유무 → disposition | CLEAR / REVIEW | 낮음 | 표시·라우팅은 마지막에 종합 |
+
+```
+function screen_A_12(tx, ctx):
+# 1. 활성 여부 (비활성이면 스크리닝 없음)
+active_resale = ctx.recipe.R2 and A06.isAffiliate(tx.seller)
+active_market = ctx.recipe.R4
+if not (active_resale or active_market):
+return {disposition: CLEAR, flags: [], note: "A-12 비활성"}
+
+flags = []
+
+# 2. 재판매 축 (affiliate 매도일 때)
+if active_resale:
+# RF_RESALE_INTENT — 502(d)(1)·§2(a)(11)·§4(d)(7)
+if tx.buyer.acquisitionPurpose == FOR_OTHERS
+or is_immediate_flip(tx.seller.acquiredAt, now): # 즉시 전매 정황
+flags.append(FLAG_RESALE_INTENT)
+elif tx.buyer.acquisitionPurpose == UNKNOWN:
+flags.append(FLAG_RESALE_INTENT) # 미확인도 표시(inquiry 필요)
+
+# RF_CONTROL_UNDISCLOSED — §4(d)(3)(K)
+if tx.seller.controlPersonCert in {ABSENT, CONTRADICTED}
+or mismatch(A06.result(tx.seller), tx.seller.controlPersonCert):
+flags.append(FLAG_CONTROL_UNDISCLOSED)
+
+# RF_AI_INCONSISTENT — §4(d)(1)·506(c) reason-to-question
+if reason_to_question(tx.buyer.claim, ctx.trade_time_facts):
+flags.append(FLAG_AI_INCONSISTENT)
+
+# 3. 시장행위 축 (R4에서 항상)
+if active_market:
+# RF_WASH_CLUSTER — §17(a)(3)·10b-5(c)·§9(a)
+if same_owner_cluster(A04.cluster(tx.buyer), A04.cluster(tx.seller)):
+flags.append(FLAG_WASH_CLUSTER)
+
+# RF_STRUCTURING — 임계 회피 (수치는 라우팅 입력일 뿐)
+if near_threshold(ctx.C08, ctx.D01) and split_pattern(tx.order):
+flags.append(FLAG_STRUCTURING)
+
+# RF_PRICE_ANOMALY — NAV 괴리
+if price_deviates(tx.price, oracle.nav()):
+flags.append(FLAG_PRICE_ANOMALY)
+
+# RF_SUSPICIOUS_PATTERN — 기타
+if other_objective_flag(tx, ctx):
+flags.append(FLAG_SUSPICIOUS_PATTERN)
+
+# 4. 종합·라우팅 (차단 없음)
+if flags == []:
+return {disposition: CLEAR, flags: [], note: "red flag 없음"}
+if ambiguous(flags):
+return {disposition: REVIEW, code: REVIEW_REDFLAG_UNCERTAIN, flags: flags}
+return {disposition: REVIEW, flags: flags} # FLAG 기록 + 운영자 큐 (BLOCK 아님)
+```
+
+**단계별 해설.** 1단계는 fail-fast 게이트다 — 비활성이면 즉시 CLEAR. 2단계 재판매 축은 affiliate 매도일 때만 돌며, 세 카테고리 모두 "다른 부품 결과값의 대조"라 비용이 낮다. 특히 `is_immediate_flip`·`reason_to_question`·`mismatch`는 *임계 비교가 아니라 정황 대조*임에 유의 — 구체적 판단(실제 도관인가, 실제 모순인가)은 사람이 한다. 3단계 시장행위 축은 R4에서 항상 돌며, 클러스터·NAV 조회로 비용이 조금 더 든다. 4단계는 적신호를 종합해 disposition을 정하되 **어떤 경우에도 BLOCK을 반환하지 않는다** — A-12는 표시·라우팅만 하고, 거래 차단·suspend는 Recipe·운영자 소관이다.
+
+### 5.3 red-flag 카테고리 매트릭스 (표시 기준)
+
+| 카테고리 | 트리거 조건(대조) | 출력 코드 | 연산자 주의 |
+| --- | --- | --- | --- |
+| RF_RESALE_INTENT | 매수 목적 = 타인, 또는 즉시 전매 정황, 또는 목적 미확인 | FLAG_RESALE_INTENT | "즉시"의 경계일은 라우팅 입력 — C-01과 조율, 자동 차단 아님 |
+| RF_CONTROL_UNDISCLOSED | (d)(3)(K) 인증 부재·모순, 또는 A-06과 불일치 | FLAG_CONTROL_UNDISCLOSED | 지분율은 판정 기준 아님(A-06 원칙) |
+| RF_AI_INCONSISTENT | 자격 claim과 거래시점 사실의 실질 모순 | FLAG_AI_INCONSISTENT | "모순"은 사람이 확정 — 표시는 reason-to-question 수준 |
+| RF_WASH_CLUSTER | 매수·매도 실소유 클러스터 동일 | FLAG_WASH_CLUSTER | 동일 클러스터 = 자전거래 확정 아님, 검토 신호 |
+| RF_STRUCTURING | 임계 근접(초과 아님) + 반복 분할 | FLAG_STRUCTURING | 임계는 표시 입력 · 넘김(>) 여부는 C-08·D-01이 별도 판정 |
+| RF_PRICE_ANOMALY | 체결가가 NAV에서 유의하게 이탈 | FLAG_PRICE_ANOMALY | 괴리 임계는 라우팅 입력, 조작 여부는 사람 |
+| RF_SUSPICIOUS_PATTERN | 기타 객관 패턴 | FLAG_SUSPICIOUS_PATTERN | 포괄 카테고리 — 남용 방지 위해 근거 기록 필수 |
+
+### 5.4 스크리닝 시점 — 블록체인의 어느 시점을 스냅샷으로 보나
+
+A-12는 STATELESS·pre-trade이므로, 스크리닝은 *거래 확정 직전(block.timestamp)* 시점의 상태를 스냅샷으로 본다. 여기에 두 가지 함의가 있다. 첫째, 매도인의 "즉시 전매" 판정은 seller.acquiredAt과 현재의 차이로 계산하되, 그 경계(며칠을 "즉시"로 볼지)는 C-01의 보유기간 기준과 조율해야 하며 임의로 정하면 경계 거래를 오분류한다(§12 Open Issue). 둘째, 시계열이 필요한 신호(여러 거래에 걸친 wash·spoofing 패턴)는 A-12의 stateless 스냅샷으로는 완결되지 않으므로 F-02·F-03(STATEFUL, post-trade)가 이어받는다 — A-12는 *이번 한 거래에서 보이는* 자전거래 정황(양측 동일 클러스터)만 표시한다.
+
+### 5.5 왜 표시이고 차단이 아닌가 — scienter의 비결정성
+
+A-12가 자격 게이트처럼 "적신호 있으면 BLOCK"으로 만들 수 없는 이유는, 적신호가 가리키는 위법(underwriter 도관·사기·시세조종)의 성립이 *사람의 판단을 요하는 요소*(고의·목적·정황·reasonable grounds·reason to know)에 걸려 있기 때문이다. "같은 클러스터"가 실제 자전거래인지, "즉시 전매"가 실제 도관인지, "임계 근접"이 실제 회피 의도인지는 온체인 코드가 결정론적으로 판정할 수 없다. 코드가 이를 자동으로 "위법"으로 확정해 차단하면 두 방향으로 틀린다 — 정당한 거래를 막아 별도 책임(거래 방해)을 지고, 코드가 할 수 없는 법적 판단을 하는 척하게 된다. 그래서 A-12는 *객관적으로 판정 가능한 신호만 기계가 탐지*하고, *그 신호가 위법을 뜻하는지의 판단은 사람에게* 넘긴다. 이 분리가 §8(패턴)·§11(운영자 층)의 핵심이다.
+
+## §6. 표시·처리 — 적신호가 잡히면 어떻게 되는가
+
+### 6.1 전체 흐름 (사람 말로)
+
+A-12의 산출은 세 갈래다 — CLEAR(적신호 없음, 기록만), FLAG(적신호 있음, 코드 부여 + 운영자 큐), REVIEW(경계·복합, 운영자 큐 직행). 어느 경우에도 A-12 단독으로 거래를 차단하지 않는다. FLAG·REVIEW가 뜨면 거래는 Recipe 정책에 따라 (a) 그대로 진행되되 사후 검토 대상이 되거나, (b) 검토 완료까지 suspend된다 — 이 선택은 Recipe·운영자의 몫이며 A-12는 신호와 기록만 제공한다.
+
+### 6.2 표시(flag) 코드
+
+| 코드 | 축 | 뜻 | 후속 |
+| --- | --- | --- | --- |
+| FLAG_RESALE_INTENT | RESALE | 도관·재유통 정황 | 502(d) reasonable inquiry 수행·기록 |
+| FLAG_CONTROL_UNDISCLOSED | RESALE | (d)(3)(K) 인증 부재·모순 | 인증 진정성 확인, 필요 시 A-06 재검토 |
+| FLAG_AI_INCONSISTENT | RESALE | 자격 claim과 사실 모순 | A-03·A-13 재확인 트리거 |
+| FLAG_WASH_CLUSTER | MARKET | 양측 동일 실소유 클러스터 | F-02 시계열 검토 연계 |
+| FLAG_STRUCTURING | MARKET | 임계 회피 쪼개기 정황 | C-08·D-01 맥락에서 의도 검토 |
+| FLAG_PRICE_ANOMALY | MARKET | NAV 대비 가격 이탈 | 괴리 사유 확인 |
+| FLAG_SUSPICIOUS_PATTERN | MARKET | 기타 위험 패턴 | F-03 SAR 판단 연계 |
+| REVIEW_REDFLAG_UNCERTAIN | 공통 | 자동 분류 애매 | 운영자 큐 직행, 근거 기록 |
+
+### 6.3 Review Path (FLAG·REVIEW 처리)
+
+```
+1. A-12가 FLAG·REVIEW 반환 + flag event 온체인 기록
+2. 거래는 Recipe 정책에 따라 진행 또는 suspend (A-12는 결정 안 함)
+3. Decipher Trust Operations 큐로 라우팅
+4. 운영자 검토: 적신호별 실사 → reason-to-know·scienter 판단 → (필요 시) 변호사 escalate
+5. 결정: (해소) 거래 정상화 / (위험 확인) suspend·SAR / (경계) 추가 증거 요청
+6. 모든 결정·근거를 Compliance Log에 기록 (reasonable inquiry의 audit trail)
+```
+
+핵심은 6번이다 — A-12의 진짜 산출물은 "차단"이 아니라 *"우리는 적신호를 감지했고, 사람이 검토했으며, 그 근거를 남겼다"는 기록*이다(§1.4). 이 기록이 willful blindness 주장에 대한 방어가 된다.
+
+### 6.4 메시지 분리 — 당사자 노출용 vs 내부 기록용
+
+적신호 표시는 사기·시세조종 조사와 연결될 수 있으므로, 당사자에게 노출하는 메시지와 내부 기록을 엄격히 분리한다. 당사자에게는 "추가 검토 중"(중립적)만 노출하고, 어떤 적신호가 어떤 근거로 잡혔는지(예: "귀하가 자전거래 클러스터로 탐지됨")는 노출하지 않는다 — 이는 tipping-off(조사 사실 누설) 방지와 오탐 시 명예 보호를 위해서다. 내부 기록에는 카테고리·근거·대조 데이터·운영자 판단을 상세히 남긴다.
+
+## §7. 테스트 케이스 — 스펙이 제대로 작동하는지 검증
+
+### 7.1 Test 1 — CLEAR (적신호 없음)
+
+**상황:** 비-affiliate 매수인이 자기 계산으로 BUIDL을 매수, 매도인은 1년 이상 보유한 비-affiliate, 양측 클러스터 상이, 가격은 NAV 근처, 임계에서 멀다.
+**기대:** R2 재판매 축은 매도인 비-affiliate라 비활성(RESALE 카테고리 미평가), R4 시장행위 축은 활성이나 어느 카테고리도 트리거 안 됨 → disposition = CLEAR, flags = []. A-12는 "red flag 없음"만 기록하고 거래는 다른 게이트 결과로 진행.
+
+### 7.2 Test 2 — FLAG_RESALE_INTENT (도관 정황)
+
+**상황:** BlackRock affiliate인 매도인이 *3일 전 취득한* 물량을 매도, 매수인의 acquisitionPurpose = FOR_OTHERS.
+**기대:** R2 활성(affiliate 매도). `is_immediate_flip`(3일)와 `buyer.purpose == FOR_OTHERS` 둘 다 트리거 → flags = [FLAG_RESALE_INTENT], disposition = REVIEW. 운영자 큐로 라우팅되어 502(d) reasonable inquiry 수행. 거래는 Recipe 정책에 따라 진행/suspend. **차단은 A-12가 하지 않음.**
+
+### 7.3 Test 3 — Boundary (임계 근접 구조화)
+
+**상황:** 매도인이 D-01의 2,000-holder 임계 *바로 아래*가 되도록, 그리고 C-08 물량 임계를 *넘지 않도록*(초과 아님) 주문을 여러 건으로 쪼갠 정황. 각 건은 개별 게이트를 통과.
+**기대:** 개별 게이트(C-08은 임계 초과 아니므로 PASS, D-01은 임계 미도달)는 통과하지만, A-12의 RF_STRUCTURING이 "임계 근접 + 반복 분할"을 포착 → flags = [FLAG_STRUCTURING], disposition = REVIEW. **경계 명시:** 여기서 A-12는 "임계를 넘었다"를 판정하지 않는다(그건 C-08·D-01의 > 판정). A-12는 "임계 바로 아래로 쪼개는 회피 의도가 의심된다"를 표시할 뿐이고, 실제 회피 의도는 운영자가 판단한다.
+
+### 7.4 Test 4 — FLAG_WASH_CLUSTER (자전거래 정황)
+
+**상황:** 매수인 지갑과 매도인 지갑이 A-04(신원 dedup)에서 *같은 실소유 클러스터*로 판정된 상태에서 서로 거래.
+**기대:** R4 활성. `same_owner_cluster` 트리거 → flags = [FLAG_WASH_CLUSTER], disposition = REVIEW. F-02(시계열 시장감시)로 연계되어 반복 자전거래 패턴 여부 검토. **경계:** 한 번의 동일-클러스터 거래가 곧 위법 자전거래는 아니다(예: 동일인의 지갑 정리). A-12는 정황을 표시하고, 위법성은 F-02 시계열 + 운영자 판단이 확정.
+
+### 7.5 Test 5 — 오탐 → 운영자 CLEAR (false positive 처리)
+
+**상황:** Test 4의 동일-클러스터 거래가 실은 매수인이 자기 hot wallet에서 cold wallet으로 옮기며 발생한 정당한 자기이전(A-04가 같은 사람의 두 지갑으로 이미 인지).
+**기대:** A-12는 여전히 FLAG_WASH_CLUSTER를 표시(객관 신호는 동일). 운영자 검토에서 "동일인 자기이전, 시장 왜곡 없음"으로 판단 → 거래 정상화, 근거를 Compliance Log에 기록. **함의:** 오탐이 나와도 A-12의 표시는 잘못이 아니다 — 표시의 목적은 위법 확정이 아니라 "사람이 확인했다는 기록"을 남기는 것이고, 그 기록 자체가 reasonable inquiry의 증거다. 오탐률이 높으면 라우팅 임계·대조 로직을 조정하되, "적신호를 아예 안 보는" 방향으로 가서는 안 된다(그것이 willful blindness).
+
+## §8. 감시형(Pattern C) 패턴 — 왜 이 방식인가
+
+### 8.1 Decipher의 검증 방식 3패턴
+
+Decipher는 법적 판정을 온체인 코드로 옮기는 방식을 세 가지로 나눈다.
+
+| 패턴 | 이름 | 작동 방식 | 예시 |
+| --- | --- | --- | --- |
+| A | 직접 계산형 | 온체인 코드가 직접 비교·계산해 PASS/FAIL | 나이 ≥ 18, 보유기간, 제재명부 매칭 |
+| B | 증명서 확인형 | off-chain 신뢰기관이 판단 → 서명 claim → DEX는 claim만 확인 | AI·QP·affiliate 판정(A-03·A-13·A-06) |
+| C | 감시형 | 객관 신호만 자동 표시, 판단은 운영자가 | 시세조종·사기 감시, red flag(A-12·F-02·F-03) |
+
+### 8.2 A-12에 패턴 C가 유일한 선택인 이유
+
+**패턴 A는 불가능하다.** A-12가 가리키는 위법(underwriter 도관·사기·시세조종)의 성립은 §5.5에서 본 대로 고의·목적·정황·reasonable grounds·reason to know 같은 *사람의 판단 요소*에 걸린다. "같은 클러스터 = 자전거래", "즉시 전매 = 도관", "임계 근접 = 회피"를 코드가 결정론적으로 확정할 수 없다. 조건문으로 만들면 정당한 거래를 오차단한다.
+
+**패턴 B도 맞지 않는다.** 패턴 B는 "자격이 있는가"처럼 off-chain 기관이 *사전에 판단해 서명*할 수 있는 사안에 쓴다. 그러나 적신호는 거래 시점에 발생하는 *상황적 신호*라, 사전에 특정 매수인에 대해 "이 사람은 앞으로 적신호를 만들지 않는다"고 서명해 둘 수 없다. 적신호 감시는 거래마다 실시간으로 이뤄져야 한다.
+
+**그래서 패턴 C만 남는다.** 온체인 코드가 *객관적으로 판정 가능한 신호만* 탐지·표시하고, *그 신호가 위법을 뜻하는지의 판단은 사람*이 한다. 이것이 A-12를 "차단 게이트"가 아니라 "감지·라우팅 장치"로 만드는 이유다.
+
+### 8.3 패턴 C의 법적 토대 — reason to know·scienter의 구조
+
+이 방식이 법적으로 성립하는 근거는 두 겹이다. 첫째, 재판매 축에서 §4(d)(3)(K)·Rule 502(d)는 "reasonable grounds to believe"·"reasonable care"·"reasonable inquiry"를 요구하는데, 이는 *결과의 보증*이 아니라 *합리적 주의의 과정*을 요구한다. A-12의 표시 + 운영자 검토 + 기록은 바로 그 "합리적 주의의 과정"을 구현한다. 둘째, 시장행위 축에서 §17(a)·10b-5의 scienter가 recklessness(적신호에 대한 willful blindness)를 포함하므로, *적신호를 감지·검토하는 절차 자체*가 recklessness를 부정하는 방어가 된다. 즉 A-12의 산출물은 "이 거래는 적법하다"는 확정이 아니라 "우리는 위험을 보았고 합리적으로 대응했다"는 *과정의 증거*다. 이 점에서 A-12는 자격 게이트(결과를 확정)와 근본적으로 다른 종류의 부품이다.
+
+**다시 강조:** A-12는 위법을 판정하지 않는다. 위법 판정은 SEC·법원의 몫이고, A-12는 그 판정에 앞서 *합리적 주의를 다했다는 기록*을 만드는 장치다. 이 구분을 흐리면(코드가 위법을 확정하는 것처럼 설계하면) 법적으로도 실무적으로도 틀린다.
+
+## §9. Cross-Element·Cross-Recipe Coordination — 혼자 움직이지 않는다
+
+### 9.1 본 부품의 책임 경계
+
+A-12는 **적신호의 탐지·표시·라우팅만** 책임진다. 세 가지를 책임지지 *않는다* — ① 자격 판정 자체(A-03·A-13), ② affiliate/control의 질적 판정(A-06), ③ 시계열·누적 시장감시(F-02·F-03). A-12의 결과는 다른 부품·레시피와 누적적으로(cumulative) 작동하며, 특히 R2(재판매)와 R4(시장행위)에서 서로 다른 역할로 켜진다.
+
+### 9.2 Element cascade map
+
+```
+A-12 (red flag screen) ──┬─ (R2 활성: affiliate 매도) ──► A-06 (affiliate 판정 결과 소비)
+│ └─ RF_CONTROL_UNDISCLOSED ─► A-06 재검토 트리거
+│
+├─ RF_AI_INCONSISTENT ──────────► A-03 / A-13 재확인 트리거
+├─ RF_RESALE_INTENT ───────────► C-01 (보유기간·즉시전매 조율)
+│
+└─ (R4 활성) RF_WASH_CLUSTER ───► A-04 (클러스터) → F-02 (시계열)
+RF_STRUCTURING ───► C-08 · D-01 (임계 맥락)
+RF_SUSPICIOUS ────► F-03 (SAR)
+```
+
+| cascade 트리거 | 관련 부품 | 관계 |
+| --- | --- | --- |
+| R2 활성 판단 | A-06 | A-06의 affiliate 결과를 *소비*(A-12는 재판정 안 함) |
+| RF_CONTROL_UNDISCLOSED | A-06 | 인증-실제 불일치 시 A-06 재검토 트리거 |
+| RF_AI_INCONSISTENT | A-03·A-13·A-11 | 자격 claim 재확인 트리거(claim 자체는 저들 소관) |
+| RF_RESALE_INTENT | C-01 | "즉시 전매"의 경계일을 보유기간 기준과 조율 |
+| RF_WASH_CLUSTER | A-04 → F-02 | A-04 클러스터 소비 → F-02 시계열로 연계 |
+| RF_STRUCTURING | C-08·D-01 | 임계 맥락 소비(넘김 판정은 저들, A-12는 근접 표시) |
+| RF_SUSPICIOUS_PATTERN | F-03 | SAR 판단으로 연계 |
+
+**해설:** A-12는 대부분의 입력을 *다른 부품이 만든 결과값*에서 가져온다(affiliate·claim·클러스터·임계). A-12의 고유 기여는 그 결과값들 사이의 *모순·이상을 포착해 표시*하는 것이다. 그래서 A-12는 "혼자 판정하는 부품"이 아니라 "여러 부품의 산출을 교차 대조하는 감시 부품"이다.
+
+### 9.3 Recipe orchestration
+
+| Recipe | 본 부품 발동 조건 | 본 부품의 역할 |
+| --- | --- | --- |
+| R2 (§4(a)(7)·Rule 144 재판매) | 조건부 — 매도인이 affiliate일 때 | 재판매 축 적신호(도관·지배관계·자격 모순) 표시 |
+| R4 (시장행위 감시) | 핵심 — 항상 | 시장행위 축 적신호(자전거래·구조화·가격) 표시 |
+| R1 (Reg D 506(c) 발행) | 비활성(원칙) | A-12는 재판매·유통 국면 부품 — 발행은 A-03·E-03 소관 |
+| R3 (ICA §3(c)(7) 펀드) | 비활성 | 펀드 자격은 A-13·D-01 소관 |
+
+### 9.4 Conflict resolution rule — 3가지 경우
+
+**경우 1 — A-12는 FLAG인데 모든 자격 게이트는 PASS.** 흔한 경우다. 매수인 AI claim도 유효(A-03 PASS)하고 매도인 보유기간도 충족(C-01 PASS)인데 A-12가 RF_RESALE_INTENT를 표시할 수 있다. 이때 게이트 PASS가 A-12 표시를 무효화하지 *않는다* — 두 부품이 보는 것이 다르기 때문이다(게이트는 자격, A-12는 적신호). 거래는 Recipe 정책에 따라 진행/suspend하되, A-12의 표시와 운영자 검토는 반드시 기록된다.
+
+**경우 2 — A-12 RF_CONTROL_UNDISCLOSED와 A-06 결과 충돌.** A-06이 "비-affiliate"로 판정했는데 A-12가 지배관계 징표를 포착하면, A-12는 A-06을 뒤집지 않고 *A-06 재검토를 트리거*한다. 최종 판단은 A-06(운영자·Trusted Issuer)이 하며, 재검토 결과가 A-12 표시를 해소하거나 확정한다. **A-12는 affiliate 여부를 스스로 판정하지 않는다**(A-06의 소관, 그리고 A-06의 bright-line 금지 원칙 준수).
+
+**경우 3 — A-12 RF_WASH_CLUSTER와 F-02의 시계열 판정 충돌.** A-12는 *이번 한 거래*의 동일-클러스터를 표시하지만, 그것이 위법 자전거래인지는 F-02의 *시계열 패턴*(반복성·거래량 부풀리기)과 운영자 판단이 확정한다. A-12 표시는 F-02 검토의 입력이며, F-02가 "정당한 자기이전"으로 판단하면 해소된다. 순서: A-12(pre-trade 표시) → F-02(post-trade 시계열) → 운영자(확정).
+
+### 9.5 Manifest 무결성과의 조율
+
+A-12의 결과(CLEAR·FLAG·REVIEW + 카테고리)는 자산의 컴플라이언스 상태를 담는 Asset Compliance Manifest에 누적 기록된다. 거래 체결 직후(post-trade commit) Manifest 무결성 부품(B-01)이 R2·R4 각 부품 결과가 서로 모순되지 않는지 재검증한다. 특히 A-12가 FLAG인데 아무 운영자 기록도 없이 거래가 완결된 경우, B-01이 audit alert를 띄운다 — "적신호를 표시했는데 검토 기록이 없다"는 것 자체가 willful blindness 리스크이므로, 이 정합성 검사가 A-12의 audit trail 목적을 뒷받침한다.
+
+### 9.6 [해설] A-12의 경계 — A-06·A-03·F-02/F-03와 무엇이 다른가
+
+A-12는 인접 부품들과 개념이 겹쳐 보이기 쉬워, 경계를 명시적으로 정리한다. 붙잡을 직관 하나 — **A-12는 "판정"하지 않는다. 다른 부품이 만든 판정·사실 사이의 모순·이상을 "표시"할 뿐이다.**
+
+| 구분 | 그 부품이 하는 일 | A-12가 하는 일 |
+| --- | --- | --- |
+| A-06 (affiliate) | 누가 affiliate인가를 질적으로 판정(Pattern B) | A-06 결과와 모순되는 지배관계 징표를 표시 |
+| A-03·A-13 (자격) | AI/QP 자격을 검증·서명(Pattern B) | 그 claim과 거래시점 사실의 모순을 표시 |
+| A-04 (신원 dedup) | 실소유 클러스터를 확정(Pattern B) | 그 클러스터가 양측에 동일한지를 표시 |
+| C-08·D-01 (임계) | 물량·보유자 임계 초과(>)를 판정 | 임계 *근접* + 쪼개기 정황을 표시(넘김 판정 아님) |
+| F-02·F-03 (시장감시) | 시계열·누적 패턴을 STATEFUL 추적(post-trade) | 이번 한 거래의 정황을 pre-trade STATELESS로 표시 |
+
+**세 가지 오해 방지.**
+
+- **A-06과의 관계.** A-12는 affiliate를 판정하지 않는다. A-06이 판정하고, A-12는 그 결과를 소비하거나(R2 활성 판단) 그 결과와 어긋나는 신호를 표시(재검토 트리거)한다. 지분율을 A-12의 판정 기준으로 코딩하면 A-06의 bright-line 금지 원칙을 위반한다.
+- **A-03과의 관계.** A-12는 자격을 재검증하지 않는다. A-03이 발급한 claim은 유효한 것으로 전제하되, 그 claim과 *거래시점 사실이 모순*되면(reason to question) 표시해 A-03 재확인을 부른다. 이는 Release 33-9415의 "적신호가 있으면 검증 강도를 높인다"는 원리의 구현이다.
+- **F-02/F-03과의 관계.** 이것이 가장 헷갈리는 경계다. A-12와 F-02/F-03은 *같은 red-flag taxonomy를 공유*하지만 시점·상태가 다르다. A-12는 **pre-trade·STATELESS** — 이번 거래에서 즉시 판정 가능한 정황(양측 동일 클러스터·NAV 괴리·임계 근접)을 표시. F-02/F-03은 **post-trade·STATEFUL** — 여러 거래에 걸친 패턴(반복 자전거래·spoofing·의심거래 누적)을 추적. 한 줄로: **A-12는 "이 거래에 이상 신호가 있다"를, F-02/F-03은 "이 계정·자산의 거래 이력에 조작 패턴이 있다"를 본다.** A-12가 taxonomy와 pre-trade 스크린을 정의하고, F-02/F-03이 그것을 시계열로 확장한다.
+
+## §10. 3-Layer Solution — 적신호 신뢰를 세 겹으로
+
+### 10.1 왜 3겹 구조인가
+
+적신호 판단에 쓰이는 입력은 여러 곳에서 온다 — 자기신고, 다른 부품의 결과, 오라클. 각 출처는 신뢰·비용·오탐률의 trade-off가 다르다. Decipher는 이를 세 겹으로 나눠 각 층의 역할·책임을 분리한다.
+
+
+[output truncated at 50000 of 55643 characters. Pass a larger max_chars (default 50000) to see more, or use read_page with a ref_id to focus on a smaller section.]
+
+Tab Context:
+- Executed on tabId: 437007782
+- Available tabs:
+  • tabId 437007716: "(1) 7/15 | Notion" (https://app.notion.com/p/deciphersnu/7-15-3a0dff004c8980fe857bd4158b970eab)
+  • tabId 437007775: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/9a48abef-135b-4c26-9a93-f37cde6e95eb/C-01_보유기간.md?table=block&id=3a4dff00-4c89-80e2-8ec4-cc568055656c&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=AY0lG0OyMgQQfhbNQfv8j3rKgvDSFIxAbewipoAcOc0&downloadName=C-01_보유기간.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/9a48abef-135b-4c26-9a93-f37cde6e95eb/C-01_%E1%84%87%E1%85%A9%E1%84%8B%E1%85%B2%E1%84%80%E1%85%B5%E1%84%80%E1%85%A1%E1%86%AB.md?table=block&id=3a4dff00-4c89-80e2-8ec4-cc568055656c&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=AY0lG0OyMgQQfhbNQfv8j3rKgvDSFIxAbewipoAcOc0&downloadName=C-01_%E1%84%87%E1%85%A9%E1%84%8B%E1%85%B2%E1%84%80%E1%85%B5%E1%84%80%E1%85%A1%E1%86%AB.md)
+  • tabId 437007778: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/44cb0c3e-0ae2-4086-9692-f376fa1e412d/A-02_국가거주제한.md?table=block&id=3a5dff00-4c89-80af-bcc4-f13938fe02d1&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=QJagHK9XceJG2PMkC3rmR6bEmsmmoT5j4Dw_aBXuVQw&downloadName=A-02_국가거주제한.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/44cb0c3e-0ae2-4086-9692-f376fa1e412d/A-02_%E1%84%80%E1%85%AE%E1%86%A8%E1%84%80%E1%85%A1%E1%84%80%E1%85%A5%E1%84%8C%E1%85%AE%E1%84%8C%E1%85%A6%E1%84%92%E1%85%A1%E1%86%AB.md?table=block&id=3a5dff00-4c89-80af-bcc4-f13938fe02d1&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=QJagHK9XceJG2PMkC3rmR6bEmsmmoT5j4Dw_aBXuVQw&downloadName=A-02_%E1%84%80%E1%85%AE%E1%86%A8%E1%84%80%E1%85%A1%E1%84%80%E1%85%A5%E1%84%8C%E1%85%AE%E1%84%8C%E1%85%A6%E1%84%92%E1%85%A1%E1%86%AB.md)
+  • tabId 437007781: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/33c64232-39cc-488d-83d7-a39ad9feefce/A-06_법리검증기준서_v1_(1).md?table=block&id=3a4dff00-4c89-804e-84e6-da3984af99c8&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=b4tRdFbb7DLorz2-eG0X6MTX76nHZ6_lIuiLGt21Amc&downloadName=A-06_법리검증기준서_v1+%281%29.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/33c64232-39cc-488d-83d7-a39ad9feefce/A-06_%E1%84%87%E1%85%A5%E1%86%B8%E1%84%85%E1%85%B5%E1%84%80%E1%85%A5%E1%86%B7%E1%84%8C%E1%85%B3%E1%86%BC%E1%84%80%E1%85%B5%E1%84%8C%E1%85%AE%E1%86%AB%E1%84%89%E1%85%A5_v1_(1).md?table=block&id=3a4dff00-4c89-804e-84e6-da3984af99c8&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=b4tRdFbb7DLorz2-eG0X6MTX76nHZ6_lIuiLGt21Amc&downloadName=A-06_%E1%84%87%E1%85%A5%E1%86%B8%E1%84%85%E1%85%B5%E1%84%80%E1%85%A5%E1%86%B7%E1%84%8C%E1%85%B3%E1%86%BC%E1%84%80%E1%85%B5%E1%84%8C%E1%85%AE%E1%86%AB%E1%84%89%E1%85%A5_v1+%281%29.md)
+  • tabId 437007782: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/ade38c9a-ce84-4b84-aa27-91edc237a754/A-12_모름항변차단.md?table=block&id=3a5dff00-4c89-80e8-8524-da603109dd58&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=u1nHuNkhQ5QmWJ5nUdDJ0CVvE5wciLF1s3CS92vBu_8&downloadName=A-12_모름항변차단.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/ade38c9a-ce84-4b84-aa27-91edc237a754/A-12_%E1%84%86%E1%85%A9%E1%84%85%E1%85%B3%E1%86%B7%E1%84%92%E1%85%A1%E1%86%BC%E1%84%87%E1%85%A7%E1%86%AB%E1%84%8E%E1%85%A1%E1%84%83%E1%85%A1%E1%86%AB.md?table=block&id=3a5dff00-4c89-80e8-8524-da603109dd58&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=u1nHuNkhQ5QmWJ5nUdDJ0CVvE5wciLF1s3CS92vBu_8&downloadName=A-12_%E1%84%86%E1%85%A9%E1%84%85%E1%85%B3%E1%86%B7%E1%84%92%E1%85%A1%E1%86%BC%E1%84%87%E1%85%A7%E1%86%AB%E1%84%8E%E1%85%A1%E1%84%83%E1%85%A1%E1%86%AB.md)
+  • tabId 437007783: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/21ccdd0a-9027-44bd-a8c7-829673cffd3f/E-01_FormD확인.md?table=block&id=3a4dff00-4c89-80c1-9d9f-fe0d327ed295&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=SALjKL_3ScNyMgrW3R0IMonDmV2BM0KeSzndBWu-2SY&downloadName=E-01_FormD확인.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/21ccdd0a-9027-44bd-a8c7-829673cffd3f/E-01_FormD%E1%84%92%E1%85%AA%E1%86%A8%E1%84%8B%E1%85%B5%E1%86%AB.md?table=block&id=3a4dff00-4c89-80c1-9d9f-fe0d327ed295&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=SALjKL_3ScNyMgrW3R0IMonDmV2BM0KeSzndBWu-2SY&downloadName=E-01_FormD%E1%84%92%E1%85%AA%E1%86%A8%E1%84%8B%E1%85%B5%E1%86%AB.md)
+  • tabId 437007784: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/544d2676-445b-4bdb-a452-20c1681d8299/E-03_bad-actor.md?table=block&id=3a4dff00-4c89-80f9-961f-f7cb3d76a74e&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=Epf-VGxVflPxdrQZkyg0qEYN7wPkNrov3Nq-U8_wdyg&downloadName=E-03_bad-actor.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/544d2676-445b-4bdb-a452-20c1681d8299/E-03_bad-actor.md?table=block&id=3a4dff00-4c89-80f9-961f-f7cb3d76a74e&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=Epf-VGxVflPxdrQZkyg0qEYN7wPkNrov3Nq-U8_wdyg&downloadName=E-03_bad-actor.md)
+  • tabId 437007785: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/5c92bb6a-033a-43ec-90c1-a16ff623b600/F-01_operator-self-dealing.md?table=block&id=3a4dff00-4c89-80dd-9ecf-fef84b68b207&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=9UqQL7XXnpoiB1FVdChUEiu1kSw0Y-zLNs8hZCExy8g&downloadName=F-01_operator-self-dealing.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/5c92bb6a-033a-43ec-90c1-a16ff623b600/F-01_operator-self-dealing.md?table=block&id=3a4dff00-4c89-80dd-9ecf-fef84b68b207&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=9UqQL7XXnpoiB1FVdChUEiu1kSw0Y-zLNs8hZCExy8g&downloadName=F-01_operator-self-dealing.md)
+  • tabId 437007786: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/143e6081-9365-43ea-9e5c-717b58f76ca5/F-02_market-surveillance.md?table=block&id=3a4dff00-4c89-80ac-a2ab-e569f170fcb1&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=l0FsVhtHxOVI3fAepvGKpDQGg7Z05wvshiuT11XjR9I&downloadName=F-02_market-surveillance.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/143e6081-9365-43ea-9e5c-717b58f76ca5/F-02_market-surveillance.md?table=block&id=3a4dff00-4c89-80ac-a2ab-e569f170fcb1&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=l0FsVhtHxOVI3fAepvGKpDQGg7Z05wvshiuT11XjR9I&downloadName=F-02_market-surveillance.md)
+  • tabId 437007787: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/304d28b0-4a62-4bed-a878-7ef9c5c27d42/F-03_suspicious-activity-monitoring.md?table=block&id=3a4dff00-4c89-802b-bcb9-e5d3ca2a5252&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=Z_OvMDEYu9El18YazUH25PaqMNO9pMuFfVldKrBtZRc&downloadName=F-03_suspicious-activity-monitoring.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/304d28b0-4a62-4bed-a878-7ef9c5c27d42/F-03_suspicious-activity-monitoring.md?table=block&id=3a4dff00-4c89-802b-bcb9-e5d3ca2a5252&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=Z_OvMDEYu9El18YazUH25PaqMNO9pMuFfVldKrBtZRc&downloadName=F-03_suspicious-activity-monitoring.md)
+  • tabId 437007788: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/5353e81e-96a2-4d4b-a965-fb4cafccc156/F-04_no-purchase-during-distribution.md?table=block&id=3a4dff00-4c89-80f8-af9f-cc7028cb641d&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=J2D6J2JjovGrC18Rlg9blfXeyYYrthiwuJqBAzGUkBM&downloadName=F-04_no-purchase-during-distribution.md" (
