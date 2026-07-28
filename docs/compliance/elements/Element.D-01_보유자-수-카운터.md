@@ -1,0 +1,426 @@
+---
+title: "D-01 보유자 수 카운터 (Holder Count) — 부품 심층 인수인계 문서 (Walkthrough)"
+type: element
+id: D-01
+name: 보유자 수 카운터 (Holder Count)
+domain: D — 집계·누적
+maturity: 정밀화 필요 → 본 문서로 확정
+verification-pattern: 상태추적형 (State-Tracking)
+timing: pre-trade gate + post-trade commit
+stateful: STATEFUL
+research-source: R-5 (record holder 산정) + R-1 인접 (§3(c)(7))
+related-recipes: [R3 ICA §3(c)(7) Fund, R1 Reg D 506(b) 분기, §3(c)(1) 펀드 분기]
+related-elements: [A-13 QP, A-04 신원중복, A-09 look-through, B-01 manifest 정합, A-03 AI]
+---
+
+# D-01 보유자 수 카운터 (Holder Count) — 부품 심층 인수인계 문서 (Walkthrough)
+
+**이 문서는 무엇인가.** Decipher RWA DEX의 컴플라이언스 부품 중 하나인 보유자 수 카운터 부품(내부 식별자 D-01)을, 미국 증권법을 처음 보는 사람도 이해할 수 있도록 풀어 쓴 인수인계 문서다. 개발자·법무팀·외부 자문 변호사·학회원이 각자 작업의 base로 그대로 쓸 수 있도록 — (1) 이 규제가 어디서 왔고 왜 존재하는지, (2) 어떤 사실을 입력받아 (3) 어떤 로직으로 판정하고 (4) 실패하면 어떻게 처리하며 (5) 어떤 테스트로 검증하는지를, 기술 요소마다 풀이를 함께 붙여 설명한다.
+
+**자체완결 원칙.** 이 문서는 다른 내부 문서를 열지 않아도 단독으로 이해되도록 작성했다. 인용은 미국 연방법·연방규칙·SEC 발행문서 등 외부 공식 자료만 사용한다.
+
+**⚠ 출처·정정 노트 (읽기 전 필독).** 본 부품의 인용은 다음 1차 출처를 기준으로 한다 — 15 U.S.C. §80a-3(c)(1)·(c)(7)(투자회사법 펀드 적용제외, uscode.house.gov), 15 U.S.C. §78*l*(g)(1934년 증권거래소법 §12(g) 등록의무, uscode.house.gov), 17 C.F.R. §240.12g-1(§12(g) 면제)·§240.12g5-1("held of record" 정의)(eCFR 현행본), 17 C.F.R. §230.506(b)·§230.506(c)·§230.501(e)(Regulation D, eCFR), 17 C.F.R. §240.12g3-2(a)(외국 사모발행자 §12(g) 면제)·§240.3b-4(c)(foreign private issuer 정의)(eCFR). 특히 헷갈리기 쉬운 정정 포인트는 다음과 같다(상세는 부록 C).
+
+- **"2,000명 상한"은 §3(c)(7)에 없다.** 투자회사법 §3(c)(7)에는 보유자 수의 숫자 상한이 아예 없다 — "전원이 qualified purchaser면 된다"가 전부다. 2,000이라는 숫자는 다른 법률인 증권거래소법 §12(g)(공개회사 등록의무의 발동 문턱)에서 온다. D-01이 실제로 지키는 것은 "§3(c)(7) 인원 상한"이 아니라 "§12(g) 공개회사 등록 트리거를 넘지 않기"다.
+- **부등호.** §12(g)·Rule 12g-1의 등록 트리거는 "held of record by 2,000 persons"이며, 면제는 "fewer than 2,000 persons"(2,000명 미만, 즉 ≤ 1,999)다. 즉 안전구간은 < 2,000이고 정확히 2,000명이면 트리거된다. 반면 §3(c)(1)은 "not more than 100 persons"(100명 이하, ≤ 100 허용)다. §12(g)의 2,000은 미달로 유지(< 2,000)해야 하고, §3(c)(1)의 100은 도달해도 된다(≤ 100) — 두 상한의 부등호가 다르다.
+- **카운팅과 자격판정은 다른 부품이다.** D-01은 "몇 명인가"만 센다. "이 사람이 QP인가"(§3(c)(7))는 A-13이, "AI인가"(506(c))는 A-03이, "같은 사람의 여러 지갑인가"는 A-04가 판정한다. D-01은 그 결과를 받아 머릿수만 집계한다.
+- **카운팅은 look-through를 하지 않는다(자격판정과 반대).** §12(g)의 "held of record"는 법인 하나를 원칙적으로 1명으로 센다(Rule 12g5-1(a)(2)). 반면 자격판정(A-13/A-09)은 법인을 뚫고 구성원까지 본다. 머릿수 셀 때 법인 = 1, 자격 볼 때 법인 = 뚫어봄 — 목적이 달라 방향이 반대다. 예외는 회피목적 보유(Rule 12g5-1(b)(3))뿐이다.
+- **BUIDL에서 켜지는 상한(조건부).** BUIDL-like 테스트 토큰이 **미국 issuer이거나 §12(g) 적용 대상 issuer라는 전제**에서는, D-01이 거는 상한은 §12(g)의 "held of record < 2,000"이다. §3(c)(1)의 100인 상한은 BUIDL이 §3(c)(1)이 아니라 §3(c)(7) 펀드이므로 dormant, 506(b)의 35인 상한은 BUIDL이 506(b)가 아니라 506(c)(매수인 수 무제한)이므로 dormant다. **다만 실제 BUIDL은 BVI 역외 펀드이므로 이 상한이 곧바로 적용된다고 단정하지 않는다** — 다음 FPI 항목이 선행 검토되어야 한다.
+- **BVI 역외 펀드는 FPI 선행검토가 필요하다(중요).** 실제 BUIDL은 BVI 역외 펀드다. foreign private issuer(FPI, Rule 3b-4(c))라면 Rule 12g3-2(a)에 따라 그 class의 미국 거주 record holder가 300명 미만인 한 §12(g)에서 면제된다. 따라서 실제 BUIDL의 구속 상한은 "held of record < 2,000"이 아니라 "미국 거주 보유자 < 300"(12g3-2(a))일 수 있고, FPI 지위·미국 거주 보유자 산정이 선행 판단이다. D-01은 이 전제(§12(g) 적용 대상 issuer인지, FPI 면제가 없는지)를 Manifest로 받아 상한을 활성화한다(§3.11·부록 B·OD-D01-3).
+- **§12(g) 트리거는 실시간이 아니라 회계연도 말 기준이다.** 법문상 §12(g) 등록의무는 "총자산 $10M 초과 + 해당 class 2,000명(또는 비-AI 500명) held of record인 **최초 회계연도 종료일**" 후 120일 내 발생하며, Rule 12g-1도 "most recent fiscal year의 마지막 날" 기준으로 자산·인원을 본다. D-01의 거래 직전 실시간 게이트(count 도달 시 차단)는 **우발적 초과·회계연도 말 등록위험을 막기 위한 보수적 운영 게이트**이지, "2,000번째 보유자 발생 즉시 등록의무 발생"을 뜻하지 않는다(§3.2·§5.1·§7).
+
+**양식 메모.** 이 문서는 A-13 v1 인수인계 양식의 번호·헤더·서술 관습을 따른다. 다만 A-13이 증명서 확인형(Pattern B) 부품인 데 반해 D-01은 상태추적형(State-Tracking) 부품이다 — off-chain 증명서를 확인하는 것이 아니라 on-chain 누적 상태(카운터)를 매 거래마다 갱신한다. 그래서 §8은 증명서 패턴이 아니라 상태추적 패턴을, ERC-3643 변환은 claim topic이 아니라 Compliance Module을 다룬다(claim.basis enum은 D-01에 해당 없음 — 상세 §8·§3.20).
+
+---
+
+## §1. 규제 맥락 — 이 부품이 다루는 규제는 어디서 왔는가 (Context First)
+
+D-01은 한 줄로 말하면 다음 질문에 답하는 부품이다.
+
+> 이 거래를 체결하면, 이 증권의 보유자 수가 면제 구조를 깨뜨리는 임계값에 도달하는가?
+
+미국 증권법에서 "보유자 수"는 두 개의 서로 다른 면제 체계에서 각각 문턱으로 등장한다. 둘을 섞으면 안 된다.
+
+**(1) 투자회사법(ICA) 쪽 — 펀드가 "투자회사 등록"을 피하는 문턱.** 증권에 투자하는 것을 업으로 하는 issuer(펀드)는 원칙적으로 투자회사법상 등록 투자회사가 되어야 한다(§80a-3(a)). 등록을 피하려면 적용제외(exception)가 필요하다. 대표적 두 경로가 §3(c)(1)(수익적 소유자 100명 이하)과 §3(c)(7)(전원이 qualified purchaser)이다. BUIDL은 §3(c)(7)을 쓴다. 그런데 §3(c)(7)에는 인원 상한이 없다 — 전원 QP이기만 하면 인원은 무제한이다. 인원을 세는 것(§3(c)(1)의 100)은 §3(c)(1) 경로에서만 등장한다.
+
+**(2) 증권거래소법 쪽 — issuer가 "공개회사 보고의무"를 피하는 문턱.** 이것이 BUIDL에서 실제로 구속력을 갖는 문턱이다. 증권거래소법 §12(g)는 issuer의 자산이 $10,000,000을 초과(exceeding)하고 어느 지분증권 class가 held of record로 (i) 2,000명 또는 (ii) 비적격투자자 500명에게 보유되면, 그 issuer는 SEC에 등록하고 공개회사로서 정기보고를 해야 한다고 정한다. 사모 펀드가 이 트리거를 넘으면 "사적 발행"이라는 전체 구조가 무너진다(공개회사가 되어 버린다). 그래서 사모로 남으려는 §3(c)(7) 펀드는 held of record 보유자 수를 2,000명 미만(< 2,000)으로 유지한다.
+
+**왜 §12(g)가 §3(c)(7) 펀드에도 걸리나 (핵심).** §12(g)(2)(B)는 "§80a-8에 따라 등록된 투자회사가 발행한 증권"을 §12(g)에서 면제한다. 그러나 §3(c)(7) 펀드는 정의상 등록하지 않은(적용제외) 펀드다. 따라서 §12(g)(2)(B)의 면제를 받지 못하고, §12(g)의 2,000명 트리거에 그대로 노출된다. 이것이 "§3(c)(7) 펀드가 QP만 받는데도 보유자 수를 세야 하는" 이유다.
+
+따라서 D-01은 단순히 "지갑이 몇 개인가"를 보는 부품이 아니다. 거래 직전에 이 거래가 새 보유자를 추가하는지(A-04로 같은 사람의 다른 지갑이 아님을 확인한 뒤), 추가한다면 그 결과 보유자 수가 활성 상한을 넘는지를 판정하고, 거래 직후에 카운터를 갱신하는 상태추적 부품이다.
+
+**세 상한의 지도 (D-01이 담을 수 있는 상한들).** D-01은 여러 토큰이 공용으로 쓰는 라이브러리 부품이므로, 자산군·Recipe에 따라 아래 세 상한 중 활성화되는 것이 달라진다.
+
+| 근거 | 문턱 | 부등호 | Recipe | BUIDL |
+|------|------|--------|--------|-------|
+| 증권거래소법 §12(g) + Rule 12g-1 | held of record 2,000명 (및 비-AI 500명) | 미만 유지 (< 2,000, < 500 non-AI) | R3 (§3(c)(7)) | 조건부 활성 (§12(g) 적용 대상 issuer 전제; FPI면 아래로 대체) |
+| Rule 12g3-2(a) + 3b-4(c) (FPI) | 미국 거주 record holder 300명 | 미만 유지 (< 300) | R3 (§3(c)(7), FPI 발행자) | 조건부 활성 (실제 BVI BUIDL이 FPI면 이 경계가 §12(g) 2,000을 대체) |
+| 투자회사법 §3(c)(1) | 수익적 소유자 100명 (QVCF 250명) | 이하 허용 (≤ 100) | §3(c)(1) 펀드 분기 | dormant (BUIDL은 §3(c)(7)) |
+| Rule 506(b)(2)(i) | 매수인 35명 / 90일 | 이하 허용 (≤ 35) | R1의 506(b) 분기 | dormant (BUIDL은 506(c), 무제한) |
+
+이 §3(c)(7)+§12(g) 라인이 §3의 본체이며, FPI(12g3-2(a)) 경로는 실제 BVI BUIDL의 선행 검토로 중요하다(§3.11). §3(c)(1)·506(b)는 라이브러리 완결성을 위해 보존하되 BUIDL에선 꺼진다. **§12(g) 트리거는 실시간이 아니라 회계연도 말 기준**이므로(§3.2·§5.1), D-01의 거래별 게이트는 등록위험 예방용 보수적 운영 장치다.
+
+---
+
+## §2. 메타 정보 (Internal Identifier Box)
+
+아래는 Decipher 내부 PM 규약상의 식별자·분류값을 한곳에 모은 박스다. 본문에서는 이 코드들을 단독으로 쓰지 않고 "본 부품"·"보유자 수 카운터 부품" 같은 자연어로 부른다.
+
+| 항목 | 값 | 한 줄 풀이 |
+|------|-----|-----------|
+| 부품 이름 | 보유자 수 카운터 (Holder Count) | 면제 구조를 유지하기 위한 보유자 머릿수 감시원 |
+| 검사 대상 | 지분증권 class의 보유자 수가 활성 상한(§12(g) < 2,000 / §3(c)(1) ≤ 100 / 506(b) ≤ 35)을 넘지 않는가 | "이 거래로 사람 수가 선을 넘는가" |
+| Internal ID | D-01 (Decipher PM 규약) | 부품 일련번호 |
+| 검증 방식 | 상태추적형 (on-chain 누적 카운터 갱신 + 거래 전 게이트) | 증명서를 보는 게 아니라 누적 상태를 세고 갱신 |
+| Timing | pre-trade 게이트 + post-trade commit | 거래 직전에 "넘는가" 판정, 거래 직후에 카운터 갱신 |
+| Stateful 여부 | STATEFUL | 과거 거래의 누적 결과(현재 보유자 수)에 판정이 의존 |
+| 주 활성화 Recipe | R3 (ICA §3(c)(7) Fund) | 이 레시피가 §12(g) < 2,000 상한으로 본 부품을 부른다 |
+| Cumulative Recipe | R1의 506(b) 분기 / §3(c)(1) 펀드 분기 | 그 경로에서는 각각 35인·100인 상한으로 활성화 (BUIDL 미적용) |
+| Cascade Element | A-04(신원중복) · A-13(QP) · A-09(look-through) · B-01(manifest 정합) · A-03(AI) | 카운팅 단위·상한값·자격을 공급하는 부품 |
+| 성숙도 | 정밀화 필요 → 본 문서로 확정 (STATEFUL) | R-5(record holder 산정) 응답분 |
+| 파일·위치 | D-01_보유자수카운터.md · 산출물/elements/ | 산출물 경로 |
+
+---
+
+## §3. 법적 근거 (Layer 1 → 2 → 3)
+
+**읽는 법.** 법적 근거는 세 겹이다 — Layer 1(조문)은 의회가 만든 법률 텍스트(statute), Layer 2(규칙)는 SEC가 그것을 실무 수준으로 구체화한 연방규칙(rule), Layer 3(해석)은 SEC 발행문서·Release·Federal Register 해설이다. 아래 §3.0.2 표 1의 "종류" 칸이 그대로 Layer에 대응한다 — Statute = Layer 1(§3(c)(7)·§3(c)(1)·§12(g)), SEC Rule = Layer 2(Rule 12g-1·12g5-1·506(b)·506(c)·501(e)), SEC Release = Layer 3(JOBS Act Title V/VI 이행·자산문턱 연혁). 본 절은 조문이 작동하는 논리 흐름 순서로 배열돼 §3.1~§3.10 번호를 그대로 유지하며, 각 항목이 어느 Layer인지는 이 표로 확인하면 된다.
+
+### 3.0 법조문 관계 플로우차트 (개발자용)
+
+위 조문들이 D-01 판정에서 어떻게 연결되는지 — 펀드가 §3(c)(7)이면 투자회사법상 인원 상한은 없지만, 등록 투자회사가 아니어서 §12(g)가 걸리고, 자산 $10M 초과 시 held of record < 2,000 유지가 유일한 구속 상한이 되는 흐름 — 을 정리한 것이다. §3(c)(1)(100인)·506(b)(35인) 분기는 BUIDL에서 dormant다. 각 조항 상세는 §3.1~§3.10.
+
+![그림 3.0 — 법조문 관계 흐름: §3(c)(7) 무상한 → §12(g) 노출 → Rule 12g-1 < 2,000 (개발자용)](img/fig30_statute_flow.png)
+
+### 3.0.1 실제 BUIDL에 어떻게 적용되나
+
+BUIDL(BlackRock USD Institutional Digital Liquidity Fund)은 공개 공시상 Rule 506(c) + ICA §3(c)(7), 최소투자 $5M, BVI 역외 펀드다(발행 공시 Business Wire 2024-03-20). D-01 적용은 두 단계로 나눠 봐야 한다.
+
+**(1) 선행 단계 — §12(g)가 애초에 적용되는가(FPI 검토).** 실제 BUIDL은 BVI 역외 펀드이므로 Rule 3b-4(c)상 foreign private issuer(FPI)에 해당할 가능성이 크다. FPI라면 Rule 12g3-2(a)에 따라 그 class의 **미국 거주 record holder가 300명 미만**인 한 §12(g)에서 면제된다. 이 경우 실제 구속 상한은 "held of record < 2,000"이 아니라 "**미국 거주 보유자 < 300**"이 된다. 따라서 FPI 지위·미국 거주 보유자 산정·12g3-2(a)/(b) 적용 여부가 **선행 판단**이며(§3.11), D-01은 이 선행 결과를 Manifest로 받아 어느 상한(§12(g) 2,000 / 12g3-2(a) 미국 거주 300)을 활성화할지 결정한다.
+
+**(2) §12(g)가 적용된다는 전제 단계.** BUIDL-like 토큰이 미국 issuer이거나 FPI 면제가 없는 §12(g) 적용 대상 issuer라는 전제에서만, 아래 분석이 성립한다. 자산 규모가 $10M을 크게 초과하므로 Rule 12g-1(a)의 "총자산 $10M 이하" 면제는 성립하지 않고, §12(g) 등록을 피하는 길은 Rule 12g-1(b)(1)의 "held of record 2,000명 미만 그리고 비-AI 500명 미만"이다.
+
+**비-AI 분기는 자동 0이 아니다(정정).** BUIDL은 506(c)라 발행 당시 매수인 전원이 accredited investor여야 하지만(A-03이 검사), 이는 **판매 시점** 요건이다. 반면 Rule 12g-1(b)(1)의 비-AI 500명 판단은 "determined as of such day rather than at the time of the sale" — 즉 **해당 회계연도 종료 기준일 현재**의 AI 여부로 본다. 따라서 발행 당시 전원 AI였다는 사실만으로 §12(g)의 비-AI count가 영구히 0이라고 단정할 수 없다. 시스템(Recipe)이 secondary buyer에게도 계속 AI를 요구하고 A-11(freshness)·A-12(반대정보)와 연동해 status를 유지·재검증한다면 비-AI count가 사실상 0에 가깝게 유지될 수 있으나, 이는 **법문상 자동 결과가 아니라 시스템 정책·Recipe 설계의 결과**다. 그러므로 D-01은 nonAICount를 완전 dormant로 두지 않고 기준일 현재 AI claim에 연동해 별도 집계 가능하도록 설계한다(§3.2·§3.19).
+
+정리하면, 실제 BUIDL에 "held of record < 2,000 하나"가 곧바로 적용된다고 단정하지 않는다 — FPI 면제가 선행 검토되어야 하고(OD-D01-3), 비-AI count도 기준일 기준으로 별도 관리되어야 한다.
+
+### 3.0.2 조문 근거표 (Authority) + 순서·중요성
+
+**표 1 — Authority (근거 원천 일람).** "종류" = Layer, 태그 = Direct(직접 판정 근거)·Conditional(사실관계 따라 활성)·Supporting(보조)·Background(배경).
+
+| 종류 | Authority | 내용 | D-01 관련성 | 태그 | Official URL |
+|------|-----------|------|-------------|------|--------------|
+| Statute | ICA §3(c)(7), 15 U.S.C. §80a-3(c)(7) | QP 전용 펀드 적용제외 (인원 상한 없음) | R3가 유지하려는 면제 — "왜 세는가"의 상위 근거 | Direct | uscode.house.gov |
+| Statute | 증권거래소법 §12(g)(1), 15 U.S.C. §78*l*(g)(1) | 자산 > $10M + held of record 2,000명 또는 비-AI 500명 → 등록의무 | 카운팅 상한의 직접 근거 (핵심) | Direct | uscode.house.gov |
+| Statute | 증권거래소법 §12(g)(2)(B), 15 U.S.C. §78*l*(g)(2) | 등록 투자회사(§80a-8) 증권은 §12(g) 면제 | §3(c)(7) 펀드는 미등록이라 이 면제 불가 → §12(g) 노출 근거 | Direct | uscode.house.gov |
+| SEC Rule | Rule 12g-1, 17 C.F.R. §240.12g-1 | 자산 ≤ $10M 또는 held of record < 2,000 & 비-AI < 500이면 면제 | 실제 상한 경계(< 2,000) | Direct | ecfr.gov |
+| SEC Rule | Rule 12g5-1, 17 C.F.R. §240.12g5-1 | "held of record" 정의 — 누구를 1명으로 세는가 | 카운팅 단위·집계 규칙 (법인=1, 동일인=1, 회피=look-through) | Direct | ecfr.gov |
+| Statute | 증권거래소법 §12(g)(5), 15 U.S.C. §78*l*(g)(5) | "class"·"held of record"·"total assets" 정의 위임 + 종업원보상 제외 | 카운팅 정의의 위임 근거 | Supporting | uscode.house.gov |
+| Statute | 증권거래소법 §12(g)(4), 15 U.S.C. §78*l*(g)(4) | 보유자 300명 미만이면 등록 종료 | STATEFUL 하향·이력(등록 후 이탈) 경계 | Background | uscode.house.gov |
+| SEC Rule | Rule 12g3-2(a), 17 C.F.R. §240.12g3-2(a) | 외국 사모발행자(FPI) class가 미국 거주 record holder 300명 미만이면 §12(g) 면제 | 실제 BUIDL(BVI 역외)의 선행 면제 — 상한이 "미국 거주 < 300"으로 바뀔 수 있음 | Conditional | ecfr.gov |
+| SEC Rule | Rule 3b-4(c), 17 C.F.R. §240.3b-4(c) | foreign private issuer 정의 (미국 거주 의결권 ≤ 50% 또는 business-contacts test) | FPI 지위 판단 — 12g3-2(a) 면제의 선행 요건 | Conditional | ecfr.gov |
+| Statute | ICA §3(c)(1), 15 U.S.C. §80a-3(c)(1) | 수익적 소유자 100명 이하 펀드 적용제외 (+ (A) look-through) | §3(c)(1) Recipe의 상한 (BUIDL dormant); (A)는 A-09 연계 | Conditional | uscode.house.gov |
+| SEC Rule | Rule 506(b)(2)(i)·501(e), 17 C.F.R. §230.506·§230.501 | 매수인 35명/90일 상한 + 산정 방식 | 506(b) 발행 Recipe 상한 (BUIDL dormant, 506(c)는 무제한) | Conditional | ecfr.gov |
+| Statute | ICA §2(a)(51), 15 U.S.C. §80a-2(a)(51) | qualified purchaser 정의 | 자격은 A-13 담당 — D-01은 머릿수만 (경계 확인용) | Background | uscode.house.gov |
+
+**표 2 — 순서·중요성 한눈에 보기.** 순서는 중요도순이 아니라 법이 작동하는 논리 흐름순이다.
+
+| 순서 | 조문 | 중요성 | D-01이 그걸로 하는 일 |
+|------|------|--------|----------------------|
+| §3.1 | ICA §3(c)(7) | 상위 배경 | 유지 대상 면제 — 인원 상한 없음을 확인 (2,000은 여기 없음) |
+| §3.2 | §12(g)(1) | 핵심 | 상한의 근원: 자산 > $10M + held of record 2,000/비-AI 500 트리거 |
+| §3.3 | §12(g)(2)(B) | 핵심(적용 근거) | §3(c)(7) 펀드가 왜 §12(g)에 걸리는지 (미등록 → 면제 불가) |
+| §3.4 | Rule 12g-1 | 핵심 | 실제 경계: held of record < 2,000 & 비-AI < 500 유지 |
+| §3.5 | Rule 12g5-1 | 핵심 | 카운팅 단위: 법인=1, 동일인 다명의=1, 회피목적=look-through |
+| §3.6 | §12(g)(5) | 보조 | "held of record"·"total assets" 정의 위임 + 종업원보상 제외 |
+| §3.7 | §12(g)(4) | 배경 | 등록 후 300명 미만 하향 시 등록 종료 (STATEFUL 이력) |
+| §3.8 | ICA §3(c)(1) + (A) | 조건부(dormant) | §3(c)(1) 펀드 분기의 100인 상한 + look-through(A-09) |
+| §3.9 | Rule 506(b)(2)(i)·501(e) | 조건부(dormant) | 506(b) 발행 분기의 35인/90일 상한 (506(c)는 무제한) |
+| §3.10 | ICA §2(a)(51) | 배경 | 자격(QP)은 A-13, D-01은 머릿수 — 책임경계 확인 |
+| §3.11 | Rule 12g3-2(a) + 3b-4(c) | 조건부(중요·FPI) | 실제 BVI BUIDL의 선행 면제: FPI면 미국 거주 record holder < 300이면 §12(g) 면제 |
+
+### 3.1 투자회사법 §3(c)(7) — Qualified Purchaser 전용 펀드 (인원 상한 없음)
+
+- **조항**: Investment Company Act of 1940 §3(c)(7), 15 U.S.C. §80a-3(c)(7) — uscode.house.gov
+- **핵심 원문**: (A) Any issuer, the outstanding securities of which are owned exclusively by persons who, at the time of acquisition of such securities, are qualified purchasers, and which is not making and does not at that time propose to make a public offering of such securities. Securities that are owned by persons who received the securities from a qualified purchaser as a gift or bequest, or in a case in which the transfer was caused by legal separation, divorce, death, or other involuntary event, shall be deemed to be owned by a qualified purchaser, subject to such rules, regulations, and orders as the Commission may prescribe as necessary or appropriate in the public interest or for the protection of investors. (B) Notwithstanding subparagraph (A), an issuer is within the exception provided by this paragraph if— (i) in addition to qualified purchasers, outstanding securities of that issuer are beneficially owned by not more than 100 persons who are not qualified purchasers, if— (I) such persons acquired any portion of the securities of such issuer on or before September 1, 1996; and (II) at the time at which such persons initially acquired the securities of such issuer, the issuer was excepted by paragraph (1).
+- **한국어**: (A) 발행 증권 전부가, 그 취득 시점에 qualified purchaser인 자들에 의해서만 소유되고, 그 증권의 public offering을 하지 않으며 그 시점에 할 것을 제안하지도 않는 issuer. qualified purchaser로부터 증여·유증으로 증권을 받은 자, 또는 법적 별거·이혼·사망·기타 비자발적 사건으로 이전받은 자가 소유한 증권은 (SEC가 정하는 규칙·규정·명령에 따라) qualified purchaser가 소유한 것으로 본다. (B) (A)에도 불구하고, issuer는 다음의 경우 이 항의 적용제외에 해당한다 — (i) qualified purchaser 외에, 그 issuer의 발행 증권을 qualified purchaser가 아닌 100명 이하가 수익적으로 소유하되, (I) 그 자들이 1996-09-01 이전에 그 증권의 일부를 취득했고, (II) 그 최초 취득 시점에 그 issuer가 (제1항 §3(c)(1))에 의해 적용제외였던 경우.
+- **쉬운 설명**: §3(c)(7)의 핵심은 "전원이 qualified purchaser이면 인원 수 제한이 없다"는 것이다 — 조문 어디에도 보유자 수의 숫자 상한이 없다. (B)는 1996-09-01 이전 §3(c)(1)(100인) 펀드였다가 전환한 펀드에 한해 qualified purchaser가 아닌 grandfather 보유자를 100명까지 허용하는 좁은 경과규정으로, 신규 펀드(BUIDL 포함)와는 무관하다. 따라서 "D-01이 §3(c)(7) 펀드에서 세는 2,000명"은 이 조문이 아니라 §12(g)에서 오며, §3(c)(7)은 오히려 "투자회사법상으로는 상한이 없음"을 확정해 주는 상위 배경이다.
+- **PASS/FAIL 반영**: 간접 ✕ — 자격(QP) 판정은 A-13, D-01은 머릿수만. 이 조문은 D-01에 "투자회사법상 인원 상한 없음"을 알려주어, D-01의 실제 구속 상한이 §12(g)임을 확정한다. (B)의 "not more than 100" grandfather는 신규 펀드 미적용이므로 D-01 카운터에 반영하지 않는다(적용 시에도 QP 카운트가 아니라 별도 non-QP 카운트).
+- **ERC-3643 변환**: recipe = R3_ICA_3C7; holderCap.source = EXCHANGE_ACT_12G (§3(c)(7) 아님); §3(c)(7) 유지의 QP 요건은 A-13 claim.topic = QUALIFIED_PURCHASER가 담당. D-01 module은 §3(c)(7)에서 인원 상한 파라미터를 §12(g)로부터 받는다.
+
+### 3.2 증권거래소법 §12(g)(1) — 공개회사 등록의무의 발동 문턱 (핵심)
+
+- **조항**: Securities Exchange Act of 1934 §12(g)(1), 15 U.S.C. §78*l*(g)(1) — uscode.house.gov
+- **핵심 원문**: (1) Every issuer which is engaged in interstate commerce, or in a business affecting interstate commerce, or whose securities are traded by use of the mails or any means or instrumentality of interstate commerce shall— (A) within 120 days after the last day of its first fiscal year ended on which the issuer has total assets exceeding $10,000,000 and a class of equity security (other than an exempted security) held of record by either— (i) 2,000 persons, or (ii) 500 persons who are not accredited investors (as such term is defined by the Commission), and (B) in the case of an issuer that is a bank, a savings and loan holding company … or a bank holding company … not later than 120 days after the last day of its first fiscal year ended … on which the issuer has total assets exceeding $10,000,000 and a class of equity security (other than an exempted security) held of record by 2,000 or more persons, register such security by filing with the Commission a registration statement …
+- **한국어**: (1) 주간통상에 종사하거나 주간통상에 영향을 미치는 사업을 하거나, 그 증권이 우편·주간통상 수단으로 거래되는 모든 issuer는 — (A) 총자산이 $10,000,000을 초과하고 어느 지분증권 class(면제증권 제외)가 (i) 2,000명 또는 (ii) 비적격투자자(SEC가 정하는 정의) 500명에게 held of record로 보유된 최초 회계연도 종료일로부터 120일 이내에, (B) issuer가 은행·저축대부지주회사·은행지주회사인 경우 총자산 $10,000,000 초과 및 지분증권 class가 2,000명 이상에게 held of record로 보유된 최초 회계연도 종료일로부터 120일 이내에, 그 증권을 SEC에 등록신고서 제출로 등록해야 한다.
+- **쉬운 설명**: 이 조문이 "2,000"의 출처다. 두 조건이 AND로 걸린다 — (1) 총자산이 $10M을 초과할 것, 그리고 (2) 어느 지분증권 class가 held of record로 2,000명(또는 비-AI 500명)에게 보유될 것. 둘을 다 넘으면 그 issuer는 공개회사가 되어 SEC 등록·정기보고를 해야 한다. 사모 펀드에겐 사형선고나 다름없다. 부등호 주의: 자산은 "exceeding $10,000,000"(초과, > $10M)이고, 인원은 "held of record by 2,000 persons"(2,000명에 도달하면 트리거) — 즉 안전하려면 held of record를 2,000명 미만(< 2,000)으로 유지해야 한다. **트리거 시점 주의(중요)**: 조문은 "within 120 days after the last day of its **first fiscal year ended** on which ..."이라고 쓴다. 즉 등록의무는 자산·인원 요건을 동시에 충족한 **최초 회계연도 종료일** 기준으로 판단되어 그 후 120일 내에 이행하는 구조이지, "2,000번째 보유자가 생기는 순간 실시간으로" 발생하지 않는다. 따라서 D-01이 거래 직전에 count 도달을 차단하는 것은 법문상 즉시 트리거를 막는 것이라기보다 **회계연도 말에 요건을 충족해 등록위험에 빠지는 것을 예방하는 보수적 운영 게이트**다(§5.1·§7). BUIDL은 자산이 $10M을 크게 초과하므로 자산 요건은 이미 충족(=위험 쪽) 상태이며, 인원 관리가 주된 방어선이다.
+- **PASS/FAIL 반영**: 직접 ○ — D-01의 핵심 상한. 이 거래로 인한 결과 held-of-record 인원이 2,000명 미만(< 2,000)이어야 PASS. 비-AI 인원은 500명 미만(< 500)이어야 하며, 이 비-AI 여부는 판매 시점이 아니라 **회계연도 종료 기준일 현재**의 AI status로 판단한다(Rule 12g-1(b)(1), §3.4). BUIDL이 506(c)로 발행 당시 전원 AI라는 사실은 비-AI count를 낮게 유지하는 데 도움이 되지만 자동으로 0을 보장하지 않는다 — Recipe가 계속 AI를 요구하고 A-11/A-12와 연동해 status를 유지할 때 사실상 0에 가깝게 관리되는 정책적 결과다(§3.0.1·§3.19).
+- **ERC-3643 변환**: HolderCountModule.threshold_12g_total = 2000 (enforce resultingHolders < 2000); threshold_12g_nonAI = 500 (enforce nonAIHolders < 500); assetGate: manifest.totalAssetsUSD > 10_000_000 → 상한 활성.
+
+### 3.3 증권거래소법 §12(g)(2)(B) — 등록 투자회사 면제 (§3(c)(7) 펀드엔 불가)
+
+- **조항**: Securities Exchange Act §12(g)(2)(B), 15 U.S.C. §78*l*(g)(2) — uscode.house.gov
+- **핵심 원문**: (2) The provisions of this subsection shall not apply in respect of— … (B) any security issued by an investment company registered pursuant to section 80a–8 of this title.
+- **한국어**: (2) 본 subsection(§12(g))의 규정은 다음에 적용되지 않는다 — (B) §80a-8에 따라 등록된 투자회사가 발행한 증권.
+- **쉬운 설명**: §12(g)는 "등록된 투자회사가 발행한 증권"에는 적용되지 않는다. 즉 정식 등록 뮤추얼펀드 등은 애초에 §12(g)를 걱정할 필요가 없다. 그러나 §3(c)(7) 펀드는 정의상 투자회사법 등록을 하지 않은(적용제외) 펀드다 — 등록 투자회사가 아니므로 이 (B) 면제를 받지 못하고, 결과적으로 §12(g)의 2,000명 트리거에 그대로 노출된다. 이 한 문장이 "왜 QP만 받는 사모 펀드가 보유자 수까지 세야 하는가"의 답이다.
+- **PASS/FAIL 반영**: 간접 ✕ — 적용 근거. 이 면제가 성립하지 않으므로 §12(g) 상한(§3.2)이 살아남는다. Manifest에 "펀드가 등록 투자회사인가" 플래그가 있으면 D-01 활성/비활성을 결정한다.
+- **ERC-3643 변환**: manifest.fundRegisteredUnder80a8 = false → HolderCountModule.active = true (§12(g) 상한 적용). true였다면 §12(g) 분기 비활성.
+
+### 3.4 Rule 12g-1 — §12(g) 면제 (실제 경계: held of record < 2,000)
+
+- **조항**: 17 C.F.R. §240.12g-1 — ecfr.gov
+- **핵심 원문**: An issuer is not required to register a class of equity securities pursuant to section 12(g)(1) of the Act (15 U.S.C. 78l(g)(1)) if on the last day of its most recent fiscal year: (a) The issuer had total assets not exceeding $10 million; or (b)(1) The class of equity securities was held of record by fewer than 2,000 persons and fewer than 500 of those persons were not accredited investors (as such term is defined in § 230.501(a) of this chapter, determined as of such day rather than at the time of the sale of the securities); or (2) The class of equity securities was held of record by fewer than 2,000 persons in the case of a bank; a savings and loan holding company, as such term is defined in section 10 of the Home Owners' Loan Act (12 U.S.C. 1461); or a bank holding company, as such term is defined in section 2 of the Bank Holding Company Act of 1956 (12 U.S.C. 1841).
+- **한국어**: issuer는 최근 회계연도 종료일 기준 다음 중 하나에 해당하면 §12(g)(1)에 따른 지분증권 class 등록의무가 없다 — (a) 총자산이 $10 million을 초과하지 않았거나; 또는 (b)(1) 그 지분증권 class가 2,000명 미만에게 held of record로 보유되었고 그중 비적격투자자(§230.501(a) 정의, 판매 시점이 아니라 그 날 기준)가 500명 미만이었거나; 또는 (2) 은행·저축대부지주회사·은행지주회사의 경우 그 class가 2,000명 미만에게 held of record로 보유된 경우.
+- **쉬운 설명**: §12(g) 등록을 피하는 면제는 OR 구조다 — (a) 자산이 $10M 이하이면 인원과 무관하게 면제, 또는 (b) 자산이 크더라도 held of record가 2,000명 미만 그리고 비-AI가 500명 미만이면 면제. BUIDL은 자산이 $10M을 크게 초과하므로 (a) 경로는 막혀 있고, (b) 경로 — 즉 held of record < 2,000 그리고 비-AI < 500 — 유지가 (§12(g)가 적용된다는 전제에서) 주된 길이다. 부등호가 결정적이다: 조문이 "fewer than 2,000 persons"(2,000명 미만)이므로 1,999명까지는 면제, 정확히 2,000명이 되는 순간 면제를 잃는다. 두 가지 시점 규율을 놓치면 안 된다. 첫째, 이 판단은 "on the last day of its **most recent fiscal year**" — **회계연도 종료일 기준 스냅샷**이다(실시간이 아님, §3.2). 둘째, 비-AI 판단은 "(as such term is defined in §230.501(a) ..., **determined as of such day rather than at the time of the sale of the securities**)" — 즉 판매 시점이 아니라 **그 기준일 현재**의 AI 여부다. 이 둘째 문언 때문에 "506(c)라 발행 당시 전원 AI였으니 비-AI는 영구히 0"이라는 추론은 성립하지 않는다: 기준일에 AI가 아니게 된 보유자는 비-AI로 계상된다. 따라서 D-01의 운영상 PASS 조건은 "이 거래 후 held-of-record 인원 < 2,000"(≤ 1,999)이되, 비-AI count는 기준일 현재 AI claim에 연동해 별도 관리한다.
+- **PASS/FAIL 반영**: 직접 ○ — D-01 경계의 최종 출처. 결과 held-of-record < 2,000(≤ 1,999) 그리고 결과 비-AI < 500(≤ 499)이면 PASS. 하나라도 도달(= 2,000 또는 = 500)이면 FAIL.
+- **ERC-3643 변환**: moduleCheck 통과 조건 = (resultingHolders < 2000) && (resultingNonAIHolders < 500). 경계 상수는 strict less-than으로 구현(HOLDER_CAP_12G_TOTAL = 2000, HOLDER_CAP_12G_NONAI = 500; 판정 `count >= cap → reject`).
+
+### 3.5 Rule 12g5-1 — "held of record" 정의 (카운팅 단위)
+
+- **조항**: 17 C.F.R. §240.12g5-1 — ecfr.gov
+- **핵심 원문**: (a) For the purpose of determining whether an issuer is subject to the provisions of sections 12(g) and 15(d) of the Act, securities shall be deemed to be "held of record" by each person who is identified as the owner of such securities on records of security holders maintained by or on behalf of the issuer, subject to the following: (1) In any case where the records of security holders have not been maintained in accordance with accepted practice, any additional person who would be identified as such an owner on such records if they had been maintained in accordance with accepted practice shall be included as a holder of record. (2) Except as specified in paragraph (a)(9) of this section, securities identified as held of record by a corporation, a partnership, a trust whether or not the trustees are named, or other organization shall be included as so held by one person. (3) Securities identified as held of record by one or more persons as trustees, executors, guardians, custodians or in other fiduciary capacities with respect to a single trust, estate or account shall be included as held of record by one person. (4) Securities held by two or more persons as coowners shall be included as held by one person. (5) Each outstanding unregistered or bearer certificate shall be included as held of record by a separate person, except to the extent that the issuer can establish that, if such securities were registered, they would be held of record, under the provisions of this rule, by a lesser number of persons. (6) Securities registered in substantially similar names where the issuer has reason to believe because of the address or other indications that such names represent the same person, may be included as held of record by one person. … (b) Notwithstanding paragraph (a) of this section: … (3) If the issuer knows or has reason to know that the form of holding securities of record is used primarily to circumvent the provisions of section 12(g) or 15(d) of the Act, the beneficial owners of such securities shall be deemed to be the record owners thereof.
+- **한국어**: (a) issuer가 §12(g)·§15(d)의 적용대상인지 판단할 목적으로, 증권은 issuer가(또는 issuer를 위하여) 유지하는 증권 소유자 명부상 소유자로 식별되는 각 사람에 의해 "held of record"된 것으로 보되, 다음에 따른다 — (1) 명부가 accepted practice에 따라 유지되지 않은 경우, 그렇게 유지되었더라면 소유자로 식별되었을 추가 인원을 record holder에 포함한다. (2) ((a)(9) 예외를 제외하고) corporation·partnership·trust(수탁자 명시 여부 불문)·기타 조직이 held of record하는 것으로 식별된 증권은 1명이 보유한 것으로 포함한다. (3) 단일 신탁·유산·계정에 관하여 수탁자·유언집행자·후견인·보관인 등 수탁 자격의 1인 이상이 held of record하는 증권은 1명이 보유한 것으로 포함한다. (4) 2인 이상이 공동소유자로 보유하는 증권은 1명이 보유한 것으로 포함한다. (5) 각 미등록·무기명 증권은 별개의 1명이 held of record하는 것으로 포함하되, 등록되었더라면 이 규칙상 더 적은 수가 보유했을 것임을 issuer가 입증할 수 있는 범위에서는 예외로 한다. (6) 실질적으로 유사한 명의로 등록된 증권으로서 주소나 기타 정황상 동일인을 나타낸다고 issuer가 믿을 만한 이유가 있는 경우, 1명이 held of record하는 것으로 포함할 수 있다. … (b) (a)에도 불구하고 — (3) issuer가, 증권을 record로 보유하는 형태가 주로 §12(g)·§15(d) 규정을 회피하기 위해 사용된다는 것을 알거나 알 만한 이유가 있는 경우, 그 증권의 수익적 소유자를 record 소유자로 본다.
+- **쉬운 설명**: 이 규칙이 "몇 명인가"를 세는 방법을 정한다. 핵심 세 가지. 첫째, 원칙은 "issuer의 증권 소유자 명부상 소유자로 적힌 각 사람"을 1명으로 센다((a) chapeau). 둘째, 뭉치는 규칙 — 법인·조합·신탁은 그 자체로 1명 ((a)(2)), 공동소유는 1명 ((a)(4)), 주소 등으로 동일인으로 보이는 유사 명의는 1명 ((a)(6)). 여기서 자격판정과의 결정적 차이가 나온다: 카운팅에서는 법인을 뚫지 않고 그냥 1명으로 세지만, 자격판정(A-13/A-09)에서는 법인을 뚫고 구성원까지 본다 — 목적이 달라 방향이 반대다. 셋째, 회피 방지 ((b)(3)) — 보유형태가 주로 §12(g) 회피 목적이면 수익적 소유자를 record 소유자로 간주한다. 이것이 온체인에서 "한 사람이 지갑을 여러 개 만들어 머릿수를 쪼개는" 회피를 막는 정확한 법적 근거이며, D-01이 지갑이 아니라 사람(ONCHAINID) 단위로 세야 하는 이유다(A-04가 지갑↔사람 매핑을 공급).
+- **PASS/FAIL 반영**: 직접 ○ — 카운팅 단위 규칙. on-chain 구현은 (a) chapeau·(a)(6)·(b)(3)에 근거해 "지갑"이 아니라 "사람(ONCHAINID)"을 1로 센다. 법인 지갑은 (a)(2)에 따라 1로 센다. 같은 사람의 다중 지갑은 (a)(6)/(b)(3) + A-04로 1로 합산한다.
+- **ERC-3643 변환**: dedupKey = ONCHAINID (person), NOT wallet address; entityHolder → count as 1 (look-through 금지, 자격판정과 반대); 다중지갑 동일인 → A-04 identity cluster로 1 합산; (b)(3) 회피 적발 시 forcedTransfer()/recovery로 정정 + A-04 red-flag.
+
+### 3.6 증권거래소법 §12(g)(5) — "class"·"held of record"·"total assets" 정의 위임
+
+- **조항**: Securities Exchange Act §12(g)(5), 15 U.S.C. §78*l*(g)(5) — uscode.house.gov
+- **핵심 원문**: (5) For the purposes of this subsection the term "class" shall include all securities of an issuer which are of substantially similar character and the holders of which enjoy substantially similar rights and privileges. The Commission may for the purpose of this subsection define by rules and regulations the terms "total assets" and "held of record" as it deems necessary or appropriate in the public interest or for the protection of investors in order to prevent circumvention of the provisions of this subsection. … For purposes of determining whether an issuer is required to register a security with the Commission pursuant to paragraph (1), the definition of "held of record" shall not include securities held by persons who received the securities pursuant to an employee compensation plan in transactions exempted from the registration requirements of section 5 of the Securities Act of 1933.
+- **한국어**: (5) 본 subsection의 목적상 "class"는 실질적으로 유사한 성격을 가지고 그 보유자들이 실질적으로 유사한 권리·특권을 누리는 issuer의 모든 증권을 포함한다. SEC는 본 subsection의 목적상 그 규정의 회피를 방지하기 위해 공익 또는 투자자 보호에 필요·적절하다고 판단하는 바에 따라 규칙·규정으로 "total assets"와 "held of record"를 정의할 수 있다. … 제1항에 따른 등록의무 판단 목적상 "held of record"의 정의는, 종업원보상플랜에 따라 §5(1933년 증권법) 등록의무가 면제된 거래로 증권을 취득한 자가 보유한 증권을 포함하지 않는다.
+- **쉬운 설명**: 이 조항은 세 가지를 한다. 첫째, "class" 정의 — 실질 유사 권리의 증권은 하나의 class다. 온체인에서는 하나의 토큰 컨트랙트가 하나의 class에 대응한다(그 토큰의 보유자를 세면 된다). 둘째, SEC에게 "total assets"·"held of record" 정의권을 위임하면서 명시적으로 "회피 방지(prevent circumvention)" 목적을 언급한다 — 이 문언이 Rule 12g5-1(b)(3)(회피목적 보유형태 look-through)과 D-01의 사람 단위 카운팅을 정당화하는 상위 근거다. 셋째, 종업원보상플랜 취득분은 카운트에서 제외한다 — BUIDL은 종업원 대상 발행이 아니므로 무관하다.
+- **PASS/FAIL 반영**: 보조 ✕ — 정의 위임의 상위 근거. Rule 12g5-1의 카운팅 규칙(§3.5)과 그 회피방지 look-through의 법적 뿌리.
+- **ERC-3643 변환**: class 단위 = ERC-3643 토큰 컨트랙트 하나; 회피방지 원칙 → (b)(3) look-through 구현 근거; employeeCompExclusion 플래그(BUIDL = 미적용).
+
+### 3.7 증권거래소법 §12(g)(4) — 등록 종료 문턱 (하향 300명 미만)
+
+- **조항**: Securities Exchange Act §12(g)(4), 15 U.S.C. §78*l*(g)(4) — uscode.house.gov
+- **핵심 원문**: (4) Registration of any class of security pursuant to this subsection shall be terminated ninety days, or such shorter period as the Commission may determine, after the issuer files a certification with the Commission that the number of holders of record of such class of security is reduced to less than 300 persons, or, in the case of a bank, a savings and loan holding company … or a bank holding company … 1,200 persons. The Commission shall after notice and opportunity for hearing deny termination of registration if it finds that the certification is untrue. Termination of registration shall be deferred pending final determination on the question of denial.
+- **한국어**: (4) 본 subsection에 따른 어느 class 증권의 등록은, 그 class 증권의 record 보유자 수가 300명 미만(은행·저축대부지주회사·은행지주회사의 경우 1,200명)으로 감소했다는 certification을 issuer가 SEC에 제출한 후 90일(또는 SEC가 정하는 더 짧은 기간)에 종료된다. SEC는 그 certification이 허위라고 판단하면 통지·청문 기회 후 등록 종료를 거부한다. 등록 종료는 거부 여부 최종 결정 시까지 유예된다.
+- **쉬운 설명**: 상한(2,000)과 이탈문(300) 사이에는 큰 이력 구간(hysteresis)이 있다. 즉 일단 held of record 2,000명에 도달해 공개회사로 등록되면, 되돌아 나가는 문은 "record 보유자 300명 미만으로 감소"라는 훨씬 낮은 문턱 + certification + 90일이다. 한 번 넘으면 원상복구가 어렵다는 뜻이다. 이 조항은 D-01이 STATEFUL인 이유를 잘 보여준다 — 카운터는 단순히 "지금 몇 명인가"를 넘어 등록 생애주기 전체를 함의한다. 사모로 남으려는 §3(c)(7) 펀드의 실무 관건은 처음부터 < 2,000을 방어하는 것이며, < 300은 (원치 않게) 이미 등록된 뒤의 탈출 조건이다.
+- **PASS/FAIL 반영**: 배경 ✕ — pre-trade 게이트에는 직접 쓰이지 않는다. STATEFUL 이력·운영(§11)에서 "이미 등록회사가 된 예외 상황의 하향 관리" 시나리오로만 관련.
+- **ERC-3643 변환**: 일반 미사용; 등록 상태 진입 시 operator alert; terminationThreshold = 300(하향 감시, 운영 레이어 지표).
+
+### 3.8 투자회사법 §3(c)(1) + (A) — 100인 펀드 + look-through (BUIDL dormant)
+
+- **조항**: Investment Company Act §3(c)(1), 15 U.S.C. §80a-3(c)(1) — uscode.house.gov
+- **핵심 원문**: (1) Any issuer whose outstanding securities (other than short-term paper) are beneficially owned by not more than one hundred persons (or, in the case of a qualifying venture capital fund, 250 persons) and which is not making and does not presently propose to make a public offering of its securities. … For purposes of this paragraph: (A) Beneficial ownership by a company shall be deemed to be beneficial ownership by one person, except that, if the company owns 10 per centum or more of the outstanding voting securities of the issuer, and is or, but for the exception provided for in this paragraph or paragraph (7), would be an investment company, the beneficial ownership shall be deemed to be that of the holders of such company's outstanding securities (other than short-term paper).
+- **한국어**: (1) 발행 증권(단기증권 제외)이 100명 이하(적격 벤처캐피탈펀드의 경우 250명)에게 수익적으로 소유되고, 그 증권의 public offering을 하지 않으며 현재 할 것을 제안하지도 않는 issuer. … 본 항의 목적상: (A) company에 의한 수익적 소유는 1명에 의한 수익적 소유로 본다. 다만 그 company가 issuer의 발행 의결권증권의 10% 이상을 소유하고, 그 company가 (본 항 또는 제7항 §3(c)(7)의 적용제외가 아니었다면) 투자회사에 해당할 경우, 그 수익적 소유는 그 company의 발행 증권(단기증권 제외) 보유자들의 소유로 본다.
+- **쉬운 설명**: §3(c)(1)은 §3(c)(7)의 형제 면제다 — "수익적 소유자 100명 이하"(적격 벤처캐피탈펀드는 250명)이고 public offering을 하지 않는 펀드. 부등호 대조가 핵심: 여기선 "not more than one hundred"(100명 이하, ≤ 100)라 100명은 허용되고 101명이 되면 깨진다. §12(g)의 "fewer than 2,000"(2,000 도달 불가, < 2,000)과 부등호가 다르다. (A)의 look-through: 어떤 company가 issuer 의결권의 10% 이상을 갖고 그 자체가 (또는 §3(c)(1)/(7) 적용제외가 아니었다면) 투자회사였을 경우, 그 company를 1명으로 세지 않고 뚫어서 그 소유자들까지 센다 — 펀드가 펀드에 투자해 100인 상한을 우회하는 것을 막는 장치다. 이 look-through 계산은 A-09 기계를 재사용한다. 단 BUIDL은 §3(c)(7) 펀드이므로 이 100인 상한 전체가 dormant다.
+- **PASS/FAIL 반영**: 조건부 ○ (BUIDL dormant) — §3(c)(1) 펀드 Recipe일 때만 활성. 활성 시 수익적 소유자 ≤ 100(QVCF ≤ 250)이면 PASS, > 100(= 101 이상)이면 FAIL. (A) look-through 계산은 A-09의 lookThroughStatus 결과를 입력으로 받는다.
+- **ERC-3643 변환**: (조건부) recipe = ICA_3C1 → HolderCountModule.threshold_3c1 = 100 (enforce ≤ 100; `count > 100 → reject`); QVCF → 250; beneficialOwner 집계 시 (A) 10%+ 투자회사 보유자는 A-09 look-through 결과로 전개.
+
+### 3.9 Rule 506(b)(2)(i) · 501(e) · 506(c)(2)(i) — 발행 매수인 35인 상한 (BUIDL dormant)
+
+- **조항**: 17 C.F.R. §230.506(b)(2)(i) · §230.501(e) · §230.506(c)(2)(i) — ecfr.gov
+- **핵심 원문**: [506(b)(2)(i)] Limitation on number of purchasers. There are no more than, or the issuer reasonably believes that there are no more than, 35 purchasers of securities from the issuer in offerings under this section in any 90-calendar-day period. … See § 230.501(e) for the calculation of the number of purchasers and § 230.502(a) for what may or may not constitute an offering under paragraph (b) of this section. [501(e)] Calculation of number of purchasers. For purposes of calculating the number of purchasers under § 230.506(b) only, the following shall apply: (1) The following purchasers shall be excluded: (i) Any relative, spouse or relative of the spouse of a purchaser who has the same primary residence as the purchaser; … Clients of an investment adviser or customers of a broker or dealer shall be considered the "purchasers" under Regulation D regardless of the amount of discretion given to the investment adviser or broker or dealer to act on behalf of the client or customer. [506(c)(2)(i)] All purchasers of securities sold in any offering under paragraph (c) of this section are accredited investors.
+- **한국어**: [506(b)(2)(i)] 매수인 수 제한 — 어느 90역일 기간 내에 본 조에 따른 offering에서 issuer로부터 증권을 취득한 매수인이 35명을 넘지 않거나, issuer가 35명을 넘지 않는다고 합리적으로 믿을 것. 매수인 수 산정은 §230.501(e)를, 무엇이 offering을 구성하는지는 §230.502(a)를 본다. [501(e)] 매수인 수 산정 — §230.506(b)의 목적으로만 다음을 적용한다: (1) 다음 매수인은 제외한다 — (i) 매수인과 같은 primary residence를 가진 친족·배우자·배우자의 친족; … 투자자문업자의 고객 또는 broker·dealer의 고객은, 자문업자·broker·dealer에게 부여된 재량의 정도와 무관하게 Regulation D상 "매수인"으로 본다. [506(c)(2)(i)] 본 조 (c)항에 따른 offering에서 판매된 증권의 모든 매수인은 accredited investor다.
+- **쉬운 설명**: 506(b)에는 "매수인 35명 이하 / 90일"의 상한이 있고, 이 35명은 501(e)로 산정한다 — accredited investor는 계산에서 제외되고, 같은 집 친족은 제외되며, 법인·조합은 원칙적으로 1명으로 뭉친다(즉 실질적으로는 "비-AI 매수인 35명" 상한에 가깝다). 부등호는 "no more than 35"(35명 이하, ≤ 35 허용)라 35명은 OK, 36명이면 깨진다. 그러나 이 상한은 506(b) 전용이다. BUIDL은 506(c)를 쓴다 — 506(c)(2)(i)는 "전원이 AI"를 요구하는 대신 매수인 수 상한을 두지 않는다. 따라서 506(b)의 35인 상한은 BUIDL에서 dormant다(§4(a)(7) 재판매 경로에도 매수인 수 상한은 없다).
+- **PASS/FAIL 반영**: 조건부 ○ (BUIDL dormant) — R1의 506(b) 분기일 때만 활성. 활성 시 501(e)로 산정한 매수인 수 ≤ 35(90일 rolling)이면 PASS, > 35(= 36 이상)이면 FAIL. 506(c)·§4(a)(7) 경로에선 비활성.
+- **ERC-3643 변환**: (조건부) recipe = REGD_506B → HolderCountModule.threshold_506b = 35 (rolling 90-day window, enforce ≤ 35); purchaserCount 산정 시 501(e) 제외규칙(AI 제외·친족 제외·법인 1로 뭉침) 적용; recipe = REGD_506C → 이 상한 비활성(무제한).
+
+### 3.10 투자회사법 §2(a)(51) — Qualified Purchaser 정의 (자격은 A-13, 카운트는 D-01)
+
+- **조항**: Investment Company Act §2(a)(51), 15 U.S.C. §80a-2(a)(51) — uscode.house.gov
+- **핵심 원문**: (51)(A) "Qualified purchaser" means— (i) any natural person (including any person who holds a joint, community property, or other similar shared ownership interest in an issuer that is excepted under section 80a–3(c)(7) of this title with that person's qualified purchaser spouse) who owns not less than $5,000,000 in investments, as defined by the Commission; …
+- **한국어**: (51)(A) "Qualified purchaser"란 다음을 의미한다 — (i) SEC가 정하는 investments를 $5,000,000 이상 소유한 자연인(그 사람의 qualified purchaser 배우자와 함께 §80a-3(c)(7) 적용제외 issuer에 대한 공동·부부공동재산·기타 유사 공유지분을 보유한 자를 포함); …
+- **쉬운 설명**: qualified purchaser의 정의(개인은 investments $5M 이상 등)는 D-01이 아니라 A-13이 판정한다. D-01은 "이 사람이 QP인가"를 다시 판단하지 않고, A-13의 QP claim이 붙은 보유자를 그저 머릿수로 센다. 여기 인용하는 이유는 책임경계를 명확히 하기 위함이다 — §3(c)(7) 유지에는 "전원 QP"(A-13)와 "인원 < 2,000"(D-01)이 둘 다 필요하며, D-01은 후자만 담당한다. QP는 반드시 AI인 것은 아니지만, BUIDL은 506(c)로 전원 AI가 별도로 요구되므로(A-03) §12(g)의 비-AI 500 분기는 항상 0이 된다.
+- **PASS/FAIL 반영**: 배경 ✕ — 자격 판정은 A-13이 전담. D-01은 QP 여부에 관여하지 않는다.
+- **ERC-3643 변환**: 자격 = A-13 claim.topic = QUALIFIED_PURCHASER; D-01 module은 그 claim 보유자를 카운트 대상으로 인식만 하고 자격을 재검증하지 않는다.
+
+### 3.11 Rule 12g3-2(a) + Rule 3b-4(c) — 외국 사모발행자(FPI) §12(g) 면제 (실제 BVI BUIDL의 선행 검토·중요)
+
+- **조항**: 17 C.F.R. §240.12g3-2(a) (FPI §12(g) 면제) · 17 C.F.R. §240.3b-4(c) (foreign private issuer 정의) — ecfr.gov
+- **핵심 원문**: [12g3-2(a)] Securities of any class issued by any foreign private issuer shall be exempt from section 12(g) (15 U.S.C. 78l(g)) of the Act if the class has fewer than 300 holders resident in the United States. This exemption shall continue until the next fiscal year end at which the issuer has a class of equity securities held by 300 or more persons resident in the United States. [3b-4(b)] The term foreign issuer means any issuer which is a foreign government, a national of any foreign country or a corporation or other organization incorporated or organized under the laws of any foreign country. [3b-4(c)] The term foreign private issuer means any foreign issuer other than a foreign government except for an issuer meeting the following conditions as of the last business day of its most recently completed second fiscal quarter: (1) More than 50 percent of the issuer's outstanding voting securities are directly or indirectly held of record by residents of the United States; and [(2) any of: (i) a majority of executive officers or directors are U.S. citizens or residents; (ii) more than 50 percent of assets located in the United States; or (iii) business administered principally in the United States].
+- **한국어**: [12g3-2(a)] 외국 사모발행자(foreign private issuer)가 발행한 어느 class 증권은, 그 class의 미국 거주 보유자가 300명 미만이면 §12(g)에서 면제된다. 이 면제는 그 issuer가 지분증권 class를 미국 거주 300명 이상에게 보유하게 되는 다음 회계연도 종료일까지 지속된다. [3b-4(b)] "foreign issuer"란 외국 정부, 외국의 국민, 또는 외국 법률에 따라 설립·조직된 corporation 기타 조직인 모든 issuer를 말한다. [3b-4(c)] "foreign private issuer"란, 가장 최근 완료된 제2 회계분기의 마지막 영업일 기준 다음 조건에 해당하는 issuer를 제외한, 외국 정부가 아닌 모든 foreign issuer를 말한다 — (1) issuer 발행 의결권증권의 50% 초과를 미국 거주자가 직접·간접으로 record상 보유하고; 그리고 [(2) 다음 중 하나: (i) 임원·이사의 과반이 미국 시민·거주자이거나; (ii) 자산의 50% 초과가 미국 내에 있거나; (iii) 사업이 주로 미국에서 관리되는 경우].
+- **쉬운 설명**: 실제 BUIDL은 BVI 역외 펀드이므로, §12(g) 상한(< 2,000)을 논하기 전에 "이 issuer가 애초에 §12(g) 적용 대상인가"를 먼저 물어야 한다. Rule 3b-4(c)의 두 테스트로 FPI 여부를 본다 — (a) 지분(shareholder) 테스트: 미국 거주자가 의결권증권을 50% 이하로 보유하면 FPI; (b) 만약 미국 거주자가 50% 초과 보유하면, business-contacts 테스트(미국 임원·이사 과반/미국 자산 50% 초과/미국 주업)를 하나도 충족하지 않아야 FPI. FPI로 판정되면 Rule 12g3-2(a)에 따라 그 class의 **미국 거주 record holder가 300명 미만**인 한 §12(g) 자체에서 면제된다. 이 경우 D-01의 실제 구속 상한은 "held of record < 2,000"이 아니라 "**미국 거주 보유자 < 300**"으로 바뀐다. 미국 거주 보유자 산정은 Rule 12g3-2(a)/3b-4(c)가 §240.12g5-1의 record 산정 방식을 원용한다(즉 사람 단위·법인=1은 그대로, 다만 미국 거주자만 집계). 이 판단은 A-02(국적·거주)·Reg S 경로와 맞물리며, 실제 BUIDL에 "< 2,000 하나"를 단정할 수 없게 만드는 핵심 이유다.
+- **PASS/FAIL 반영**: 조건부 ○ (FPI일 때 §12(g) 상한 자체를 대체) — Manifest가 issuer를 FPI로 표시하고 12g3-2(a) 면제가 유효하면, D-01은 §12(g) 2,000 상한 대신 "미국 거주 record holder < 300"(12g3-2(a))을 경계로 적용한다. FPI가 아니거나 12g3-2(a) 면제가 없으면 §12(g) 2,000 상한(§3.2)이 적용된다. 어느 쪽인지는 법률 자문으로 확정한다(OD-D01-3).
+- **ERC-3643 변환**: manifest.issuerIsFPI(bool) + manifest.fpiExemption12g3_2a(bool) → true면 HolderCountModule이 usResidentHolderCount를 별도 집계하고 threshold_12g3_2a = 300 (enforce usResidentHolders < 300); 이때 §12(g) 2,000 분기는 비활성. 미국 거주 여부는 A-02(국적·거주) claim에서 입력. false면 §3.2 §12(g) 분기 활성.
+
+아래 각 행은 §5.2의 판정 분기 하나에 대응한다. reasonCode는 §6의 거절 코드와 일치한다.
+
+| # | 조건 | 결과 | reasonCode | 근거 조문 |
+|---|------|------|-----------|-----------|
+| P1 | 이 거래가 카운트에 영향 없음 (수취인이 이미 보유 > 0, 또는 수취인 ONCHAINID가 다른 지갑으로 이미 보유자) | PASS | — (COUNT_UNCHANGED) | Rule 12g5-1(a)(6)·(b)(3) + A-04 |
+| P2 | 카운트 증가(신규 사람), §12(g) 활성, 결과 held-of-record < 2,000 그리고 결과 비-AI < 500 | PASS | — | Rule 12g-1(b)(1); §12(g)(1)(A) |
+| F1 | 카운트 증가(신규 사람), §12(g) 활성, 결과 held-of-record ≥ 2,000 | FAIL | HOLDER_CAP_12G_TOTAL | §12(g)(1)(A)(i); Rule 12g-1(b)(1) |
+| F2 | 카운트 증가(신규 비-AI), §12(g) 활성, 결과 비-AI ≥ 500 (총계는 < 2,000이라도) | FAIL | HOLDER_CAP_12G_NONAI | §12(g)(1)(A)(ii); Rule 12g-1(b)(1) |
+| P3 | §12(g) 활성이나 자산게이트 미충족 (총자산 ≤ $10M) | PASS | — (ASSET_GATE_EXEMPT) | Rule 12g-1(a) |
+| P6 | issuer가 FPI이고 12g3-2(a) 면제 유효, 결과 미국 거주 record holder < 300 | PASS | — (FPI_EXEMPT) | Rule 12g3-2(a)·3b-4(c) |
+| F5 | issuer가 FPI, 결과 미국 거주 record holder ≥ 300 (다음 회계연도 말 §12(g) 노출) | FAIL(차단) | HOLDER_CAP_12G3_2A_US300 | Rule 12g3-2(a) |
+| P4/F3 | §3(c)(1) Recipe 활성, 수익적 소유자 ≤ 100 (QVCF ≤ 250) → PASS / > 100 → FAIL | PASS/FAIL | HOLDER_CAP_3C1_100 | §3(c)(1); (A) look-through는 A-09 |
+| P5/F4 | 506(b) 분기 활성, 501(e) 산정 매수인 ≤ 35(90일) → PASS / > 35 → FAIL | PASS/FAIL | HOLDER_CAP_506B_35 | Rule 506(b)(2)(i)·501(e) |
+| C1 | 동일인 다중지갑 회피 적발 (A-04 클러스터) | 1명으로 합산 (신규 아님) | — (DEDUP_MERGED) | Rule 12g5-1(b)(3) |
+| S1 | 매도인 post-transfer 잔액 = 0 (보유자 이탈) | 카운트 감산 (post-trade commit) | — (HOLDER_EXIT) | Rule 12g5-1(a) chapeau |
+
+- 실제 BVI BUIDL에서는 **§12(g) 적용 여부 자체가 FPI 선행 판단(P6/F5)에 달려 있다**. FPI 면제(12g3-2(a))가 유효하면 구속 경계는 F1(2,000)이 아니라 F5(미국 거주 300)로 바뀐다. FPI 면제가 없다는 전제에서 실제로 도달 가능한 주 FAIL 경로는 F1(< 2,000 초과)이다. **F2(비-AI ≥ 500)는 "전원 AI라 자동 0"이 아니다** — 비-AI 여부는 회계연도 종료 기준일 현재로 판단하므로(Rule 12g-1(b)(1)), Recipe가 secondary buyer에도 계속 AI를 요구하고 A-11/A-12와 연동해 status를 유지할 때에만 사실상 0에 가깝게 관리되는 정책적 결과다(§3.0.1·§3.2). F3·F4는 dormant, P3는 자산 >> $10M이라 미해당.
+- 부등호 총정리: F1·F2·F5는 "≥"(도달 시 FAIL/차단 — 안전구간 < 2,000, < 500, 미국 거주 < 300). F3·F4는 ">"(초과 시 FAIL — 허용구간 ≤ 100, ≤ 35). 자산게이트(P3)는 §12(g) "exceeding $10,000,000"(> $10M이면 게이트 충족) / 12g-1 "not exceeding $10 million"(≤ $10M이면 면제).
+
+### 3.20 ERC-3643 변환 총정리 — Compliance Module 매핑 (claim.basis 해당 없음)
+
+D-01은 상태추적형이므로 A-13류의 claim.topic·claim.basis enum을 쓰지 않는다. 대신 ERC-3643/T-REX의 Modular Compliance에 결합하는 커스텀 모듈(HolderCountModule, IModule 구현)로 변환된다. 카운팅 단위는 지갑 주소가 아니라 IdentityRegistry의 ONCHAINID(사람)다.
+
+**모듈 상태 변수**
+
+| 변수 | 의미 | 근거 |
+|------|------|------|
+| holderCount | 현재 held-of-record 사람 수 (ONCHAINID 기준) | Rule 12g5-1(a) |
+| nonAICount | 그중 비-AI 사람 수 (BUIDL = 0) | §12(g)(1)(A)(ii); A-03 |
+| balanceByIdentity[ONCHAINID] | 사람별 합산 잔액 (신규/이탈 판정용) | Rule 12g5-1(a)(6)·(b)(3); A-04 |
+| threshold_12g_total = 2000 | §12(g) 총 상한 (enforce `< 2000`) | §12(g)(1)(A)(i); Rule 12g-1(b)(1) |
+| threshold_12g_nonAI = 500 | §12(g) 비-AI 상한 (enforce `< 500`) | §12(g)(1)(A)(ii) |
+| threshold_3c1 = 100 / QVCF 250 | §3(c)(1) 상한 (enforce `<= 100`) — dormant | §3(c)(1) |
+| threshold_506b = 35 | 506(b) 매수인 상한/90일 (enforce `<= 35`) — dormant | Rule 506(b)(2)(i) |
+| assetGateMet | 총자산 > $10M 여부 (true면 §12(g) 상한 활성) | §12(g)(1)(A); Rule 12g-1(a) |
+| active | 펀드 미등록(§80a-8) 확인 시 true | §12(g)(2)(B) |
+| issuerIsFPI / fpiExemption12g3_2a | issuer가 FPI이고 12g3-2(a) 면제 유효 여부 (true면 §12(g) 2,000 대신 미국 거주 300 적용) | Rule 3b-4(c); 12g3-2(a) |
+| usResidentHolderCount / threshold_12g3_2a = 300 | FPI 경로의 미국 거주 record holder 수·상한 (enforce `< 300`) | Rule 12g3-2(a); A-02 |
+| legalClassId | 이 token이 표창하는 법적 equity security class 식별자 (Manifest 지정) — token 컨트랙트와 1:1이 아닐 수 있음 | §12(g)(5) "substantially similar rights and privileges" |
+
+**IModule 훅 → 조문 매핑**
+
+| 훅 | 시점 | 역할 | 조문 |
+|----|------|------|------|
+| moduleCheck(from, to, value, compliance) | pre-trade 게이트 | 수취인이 신규 사람인지(ONCHAINID dedup) 판정 후, 신규면 결과 카운트가 활성 상한 경계를 넘는지 검사 → bool | §12(g)(1); Rule 12g-1; 12g5-1 |
+| moduleTransferAction(from, to, value) | post-trade commit | 수취인이 0→양수면 holderCount 증가, 매도인이 양수→0이면 감산 (ONCHAINID 단위) | Rule 12g5-1(a) |
+| moduleMintAction(to, value) | 발행 commit | 신규 보유자면 증가 | §12(g)(1); 12g5-1(a) |
+| moduleBurnAction(from, value) | 상환 commit | 잔액 0 도달 시 감산 (§12(g)(4) 하향 인지) | §12(g)(4) |
+
+**reasonCode enum**: HOLDER_CAP_12G_TOTAL · HOLDER_CAP_12G_NONAI · HOLDER_CAP_12G3_2A_US300 · HOLDER_CAP_3C1_100 · HOLDER_CAP_506B_35 (§6·§3.19와 일치).
+
+**dedup·회피 정정**: 지갑↔ONCHAINID 매핑은 IdentityRegistry(A-04)에서 받는다. 동일인 다중지갑은 Rule 12g5-1(b)(3)에 근거해 1로 합산하며, 회피 적발 시 forcedTransfer()/recovery로 정정하고 A-04에 red-flag를 남긴다. (자격판정과 반대로, 법인 지갑은 look-through 없이 1로 센다 — Rule 12g5-1(a)(2).)
+
+**class 매핑 주의(단정 금지)**: 구현상 하나의 ERC-3643 token contract를 하나의 class로 매핑할 수 있으나, 법적으로는 §12(g)(5)의 "securities ... of substantially similar character and the holders of which enjoy substantially similar rights and privileges" 기준으로 그 token이 표창하는 fund interest가 실질적으로 동일한 class인지 별도 확인해야 한다. 같은 contract 안에 series/class가 섞이거나, 같은 fund interest가 여러 token wrapper로 존재하면 Manifest에서 legalClassId로 legal class mapping을 별도 지정해 카운트를 class 단위로 분리한다(B-01 연계, OD-D01-6).
+
+**ONCHAINID = 법적 명부의 mirror(단정 금지)**: D-01의 on-chain ONCHAINID counter는 법적 record-holder 명부의 **기술적 mirror**로 설계된다. 최종 법적 기준은 Rule 12g5-1(a)이 말하는 "records of security holders maintained by or on behalf of the issuer" — 즉 issuer 또는 transfer agent(BUIDL의 경우 Securitize)가 유지하는 security holder record다. 따라서 ONCHAINID counter와 transfer agent ledger의 정기 reconciliation이 필요하며, 불일치 시 법적 명부가 우선한다(§4.2·§11·OD-D01-1).
+
+---
+
+## §4. 입력 사실 (Input Facts)
+
+### 4.1 판정에 필요한 데이터
+
+| 입력 | 의미 | 출처 |
+|------|------|------|
+| currentHolderCount | 현재 held-of-record 사람 수 (ONCHAINID 기준) | 모듈 상태 (on-chain) |
+| balanceByIdentity[ONCHAINID] | 사람별 합산 잔액 | 모듈 상태 + IdentityRegistry |
+| to_currentBalance | 수취인(및 그 ONCHAINID)의 현재 보유량 | on-chain balanceOf + A-04 매핑 |
+| from_postBalance | 매도인의 거래 후 잔액 (0이면 이탈) | 거래 파라미터 + on-chain |
+| to_isNewPerson | 수취인 ONCHAINID가 기존 보유자가 아닌가 | A-04 (지갑↔사람 클러스터) |
+| currentNonAICount | 비-AI 보유자 수 (BUIDL = 0) | A-03 claim 집계 |
+| totalAssetsUSD | issuer 총자산 (자산게이트) | Manifest (B-01) / issuer 보고 |
+| activeCaps | 어느 상한이 활성인가 (§12(g)/§3(c)(1)/506(b)) | Recipe + Manifest (B-01) |
+| capValues | 상한 임계값·정책 buffer | Manifest (B-01) |
+| fundRegistered80a8 | 펀드가 등록 투자회사인가 (false면 §12(g) 활성) | Manifest (B-01) |
+
+### 4.2 데이터 출처와 책임경계
+
+- **카운터 자체**는 on-chain 모듈 상태다 — 매 거래 commit에서 갱신되며 on-chain 보유자에 대해 기술적으로 authoritative하다. 다만 이는 **법적 명부 자체가 아니라 그 mirror**다(아래 법적 유의).
+- **지갑↔사람 매핑**은 A-04(IdentityRegistry/ONCHAINID)가 공급한다. D-01은 이 매핑을 신뢰해 사람 단위로 센다 — 신원 판정을 재수행하지 않는다.
+- **AI 상태**(비-AI 카운트용)는 A-03의 claim에서 오며, 기준일 현재 status 유지·신선도는 A-11, 반대정보는 A-12가 공급한다. **자격(QP/AI) 판정 자체는 D-01의 일이 아니다.**
+- **거주·국적**(FPI 경로의 미국 거주 보유자 산정용)은 A-02에서 온다.
+- **상한값·활성 여부·자산게이트·FPI 지위·legalClassId**는 Manifest에서 오며 B-01(신상카드 정합)이 Manifest와 실제 설정의 일치를 보증한다.
+- **법적 유의(중요)**: Rule 12g5-1(a)상 "held of record"의 기준은 "records of security holders maintained by or on behalf of the issuer" — 즉 issuer 또는 transfer agent(BUIDL의 경우 Securitize)가 유지하는 법적 security holder record다. **D-01의 on-chain ONCHAINID counter는 이 법적 명부의 기술적 mirror로 설계되며, 최종 법적 기준은 그 명부다.** 따라서 ONCHAINID counter와 transfer agent ledger의 정기 reconciliation이 필요하고, 불일치 시 법적 명부가 우선한다(OD-D01-1, §11·§12).
+
+### 4.4 갈래별 필수 확인 항목 (전체 표)
+
+공통 행(모든 갈래) + 갈래별 항목. "예시"가 아니라 활성 상한별로 반드시 확인해야 하는 항목 전체다.
+
+| 갈래 | 공통 필수 | 갈래별 필수 |
+|------|-----------|-------------|
+| §12(g) (R3, BUIDL 활성) | ① 지갑→ONCHAINID dedup(A-04) ② 수취인 신규 사람 여부 ③ 매도인 이탈 여부 | ① 결과 held-of-record < 2,000 ② 결과 비-AI < 500 (A-03; BUIDL=0) ③ 자산게이트(총자산 > $10M → 상한 활성) ④ 펀드 미등록(§80a-8) |
+| §3(c)(1) (dormant) | 상동 | ① 수익적 소유자 ≤ 100 (QVCF ≤ 250) ② (A) 10%+ 투자회사 보유자 look-through (A-09) |
+| 506(b) 발행 (dormant) | 상동 | ① 501(e) 산정 매수인 ≤ 35 ② 90역일 rolling window ③ 501(e) 제외(AI·친족·법인 뭉침) 적용 |
+
+---
+
+## §5. 판정 로직 (Decision Logic)
+
+### 5.1 개념 — STATEFUL 2단계
+
+D-01은 증명서를 확인하는 정적 게이트가 아니라, 누적 상태(카운터)를 유지하며 매 거래에서 두 단계를 수행하는 상태추적 부품이다.
+
+1. **pre-trade 게이트 (moduleCheck)**: 이 거래가 새 보유자를 추가하는가? 추가한다면 결과 카운트가 활성 상한 경계를 넘는가? 넘으면 거절.
+2. **post-trade commit (moduleTransferAction/Mint/Burn)**: 거래 성사 후 카운터를 갱신 — 신규 보유자 진입 시 +1, 매도인 잔액 0 도달 시 −1.
+
+STATEFUL인 이유: 판정이 "지금까지 누적된 보유자 수"에 의존하고, 각 거래가 그 공유 상태를 변경한다.
+
+**법문 트리거 vs 운영 게이트(중요).** 법문상 §12(g) 등록의무는 실시간이 아니라 **회계연도 종료일 기준**으로 발생한다 — "총자산 $10M 초과 + 해당 class 2,000명(또는 비-AI 500명) held of record인 최초 회계연도 종료일" 후 120일 내 등록(§12(g)(1)), 그리고 Rule 12g-1은 "most recent fiscal year의 마지막 날" 기준으로 판단한다(§3.2·§3.4). 따라서 D-01이 거래 직전에 count 도달을 차단하는 것은 "2,000번째 보유자 발생 즉시 등록의무 발생"을 구현한 것이 아니라, **회계연도 말에 요건을 충족해 등록위험(사모 구조 붕괴)에 빠지는 것을 예방하기 위한 보수적 운영 게이트**다. 이 구분을 문서·테스트 전반에서 유지한다(§7 T2·T7은 "즉시 위법"이 아니라 "운영상 차단"으로 읽는다).
+
+### 5.2 판정 순서 (싸고 탈락 잘 되는 검사·선행조건 먼저)
+
+증명서형(A-13)의 "존재 → 진위 → 신선도 → 갈래"와 달리, 상태추적형 D-01의 순서는 다음이다.
+
+1. **관련성**: 이 거래가 카운트에 영향을 주는가? 수취인이 이미 보유(> 0)면 신규 보유자 아님 → 카운트 불변 → **즉시 PASS**(가장 싸고 흔한 경로, P1).
+2. **신원 dedup**: 수취인 지갑을 ONCHAINID로 매핑(A-04). 그 사람이 다른 지갑으로 이미 보유자면 신규 아님 → PASS(C1/DEDUP).
+3. **활성 상한 결정**: Recipe·Manifest로 어느 상한이 켜지는지 결정(§12(g)/§3(c)(1)/506(b)). 펀드 미등록·자산게이트 확인.
+4. **경계 판정**: 신규 사람이면 결과 카운트를 활성 상한 경계와 비교 — §12(g): < 2,000 그리고 < 500(비-AI); §3(c)(1): ≤ 100; 506(b): ≤ 35. 하나라도 위반이면 FAIL + reasonCode.
+5. **[post-trade] commit**: 성사 후 카운터 갱신(+1 신규 / −1 이탈). look-through cascade가 필요한 §3(c)(1)(A) 집계는 이 단계에서 A-09 결과를 반영(가장 무거운 계산은 나중).
+
+### 5.3 경계 매트릭스 (부등호 규율)
+
+| 상한 | 연산 | 트리거(FAIL) | 안전구간(PASS) |
+|------|------|--------------|----------------|
+| §12(g) 총계 | held-of-record | ≥ 2,000 | < 2,000 (≤ 1,999) |
+| §12(g) 비-AI | 비-AI 보유자 | ≥ 500 | < 500 (≤ 499) |
+| §3(c)(1) | 수익적 소유자 | > 100 (≥ 101) | ≤ 100 (QVCF ≤ 250) |
+| 506(b) | 501(e) 매수인/90일 | > 35 (≥ 36) | ≤ 35 |
+| 자산게이트 | 총자산 | > $10M → 상한 활성 | ≤ $10M → 12g-1(a) 면제 |
+
+의사코드 (§12(g) 활성, BUIDL 기준):
+
+```
+moduleCheck(from, to, value):
+id = identityRegistry.ONCHAINID(to) # A-04
+if balanceByIdentity[id] > 0: # 관련성
+return PASS # 신규 아님 → 카운트 불변 (P1)
+if not assetGateMet: # 자산 ≤ $10M
+return PASS # 12g-1(a) 면제 (P3)
+resultingTotal = holderCount + 1
+if resultingTotal >= threshold_12g_total: # 2000
+return FAIL(HOLDER_CAP_12G_TOTAL) # F1
+if not A03.isAI(id):
+if nonAICount + 1 >= threshold_12g_nonAI: # 500
+return FAIL(HOLDER_CAP_12G_NONAI) # F2
+return PASS # P2
+
+moduleTransferAction(from, to, value): # post-trade commit
+idTo = ONCHAINID(to); idFrom = ONCHAINID(from)
+if balanceByIdentity[idTo] == 0 and value > 0:
+holderCount += 1
+if not A03.isAI(idTo): nonAICount += 1
+apply balances...
+if balanceByIdentity[idFrom] == 0: # 이탈
+holderCount -= 1
+if not A03.isAI(idFrom): nonAICount -= 1
+```
+
+---
+
+## §6. 거절·예외 처리 (Rejection & Exception)
+
+### 6.1 거절 코드
+
+| reasonCode | 발동 조건 | 근거 |
+|-----------|-----------|------|
+| HOLDER_CAP_12G_TOTAL | 결과 held-of-record ≥ 2,000 | §12(g)(1)(A)(i); 12g-1(b)(1) |
+| HOLDER_CAP_12G_NONAI | 결과 비-AI ≥ 500 | §12(g)(1)(A)(ii); 12g-1(b)(1) |
+| HOLDER_CAP_3C1_100 | §3(c)(1) 활성 시 수익적 소유자 > 100 | §3(c)(1) |
+| HOLDER_CAP_506B_35 | 506(b) 활성 시 매수인 > 35/90일 | 506(b)(2)(i)·501(e) |
+
+### 6.2 예외·해소 경로 — 구조적 게이트 (증명서 cure 없음)
+
+증명서형 부품은 "새 claim을 발급받아 통과"라는 off-chain cure가 있지만, D-01의 상한 초과는 **구조적**이라 개별 서류로 풀 수 없다. 2,000번째 보유자를 새로 들일 수는 없다. 해소는 다음뿐이다.
+
+- **기존 보유자에게의 이전**은 자유롭다 — 신규 보유자가 아니므로 카운트가 늘지 않는다(P1). 유동성은 기존 보유자 집합 안에서 계속 돈다.
+
+[output truncated at 50000 of 62775 characters. Pass a larger max_chars (default 50000) to see more, or use read_page with a ref_id to focus on a smaller section.]
+
+Tab Context:
+- Executed on tabId: 437007867
+- Available tabs:
+  • tabId 437007716: "(1) 7/8 | Notion" (https://app.notion.com/p/deciphersnu/7-8-398dff004c898098b1defb8a486ffa72)
+  • tabId 437007865: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/04fc44e8-c61b-4105-bd9c-3c00978b074b/Element.B-04_엔진-선택.md?table=block&id=39edff00-4c89-80c1-8d79-de9a7419301e&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=RiUqq1SnVeD2ASSYNtcy9mv7534Ay83CtVaKuwmrTXg&downloadName=Element.B-04_엔진-선택.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/04fc44e8-c61b-4105-bd9c-3c00978b074b/Element.B-04_%E1%84%8B%E1%85%A6%E1%86%AB%E1%84%8C%E1%85%B5%E1%86%AB-%E1%84%89%E1%85%A5%E1%86%AB%E1%84%90%E1%85%A2%E1%86%A8.md?table=block&id=39edff00-4c89-80c1-8d79-de9a7419301e&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=RiUqq1SnVeD2ASSYNtcy9mv7534Ay83CtVaKuwmrTXg&downloadName=Element.B-04_%E1%84%8B%E1%85%A6%E1%86%AB%E1%84%8C%E1%85%B5%E1%86%AB-%E1%84%89%E1%85%A5%E1%86%AB%E1%84%90%E1%85%A2%E1%86%A8.md)
+  • tabId 437007866: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/89c220ee-b89c-43e6-b667-e611a389f432/C-00_resale-path-selector.md?table=block&id=39fdff00-4c89-80e2-81e5-c5ad6255b224&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=caSVWlN7iZZuzQMF-aGrK7Nb0sobDN-vWpWUPPE8HmU&downloadName=C-00_resale-path-selector.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/89c220ee-b89c-43e6-b667-e611a389f432/C-00_resale-path-selector.md?table=block&id=39fdff00-4c89-80e2-81e5-c5ad6255b224&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=caSVWlN7iZZuzQMF-aGrK7Nb0sobDN-vWpWUPPE8HmU&downloadName=C-00_resale-path-selector.md)
+  • tabId 437007867: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/d4595b45-121b-4546-851e-4de3ab05ce7b/Element.D-01_보유자-수-카운터.md?table=block&id=39edff00-4c89-807f-aa04-c016b72d5575&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=BSbO33EdGZEmvEqzE2iuf1NaeRjmPG95ZRm3hUeNd7w&downloadName=Element.D-01_보유자-수-카운터.md" (
