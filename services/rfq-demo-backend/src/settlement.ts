@@ -29,9 +29,10 @@ export interface DemoTradeResult {
 export class DemoSettlementService {
   private readonly provider: JsonRpcProvider;
   private readonly investor: NonceManager;
-  private readonly operator: NonceManager;
+  private readonly operator: HDNodeWallet;
   private readonly investorAddress: string;
   private nextRouterNonce = BigInt(Date.now());
+  private operatorNonce?: number;
 
   constructor(private readonly config: DemoBackendConfig, private readonly quotes: RFQBackendSDK) {
     if (!config.demoSettlement.enabled) throw new Error("demo settlement is disabled");
@@ -49,7 +50,7 @@ export class DemoSettlementService {
 
     this.provider = new JsonRpcProvider(config.rpcUrl, config.chainId);
     this.investor = new NonceManager(investor.connect(this.provider));
-    this.operator = new NonceManager(operator.connect(this.provider));
+    this.operator = operator.connect(this.provider);
   }
 
   async trade(amountIn: string, action: DemoTradeAction): Promise<DemoTradeResult> {
@@ -122,9 +123,19 @@ export class DemoSettlementService {
   }
 
   private async setMakerApproval(approved: boolean): Promise<void> {
+    // The operator account also performed deployment/onboarding transactions.
+    // Refresh before each policy toggle so a revoke/finally-restore pair cannot
+    // reuse a stale cached nonce in the long-lived demo backend.
+    const nonce = this.operatorNonce ?? await this.operator.getNonce("pending");
+    this.operatorNonce = nonce + 1;
     const adapter = new Contract(this.config.artifact.rfqAdapter, RFQ_ADAPTER_ABI, this.operator);
-    const tx = await adapter.setMakerApproved(this.config.artifact.maker, approved);
-    await tx.wait();
+    try {
+      const tx = await adapter.setMakerApproved(this.config.artifact.maker, approved, {nonce});
+      await tx.wait();
+    } catch (error) {
+      this.operatorNonce = undefined;
+      throw error;
+    }
   }
 }
 

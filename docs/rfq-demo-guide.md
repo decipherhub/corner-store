@@ -8,8 +8,12 @@ Router settlement path.
 ## One-command demo
 
 ```sh
-scripts/e2e-anvil.sh --profile buidl-like --mode rfq
+scripts/demo.sh --profile buidl-like
 ```
+
+The launcher starts Anvil, deploys the selected profile, starts the RFQ backend,
+starts the read-only Operator API and serves the dashboard. Open the printed URL
+and press Ctrl-C to stop all local services.
 
 The command exits non-zero on failure. A successful run proves, in order:
 
