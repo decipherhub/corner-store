@@ -178,6 +178,35 @@ async function handleRequest(
       return;
     }
 
+    if (req.method === "POST" && req.url === "/demo/enforcement/adapter-boundary") {
+      if (!settlement) {
+        sendJson(res, 403, {error: "demo_settlement_disabled", message: "enforcement evidence is available only from the local e2e runner"});
+        return;
+      }
+      const body = await readJsonBody(req);
+      if (!isRecord(body) || (body.walletId !== undefined && typeof body.walletId !== "string")) {
+        throw new Error("walletId must be a string");
+      }
+      sendJson(res, 200, await settlement.proveAdapterBoundary(body.walletId as string | undefined));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/demo/enforcement/restore") {
+      if (!settlement) {
+        sendJson(res, 403, {error: "demo_settlement_disabled", message: "enforcement restore is available only from the local e2e runner"});
+        return;
+      }
+      const body = await readJsonBody(req);
+      if (
+        !isRecord(body) ||
+        (body.kind !== "claim-expiry" && body.kind !== "maker-revocation")
+      ) {
+        throw new Error("kind must be claim-expiry or maker-revocation");
+      }
+      sendJson(res, 200, await settlement.restoreEnforcementState(body.kind));
+      return;
+    }
+
     if (req.method === "POST" && (req.url === "/rfq/quote" || req.url === "/quote")) {
       const body = await readJsonBody(req);
       const signed = await createQuote(body, config, quoteService);

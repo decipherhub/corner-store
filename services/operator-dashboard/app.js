@@ -3,7 +3,8 @@ const profiles = {admin: {id: "admin", label: "Admin", role: "admin", address: n
 const viewMeta = {
   dashboard: ["Overview", "Dashboard"], create: ["New request", "RFQ 거래"], rfqs: ["Requests & quotes", "My RFQs"],
   portfolio: ["Holdings", "Portfolio"], adminDashboard: ["Admin", "Dashboard"], adminMonitoring: ["Admin", "RFQ 모니터링"],
-  adminUsers: ["Admin", "사용자 / 화이트리스트"], adminMaker: ["Admin", "Maker 관리"], adminHistory: ["Admin", "거래 내역"]
+  adminUsers: ["Admin", "사용자 / 화이트리스트"], adminMaker: ["Admin", "Maker 관리"],
+  adminEnforcement: ["Compliance operations", "Enforcement Cases"], adminHistory: ["Admin", "거래 내역"]
 };
 let currentProfile = profiles.admin;
 let chainState = null;
@@ -16,6 +17,7 @@ let quoteConsumed = false;
 let quoteTimer = null;
 let tradeSide = "buy";
 let marketRange = "1h";
+let enforcementCase = null;
 let session = {rfqId: null, status: null, quoteCount: 0, settledCount: 0, rwaDelta: 0n, quoteDelta: 0n, activities: []};
 
 function endpoint(path) { return `${$("backend").value.replace(/\/$/, "")}${path}`; }
@@ -153,6 +155,16 @@ function configurePresentation() {
   }
   $("ttl").value = injectedTtl;
   $("liveMakerDescription").textContent = chainState.presentation.maker.label;
+  if ($("caseManifest")) {
+    $("caseManifest").textContent = `${asset.symbol} · ${chainState.assetProfile}`;
+    const selectedCaseWallet = $("caseWallet").value;
+    $("caseWallet").innerHTML = chainState.wallets
+      .map((wallet) => `<option value="${escapeHtml(wallet.id)}">${escapeHtml(wallet.label)} · ${shortAddress(wallet.address)}</option>`)
+      .join("");
+    if (chainState.wallets.some((wallet) => wallet.id === selectedCaseWallet)) {
+      $("caseWallet").value = selectedCaseWallet;
+    }
+  }
   renderMarketChart();
   updateSidePresentation();
 }
@@ -578,6 +590,263 @@ async function advanceTemporal() {
     setStatus("temporalStatus", "QP claim이 만료되었습니다. 같은 taker 지갑으로 돌아가 저장된 quote의 최종 거부를 확인하세요.", "good");
   } catch (error) { setStatus("temporalStatus", error.message, "bad"); }
 }
+
+const enforcementLabels = {
+  "adapter-boundary": {
+    title: "Adapter 직접 호출 차단",
+    control: "RFQAdapter.onlyRouter",
+    mutation: "별도 정책 변경 없음",
+    expected: "NotAuthorized + 실패 receipt + 잔액 불변"
+  },
+  "claim-expiry": {
+    title: "Quote 이후 QP claim 만료",
+    control: "ExecutionRouter fill-time compliance",
+    mutation: "Anvil chain time 전진",
+    expected: "ComplianceRejected + reasonCode + 잔액 불변"
+  },
+  "maker-revocation": {
+    title: "Quote 이후 Maker 승인 취소",
+    control: "RFQAdapter maker allowlist",
+    mutation: "Maker approval true → false",
+    expected: "RFQMakerNotApproved + 실패 receipt + 잔액 불변"
+  }
+};
+
+function caseWalletState() {
+  return chainState.wallets.find((wallet) => wallet.id === enforcementCase?.walletId);
+}
+function caseStep(label, detail, status = "pending") {
+  enforcementCase.steps.push({label, detail, status, time: new Date()});
+  renderEnforcementCase();
+}
+function caseBadge(status) {
+  const label = {
+    opened: "Open", prepared: "Baseline ready", quoted: "Quote issued",
+    mutated: "Policy changed", blocked: "Blocked · verified", restored: "Closed"
+  }[status] || "Not opened";
+  $("caseStatusBadge").textContent = label;
+  $("caseStatusBadge").className = `status-pill ${status === "blocked" ? "live" : status === "restored" ? "neutral" : "warning"}`;
+}
+function renderCaseEvidence(result) {
+  if (!result) {
+    $("caseResult").classList.add("hidden");
+    $("caseResult").innerHTML = "";
+    return;
+  }
+  const tx = result.attemptedTransaction;
+  const balances = result.balanceEvidence;
+  const trace = result.trace || [];
+  const blockNumber = tx ? Number(tx.blockNumber) : null;
+  const receiptStatus = tx ? Number(tx.status) : null;
+  $("caseResult").classList.remove("hidden");
+  $("caseResult").innerHTML = `
+    <div class="evidence-outcome"><span>Enforcement outcome</span><strong>${escapeHtml(result.outcome || (result.rejection ? "BLOCKED" : "UNKNOWN"))}</strong></div>
+    <div class="evidence-grid">
+      <div><span>Rejection</span><strong>${escapeHtml(result.rejection || "—")}</strong></div>
+      <div><span>Reason code / selector</span><code>${escapeHtml(result.reasonCode || result.selector || "—")}</code></div>
+      <div><span>Transaction</span><code>${tx ? escapeHtml(shortAddress(tx.hash)) : "—"}</code></div>
+      <div><span>Receipt</span><strong>${tx && Number.isSafeInteger(blockNumber) && Number.isSafeInteger(receiptStatus) ? `Block ${blockNumber} · status ${receiptStatus}` : "—"}</strong></div>
+      <div><span>RWA balance</span><code>${balances ? `${escapeHtml(balances.rwaBefore)} → ${escapeHtml(balances.rwaAfter)}` : "—"}</code></div>
+      <div><span>Settlement balance</span><code>${balances ? `${escapeHtml(balances.quoteBefore)} → ${escapeHtml(balances.quoteAfter)}` : "—"}</code></div>
+    </div>
+    <div class="balance-proof ${balances?.unchanged ? "verified" : ""}">
+      <strong>${balances?.unchanged ? "✓ Asset movement prevented" : "Balance evidence unavailable"}</strong>
+      <span>실패 전후 RWA와 결제 자산 잔액이 동일해야 합니다.</span>
+    </div>
+    <div class="evidence-trace">${trace.map((item, index) => {
+      const status = ["passed", "rejected", "pending"].includes(item.status) ? item.status : "pending";
+      return `<div class="${status}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(item.stage)}</strong><small>${escapeHtml(item.detail)}</small></div>`;
+    }).join("")}</div>`;
+}
+function renderEnforcementCase() {
+  if (!enforcementCase) {
+    caseBadge(null);
+    $("caseCreate").disabled = false;
+    $("caseType").disabled = false;
+    $("caseWallet").disabled = false;
+    $("caseFacts").innerHTML = "<span>케이스를 생성하면 기준 상태와 단계별 작업이 표시됩니다.</span>";
+    $("caseTimeline").innerHTML = '<div class="empty-row">열린 케이스가 없습니다.</div>';
+    ["casePrepare", "caseQuote", "caseMutate", "caseExecute", "caseRestore"].forEach((id) => $(id).disabled = true);
+    renderCaseEvidence(null);
+    return;
+  }
+  const definition = enforcementLabels[enforcementCase.type];
+  const wallet = caseWalletState();
+  caseBadge(enforcementCase.status);
+  $("caseFacts").innerHTML = `
+    <div><span>Case ID</span><strong>${escapeHtml(enforcementCase.id)}</strong></div>
+    <div><span>Control</span><strong>${escapeHtml(definition.control)}</strong></div>
+    <div><span>대상</span><strong>${escapeHtml(wallet?.label || enforcementCase.walletId)} · ${shortAddress(wallet?.address)}</strong></div>
+    <div><span>상태 변경</span><strong>${escapeHtml(definition.mutation)}</strong></div>
+    <div><span>기대 증거</span><strong>${escapeHtml(definition.expected)}</strong></div>`;
+  $("caseTimeline").innerHTML = enforcementCase.steps.length
+    ? enforcementCase.steps.map((step, index) => `<div class="case-step ${step.status}"><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(step.detail)}</small><time>${step.time.toLocaleTimeString("ko-KR")}</time></div></div>`).join("")
+    : '<div class="empty-row">첫 작업을 실행하세요.</div>';
+
+  const status = enforcementCase.status;
+  const direct = enforcementCase.type === "adapter-boundary";
+  const closed = status === "restored";
+  $("caseCreate").disabled = !closed;
+  $("caseType").disabled = !closed;
+  $("caseWallet").disabled = !closed;
+  $("casePrepare").disabled = status !== "opened";
+  $("caseQuote").disabled = direct || status !== "prepared";
+  $("caseMutate").disabled = direct || status !== "quoted";
+  $("caseExecute").disabled = direct ? status !== "prepared" : status !== "mutated";
+  $("caseRestore").disabled = !["prepared", "quoted", "mutated", "blocked"].includes(status);
+  $("caseQuote").textContent = direct ? "2. Quote 불필요" : "2. Firm quote 발급";
+  $("caseMutate").textContent = direct ? "3. 정책 변경 불필요" : "3. 정책 상태 변경";
+  renderCaseEvidence(enforcementCase.result);
+}
+function createEnforcementCase() {
+  if (enforcementCase && enforcementCase.status !== "restored") return;
+  let walletId = $("caseWallet").value;
+  const type = $("caseType").value;
+  if (type === "claim-expiry") {
+    walletId = chainState.presentation.temporalEligibility.walletId;
+    $("caseWallet").value = walletId;
+  }
+  const definition = enforcementLabels[type];
+  const wallet = chainState.wallets.find((entry) => entry.id === walletId);
+  enforcementCase = {
+    id: `EC-${Date.now().toString(36).toUpperCase()}`,
+    type,
+    walletId,
+    status: "opened",
+    quote: null,
+    result: null,
+    steps: [{
+      label: "Case opened",
+      detail: `${definition.title} · ${wallet?.label || walletId}`,
+      status: "passed",
+      time: new Date()
+    }]
+  };
+  renderEnforcementCase();
+}
+async function prepareEnforcementCase() {
+  if (!enforcementCase || enforcementCase.status !== "opened") return;
+  $("casePrepare").disabled = true;
+  try {
+    if (enforcementCase.type === "claim-expiry") {
+      await post("/demo/admin/temporal/prepare", {walletId: enforcementCase.walletId});
+    } else if (enforcementCase.type === "maker-revocation") {
+      await post("/demo/enforcement/restore", {kind: "maker-revocation"});
+    } else {
+      await loadState();
+    }
+    await loadState();
+    enforcementCase.status = "prepared";
+    const wallet = caseWalletState();
+    if (enforcementCase.type === "maker-revocation") {
+      const baseline = await post("/demo/precheck", {
+        taker: wallet.address,
+        amountIn: chainState.suggestedTradeAmounts.buyAmountIn,
+        side: "buy"
+      });
+      if (!baseline.allowed) {
+        enforcementCase.status = "opened";
+        throw Error(`선택 지갑의 기준 거래가 먼저 허용되어야 합니다: ${baseline.verdict.reason || "policy rejected"}`);
+      }
+    }
+    caseStep(
+      "Baseline captured",
+      `Maker ${chainState.makerApproved ? "approved" : "not approved"} · RWA ${formatBaseUnits(wallet.rwaBalance)} · ${chainState.presentation.quoteAsset.symbol} ${formatBaseUnits(wallet.quoteBalance, chainState.presentation.quoteAsset.decimals)}`,
+      "passed"
+    );
+  } catch (error) {
+    caseStep("Baseline failed", error.message, "rejected");
+  }
+}
+async function issueEnforcementQuote() {
+  if (!enforcementCase || enforcementCase.status !== "prepared" || enforcementCase.type === "adapter-boundary") return;
+  $("caseQuote").disabled = true;
+  try {
+    const wallet = caseWalletState();
+    const ttlSeconds = enforcementCase.type === "claim-expiry"
+      ? chainState.presentation.temporalEligibility.quoteTtlSeconds
+      : chainState.presentation.execution.defaultQuoteTtlSeconds;
+    enforcementCase.quote = await post("/demo/quote", {
+      taker: wallet.address,
+      amountIn: chainState.suggestedTradeAmounts.buyAmountIn,
+      side: "buy",
+      ttlSeconds
+    });
+    enforcementCase.status = "quoted";
+    caseStep(
+      "Firm quote issued",
+      `Nonce ${enforcementCase.quote.quote.nonce} · expires ${new Date(Number(enforcementCase.quote.quote.expiry) * 1000).toLocaleTimeString("ko-KR")} · taker ${shortAddress(wallet.address)}`,
+      "passed"
+    );
+  } catch (error) {
+    caseStep("Quote issuance failed", error.message, "rejected");
+  }
+}
+async function mutateEnforcementPolicy() {
+  if (!enforcementCase || enforcementCase.status !== "quoted") return;
+  $("caseMutate").disabled = true;
+  try {
+    if (enforcementCase.type === "claim-expiry") {
+      const seconds = chainState.presentation.temporalEligibility.advanceSeconds;
+      await post("/demo/admin/temporal/advance", {seconds});
+      caseStep("Claim state changed", `Chain time advanced by ${seconds}s after quote issuance`, "rejected");
+    } else {
+      await post("/demo/admin/maker", {approved: false});
+      caseStep("Maker policy changed", "Operator revoked the quote maker after signing", "rejected");
+    }
+    await loadState();
+    enforcementCase.status = "mutated";
+    renderEnforcementCase();
+  } catch (error) {
+    caseStep("Policy mutation failed", error.message, "rejected");
+  }
+}
+async function executeEnforcementCase() {
+  if (!enforcementCase) return;
+  $("caseExecute").disabled = true;
+  try {
+    const result = enforcementCase.type === "adapter-boundary"
+      ? await post("/demo/enforcement/adapter-boundary", {walletId: enforcementCase.walletId})
+      : await post("/demo/trade", {
+          amountIn: enforcementCase.quote.quote.amountIn,
+          action: enforcementCase.type === "maker-revocation" ? "revoked-maker" : "compliance-proof",
+          quote: enforcementCase.quote
+        });
+    if (
+      !result.rejection ||
+      !result.attemptedTransaction ||
+      result.attemptedTransaction.status !== 0 ||
+      !result.balanceEvidence?.unchanged
+    ) {
+      throw Error("차단 결과에 실패 receipt와 잔액 불변 증거가 모두 포함되지 않았습니다.");
+    }
+    enforcementCase.result = result;
+    enforcementCase.status = "blocked";
+    caseStep(
+      "Execution blocked",
+      `${result.rejection} · block ${result.attemptedTransaction.blockNumber} · balances unchanged`,
+      "passed"
+    );
+    await loadState();
+  } catch (error) {
+    caseStep("Evidence verification failed", error.message, "rejected");
+  }
+}
+async function restoreEnforcementCase() {
+  if (!enforcementCase) return;
+  $("caseRestore").disabled = true;
+  try {
+    if (enforcementCase.type !== "adapter-boundary") {
+      await post("/demo/enforcement/restore", {kind: enforcementCase.type});
+    }
+    await loadState();
+    enforcementCase.status = "restored";
+    caseStep("Case closed", "Mutable demo policy state restored to the scenario baseline", "passed");
+  } catch (error) {
+    caseStep("Restore failed", error.message, "rejected");
+  }
+}
+
 function eventRow(e) { return `<div class="event"><span class="kind">${escapeHtml(e.name)}</span><div><strong>Block ${escapeHtml(e.blockNumber)}</strong><br><code>${escapeHtml(e.transactionHash)}</code></div><details><summary>details</summary><code>${escapeHtml(JSON.stringify(e.args))}</code></details></div>`; }
 function renderEvents(events) {
   $("eventSummary").innerHTML = `<div><strong>${events.filter((e)=>e.name==="RFQSettled").length}</strong><span>Settled</span></div><div><strong>${events.filter((e)=>e.name==="RFQRejected").length}</strong><span>Rejected</span></div><div><strong>${events.length}</strong><span>Total</span></div>`;
@@ -598,6 +867,17 @@ $("amount").oninput = () => { clearTimeout(window.precheckTimer); window.prechec
 $("executeQuote").onclick = execute; $("closeConfirm").onclick = $("cancelConfirm").onclick = () => $("confirmBackdrop").classList.add("hidden");
 $("adminRefresh").onclick = refreshAdmin; $("refresh").onclick = refreshHistory; $("revokeMaker").onclick = () => setMaker(false); $("restoreMaker").onclick = () => setMaker(true);
 $("prepareTemporal").onclick = prepareTemporal; $("advanceTemporal").onclick = advanceTemporal;
+$("caseCreate").onclick = createEnforcementCase;
+$("casePrepare").onclick = prepareEnforcementCase;
+$("caseQuote").onclick = issueEnforcementQuote;
+$("caseMutate").onclick = mutateEnforcementPolicy;
+$("caseExecute").onclick = executeEnforcementCase;
+$("caseRestore").onclick = restoreEnforcementCase;
+$("caseType").onchange = () => {
+  if ($("caseType").value === "claim-expiry" && chainState) {
+    $("caseWallet").value = chainState.presentation.temporalEligibility.walletId;
+  }
+};
 $("openGuide").onclick = () => $("guideBackdrop").classList.remove("hidden"); $("closeGuide").onclick = () => $("guideBackdrop").classList.add("hidden");
 $("notificationButton").onclick = () => $("notificationPanel").classList.toggle("hidden");
 updateSummary();

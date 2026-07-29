@@ -236,6 +236,12 @@ DEMO_READY=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/setup" \
 node -e 'const value=JSON.parse(process.argv[1]); if (!value.ready || !value.makerApproved) { console.error(value); process.exit(1); } console.log("    PASS: dashboard setup prepared the on-chain maker");' "$DEMO_READY"
 DEMO_MARKET_READY=$(curl -fsS "http://127.0.0.1:${BACKEND_PORT}/demo/market-history")
 node -e 'const value=JSON.parse(process.argv[1]); if (value.oracle?.length < 60 || value.indicative?.length !== value.oracle.length || value.fills?.length !== 0 || value.oracle[1].timestamp - value.oracle[0].timestamp !== 60) { console.error(value); process.exit(1); } console.log(`    PASS: ${value.oracle.length} one-minute NAV/indicative samples loaded with no synthetic fills`);' "$DEMO_MARKET_READY"
+
+echo "==> Proving the RFQAdapter direct-call boundary with a failed transaction receipt"
+ADAPTER_BOUNDARY=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/enforcement/adapter-boundary" \
+  -H "content-type: application/json" \
+  -d '{}')
+node -e 'const value=JSON.parse(process.argv[1]); if (value.outcome !== "BLOCKED" || value.rejection !== "NotAuthorized" || !value.attemptedTransaction?.hash || value.attemptedTransaction.status !== 0 || !value.balanceEvidence?.unchanged) { console.error(value); process.exit(1); } console.log(`    PASS: direct Adapter call failed in block ${value.attemptedTransaction.blockNumber} and balances remained unchanged`);' "$ADAPTER_BOUNDARY"
 DEMO_AMOUNT=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.suggestedTradeAmounts.buyAmountIn);' "$DEMO_READY")
 DEMO_SELL_AMOUNT=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.suggestedTradeAmounts.sellAmountIn);' "$DEMO_READY")
 DEMO_AMOUNT_DISPLAY="$SCENARIO_BUY_DISPLAY"
@@ -315,7 +321,7 @@ DEMO_REJECT_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.std
 DEMO_REJECTED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
   -d "$DEMO_REJECT_BODY")
-node -e 'const value=JSON.parse(process.argv[1]); if (value.rejection !== "RFQMakerNotApproved") { console.error(value); process.exit(1); } console.log("    PASS: dashboard maker-revocation returned RFQMakerNotApproved");' "$DEMO_REJECTED"
+node -e 'const value=JSON.parse(process.argv[1]); const simulated=value.trace?.some((step)=>step.stage==="Revert simulation" && /RFQMakerNotApproved/.test(step.detail)); if (value.rejection !== "RFQMakerNotApproved" || !simulated || !value.attemptedTransaction?.hash || value.attemptedTransaction.status !== 0 || !value.balanceEvidence?.unchanged) { console.error(value); process.exit(1); } console.log("    PASS: maker-revocation produced a selector-verified failed receipt with unchanged balances");' "$DEMO_REJECTED"
 DEMO_REVOKED_STATE=$(curl -fsS "http://127.0.0.1:${BACKEND_PORT}/demo/state")
 node -e 'const value=JSON.parse(process.argv[1]); if (value.makerApproved) { console.error(value); process.exit(1); } console.log("    PASS: maker remains revoked until an explicit restore");' "$DEMO_REVOKED_STATE"
 DEMO_RESTORED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/restore" \
@@ -344,7 +350,7 @@ if [[ "$ASSET_PROFILE" == "buidl-like" ]]; then
   INELIGIBLE_REJECTED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
     -H "content-type: application/json" \
     -d "$INELIGIBLE_TRADE_BODY")
-  node -e 'const value=JSON.parse(process.argv[1]); if (value.rejection !== "Qualified Purchaser claim missing" || !value.reasonCode) { console.error(value); process.exit(1); } console.log("    PASS: Router final check rejected the signed ineligible quote");' "$INELIGIBLE_REJECTED"
+  node -e 'const value=JSON.parse(process.argv[1]); const simulated=value.trace?.some((step)=>step.stage==="Revert simulation" && /ComplianceRejected/.test(step.detail)); if (value.rejection !== "Qualified Purchaser claim missing" || !simulated || !value.reasonCode || !value.attemptedTransaction?.hash || value.attemptedTransaction.status !== 0 || !value.balanceEvidence?.unchanged) { console.error(value); process.exit(1); } console.log("    PASS: Router selector-verified the signed ineligible quote rejection without asset movement");' "$INELIGIBLE_REJECTED"
   ADMIN_ELIGIBLE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/admin/claim" \
     -H "content-type: application/json" \
     -d "{\"walletId\":\"${INELIGIBLE_ID}\",\"claim\":{\"basis\":\"NATURAL\",\"signatureValid\":true,\"issuerTrusted\":true,\"lookThroughStatus\":\"NONE\",\"coveredCompanyMatchesFund\":false}}")
@@ -376,7 +382,7 @@ if [[ "$ASSET_PROFILE" == "buidl-like" ]]; then
   TEMPORAL_REJECTED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
     -H "content-type: application/json" \
     -d "$TEMPORAL_TRADE_BODY")
-  node -e 'const value=JSON.parse(process.argv[1]); if (value.rejection !== "Qualified Purchaser claim expired") { console.error(value); process.exit(1); } console.log("    PASS: Router rejected the still-live quote after eligibility expired");' "$TEMPORAL_REJECTED"
+  node -e 'const value=JSON.parse(process.argv[1]); const simulated=value.trace?.some((step)=>step.stage==="Revert simulation" && /ComplianceRejected/.test(step.detail)); if (value.rejection !== "Qualified Purchaser claim expired" || !simulated || !value.reasonCode || !value.attemptedTransaction?.hash || value.attemptedTransaction.status !== 0 || !value.balanceEvidence?.unchanged) { console.error(value); process.exit(1); } console.log("    PASS: Router selector-verified the expired-claim rejection and preserved balances");' "$TEMPORAL_REJECTED"
   TEMPORAL_RESET=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/setup" \
     -H "content-type: application/json" \
     -d '{}')

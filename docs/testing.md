@@ -115,8 +115,11 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - backend/UI 매수(결제 자산→RWA)와 매도(RWA→결제 자산)의 실제 양방향 settlement
 - 매도 후 taker RWA 감소와 결제 자산 증가
 - backend quote 발급 후 maker revoke 시 fill-time 거부
+- RFQAdapter 직접 호출의 status `0` receipt와 RWA/결제 자산 잔액 불변
+- quote 이후 maker revoke 거부의 실패 receipt와 잔액 불변
 - 적격 A/B와 비적격 wallet fixture의 실제 QP pre-check
 - 비적격 taker-bound signed quote의 Router fill-time compliance 거부
+- quote 이후 QP claim 만료 거부의 reasonCode, 실패 receipt와 잔액 불변
 - Admin QP fixture 변경과 원상복구
 - scenario JSON에서 wallet/표시값/최소금액/시간 조건 주입
 - scenario JSON에서 Anvil account, 초기 investor/maker/pool 물량, 양방향 기본

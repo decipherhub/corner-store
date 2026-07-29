@@ -36,7 +36,9 @@ const ERC20_ABI = [
 ];
 const RFQ_ADAPTER_ABI = [
   "function setMakerApproved(address maker,bool approved)",
-  "function approvedMaker(address maker) view returns (bool)"
+  "function approvedMaker(address maker) view returns (bool)",
+  "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req,(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash) decision) returns (tuple(uint256 amountOut,bytes32 executionId))",
+  "error NotAuthorized()"
 ];
 const QP_ABI = [
   "function qp(address user) view returns (bool)",
@@ -52,6 +54,7 @@ const QUOTE_TUPLE =
   "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,uint256 nonce,uint64 expiry)";
 const RFQ_MAKER_NOT_APPROVED_SELECTOR = id("RFQMakerNotApproved()").slice(0, 10).toLowerCase();
 const COMPLIANCE_REJECTED_SELECTOR = id("ComplianceRejected(bytes32)").slice(0, 10).toLowerCase();
+const NOT_AUTHORIZED_SELECTOR = id("NotAuthorized()").slice(0, 10).toLowerCase();
 const ZERO_BYTES32 = `0x${"0".repeat(64)}`;
 const QP_BASIS_NAMES: QpBasis[] = [
   "NONE", "NATURAL", "FAMILY_COMPANY", "TRUST", "INSTITUTIONAL", "QIB", "KNOWLEDGEABLE_EMPLOYEE", "OTHER"
@@ -119,8 +122,32 @@ export interface DemoTradeResult {
     quoteAfter: string;
     quoteDelta: string;
   };
+  attemptedTransaction?: {
+    hash: string;
+    blockNumber: number;
+    status: number;
+  };
+  balanceEvidence?: {
+    rwaBefore: string;
+    rwaAfter: string;
+    quoteBefore: string;
+    quoteAfter: string;
+    unchanged: boolean;
+  };
   rejection?: string;
   reasonCode?: string;
+}
+
+export interface AdapterBoundaryEvidence {
+  caseType: "ADAPTER_BOUNDARY";
+  outcome: "BLOCKED";
+  wallet: {id: string; label: string; address: string};
+  control: "RFQAdapter.onlyRouter";
+  rejection: "NotAuthorized";
+  selector: string;
+  attemptedTransaction: {hash: string; blockNumber: number; status: number};
+  balanceEvidence: DemoTradeResult["balanceEvidence"];
+  trace: DemoTradeResult["trace"];
 }
 
 interface WalletEntry {
@@ -334,6 +361,119 @@ export class DemoSettlementService {
     });
   }
 
+  async proveAdapterBoundary(walletId?: DemoWalletId): Promise<AdapterBoundaryEvidence> {
+    return this.enqueue(async () => {
+      const entry = walletId ? this.walletById(walletId) : this.walletFor(this.config.artifact.investor);
+      const address = entry.signer.address;
+      const rwa = new Contract(this.config.artifact.rwaToken, ERC20_ABI, this.provider);
+      const quote = new Contract(this.config.artifact.quote, ERC20_ABI, this.provider);
+      const adapter = new Contract(this.config.artifact.rfqAdapter, RFQ_ADAPTER_ABI, entry.signer);
+      const rwaBefore = await rwa.balanceOf(address) as bigint;
+      const quoteBefore = await quote.balanceOf(address) as bigint;
+      const latest = await this.latestBlock();
+      const request = [
+        this.context(
+          address,
+          this.config.scenario.execution.defaultBuyAmountBaseUnits,
+          this.pricing.amountOut(
+            BigInt(this.config.scenario.execution.defaultBuyAmountBaseUnits),
+            "buy"
+          ).toString(),
+          "buy"
+        ),
+        0n,
+        BigInt(latest.timestamp + 3600),
+        this.nextRouterNonce++,
+        "0x"
+      ];
+      const decision = [
+        false,
+        ZERO_BYTES32,
+        0n,
+        0n,
+        0n,
+        0n,
+        ZERO_BYTES32,
+        ZERO_BYTES32,
+        ZERO_BYTES32,
+        0n,
+        ZERO_BYTES32
+      ];
+      try {
+        await adapter.execute.staticCall(request, decision);
+        throw new Error("direct RFQAdapter call unexpectedly passed its router boundary");
+      } catch (error) {
+        if (!isError(error, NOT_AUTHORIZED_SELECTOR, "NotAuthorized")) throw error;
+      }
+
+      const tx = await adapter.execute(request, decision, {
+        gasLimit: 600_000,
+        nonce: await this.pendingNonce(address)
+      });
+      let receipt;
+      try {
+        receipt = await tx.wait();
+      } catch (error) {
+        receipt = (error as any)?.receipt;
+        if (!receipt) throw error;
+      }
+      const attemptedTransaction: AdapterBoundaryEvidence["attemptedTransaction"] = {
+        hash: tx.hash,
+        blockNumber: Number(receipt.blockNumber),
+        status: Number(receipt.status)
+      };
+      if (!attemptedTransaction || attemptedTransaction.status !== 0) {
+        throw new Error("direct RFQAdapter rejection did not produce a failed transaction receipt");
+      }
+
+      const rwaAfter = await rwa.balanceOf(address) as bigint;
+      const quoteAfter = await quote.balanceOf(address) as bigint;
+      const balanceEvidence = {
+        rwaBefore: rwaBefore.toString(),
+        rwaAfter: rwaAfter.toString(),
+        quoteBefore: quoteBefore.toString(),
+        quoteAfter: quoteAfter.toString(),
+        unchanged: rwaBefore === rwaAfter && quoteBefore === quoteAfter
+      };
+      if (!balanceEvidence.unchanged) throw new Error("adapter boundary rejection changed wallet balances");
+      const trace: AdapterBoundaryEvidence["trace"] = [
+        {stage: "Caller", detail: `${entry.label} called RFQAdapter.execute directly`, status: "passed"},
+        {stage: "Router boundary", detail: "RFQAdapter.onlyRouter rejected the caller", status: "rejected"},
+        {stage: "Asset movement", detail: "RWA and quote balances remained unchanged", status: "passed"}
+      ];
+      this.appendEvent({
+        blockNumber: attemptedTransaction.blockNumber,
+        transactionHash: attemptedTransaction.hash,
+        name: "AdapterBypassRejected",
+        args: {caller: address, adapter: this.config.artifact.rfqAdapter, reason: "NotAuthorized"}
+      });
+      return {
+        caseType: "ADAPTER_BOUNDARY",
+        outcome: "BLOCKED",
+        wallet: {id: entry.id, label: entry.label, address},
+        control: "RFQAdapter.onlyRouter",
+        rejection: "NotAuthorized",
+        selector: NOT_AUTHORIZED_SELECTOR,
+        attemptedTransaction,
+        balanceEvidence,
+        trace
+      };
+    });
+  }
+
+  async restoreEnforcementState(kind: "claim-expiry" | "maker-revocation"): Promise<Awaited<ReturnType<DemoSettlementService["state"]>>> {
+    return this.enqueue(async () => {
+      if (kind === "maker-revocation") await this.setMakerApproval(true);
+      if (kind === "claim-expiry") {
+        const temporal = this.config.scenario.temporalEligibility;
+        await this.setFreshnessCap(temporal.baselineFreshnessSeconds);
+        const entry = this.walletById(temporal.walletId);
+        await this.setWalletEligibility(entry, entry.initialQualifiedPurchaser);
+      }
+      return this.state();
+    });
+  }
+
   async trade(amountIn: string, action: DemoTradeAction, provided?: SignedRFQQuote): Promise<DemoTradeResult> {
     return this.enqueue(() => this.tradeUnlocked(amountIn, action, provided));
   }
@@ -359,7 +499,7 @@ export class DemoSettlementService {
     ];
 
     if (action === "revoked-maker") {
-      await this.setMakerApproval(false);
+      if (await this.makerApproved()) await this.setMakerApproval(false);
       trace.push({stage: "Maker policy", detail: "operator revoked maker after quote signing", status: "rejected"});
     }
     const result = await this.execute(wallet, signed, action, trace);
@@ -378,8 +518,9 @@ export class DemoSettlementService {
       });
     } else if (result.rejection) {
       this.appendEvent({
-        blockNumber: await this.provider.getBlockNumber(),
-        transactionHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+        blockNumber: result.attemptedTransaction?.blockNumber ?? await this.provider.getBlockNumber(),
+        transactionHash: result.attemptedTransaction?.hash ??
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
         name: "RFQRejected",
         args: {maker: signed.quote.maker, taker: signed.quote.taker, reason: result.rejection}
       });
@@ -426,8 +567,34 @@ export class DemoSettlementService {
       venueData
     ];
 
+    let verifiedRejection: "RFQMakerNotApproved" | "ComplianceRejected" | undefined;
+    if (action !== "settle") {
+      try {
+        await router.execute.staticCall(request);
+        throw new Error(`${action} request unexpectedly passed the final Router simulation`);
+      } catch (error) {
+        if (action === "revoked-maker" && isError(error, RFQ_MAKER_NOT_APPROVED_SELECTOR, "RFQMakerNotApproved")) {
+          verifiedRejection = "RFQMakerNotApproved";
+        } else if (action === "compliance-proof" && isError(error, COMPLIANCE_REJECTED_SELECTOR, "ComplianceRejected")) {
+          verifiedRejection = "ComplianceRejected";
+        } else {
+          throw error;
+        }
+      }
+      trace.push({
+        stage: "Revert simulation",
+        detail: `${verifiedRejection} selector verified for the exact Router request`,
+        status: "rejected"
+      });
+    }
+
+    let attemptedHash: string | undefined;
     try {
-      const tx = await router.execute(request, {nonce: await this.pendingNonce(investorAddress)});
+      const tx = await router.execute(request, {
+        gasLimit: 1_500_000,
+        nonce: await this.pendingNonce(investorAddress)
+      });
+      attemptedHash = tx.hash;
       const receipt = await tx.wait();
       const rwaAfter = await rwa.balanceOf(investorAddress) as bigint;
       const quoteAfter = await quote.balanceOf(investorAddress) as bigint;
@@ -465,16 +632,56 @@ export class DemoSettlementService {
     } catch (error) {
       const detail = error instanceof Error ? (error as any).shortMessage ?? error.message : String(error);
       trace.push({stage: "Final Router check", detail, status: "rejected"});
-      if (action === "revoked-maker" && isError(error, RFQ_MAKER_NOT_APPROVED_SELECTOR, "RFQMakerNotApproved")) {
-        return {action, side, quote: signed, trace, rejection: "RFQMakerNotApproved"};
-      }
-      if (action === "compliance-proof" && isError(error, COMPLIANCE_REJECTED_SELECTOR, "ComplianceRejected")) {
-        const precheck = await this.precheck(investorAddress, q.amountIn, side);
+      const receipt = (error as any)?.receipt;
+      if (attemptedHash && !receipt) throw error;
+      const attemptedTransaction = attemptedHash && receipt
+        ? {
+            hash: attemptedHash,
+            blockNumber: Number(receipt.blockNumber),
+            status: Number(receipt.status)
+          }
+        : undefined;
+      const rwaAfter = await rwa.balanceOf(investorAddress) as bigint;
+      const quoteAfter = await quote.balanceOf(investorAddress) as bigint;
+      const balanceEvidence = {
+        rwaBefore: rwaBefore.toString(),
+        rwaAfter: rwaAfter.toString(),
+        quoteBefore: quoteBefore.toString(),
+        quoteAfter: quoteAfter.toString(),
+        unchanged: rwaBefore === rwaAfter && quoteBefore === quoteAfter
+      };
+      if (
+        action === "revoked-maker" &&
+        attemptedTransaction?.status === 0 &&
+        verifiedRejection === "RFQMakerNotApproved"
+      ) {
         return {
           action,
           side,
           quote: signed,
           trace,
+          ...(attemptedTransaction ? {attemptedTransaction} : {}),
+          balanceEvidence,
+          rejection: "RFQMakerNotApproved"
+        };
+      }
+      const precheck = action === "compliance-proof"
+        ? await this.precheck(investorAddress, q.amountIn, side)
+        : undefined;
+      if (
+        action === "compliance-proof" &&
+        precheck &&
+        attemptedTransaction?.status === 0 &&
+        verifiedRejection === "ComplianceRejected" &&
+        !precheck.allowed
+      ) {
+        return {
+          action,
+          side,
+          quote: signed,
+          trace,
+          ...(attemptedTransaction ? {attemptedTransaction} : {}),
+          balanceEvidence,
           rejection: precheck.verdict.reason ?? "ComplianceRejected",
           reasonCode: precheck.verdict.reasonCode
         };

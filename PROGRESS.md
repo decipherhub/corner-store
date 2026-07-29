@@ -15,6 +15,12 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DEMO-012 — Enforcement Case Workflow`: Admin에 단계형 Enforcement Cases
+  워크스페이스를 추가했다. Adapter 직접 호출, quote 이후 claim 만료, quote 이후
+  Maker 취소를 기준 상태→quote→정책 변경→실행→증거→복구로 분리하며, 실제 실패
+  transaction receipt, reasonCode/selector, 실패 전후 잔액 불변과 trace를
+  표시한다. backend/dashboard smoke, `git diff --check`, 별도 포트 BUIDL-like
+  RFQ E2E에서 세 차단 경로를 검증했다.
 - `DEMO-011 — Multi-resolution History and Repeat Liquidity`: 시간별로 주입한
   NAV/indicative anchor를 1분 간격으로 보간해 기본 scenario에서 421개 sample을
   제공한다. 따라서 1분·5분·1시간·전체는 서로 다른 관측 수를 표시한다. 투자자

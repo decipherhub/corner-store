@@ -73,6 +73,32 @@ The command exits non-zero on failure. A successful run proves, in order:
     freshness window, and the still-live quote is rejected at Router fill time;
 11. the backend can settle again after CLI activity without reusing a stale
    account nonce.
+12. a direct `RFQAdapter.execute` transaction is mined with status `0`, and the
+    caller's RWA and settlement balances remain unchanged.
+
+## Enforcement case workflow
+
+Switch to **Admin → Enforcement Cases** for the operator-facing proof workflow.
+This is intentionally not a one-click demo. Open one case and execute its
+controls in order:
+
+1. **기준 상태 준비** records or restores the current wallet, maker and policy
+   baseline.
+2. **Firm quote 발급** creates the exact taker-bound quote to be tested. Direct
+   Adapter cases skip this step because no valid settlement quote is needed.
+3. **정책 상태 변경** expires the configured claim or revokes the Maker after
+   quote issuance.
+4. **실행 요청 제출** sends a real local transaction. The expected result is a
+   mined status-`0` receipt, not a browser-only warning.
+5. Review the rejection, reasonCode or selector, failed transaction, execution
+   trace and before/after balances.
+6. **케이스 종료 및 상태 복구** restores mutable demo state before another
+   scenario.
+
+The architecture strip explains which policy binding and execution boundary is
+under test. The comparison table does not claim that Corner Store replaces
+ERC-3643 token transfer enforcement: it shows the additional Router/Adapter
+controls required for the supported DEX execution path.
 
 ## Presenter flow
 
@@ -96,6 +122,9 @@ Use the one-command launcher and open `http://127.0.0.1:8790`.
    claim.
 6. Open **Portfolio** to show that holdings remain readable even when trading is
    blocked.
+7. For the strongest operator proof, open **Enforcement Cases** and run the
+   three cases separately. Keep the failed receipt and unchanged-balance panel
+   visible while explaining the control that rejected the request.
 
 The additional makers and portfolio valuation are presentation fixtures and
 are labeled accordingly; they are not executable quotes, persistent account

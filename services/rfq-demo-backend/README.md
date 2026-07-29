@@ -84,6 +84,12 @@ The local-only dashboard control endpoints are:
   the configured target wallet's QP claim.
 - `POST /demo/admin/temporal/advance`: advance local Anvil time so the QP claim
   expires while the configured quote TTL remains live.
+- `POST /demo/enforcement/adapter-boundary`: submit a direct
+  `RFQAdapter.execute` transaction from a configured investor and return its
+  failed receipt, `NotAuthorized` selector, execution trace and unchanged
+  before/after balances.
+- `POST /demo/enforcement/restore`: restore the claim-expiry or Maker-revocation
+  case to its injected baseline.
 
 The state/setup/restore/trade controls are disabled unless
 `RFQ_DEMO_ENABLE_SETTLEMENT=1` is set by the local runner. `/demo/quote` remains
@@ -190,4 +196,5 @@ the local runner. The live runner additionally proves setup → protected Router
 fill → persistent revoke state → explicit restore, role-aware pre-check,
 ineligible final rejection, Admin QP round-trip, quote-time eligibility expiring
 before Router settlement, and a reverse sell whose RWA decreases while the
-settlement-asset balance increases.
+settlement-asset balance increases. It also mines the three enforcement failures
+used by the dashboard and verifies status `0` receipts plus unchanged balances.

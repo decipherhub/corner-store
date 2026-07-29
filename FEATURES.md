@@ -1090,3 +1090,32 @@ passing
 ### State
 
 passing
+
+## DEMO-012 — Enforcement Case Workflow
+
+### Behavior
+
+- Admin은 Adapter 직접 호출, quote 이후 claim 만료, quote 이후 Maker 승인 취소를
+  각각 독립된 enforcement case로 연다.
+- 각 case는 기준 상태 준비, firm quote 발급, 정책 변경, 실행 제출, 증거 검토,
+  상태 복구를 별도 단계로 수행하며 한 버튼으로 전체 시나리오를 연출하지 않는다.
+- 차단 증거는 실제 status `0` transaction receipt, 거부 사유 또는 reasonCode,
+  실패 전후 RWA/결제 자산 잔액 불변과 실행 trace를 함께 제공한다.
+- UI는 Element → Recipe → Manifest → ExecutionRouter → Adapter binding과
+  일반 ERC-3643 token enforcement 대비 Corner Store 실행 경로 통제를 표시한다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- case와 evidence는 local Anvil 운영 워크스페이스다. production의 영속 case store,
+  인증, 감사 로그 서명과 외부 indexer를 대신하지 않는다.

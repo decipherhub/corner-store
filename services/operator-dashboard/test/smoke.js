@@ -13,6 +13,9 @@ for (const marker of [
   'id="walletSelector"', "Admin", 'id="ribbonAsset"', 'id="dashboardHolding"',
   'id="userNav"', 'id="adminNav"', 'id="dashboardView"', 'id="createView"', 'id="rfqsView"',
   'id="portfolioView"', 'id="adminDashboardView"', 'id="adminUsersView"', 'id="adminMakerView"',
+  'id="adminEnforcementView"', 'id="caseType"', 'id="caseWallet"', 'id="caseCreate"',
+  'id="casePrepare"', 'id="caseQuote"', 'id="caseMutate"', 'id="caseExecute"', 'id="caseRestore"',
+  'id="caseTimeline"', 'id="caseResult"', "Element", "ExecutionRouter", "Adapter 직접 호출",
   "Compliance Pre-check", "참고가격", "최종 온체인 거부 시연", 'id="prepareTemporal"', 'id="advanceTemporal"',
   'id="buySide"', 'id="sellSide"', 'id="quoteHolding"',
   'id="ttl"', "scenario 기본값",
@@ -28,6 +31,7 @@ for (const marker of [
   "/health", "/demo/state", "/demo/market-history", "/demo/setup", "/demo/precheck", "/demo/quote", "/demo/trade",
   "/demo/admin/claim", "/demo/admin/maker", "/api/v1/events", "compliance-proof",
   "/demo/admin/temporal/prepare", "/demo/admin/temporal/advance", "Qualified Purchaser claim missing",
+  "/demo/enforcement/adapter-boundary", "/demo/enforcement/restore",
   "selectedWallet", "runPrecheck", "switchProfile", "requiresQualifiedPurchaser", "quoteConsumed",
   "configurePresentation", "chainNow", "quote.taker", "Router가 체결을 거부했습니다",
   "Scenario fixture", "Live · executable", "refreshAdmin", "saveClaim", "setMaker",
@@ -38,6 +42,9 @@ for (const marker of [
   "qpBasisHelp", "개인 투자자", "Rule 3c-5의 KE 예외 경로", "renderMarketChart",
   "marketHistory.fills", "suggestedTradeAmounts", "applySuggestedAmount", "setMarketRange",
   "fill-ticket", "displayOrder", "amountRwa"
+  , "createEnforcementCase", "prepareEnforcementCase", "issueEnforcementQuote",
+  "mutateEnforcementPolicy", "executeEnforcementCase", "restoreEnforcementCase",
+  "attemptedTransaction", "balanceEvidence", "Asset movement prevented"
 ]) {
   if (!app.includes(marker)) throw new Error(`dashboard API/state marker missing: ${marker}`);
 }
@@ -51,6 +58,9 @@ for (const [control, handler] of [
   ,["buySide", 'setTradeSide("buy")'], ["sellSide", 'setTradeSide("sell")']
   ,["range1m", 'setMarketRange("1m")'], ["range5m", 'setMarketRange("5m")']
   ,["range1h", 'setMarketRange("1h")'], ["rangeAll", 'setMarketRange("all")']
+  ,["caseCreate", "createEnforcementCase"], ["casePrepare", "prepareEnforcementCase"]
+  ,["caseQuote", "issueEnforcementQuote"], ["caseMutate", "mutateEnforcementPolicy"]
+  ,["caseExecute", "executeEnforcementCase"], ["caseRestore", "restoreEnforcementCase"]
 ]) {
   const binding = app.indexOf(`$("` + control + `").onclick`);
   if (binding < 0 || !app.slice(binding, binding + 280).includes(handler)) {
@@ -61,6 +71,7 @@ for (const [control, handler] of [
 for (const marker of [
   "--blue:", ".app-shell", ".sidebar", ".hero-balance", ".quote-grid", ".precheck-card", ".market-chart",
   ".range-switcher", ".fill-label", ".market-fill-tape", ".fill-ticket",
+  ".architecture-strip", ".coverage-table", ".enforcement-layout", ".case-timeline", ".evidence-result",
   ".role-banner", ".modal-backdrop", "@media (max-width: 720px)", "@media (prefers-reduced-motion: reduce)"
 ]) {
   if (!css.includes(marker)) throw new Error(`dashboard style marker missing: ${marker}`);

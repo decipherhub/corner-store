@@ -192,6 +192,10 @@ async function main(): Promise<void> {
     assert(disabledSetup.status === 403, "demo setup is unavailable outside the local runner");
     const disabledRestore = await requestJson(`${running.baseUrl}/demo/restore`, "POST", {});
     assert(disabledRestore.status === 403, "demo restore is unavailable outside the local runner");
+    const disabledBoundaryEvidence = await requestJson(`${running.baseUrl}/demo/enforcement/adapter-boundary`, "POST", {});
+    assert(disabledBoundaryEvidence.status === 403, "adapter-boundary evidence is unavailable outside the local runner");
+    const disabledEnforcementRestore = await requestJson(`${running.baseUrl}/demo/enforcement/restore`, "POST", {kind: "maker-revocation"});
+    assert(disabledEnforcementRestore.status === 403, "enforcement restore is unavailable outside the local runner");
 
     const quoteResponse = await requestJson(`${running.baseUrl}/rfq/quote`, "POST", {
       taker: artifact.investor,

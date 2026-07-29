@@ -22,6 +22,7 @@
         <button class="nav-item" data-view="adminMonitoring"><span>⇄</span>RFQ 모니터링</button>
         <button class="nav-item" data-view="adminUsers"><span>◎</span>사용자/화이트리스트</button>
         <button class="nav-item" data-view="adminMaker"><span>◆</span>Maker 관리</button>
+        <button class="nav-item" data-view="adminEnforcement"><span>⌁</span>Enforcement Cases</button>
         <button class="nav-item" data-view="adminHistory"><span>≡</span>거래 내역</button>
       </nav>
       <div class="trust-note"><span class="trust-dot"></span><div><strong>Pre-check ≠ guarantee</strong><small>서명 후 정책이 바뀌어도 Router가 fill 시점에 다시 검사합니다.</small></div></div>
@@ -114,13 +115,49 @@
         <section id="adminMonitoringView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>RFQ 모니터링</h2><p>세션 RFQ와 온체인 실행 결과를 함께 봅니다.</p></div></div><section class="surface"><div id="monitoringContent" class="fact-list"></div></section></section>
         <section id="adminUsersView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>투자자 Claim 관리</h2><p>허용 결과를 직접 지정하지 않습니다. Trusted Issuer가 확인한 근거·서명·발급자 신뢰·look-through 사실을 기록하면 <strong>Investment Company Act §2(a)(51)</strong>의 QP 기준과 <strong>Rule 3c-5</strong>의 KE 예외를 판정합니다.</p></div></div><section class="surface claim-guide"><h3>ICA §3(c)(7) 펀드의 투자자 허용 근거</h3><p>개인·가족회사·신탁·기관·QIB는 §2(a)(51)의 Qualified Purchaser 경로이고, KE는 Rule 3c-5에 따른 별도 허용 예외입니다.</p><p><strong>KE</strong>는 Knowledgeable Employee의 약자로, 해당 사모펀드의 투자 활동에 관여하는 일정 임직원을 뜻합니다. 아무 회사 직원이 아니라 현재 거래하는 펀드와 claim의 대상 펀드가 일치해야 합니다.</p><small>기술 상세: 내부 정책 Element ID는 A-13-v1입니다.</small></section><section class="surface table-surface"><table class="data-table"><thead><tr><th>사용자</th><th>현재 판정</th><th>투자자 claim 속성</th><th>기록</th></tr></thead><tbody id="adminUserRows"></tbody></table></section><div id="adminUserStatus" class="inline-status">Claim 속성 변경은 로컬 Anvil의 투자자 적격성 정책 컨트랙트에 기록됩니다.</div><section class="surface temporal-demo"><div class="section-head"><div><p class="kicker">Temporal compliance</p><h3>적격성 만료 시나리오</h3><p>견적 요청 때는 유효했던 QP claim을 시간 경과로 만료시킨 뒤, 체결 시점의 재검사에서 동일 견적이 거부되는 것을 보여줍니다.</p></div></div><div id="temporalFacts" class="fact-list"></div><div class="button-row"><button id="prepareTemporal" class="secondary">만료 데모 준비</button><button id="advanceTemporal" class="danger">시간 경과시키기</button></div><div id="temporalStatus" class="inline-status">시나리오 설정을 불러오는 중입니다.</div></section></section>
         <section id="adminMakerView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>Maker 관리</h2><p>quote 서명 후 maker를 취소해 fill-time enforcement를 증명할 수 있습니다.</p></div></div><section class="surface"><div id="makerFacts" class="fact-list"></div><div class="button-row"><button id="revokeMaker" class="danger">Maker 취소</button><button id="restoreMaker" class="secondary">Maker 복구</button></div><div id="makerStatus" class="inline-status">상태를 불러오는 중입니다.</div></section></section>
+        <section id="adminEnforcementView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Compliance operations</p><h2>Enforcement Cases</h2><p>우회 시도나 quote 이후의 정책 변경을 케이스로 열고, 각 단계와 온체인 증거를 분리해 검토합니다.</p></div><span class="fixture-label">Local evidence workspace</span></div>
+          <section class="surface architecture-strip">
+            <div><span>01</span><strong>Element</strong><small>QP · freshness · minimum</small></div><i>→</i>
+            <div><span>02</span><strong>Recipe</strong><small>정책 조합</small></div><i>→</i>
+            <div><span>03</span><strong>Manifest</strong><small id="caseManifest">선택 자산 binding</small></div><i>→</i>
+            <div><span>04</span><strong>ExecutionRouter</strong><small>fill-time evaluation</small></div><i>→</i>
+            <div><span>05</span><strong>RFQAdapter</strong><small>onlyRouter settlement</small></div>
+          </section>
+          <section class="surface comparison-panel">
+            <div class="section-head"><div><p class="kicker">Control coverage</p><h3>일반 ERC-3643과 실행 경로 보호 비교</h3></div></div>
+            <div class="coverage-table"><div class="coverage-head"><span>통제 지점</span><strong>ERC-3643 token</strong><strong>Corner Store</strong></div><div><span>토큰 전송 적격성</span><b>지원</b><b>지원</b></div><div><span>Quote 이후 claim 변경</span><b>DEX 별도 구현</b><b class="covered">Router 재검사</b></div><div><span>Maker 승인 변경</span><b>범위 밖</b><b class="covered">fill-time 검사</b></div><div><span>Adapter 직접 호출</span><b>DEX 별도 구현</b><b class="covered">onlyRouter 차단</b></div></div>
+          </section>
+          <div class="enforcement-layout">
+            <section class="surface case-builder">
+              <div class="section-head"><div><p class="kicker">Case intake</p><h3>검증 케이스 생성</h3></div><span id="caseStatusBadge" class="status-pill neutral">Not opened</span></div>
+              <label for="caseType">검증 유형</label>
+              <select id="caseType"><option value="adapter-boundary">Adapter 직접 호출</option><option value="claim-expiry">Quote 후 claim 만료</option><option value="maker-revocation">Quote 후 Maker 취소</option></select>
+              <label for="caseWallet">대상 지갑</label><select id="caseWallet"></select>
+              <button id="caseCreate" class="primary full">새 Enforcement Case 열기</button>
+              <div id="caseFacts" class="case-facts"><span>케이스를 생성하면 기준 상태와 단계별 작업이 표시됩니다.</span></div>
+              <div class="case-actions">
+                <button id="casePrepare" class="secondary" disabled>1. 기준 상태 준비</button>
+                <button id="caseQuote" class="secondary" disabled>2. Firm quote 발급</button>
+                <button id="caseMutate" class="danger" disabled>3. 정책 상태 변경</button>
+                <button id="caseExecute" class="primary" disabled>4. 실행 요청 제출</button>
+                <button id="caseRestore" class="text-button" disabled>케이스 종료 및 상태 복구</button>
+              </div>
+            </section>
+            <section class="surface case-evidence">
+              <div class="section-head"><div><p class="kicker">Evidence</p><h3>검증 타임라인</h3></div><small>성공한 체결이 아니라 차단 통제를 증명합니다.</small></div>
+              <div id="caseTimeline" class="case-timeline"><div class="empty-row">열린 케이스가 없습니다.</div></div>
+              <div id="caseResult" class="evidence-result hidden"></div>
+            </section>
+          </div>
+        </section>
         <section id="adminHistoryView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>거래 내역</h2><p>실제 체결, maker 변경과 데모 거부 기록을 확인합니다.</p></div><button id="refresh" class="secondary">새로고침</button></div><section class="surface"><div id="eventSummary" class="event-stats"></div><div id="events" class="event-list"></div></section></section>
       </main>
     </div>
   </div>
 
   <div id="confirmBackdrop" class="modal-backdrop hidden"><section id="confirmDialog" class="modal" role="dialog" aria-modal="true"><button id="closeConfirm" class="modal-close">×</button><p class="kicker">Final review</p><h2>이 견적을 체결할까요?</h2><div id="review" class="review-card"></div><div id="modalPrecheck" class="precheck-card compact"></div><p class="modal-note">Pre-check 결과와 관계없이 Router의 ComplianceEngine이 fill 시점에 최신 상태를 다시 검사합니다.</p><div class="button-row end"><button id="cancelConfirm" class="secondary">취소</button><button id="executeQuote" class="primary">견적 수락 및 체결</button></div></section></div>
-  <div id="guideBackdrop" class="modal-backdrop hidden"><section id="demoGuide" class="modal guide-modal" role="dialog" aria-modal="true"><button id="closeGuide" class="modal-close">×</button><p class="kicker">Presenter guide</p><h2>규제 RFQ 데모 순서</h2><div class="guide-grid"><article><span>01</span><h3>주입 데이터 확인</h3><p>환경 준비 버튼으로 scenario JSON의 사용자·자산·정책 fixture를 온체인에 반영합니다.</p></article><article><span>02</span><h3>시장 맥락 확인</h3><p>Dashboard에서 Mock NAV, indicative RFQ mid와 spread를 비교합니다. 점으로 표시되는 가격만 실제 Router 체결입니다.</p></article><article><span>03</span><h3>매수 / 매도</h3><p>매수는 결제 자산을 내고 RWA를 받으며, 매도는 RWA를 내고 결제 자산을 받습니다. 체결 후 차트와 Portfolio 변화를 확인합니다.</p></article><article><span>04</span><h3>비적격 차단</h3><p>비적격 사용자의 Pre-check 실패와 Router 최종 거부를 확인합니다. 거부된 요청은 체결가나 거래량에 포함되지 않습니다.</p></article><article><span>05</span><h3>시간 만료</h3><p>Admin에서 만료 데모를 준비하고 quote를 받은 뒤 시간을 경과시켜 같은 quote가 최종 검사에서 거부되는지 확인합니다.</p></article></div><div class="guide-boundary"><strong>중요</strong> quote는 taker 주소에 묶이며 Pre-check는 보장이 아닙니다. 체결 시 Router가 최신 claim freshness와 maker 정책을 다시 검사합니다.</div></section></div>
+  <div id="guideBackdrop" class="modal-backdrop hidden"><section id="demoGuide" class="modal guide-modal" role="dialog" aria-modal="true"><button id="closeGuide" class="modal-close">×</button><p class="kicker">Presenter runbook</p><h2>규제 RFQ 운영 흐름</h2><div class="guide-grid"><article><span>01</span><h3>환경과 정책 확인</h3><p>Mock TA·Anvil 배지를 고지하고 Admin에서 자산, Manifest와 현재 claim·Maker 상태를 확인합니다.</p></article><article><span>02</span><h3>정상 RFQ 체결</h3><p>적격 투자자로 firm quote를 검토·체결하고 Portfolio와 실제 fill marker가 갱신되는지 확인합니다.</p></article><article><span>03</span><h3>Enforcement Case 열기</h3><p>Admin의 Enforcement Cases에서 우회, claim 만료 또는 Maker 취소 케이스를 생성합니다.</p></article><article><span>04</span><h3>상태와 실행 분리</h3><p>기준 상태, quote 발급, 정책 변경, 실행 제출을 순서대로 수행합니다. 각 단계는 자동으로 합쳐 실행되지 않습니다.</p></article><article><span>05</span><h3>증거 검토</h3><p>실패 transaction, reasonCode, 잔액 불변과 이벤트를 확인합니다. 거부된 요청은 차트와 볼륨에 포함되지 않습니다.</p></article></div><div class="guide-boundary"><strong>중요</strong> Pre-check는 보장이 아니며, quote는 taker 주소에 묶입니다. RFQAdapter는 Router만 호출할 수 있고 Router는 fill 시점에 최신 정책을 다시 검사합니다.</div></section></div>
   <script src="/app.js"></script>
 </body>
 </html>

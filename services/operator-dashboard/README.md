@@ -19,6 +19,13 @@ temporal-eligibility proof and transaction-history screens. Those controls send
 real local-chain transactions or advance local Anvil time; they are not cosmetic
 browser state.
 
+**Enforcement Cases** is the operator investigation workspace. It treats direct
+Adapter calls, post-quote claim expiry and post-quote Maker revocation as
+separate cases. The operator prepares a baseline, issues the relevant quote,
+changes policy state, submits the execution and reviews the resulting failed
+receipt, rejection code, unchanged balances and trace before restoring state.
+The stages are deliberately separate; there is no “run every proof” button.
+
 The executable flow requests a live firm quote, lets the trader review the exact
 signed payload, and settles that same quote through the protected Router.
 Additional maker rows are explicitly preview fixtures until multi-maker backend
@@ -55,6 +62,8 @@ explicit final-enforcement proof. Switch to Admin to change QP or maker state.
 The temporal proof issues a quote while the configured investor is eligible,
 advances Anvil beyond the injected claim freshness window, and then shows the
 same still-live quote fail the Router's latest-policy check.
+Use **Enforcement Cases** when the audience needs durable execution evidence
+rather than only the trader-facing rejection message.
 Press Ctrl-C to stop all local services. Use the **?** button for the presenter
 sequence and the taker-binding warning.
 The launcher refuses to start when one of its ports is already occupied instead
