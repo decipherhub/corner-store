@@ -3,8 +3,14 @@ import {IncomingMessage, Server, ServerResponse, createServer} from "http";
 import {RFQBackendSDK, SignedRFQQuote} from "../../rfq/src";
 
 import {DemoBackendConfig, asAddress} from "./config";
-import {createDemoQuoteService} from "./service";
-import {DemoSettlementService, DemoTradeAction} from "./settlement";
+import {createDemoPricing, createDemoQuoteService} from "./service";
+import {
+  DemoSettlementService,
+  DemoTradeAction,
+  LookThroughStatus,
+  QpBasis,
+  QpClaimInput
+} from "./settlement";
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -22,8 +28,9 @@ export interface DemoServer {
 }
 
 export async function startDemoServer(config: DemoBackendConfig): Promise<DemoServer> {
-  const quoteService = await createDemoQuoteService(config);
-  const settlement = config.demoSettlement.enabled ? new DemoSettlementService(config, quoteService) : undefined;
+  const pricing = createDemoPricing(config);
+  const quoteService = await createDemoQuoteService(config, pricing);
+  const settlement = config.demoSettlement.enabled ? new DemoSettlementService(config, quoteService, pricing) : undefined;
   const server = createServer((req, res) => {
     void handleRequest(req, res, config, quoteService, settlement);
   });
@@ -87,6 +94,15 @@ async function handleRequest(
       return;
     }
 
+    if (req.method === "GET" && req.url === "/demo/market-history") {
+      if (!settlement) {
+        sendJson(res, 403, {error: "demo_settlement_disabled", message: "market history is available only from the local e2e runner"});
+        return;
+      }
+      sendJson(res, 200, await settlement.marketHistory());
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/demo/setup") {
       if (!settlement) {
         sendJson(res, 403, {error: "demo_settlement_disabled", message: "demo setup is available only from the local e2e runner"});
@@ -126,13 +142,11 @@ async function handleRequest(
       return;
     }
 
-    if (req.method === "POST" && req.url === "/demo/admin/user") {
+    if (req.method === "POST" && req.url === "/demo/admin/claim") {
       requireSettlement(settlement);
       const body = await readJsonBody(req);
-      if (!isRecord(body) || typeof body.walletId !== "string" || typeof body.eligible !== "boolean") {
-        throw new Error("walletId and eligible are required");
-      }
-      sendJson(res, 200, await settlement.setUserEligibility(body.walletId, body.eligible));
+      if (!isRecord(body) || typeof body.walletId !== "string") throw new Error("walletId is required");
+      sendJson(res, 200, await settlement.setUserClaim(body.walletId, parseQpClaim(body.claim)));
       return;
     }
 
@@ -200,6 +214,39 @@ async function handleRequest(
     const message = error instanceof Error ? error.message : "unknown error";
     sendJson(res, 400, {error: "invalid_request", message});
   }
+}
+
+function parseQpClaim(value: unknown): QpClaimInput {
+  if (!isRecord(value)) throw new Error("claim is required");
+  const basis = value.basis;
+  const lookThroughStatus = value.lookThroughStatus;
+  if (!isQpBasis(basis)) throw new Error("claim basis is invalid");
+  if (!isLookThroughStatus(lookThroughStatus)) throw new Error("lookThroughStatus is invalid");
+  if (
+    typeof value.signatureValid !== "boolean" ||
+    typeof value.issuerTrusted !== "boolean" ||
+    typeof value.coveredCompanyMatchesFund !== "boolean"
+  ) {
+    throw new Error("claim signature, issuer trust and covered-company facts are required");
+  }
+  return {
+    basis,
+    signatureValid: value.signatureValid,
+    issuerTrusted: value.issuerTrusted,
+    lookThroughStatus,
+    coveredCompanyMatchesFund: value.coveredCompanyMatchesFund
+  };
+}
+
+function isQpBasis(value: unknown): value is QpBasis {
+  return [
+    "NONE", "NATURAL", "FAMILY_COMPANY", "TRUST",
+    "INSTITUTIONAL", "QIB", "KNOWLEDGEABLE_EMPLOYEE", "OTHER"
+  ].includes(String(value));
+}
+
+function isLookThroughStatus(value: unknown): value is LookThroughStatus {
+  return ["NONE", "PENDING", "COMPLETED", "FAILED"].includes(String(value));
 }
 
 function parseDemoTrade(body: unknown): {amountIn: string; action: DemoTradeAction} {

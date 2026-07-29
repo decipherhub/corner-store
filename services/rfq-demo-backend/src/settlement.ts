@@ -14,6 +14,12 @@ import {existsSync, readFileSync, writeFileSync} from "fs";
 import {RFQBackendSDK, RFQ_QUOTE_TYPES, SignedRFQQuote} from "../../rfq/src";
 
 import {ANVIL_MNEMONIC, DemoBackendConfig, asAddress} from "./config";
+import {
+  DemoMarketHistory,
+  DemoMarketPriceState,
+  DemoMarketPricing,
+  DemoSuggestedTradeAmounts
+} from "./service";
 
 const ROUTER_ABI = [
   "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req) returns (tuple(uint256 amountOut,bytes32 executionId))",
@@ -38,6 +44,7 @@ const QP_ABI = [
   "function freshnessCap() view returns (uint64)",
   "function check(address user,address counterparty,address asset,uint256 amount,bytes data) view returns (bool passed,bytes32 reasonCode)",
   "function setQp(address user,bool isQp)",
+  "function setQpClaim(address user,(uint8 basis,bool signatureValid,bool issuerTrusted,uint64 verifiedAt,uint8 ltStatus,bytes32 coveredCompany) claim)",
   "function setFreshnessCap(uint64 cap)"
 ];
 const POLICY_ABI = ["function statusOf(address token) view returns (uint8)"];
@@ -45,9 +52,33 @@ const QUOTE_TUPLE =
   "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,uint256 nonce,uint64 expiry)";
 const RFQ_MAKER_NOT_APPROVED_SELECTOR = id("RFQMakerNotApproved()").slice(0, 10).toLowerCase();
 const COMPLIANCE_REJECTED_SELECTOR = id("ComplianceRejected(bytes32)").slice(0, 10).toLowerCase();
+const ZERO_BYTES32 = `0x${"0".repeat(64)}`;
+const QP_BASIS_NAMES: QpBasis[] = [
+  "NONE", "NATURAL", "FAMILY_COMPANY", "TRUST", "INSTITUTIONAL", "QIB", "KNOWLEDGEABLE_EMPLOYEE", "OTHER"
+];
+const QP_BASIS_VALUES = Object.fromEntries(QP_BASIS_NAMES.map((name, value) => [name, value])) as Record<QpBasis, number>;
+const LOOK_THROUGH_NAMES: LookThroughStatus[] = ["NONE", "PENDING", "COMPLETED", "FAILED"];
+const LOOK_THROUGH_VALUES = Object.fromEntries(
+  LOOK_THROUGH_NAMES.map((name, value) => [name, value])
+) as Record<LookThroughStatus, number>;
 export type DemoWalletId = string;
 export type DemoTradeAction = "settle" | "revoked-maker" | "compliance-proof";
 export type DemoTradeSide = "buy" | "sell";
+export type QpBasis =
+  "NONE" | "NATURAL" | "FAMILY_COMPANY" | "TRUST" | "INSTITUTIONAL" | "QIB" | "KNOWLEDGEABLE_EMPLOYEE" | "OTHER";
+export type LookThroughStatus = "NONE" | "PENDING" | "COMPLETED" | "FAILED";
+
+export interface QpClaimInput {
+  basis: QpBasis;
+  signatureValid: boolean;
+  issuerTrusted: boolean;
+  lookThroughStatus: LookThroughStatus;
+  coveredCompanyMatchesFund: boolean;
+}
+
+export interface QpClaimState extends QpClaimInput {
+  verifiedAt?: number;
+}
 
 export interface DemoWalletState {
   id: DemoWalletId;
@@ -60,6 +91,7 @@ export interface DemoWalletState {
   eligibilityReason?: string;
   verifiedAt?: number;
   expiresAt?: number;
+  qpClaim: QpClaimState;
 }
 
 export interface DemoPrecheckResult {
@@ -106,7 +138,11 @@ export class DemoSettlementService {
   private nextRouterNonce = BigInt(Date.now());
   private actionQueue: Promise<void> = Promise.resolve();
 
-  constructor(private readonly config: DemoBackendConfig, private readonly quotes: RFQBackendSDK) {
+  constructor(
+    private readonly config: DemoBackendConfig,
+    private readonly quotes: RFQBackendSDK,
+    private readonly pricing: DemoMarketPricing
+  ) {
     if (!config.demoSettlement.enabled) throw new Error("demo settlement is disabled");
     if (config.chainId !== 31337) throw new Error("demo settlement is restricted to Anvil chain id 31337");
 
@@ -135,8 +171,11 @@ export class DemoSettlementService {
     qualifiedPurchaserFreshnessCap: number;
     chainId: number;
     maker: string;
+    makerInventory: {rwaBalance: string; quoteBalance: string};
     investor: string;
     wallets: DemoWalletState[];
+    marketPrice: DemoMarketPriceState;
+    suggestedTradeAmounts: DemoSuggestedTradeAmounts;
     presentation: DemoBackendConfig["scenario"];
   }> {
     const makerApproved = await this.makerApproved();
@@ -144,6 +183,8 @@ export class DemoSettlementService {
     const wallets = await Promise.all([...this.wallets.values()].map((entry) => this.walletState(entry)));
     const latest = await this.latestBlock();
     const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.provider);
+    const rwa = new Contract(this.config.artifact.rwaToken, ERC20_ABI, this.provider);
+    const quote = new Contract(this.config.artifact.quote, ERC20_ABI, this.provider);
     return {
       ready: makerApproved && Number(network.chainId) === this.config.chainId,
       assetProfile: this.config.artifact.assetProfile,
@@ -153,8 +194,14 @@ export class DemoSettlementService {
       qualifiedPurchaserFreshnessCap: Number(await qp.freshnessCap()),
       chainId: Number(network.chainId),
       maker: this.config.artifact.maker,
+      makerInventory: {
+        rwaBalance: String(await rwa.balanceOf(this.config.artifact.maker)),
+        quoteBalance: String(await quote.balanceOf(this.config.artifact.maker))
+      },
       investor: asAddress(this.config.artifact.investor, "artifact investor"),
       wallets,
+      marketPrice: this.pricing.state(),
+      suggestedTradeAmounts: this.pricing.suggestedTradeAmounts(),
       presentation: this.config.scenario
     };
   }
@@ -162,12 +209,17 @@ export class DemoSettlementService {
   async prepare(): Promise<Awaited<ReturnType<DemoSettlementService["state"]>>> {
     return this.enqueue(async () => {
       if (!await this.makerApproved()) await this.setMakerApproval(true);
+      this.pricing.reset((await this.latestBlock()).timestamp);
       await this.setFreshnessCap(this.config.scenario.temporalEligibility.baselineFreshnessSeconds);
       for (const wallet of this.wallets.values()) {
         await this.setWalletEligibility(wallet, wallet.initialQualifiedPurchaser);
       }
       return this.state();
     });
+  }
+
+  async marketHistory(): Promise<DemoMarketHistory> {
+    return this.pricing.history((await this.latestBlock()).timestamp);
   }
 
   async restoreMaker(): Promise<Awaited<ReturnType<DemoSettlementService["state"]>>> {
@@ -184,7 +236,7 @@ export class DemoSettlementService {
     const policy = new Contract(this.requiredArtifact("policyReg"), POLICY_ABI, this.provider);
     const assetActive = Number(await policy.statusOf(this.config.artifact.rwaToken)) === 2;
     const minimum = BigInt(this.config.scenario.asset.minimumAmountBaseUnits);
-    const amountOut = this.price(amount);
+    const amountOut = this.pricing.amountOut(amount, side);
     const rwaAmount = side === "buy" ? amountOut : amount;
     const amountAllowed = !requiresQp || rwaAmount >= minimum;
     const context = this.context(entry.signer.address, amountIn, amountOut.toString(), side);
@@ -236,6 +288,14 @@ export class DemoSettlementService {
     return this.enqueue(async () => {
       const entry = this.walletById(walletId);
       await this.setWalletEligibility(entry, eligible);
+      return this.walletState(entry);
+    });
+  }
+
+  async setUserClaim(walletId: DemoWalletId, claim: QpClaimInput): Promise<DemoWalletState> {
+    return this.enqueue(async () => {
+      const entry = this.walletById(walletId);
+      await this.setWalletClaim(entry, claim);
       return this.walletState(entry);
     });
   }
@@ -379,6 +439,13 @@ export class DemoSettlementService {
         detail: `${side.toUpperCase()} · RWA ${formatSigned(rwaDelta)} · qUSD ${formatSigned(quoteDelta)}`,
         status: "passed"
       });
+      const fillBlock = await this.provider.getBlock(receipt?.blockNumber ?? "latest");
+      this.pricing.recordFill(side, {
+        timestamp: fillBlock?.timestamp ?? latest.timestamp,
+        amountRwa: (side === "buy" ? BigInt(q.amountOut) : BigInt(q.amountIn)).toString(),
+        amountQuote: (side === "buy" ? BigInt(q.amountIn) : BigInt(q.amountOut)).toString(),
+        transactionHash: tx.hash
+      });
       return {
         action,
         side,
@@ -421,18 +488,13 @@ export class DemoSettlementService {
     return adapter.approvedMaker(this.config.artifact.maker) as Promise<boolean>;
   }
 
-  private price(amountIn: bigint): bigint {
-    const amountOut = (amountIn * BigInt(this.config.priceNumerator)) / BigInt(this.config.priceDenominator);
-    if (amountOut <= 0n) throw new Error("pricing provider returned zero amountOut");
-    return amountOut;
-  }
-
   private async qpEligibility(address: string): Promise<{
     present: boolean;
     eligible: boolean;
     reason?: string;
     verifiedAt?: number;
     expiresAt?: number;
+    claim: QpClaimState;
   }> {
     const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.provider);
     const claim = await qp.claimOf(address);
@@ -442,11 +504,29 @@ export class DemoSettlementService {
     const verifiedAt = present ? Number(claim.verifiedAt) : undefined;
     const latest = await this.latestBlock();
     const expired = present && verifiedAt !== undefined && latest.timestamp > verifiedAt + cap;
+    const reason = this.qpFailureReason({
+      basis: Number(claim.basis),
+      signatureValid: Boolean(claim.signatureValid),
+      issuerTrusted: Boolean(claim.issuerTrusted),
+      verifiedAt,
+      expired,
+      lookThroughStatus: Number(claim.ltStatus),
+      coveredCompany: String(claim.coveredCompany)
+    });
     return {
       present,
       eligible: Boolean(eligible),
-      ...(!eligible ? {reason: expired ? "Qualified Purchaser claim expired" : "Qualified Purchaser claim missing"} : {}),
-      ...(verifiedAt !== undefined ? {verifiedAt, expiresAt: verifiedAt + cap} : {})
+      ...(!eligible ? {reason} : {}),
+      ...(verifiedAt !== undefined ? {verifiedAt, expiresAt: verifiedAt + cap} : {}),
+      claim: {
+        basis: QP_BASIS_NAMES[Number(claim.basis)] ?? "OTHER",
+        signatureValid: Boolean(claim.signatureValid),
+        issuerTrusted: Boolean(claim.issuerTrusted),
+        lookThroughStatus: LOOK_THROUGH_NAMES[Number(claim.ltStatus)] ?? "NONE",
+        coveredCompanyMatchesFund:
+          String(claim.coveredCompany).toLowerCase() === this.fundKey().toLowerCase(),
+        ...(verifiedAt !== undefined ? {verifiedAt} : {})
+      }
     };
   }
 
@@ -463,7 +543,8 @@ export class DemoSettlementService {
       rwaBalance: String(await rwa.balanceOf(entry.signer.address)),
       quoteBalance: String(await quote.balanceOf(entry.signer.address)),
       ...(qp.reason ? {eligibilityReason: qp.reason} : {}),
-      ...(qp.verifiedAt !== undefined ? {verifiedAt: qp.verifiedAt, expiresAt: qp.expiresAt} : {})
+      ...(qp.verifiedAt !== undefined ? {verifiedAt: qp.verifiedAt, expiresAt: qp.expiresAt} : {}),
+      qpClaim: qp.claim
     };
   }
 
@@ -518,6 +599,67 @@ export class DemoSettlementService {
       name: "QualifiedPurchaserSet",
       args: {investor: entry.signer.address, eligible: String(eligible)}
     });
+  }
+
+  private async setWalletClaim(entry: WalletEntry, claim: QpClaimInput): Promise<void> {
+    const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.operator);
+    const latest = await this.latestBlock();
+    const encoded = [
+      QP_BASIS_VALUES[claim.basis],
+      claim.signatureValid,
+      claim.issuerTrusted,
+      claim.basis === "NONE" ? 0 : latest.timestamp,
+      LOOK_THROUGH_VALUES[claim.lookThroughStatus],
+      claim.coveredCompanyMatchesFund ? this.fundKey() : ZERO_BYTES32
+    ];
+    const tx = await this.sendOperatorTransaction((nonce) =>
+      qp.setQpClaim(entry.signer.address, encoded, {nonce})
+    );
+    this.appendEvent({
+      blockNumber: tx.blockNumber,
+      transactionHash: tx.hash,
+      name: "QpClaimSet",
+      args: {
+        investor: entry.signer.address,
+        basis: claim.basis,
+        signatureValid: String(claim.signatureValid),
+        issuerTrusted: String(claim.issuerTrusted),
+        lookThroughStatus: claim.lookThroughStatus,
+        coveredCompanyMatchesFund: String(claim.coveredCompanyMatchesFund)
+      }
+    });
+  }
+
+  private fundKey(): string {
+    return `0x${BigInt(this.config.artifact.rwaToken).toString(16).padStart(64, "0")}`;
+  }
+
+  private qpFailureReason(claim: {
+    basis: number;
+    signatureValid: boolean;
+    issuerTrusted: boolean;
+    verifiedAt?: number;
+    expired: boolean;
+    lookThroughStatus: number;
+    coveredCompany: string;
+  }): string {
+    if (claim.basis === 0) return "Qualified Purchaser claim missing";
+    if (!claim.signatureValid) return "Qualified Purchaser claim signature is invalid";
+    if (!claim.issuerTrusted) return "Qualified Purchaser claim issuer is not trusted";
+    if (claim.expired) return "Qualified Purchaser claim expired";
+    if ((claim.basis === 2 || claim.basis === 3) && claim.lookThroughStatus === 0) {
+      return "Beneficial-owner look-through is required";
+    }
+    if ((claim.basis === 2 || claim.basis === 3) && claim.lookThroughStatus === 1) {
+      return "Beneficial-owner look-through is pending";
+    }
+    if (claim.basis === 2 && claim.lookThroughStatus === 3) return "Family-company look-through failed";
+    if (claim.basis === 3 && claim.lookThroughStatus === 3) return "Trust look-through failed";
+    if (claim.basis === 6 && claim.coveredCompany.toLowerCase() !== this.fundKey().toLowerCase()) {
+      return "Knowledgeable Employee claim does not cover this fund";
+    }
+    if (claim.basis === 7) return "Qualified Purchaser basis requires operator review";
+    return "Qualified Purchaser claim does not satisfy the active policy";
   }
 
   private async setFreshnessCap(seconds: number): Promise<void> {

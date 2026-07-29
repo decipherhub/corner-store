@@ -71,6 +71,11 @@ contract DemoScenarios is Script, DemoConstants {
     UniswapV3Adapter internal ammAdapter;
     RFQAdapter internal rfqAdapter;
     bool internal useBuidlLikeProfile;
+    uint256 internal tradeAmount;
+    uint256 internal rfqBuyAmountOut;
+    uint256 internal sellTradeAmount;
+    uint256 internal rfqSellAmountOut;
+    uint64 internal quoteTtlSeconds;
 
     // per-initiator router nonce sequence for the investor.
     uint256 internal nonceSeq = 1;
@@ -160,14 +165,14 @@ contract DemoScenarios is Script, DemoConstants {
         );
 
         uint256 before = rwa.balanceOf(investor);
-        ExecutionRequest memory req = _buyRequest(AMM_TRADE);
+        ExecutionRequest memory req = _buyRequest(tradeAmount);
 
         vm.broadcast(investorPk);
         router.execute(req);
 
         uint256 delta = rwa.balanceOf(investor) - before;
         console2.log("    evidence: Executed; investor RWA balance delta (wei):", delta);
-        _record(2, delta == AMM_TRADE);
+        _record(2, delta == tradeAmount);
     }
 
     // ---------------------------------------------------------------------
@@ -180,7 +185,7 @@ contract DemoScenarios is Script, DemoConstants {
         vm.broadcast(deployerPk);
         jurisdiction.setJurisdiction(investor, bytes32("ZZ"));
 
-        ExecutionRequest memory req = _buyRequest(AMM_TRADE);
+        ExecutionRequest memory req = _buyRequest(tradeAmount);
         bytes32 expected = ReasonCodes.encode(1, bytes32("A-02-v1"), uint32(1));
 
         (bool reverted, bytes32 reason) = _tryExecuteExpectComplianceReject(req);
@@ -204,7 +209,7 @@ contract DemoScenarios is Script, DemoConstants {
         vm.broadcast(deployerPk);
         policyReg.suspendManifest(address(rwa), bytes32("DEMO-SUSPEND"));
 
-        ExecutionRequest memory blockedReq = _buyRequest(AMM_TRADE);
+        ExecutionRequest memory blockedReq = _buyRequest(tradeAmount);
         // the helper decodes `reason` ONLY for ComplianceRejected, so a nonzero
         // reason proves the block came from the compliance gate specifically,
         // not from an unrelated revert.
@@ -227,27 +232,39 @@ contract DemoScenarios is Script, DemoConstants {
     function _scenario5_rfq() internal {
         _title(5, "RFQ venue: maker signs an EIP-712 quote off-chain; taker settles through the router");
 
-        // (a) approved maker fill.
+        // (a) approved maker buy fill.
         uint256 invBefore = rwa.balanceOf(investor);
         uint256 makerBefore = rwa.balanceOf(maker);
-        (RFQQuote memory q, ExecutionRequest memory req) = _rfqRequest(maker, makerPk, 1);
+        (, ExecutionRequest memory req) = _rfqRequest(maker, makerPk, 1);
 
         vm.broadcast(investorPk);
         router.execute(req);
 
         uint256 invDelta = rwa.balanceOf(investor) - invBefore;
         uint256 makerOut = makerBefore - rwa.balanceOf(maker);
-        bool fillOk = invDelta == RFQ_RWA_OUT && makerOut == RFQ_RWA_OUT && quote.balanceOf(maker) >= RFQ_QUOTE_IN;
+        bool buyOk = invDelta == rfqBuyAmountOut && makerOut == rfqBuyAmountOut && quote.balanceOf(maker) >= tradeAmount;
         console2.log("    evidence: RFQFilled; taker RWA delta (wei):", invDelta);
-        q; // silence unused
 
-        // (b) unapproved maker is rejected before any settlement.
+        // (b) approved maker sell fill uses the independently injected sell amount.
+        uint256 quoteBefore = quote.balanceOf(investor);
+        uint256 investorRwaBefore = rwa.balanceOf(investor);
+        (, ExecutionRequest memory sellReq) = _rfqSellRequest(maker, makerPk, 2);
+
+        vm.broadcast(investorPk);
+        router.execute(sellReq);
+
+        uint256 quoteDelta = quote.balanceOf(investor) - quoteBefore;
+        uint256 investorRwaOut = investorRwaBefore - rwa.balanceOf(investor);
+        bool sellOk = quoteDelta == rfqSellAmountOut && investorRwaOut == sellTradeAmount;
+        console2.log("    evidence: RFQFilled sell; taker QUOTE delta (wei):", quoteDelta);
+
+        // (c) unapproved maker is rejected before any settlement.
         (, ExecutionRequest memory badReq) = _rfqRequest(unapprovedMaker, unapprovedMakerPk, 1);
         (bool rejected, bytes4 sel) = _tryExecuteExpectSelector(badReq);
         bool unapprovedOk = rejected && sel == Errors.RFQMakerNotApproved.selector;
         console2.log("    evidence: unapproved maker quote rejected (RFQMakerNotApproved) ->", unapprovedOk);
 
-        _record(5, fillOk && unapprovedOk);
+        _record(5, buyOk && sellOk && unapprovedOk);
     }
 
     // ---------------------------------------------------------------------
@@ -282,7 +299,7 @@ contract DemoScenarios is Script, DemoConstants {
 
         vm.recordLogs();
         for (uint256 i = 0; i < 3; i++) {
-            ExecutionRequest memory req = _buyRequest(AMM_TRADE);
+            ExecutionRequest memory req = _buyRequest(tradeAmount);
             vm.broadcast(investorPk);
             router.execute(req);
         }
@@ -303,7 +320,7 @@ contract DemoScenarios is Script, DemoConstants {
     function _scenario7_bypass() internal {
         _title(7, "Bypass attempt: direct adapter.execute (around the router) reverts NotAuthorized");
 
-        ExecutionRequest memory req = _buyRequest(AMM_TRADE);
+        ExecutionRequest memory req = _buyRequest(tradeAmount);
         ComplianceDecision memory d; // unused: onlyRouter reverts first
 
         bool reverted;
@@ -350,11 +367,11 @@ contract DemoScenarios is Script, DemoConstants {
         q.taker = investor;
         q.tokenIn = address(quote);
         q.tokenOut = address(rwa);
-        q.amountIn = RFQ_QUOTE_IN;
-        q.amountOut = RFQ_RWA_OUT;
+        q.amountIn = tradeAmount;
+        q.amountOut = rfqBuyAmountOut;
         q.venue = RFQ_VENUE;
         q.nonce = quoteNonce;
-        q.expiry = uint64(block.timestamp + 1 hours);
+        q.expiry = uint64(block.timestamp) + quoteTtlSeconds;
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(mkPk, rfqAdapter.hashQuote(q));
         bytes memory sig = abi.encodePacked(r, s, v);
@@ -365,15 +382,54 @@ contract DemoScenarios is Script, DemoConstants {
         ctx.seller = mk;
         ctx.tokenIn = address(quote);
         ctx.tokenOut = address(rwa);
-        ctx.amountIn = RFQ_QUOTE_IN;
-        ctx.amountOut = RFQ_RWA_OUT;
+        ctx.amountIn = tradeAmount;
+        ctx.amountOut = rfqBuyAmountOut;
         ctx.venueType = VenueType.RFQ;
         ctx.venue = RFQ_VENUE;
         ctx.flowType = FlowType.SECONDARY_TRADE;
 
         req.context = ctx;
-        req.amountOutMin = RFQ_RWA_OUT;
-        req.deadline = uint64(block.timestamp + 1 hours);
+        req.amountOutMin = rfqBuyAmountOut;
+        req.deadline = uint64(block.timestamp) + quoteTtlSeconds;
+        req.nonce = nonceSeq++;
+        req.venueData = abi.encode(q, sig);
+    }
+
+    function _rfqSellRequest(address mk, uint256 mkPk, uint256 quoteNonce)
+        internal
+        returns (RFQQuote memory q, ExecutionRequest memory req)
+    {
+        q.maker = mk;
+        q.taker = investor;
+        q.tokenIn = address(rwa);
+        q.tokenOut = address(quote);
+        q.amountIn = sellTradeAmount;
+        q.amountOut = rfqSellAmountOut;
+        q.venue = RFQ_VENUE;
+        q.nonce = quoteNonce;
+        q.expiry = uint64(block.timestamp) + quoteTtlSeconds;
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(mkPk, rfqAdapter.hashQuote(q));
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        ComplianceContext memory ctx;
+        ctx.initiator = investor;
+        // The reference engine screens the RFQ taker as its compliance subject
+        // for both directions. Token direction still drives post-trade
+        // accounting and the adapter's actual settlement legs.
+        ctx.buyer = investor;
+        ctx.seller = mk;
+        ctx.tokenIn = address(rwa);
+        ctx.tokenOut = address(quote);
+        ctx.amountIn = sellTradeAmount;
+        ctx.amountOut = rfqSellAmountOut;
+        ctx.venueType = VenueType.RFQ;
+        ctx.venue = RFQ_VENUE;
+        ctx.flowType = FlowType.SECONDARY_TRADE;
+
+        req.context = ctx;
+        req.amountOutMin = rfqSellAmountOut;
+        req.deadline = uint64(block.timestamp) + quoteTtlSeconds;
         req.nonce = nonceSeq++;
         req.venueData = abi.encode(q, sig);
     }
@@ -460,6 +516,11 @@ contract DemoScenarios is Script, DemoConstants {
     // ---------------------------------------------------------------------
     function _load() internal {
         string memory json = vm.readFile(ARTIFACT_PATH);
+        string memory scenario = vm.readFile(SCENARIO_RUNTIME_PATH);
+        require(vm.parseJsonUint(json, ".scenarioSchemaVersion") == 2, "artifact scenario schemaVersion invalid");
+        require(vm.parseJsonUint(scenario, ".schemaVersion") == 2, "runtime scenario schemaVersion invalid");
+        bytes32 artifactScenarioHash = abi.decode(vm.parseJson(json, ".scenarioHash"), (bytes32));
+        require(artifactScenarioHash == keccak256(bytes(scenario)), "runtime scenario does not match deployment");
 
         bytes32 profileHash = keccak256(bytes(vm.parseJsonString(json, ".assetProfile")));
         useBuidlLikeProfile = profileHash == keccak256("buidl-like");
@@ -470,10 +531,43 @@ contract DemoScenarios is Script, DemoConstants {
         maker = vm.parseJsonAddress(json, ".maker");
         unapprovedMaker = vm.parseJsonAddress(json, ".unapprovedMaker");
 
-        deployerPk = vm.deriveKey(MNEMONIC, 0);
-        investorPk = vm.deriveKey(MNEMONIC, 1);
-        makerPk = vm.deriveKey(MNEMONIC, 2);
-        unapprovedMakerPk = vm.deriveKey(MNEMONIC, 3);
+        uint256[6] memory accounts;
+        accounts[0] = vm.parseJsonUint(scenario, ".deployment.accounts.deployer");
+        accounts[1] = vm.parseJsonUint(scenario, ".deployment.accounts.investor");
+        accounts[2] = vm.parseJsonUint(scenario, ".deployment.accounts.maker");
+        accounts[3] = vm.parseJsonUint(scenario, ".deployment.accounts.unapprovedMaker");
+        accounts[4] = vm.parseJsonUint(scenario, ".deployment.accounts.eligibleInvestorB");
+        accounts[5] = vm.parseJsonUint(scenario, ".deployment.accounts.ineligibleInvestor");
+        for (uint256 i = 0; i < accounts.length; i++) {
+            require(accounts[i] <= 9, "runtime scenario account must be in range 0-9");
+            for (uint256 j = i + 1; j < accounts.length; j++) {
+                require(accounts[i] != accounts[j], "runtime scenario accounts must be unique");
+            }
+        }
+
+        deployerPk = vm.deriveKey(MNEMONIC, uint32(accounts[0]));
+        investorPk = vm.deriveKey(MNEMONIC, uint32(accounts[1]));
+        makerPk = vm.deriveKey(MNEMONIC, uint32(accounts[2]));
+        unapprovedMakerPk = vm.deriveKey(MNEMONIC, uint32(accounts[3]));
+        require(vm.addr(deployerPk) == deployer, "runtime deployer does not match deployment");
+        require(vm.addr(investorPk) == investor, "runtime investor does not match deployment");
+        require(vm.addr(makerPk) == maker, "runtime maker does not match deployment");
+        require(vm.addr(unapprovedMakerPk) == unapprovedMaker, "runtime unapproved maker does not match deployment");
+
+        tradeAmount = vm.parseUint(vm.parseJsonString(scenario, ".execution.defaultBuyAmountBaseUnits"));
+        sellTradeAmount = vm.parseUint(vm.parseJsonString(scenario, ".execution.defaultSellAmountBaseUnits"));
+        uint256 pricingNumerator = vm.parseUint(vm.parseJsonString(scenario, ".execution.pricing.numerator"));
+        uint256 pricingDenominator = vm.parseUint(vm.parseJsonString(scenario, ".execution.pricing.denominator"));
+        uint256 ttl = vm.parseJsonUint(scenario, ".execution.defaultQuoteTtlSeconds");
+        require(
+            tradeAmount > 0 && sellTradeAmount > 0 && pricingNumerator > 0 && pricingDenominator > 0,
+            "runtime scenario execution values must be positive"
+        );
+        require(ttl > 0 && ttl <= type(uint64).max - block.timestamp, "runtime scenario quote TTL invalid");
+        rfqBuyAmountOut = tradeAmount * pricingNumerator / pricingDenominator;
+        rfqSellAmountOut = sellTradeAmount * pricingNumerator / pricingDenominator;
+        require(rfqBuyAmountOut > 0 && rfqSellAmountOut > 0, "runtime scenario pricing returned zero");
+        quoteTtlSeconds = uint64(ttl);
 
         rwa = IERC20(vm.parseJsonAddress(json, ".rwaToken"));
         quote = IERC20(vm.parseJsonAddress(json, ".quote"));

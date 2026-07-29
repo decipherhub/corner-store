@@ -1,16 +1,17 @@
 import {existsSync, readFileSync} from "fs";
 import {dirname, resolve} from "path";
-import {HDNodeWallet, Wallet} from "ethers";
+import {HDNodeWallet, Wallet, keccak256, toUtf8Bytes} from "ethers";
 
 import {Address, Hex} from "../../rfq/src";
 
 export const ANVIL_MNEMONIC = "test test test test test test test test test test test junk";
 export const DEFAULT_CHAIN_ID = 31337;
 export const DEFAULT_PORT = 8787;
-export const DEFAULT_TTL_SECONDS = 3600;
 
 export interface Artifact {
   assetProfile: "buidl-like" | "reg-d";
+  scenarioSchemaVersion: number;
+  scenarioHash: string;
   deployer: string;
   investor: string;
   eligibleInvestorB?: string;
@@ -30,12 +31,39 @@ export interface Artifact {
 export type DemoArtifactWalletKey = "investor" | "eligibleInvestorB" | "ineligibleInvestor";
 
 export interface DemoScenario {
-  schemaVersion: 1;
+  schemaVersion: 2;
+  deployment: {
+    accounts: {
+      deployer: number;
+      investor: number;
+      maker: number;
+      unapprovedMaker: number;
+      eligibleInvestorB: number;
+      ineligibleInvestor: number;
+    };
+    initialBalancesBaseUnits: {
+      investorQuote: string;
+      investorRwa: string;
+      makerQuote: string;
+      makerRwa: string;
+      poolRwa: string;
+    };
+  };
+  execution: {
+    pricing: {
+      provider: "trade-impact-mock";
+      numerator: string;
+      denominator: string;
+      impactBpsPerFill: number;
+    };
+    defaultBuyAmountBaseUnits: string;
+    defaultSellAmountBaseUnits: string;
+    minimumTradeBufferBps: number;
+    defaultQuoteTtlSeconds: number;
+  };
   asset: {
     name: string;
     symbol: string;
-    referencePrice: string;
-    referenceCurrency: string;
     minimumAmountBaseUnits: string;
     decimals: number;
   };
@@ -53,6 +81,13 @@ export interface DemoScenario {
     initialQualifiedPurchaser: boolean;
   }>;
   previewQuotes: Array<{maker: string; rate: string}>;
+  marketHistory: {
+    intervalSeconds: number;
+    sampleIntervalSeconds: number;
+    indicativeSpreadBps: number;
+    oraclePrices: string[];
+    indicativeMidPrices: string[];
+  };
   temporalEligibility: {
     walletId: string;
     baselineFreshnessSeconds: number;
@@ -88,10 +123,23 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env): Dem
   const artifactPath = resolveArtifactPath(args.artifact ?? env.RFQ_DEMO_ARTIFACT);
   const artifact = JSON.parse(readFileSync(artifactPath, "utf8")) as Artifact;
   const scenarioPath = resolveScenarioPath(args.scenario ?? env.RFQ_DEMO_SCENARIO);
-  const scenario = validateScenario(JSON.parse(readFileSync(scenarioPath, "utf8")), artifact.assetProfile);
+  const scenarioJson = readFileSync(scenarioPath, "utf8");
+  const scenario = validateScenario(JSON.parse(scenarioJson), artifact.assetProfile);
+  if (artifact.scenarioSchemaVersion !== scenario.schemaVersion) {
+    throw new Error("demo scenario schema version does not match the deployment artifact");
+  }
+  if (artifact.scenarioHash?.toLowerCase() !== keccak256(toUtf8Bytes(scenarioJson)).toLowerCase()) {
+    throw new Error("demo scenario does not match the data used to deploy the stack");
+  }
+  if (
+    args.ttl !== undefined || env.RFQ_DEMO_TTL_SECONDS !== undefined ||
+    args.priceNumerator !== undefined || env.RFQ_DEMO_PRICE_NUMERATOR !== undefined ||
+    args.priceDenominator !== undefined || env.RFQ_DEMO_PRICE_DENOMINATOR !== undefined
+  ) {
+    throw new Error("quote TTL and fixed-rate pricing are deployment-bound; change the scenario and redeploy");
+  }
 
-  const makerWallet = resolveMakerWallet(args, env);
-  const defaultTtlSeconds = parsePositiveInt(args.ttl ?? env.RFQ_DEMO_TTL_SECONDS, DEFAULT_TTL_SECONDS, "ttl");
+  const makerWallet = resolveMakerWallet(args, env, scenario.deployment.accounts.maker);
 
   return {
     host: args.host ?? env.RFQ_DEMO_HOST ?? "127.0.0.1",
@@ -103,13 +151,16 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env): Dem
     scenarioPath,
     scenario,
     makerWallet,
-    defaultTtlSeconds,
-    priceNumerator: parsePositiveBigIntString(args.priceNumerator ?? env.RFQ_DEMO_PRICE_NUMERATOR, "1", "price-numerator"),
-    priceDenominator: parsePositiveBigIntString(args.priceDenominator ?? env.RFQ_DEMO_PRICE_DENOMINATOR, "1", "price-denominator"),
+    defaultTtlSeconds: scenario.execution.defaultQuoteTtlSeconds,
+    priceNumerator: scenario.execution.pricing.numerator,
+    priceDenominator: scenario.execution.pricing.denominator,
     eventsPath: env.CORNER_STORE_EVENTS,
     demoSettlement: {
       enabled: env.RFQ_DEMO_ENABLE_SETTLEMENT === "1",
-      operatorAccount: parseAccountIndex(env.RFQ_DEMO_OPERATOR_ACCOUNT ?? "0")
+      operatorAccount: parseAccountIndex(
+        env.RFQ_DEMO_OPERATOR_ACCOUNT ?? String(scenario.deployment.accounts.deployer),
+        "operator-account"
+      )
     }
   };
 }
@@ -125,11 +176,8 @@ export function usage(): string {
     "  --scenario <path>             injected demo data (default: services/rfq-demo-backend/config/demo-scenario.json)",
     "  --chain-id <n>                RFQ EIP-712 chain id (default: 31337)",
     "  --rpc <url>                   chain RPC used for quote expiry time (default: http://127.0.0.1:8545)",
-    "  --maker-account <n>           Anvil maker account index (default: 2)",
+    "  --maker-account <n>           Anvil maker account index (default: injected scenario)",
     "  --maker-key <hex>             explicit maker private key",
-    "  --ttl <seconds>               default quote TTL (default: 3600)",
-    "  --price-numerator <uint>      fixed-rate amountOut numerator (default: 1)",
-    "  --price-denominator <uint>    fixed-rate amountOut denominator (default: 1)",
     "  --help                        print this help"
   ].join("\n");
 }
@@ -200,24 +248,74 @@ function resolveScenarioPath(opt?: string): string {
 }
 
 function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]): DemoScenario {
-  if (!isRecord(value) || value.schemaVersion !== 1) throw new Error("demo scenario schemaVersion must be 1");
+  if (!isRecord(value) || value.schemaVersion !== 2) throw new Error("demo scenario schemaVersion must be 2");
+  const deployment = value.deployment;
+  const execution = value.execution;
   const asset = value.asset;
   const quoteAsset = value.quoteAsset;
   const maker = value.maker;
   const wallets = value.wallets;
   const previewQuotes = value.previewQuotes;
+  const marketHistory = value.marketHistory;
   const temporal = value.temporalEligibility;
   if (
+    !isRecord(deployment) || !isRecord(deployment.accounts) ||
+    !isRecord(deployment.initialBalancesBaseUnits) ||
+    !isRecord(execution) || !isRecord(execution.pricing) ||
     !isRecord(asset) || !isRecord(quoteAsset) || !isRecord(maker) ||
-    !Array.isArray(wallets) || !Array.isArray(previewQuotes) || !isRecord(temporal)
+    !Array.isArray(wallets) || !Array.isArray(previewQuotes) ||
+    !isRecord(marketHistory) || !isRecord(temporal)
   ) {
     throw new Error("demo scenario is missing required sections");
   }
+  const accounts = deployment.accounts;
+  const balances = deployment.initialBalancesBaseUnits;
+  const accountKeys = [
+    "deployer", "investor", "maker", "unapprovedMaker", "eligibleInvestorB", "ineligibleInvestor"
+  ] as const;
+  const normalizedAccounts = Object.fromEntries(accountKeys.map((key) => {
+    const account = accounts[key];
+    if (!Number.isInteger(account) || Number(account) < 0 || Number(account) > 9) {
+      throw new Error(`demo scenario deployment account ${key} must be an integer 0-9`);
+    }
+    return [key, Number(account)];
+  })) as DemoScenario["deployment"]["accounts"];
+  if (new Set(Object.values(normalizedAccounts)).size !== accountKeys.length) {
+    throw new Error("demo scenario deployment accounts must be unique");
+  }
+  const balanceKeys = ["investorQuote", "investorRwa", "makerQuote", "makerRwa", "poolRwa"] as const;
+  const normalizedBalances = Object.fromEntries(balanceKeys.map((key) => {
+    const amount = balances[key];
+    if (typeof amount !== "string" || !/^\d+$/.test(amount) || BigInt(amount) <= 0n) {
+      throw new Error(`demo scenario initial balance ${key} must be a positive base-unit uint string`);
+    }
+    return [key, amount];
+  })) as DemoScenario["deployment"]["initialBalancesBaseUnits"];
+  if (
+    execution.pricing.provider !== "trade-impact-mock" ||
+    typeof execution.pricing.numerator !== "string" ||
+    typeof execution.pricing.denominator !== "string" ||
+    !isPositiveSafeInteger(execution.pricing.impactBpsPerFill) ||
+    Number(execution.pricing.impactBpsPerFill) >= 10_000
+  ) throw new Error("demo scenario execution pricing provider is invalid");
+  const pricingNumerator = parsePositiveBigIntString(execution.pricing.numerator, "1", "scenario price numerator");
+  const pricingDenominator = parsePositiveBigIntString(execution.pricing.denominator, "1", "scenario price denominator");
+  if (
+    typeof execution.defaultBuyAmountBaseUnits !== "string" ||
+    !/^\d+$/.test(execution.defaultBuyAmountBaseUnits) ||
+    BigInt(execution.defaultBuyAmountBaseUnits) <= 0n ||
+    typeof execution.defaultSellAmountBaseUnits !== "string" ||
+    !/^\d+$/.test(execution.defaultSellAmountBaseUnits) ||
+    BigInt(execution.defaultSellAmountBaseUnits) <= 0n ||
+    !isPositiveSafeInteger(execution.minimumTradeBufferBps) ||
+    Number(execution.minimumTradeBufferBps) >= 10_000 ||
+    !isPositiveSafeInteger(execution.defaultQuoteTtlSeconds)
+  ) throw new Error("demo scenario execution defaults are invalid");
+  const defaultBuyAmount = BigInt(execution.defaultBuyAmountBaseUnits);
+  const defaultSellAmount = BigInt(execution.defaultSellAmountBaseUnits);
   if (
     typeof asset.name !== "string" || asset.name.trim() === "" ||
     typeof asset.symbol !== "string" || asset.symbol.trim() === "" ||
-    typeof asset.referencePrice !== "string" || !/^\d+(\.\d+)?$/.test(asset.referencePrice) ||
-    typeof asset.referenceCurrency !== "string" || asset.referenceCurrency.trim() === "" ||
     typeof asset.minimumAmountBaseUnits !== "string" || !/^\d+$/.test(asset.minimumAmountBaseUnits) ||
     BigInt(asset.minimumAmountBaseUnits) <= 0n ||
     !Number.isInteger(asset.decimals) || Number(asset.decimals) < 0 || Number(asset.decimals) > 36 ||
@@ -226,6 +324,25 @@ function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]
     !Number.isInteger(quoteAsset.decimals) || Number(quoteAsset.decimals) < 0 || Number(quoteAsset.decimals) > 36 ||
     typeof maker.label !== "string" || maker.label.trim() === ""
   ) throw new Error("demo scenario asset or maker is invalid");
+  const assetScale = 10n ** BigInt(Number(asset.decimals));
+  const quoteScale = 10n ** BigInt(Number(quoteAsset.decimals));
+  const buyAmountOut =
+    defaultBuyAmount * BigInt(pricingDenominator) * assetScale /
+    (BigInt(pricingNumerator) * quoteScale);
+  const sellAmountOut =
+    defaultSellAmount * BigInt(pricingNumerator) * quoteScale /
+    (BigInt(pricingDenominator) * assetScale);
+  if (buyAmountOut <= 0n || sellAmountOut <= 0n) {
+    throw new Error("demo scenario pricing must return positive output for both default trades");
+  }
+  if (
+    BigInt(normalizedBalances.investorQuote) < defaultBuyAmount ||
+    BigInt(normalizedBalances.investorRwa) < defaultSellAmount ||
+    BigInt(normalizedBalances.makerRwa) < buyAmountOut ||
+    BigInt(normalizedBalances.makerQuote) < sellAmountOut
+  ) {
+    throw new Error("demo scenario initial balances cannot fund the configured default buy and sell");
+  }
   const normalizedWallets = wallets.map((wallet) => {
     if (!isRecord(wallet) || typeof wallet.id !== "string" || !/^[a-z0-9-]+$/.test(wallet.id) ||
       typeof wallet.label !== "string" || !Number.isInteger(wallet.account) || Number(wallet.account) < 0 ||
@@ -251,12 +368,27 @@ function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]
   if (!normalizedWallets.some((wallet) => wallet.artifactKey === "investor")) {
     throw new Error("demo scenario must include the deployment investor wallet");
   }
+  const accountByArtifactKey: Record<DemoArtifactWalletKey, number> = {
+    investor: normalizedAccounts.investor,
+    eligibleInvestorB: normalizedAccounts.eligibleInvestorB,
+    ineligibleInvestor: normalizedAccounts.ineligibleInvestor
+  };
+  if (normalizedWallets.some((wallet) => wallet.account !== accountByArtifactKey[wallet.artifactKey])) {
+    throw new Error("demo scenario wallet accounts must match deployment account bindings");
+  }
   if (
     assetProfile === "buidl-like" &&
     (!normalizedWallets.some((wallet) => wallet.initialQualifiedPurchaser) ||
       !normalizedWallets.some((wallet) => !wallet.initialQualifiedPurchaser))
   ) {
     throw new Error("buidl-like demo scenario requires initially eligible and ineligible wallets");
+  }
+  if (
+    assetProfile === "buidl-like" &&
+    (buyAmountOut < BigInt(asset.minimumAmountBaseUnits as string) ||
+      defaultSellAmount < BigInt(asset.minimumAmountBaseUnits as string))
+  ) {
+    throw new Error("buidl-like default buy and sell must satisfy the injected minimum RWA amount");
   }
   const normalizedPreviews = previewQuotes.map((quote) => {
     if (
@@ -267,6 +399,35 @@ function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]
     }
     return {maker: quote.maker, rate: quote.rate};
   });
+  const normalizePriceSeries = (value: unknown, label: string): string[] => {
+    if (!Array.isArray(value) || value.length < 4 || value.length > 96) {
+      throw new Error(`demo scenario ${label} must contain 4-96 prices`);
+    }
+    return value.map((price) => {
+      if (typeof price !== "string" || !/^\d+(\.\d{1,8})?$/.test(price) || Number(price) <= 0) {
+        throw new Error(`demo scenario ${label} price is invalid`);
+      }
+      return price;
+    });
+  };
+  const oraclePrices = normalizePriceSeries(marketHistory.oraclePrices, "oraclePrices");
+  const indicativeMidPrices = normalizePriceSeries(marketHistory.indicativeMidPrices, "indicativeMidPrices");
+  const generatedSampleCount = isPositiveSafeInteger(marketHistory.intervalSeconds) &&
+    isPositiveSafeInteger(marketHistory.sampleIntervalSeconds)
+    ? (oraclePrices.length - 1) *
+      (Number(marketHistory.intervalSeconds) / Number(marketHistory.sampleIntervalSeconds)) + 1
+    : 0;
+  if (
+    oraclePrices.length !== indicativeMidPrices.length ||
+    !isPositiveSafeInteger(marketHistory.intervalSeconds) ||
+    !isPositiveSafeInteger(marketHistory.sampleIntervalSeconds) ||
+    Number(marketHistory.sampleIntervalSeconds) > Number(marketHistory.intervalSeconds) ||
+    Number(marketHistory.intervalSeconds) % Number(marketHistory.sampleIntervalSeconds) !== 0 ||
+    !Number.isInteger(generatedSampleCount) ||
+    generatedSampleCount > 4096 ||
+    !isPositiveSafeInteger(marketHistory.indicativeSpreadBps) ||
+    Number(marketHistory.indicativeSpreadBps) >= 10_000
+  ) throw new Error("demo scenario marketHistory is invalid");
   if (
     typeof temporal.walletId !== "string" || !normalizedWallets.some((wallet) => wallet.id === temporal.walletId) ||
     !isPositiveSafeInteger(temporal.baselineFreshnessSeconds) ||
@@ -276,12 +437,26 @@ function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]
     Number(temporal.quoteTtlSeconds) <= Number(temporal.advanceSeconds)
   ) throw new Error("demo scenario temporalEligibility is invalid");
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    deployment: {
+      accounts: normalizedAccounts,
+      initialBalancesBaseUnits: normalizedBalances
+    },
+    execution: {
+      pricing: {
+        provider: "trade-impact-mock",
+        numerator: pricingNumerator,
+        denominator: pricingDenominator,
+        impactBpsPerFill: Number(execution.pricing.impactBpsPerFill)
+      },
+      defaultBuyAmountBaseUnits: execution.defaultBuyAmountBaseUnits,
+      defaultSellAmountBaseUnits: execution.defaultSellAmountBaseUnits,
+      minimumTradeBufferBps: Number(execution.minimumTradeBufferBps),
+      defaultQuoteTtlSeconds: Number(execution.defaultQuoteTtlSeconds)
+    },
     asset: {
       name: asset.name,
       symbol: asset.symbol,
-      referencePrice: asset.referencePrice,
-      referenceCurrency: asset.referenceCurrency,
       minimumAmountBaseUnits: asset.minimumAmountBaseUnits,
       decimals: Number(asset.decimals)
     },
@@ -293,6 +468,13 @@ function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]
     maker: {label: maker.label},
     wallets: normalizedWallets,
     previewQuotes: normalizedPreviews,
+    marketHistory: {
+      intervalSeconds: Number(marketHistory.intervalSeconds),
+      sampleIntervalSeconds: Number(marketHistory.sampleIntervalSeconds),
+      indicativeSpreadBps: Number(marketHistory.indicativeSpreadBps),
+      oraclePrices,
+      indicativeMidPrices
+    },
     temporalEligibility: {
       walletId: temporal.walletId,
       baselineFreshnessSeconds: Number(temporal.baselineFreshnessSeconds),
@@ -315,16 +497,23 @@ function isPositiveSafeInteger(value: unknown): boolean {
   return Number.isSafeInteger(value) && Number(value) > 0;
 }
 
-function resolveMakerWallet(args: Record<string, string | undefined>, env: NodeJS.ProcessEnv): Wallet | HDNodeWallet {
+function resolveMakerWallet(
+  args: Record<string, string | undefined>,
+  env: NodeJS.ProcessEnv,
+  defaultAccount: number
+): Wallet | HDNodeWallet {
   const key = args.makerKey ?? env.RFQ_DEMO_MAKER_KEY;
   if (key) return new Wallet(key.startsWith("0x") ? (key as Hex) : (`0x${key}` as Hex));
-  const index = parseAccountIndex(args.makerAccount ?? env.RFQ_DEMO_MAKER_ACCOUNT ?? "2");
+  const index = parseAccountIndex(
+    args.makerAccount ?? env.RFQ_DEMO_MAKER_ACCOUNT ?? String(defaultAccount),
+    "maker-account"
+  );
   return HDNodeWallet.fromPhrase(ANVIL_MNEMONIC, "", `m/44'/60'/0'/0/${index}`);
 }
 
-function parseAccountIndex(value: string): number {
+function parseAccountIndex(value: string, label: string): number {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 9) throw new Error(`maker-account must be an integer 0-9`);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 9) throw new Error(`${label} must be an integer 0-9`);
   return parsed;
 }
 

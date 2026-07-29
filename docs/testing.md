@@ -119,6 +119,9 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - 비적격 taker-bound signed quote의 Router fill-time compliance 거부
 - Admin QP fixture 변경과 원상복구
 - scenario JSON에서 wallet/표시값/최소금액/시간 조건 주입
+- scenario JSON에서 Anvil account, 초기 investor/maker/pool 물량, 양방향 기본
+  거래량, TTL과 mock pricing 주입
+- 배포 artifact의 scenario hash와 backend 입력 일치 검증
 - quote 발급 당시 적격인 투자자의 QP freshness 만료
 - 아직 TTL이 남은 동일 quote의 Router fill-time `FAIL_QP_CLAIM_EXPIRED` 거부
 - temporal scenario 후 injected baseline QP 상태 복원

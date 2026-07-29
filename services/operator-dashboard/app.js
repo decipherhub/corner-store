@@ -7,6 +7,7 @@ const viewMeta = {
 };
 let currentProfile = profiles.admin;
 let chainState = null;
+let marketHistory = null;
 let stateLoadedAt = Date.now();
 let presentationInitialized = false;
 let precheck = null;
@@ -14,6 +15,7 @@ let live = null;
 let quoteConsumed = false;
 let quoteTimer = null;
 let tradeSide = "buy";
+let marketRange = "1h";
 let session = {rfqId: null, status: null, quoteCount: 0, settledCount: 0, rwaDelta: 0n, quoteDelta: 0n, activities: []};
 
 function endpoint(path) { return `${$("backend").value.replace(/\/$/, "")}${path}`; }
@@ -51,14 +53,48 @@ function formatBaseUnits(value, decimals = chainState?.presentation.asset.decima
   const fraction = (absolute % scale).toString().padStart(decimals, "0").replace(/0+$/, "").slice(0, 4);
   return `${sign}${whole.toLocaleString("en-US")}${fraction ? `.${fraction}` : ""}`;
 }
+function formatInputBaseUnits(value, decimals = chainState?.presentation.asset.decimals ?? 18) {
+  const raw = BigInt(value);
+  const scale = 10n ** BigInt(decimals);
+  const whole = raw / scale;
+  const fraction = (raw % scale).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return `${whole}${fraction ? `.${fraction}` : ""}`;
+}
 function chainNow() { return Number(chainState?.chainTimestamp || 0) + Math.floor((Date.now() - stateLoadedAt) / 1000); }
+function formatRatio(numerator, denominator, precision = 4) {
+  const scale = 10n ** BigInt(precision);
+  const scaled = BigInt(numerator) * scale / BigInt(denominator);
+  const whole = scaled / scale;
+  const fraction = (scaled % scale).toString().padStart(precision, "0").replace(/0+$/, "");
+  return `${whole}${fraction ? `.${fraction}` : ""}`;
+}
 function referencePrice() {
   const asset = chainState.presentation.asset;
-  return `${asset.referenceCurrency} ${Number(asset.referencePrice).toLocaleString()}`;
+  const quote = chainState.presentation.quoteAsset;
+  const pricing = chainState.marketPrice || chainState.presentation.execution.pricing;
+  const movement = pricing.lastMove === "buy-up" ? " ↑" : pricing.lastMove === "sell-down" ? " ↓" : "";
+  return `${formatRatio(pricing.numerator, pricing.denominator)} ${quote.symbol} / ${asset.symbol}${movement}`;
+}
+function suggestedAmount(side = tradeSide) {
+  const suggested = chainState.suggestedTradeAmounts;
+  return side === "buy" ? suggested.buyAmountIn : suggested.sellAmountIn;
+}
+function applySuggestedAmount(side = tradeSide) {
+  const decimals = side === "buy"
+    ? chainState.presentation.quoteAsset.decimals
+    : chainState.presentation.asset.decimals;
+  $("amount").value = formatInputBaseUnits(suggestedAmount(side), decimals);
 }
 function quoteRate(quote) {
-  const scaled = BigInt(quote.amountOut) * 10000n / BigInt(quote.amountIn);
-  return `${scaled / 10000n}.${(scaled % 10000n).toString().padStart(4, "0")}`;
+  const asset = chainState.presentation.asset;
+  const settlement = chainState.presentation.quoteAsset;
+  const numerator = tradeSide === "buy"
+    ? BigInt(quote.amountIn) * (10n ** BigInt(asset.decimals))
+    : BigInt(quote.amountOut) * (10n ** BigInt(asset.decimals));
+  const denominator = tradeSide === "buy"
+    ? BigInt(quote.amountOut) * (10n ** BigInt(settlement.decimals))
+    : BigInt(quote.amountIn) * (10n ** BigInt(settlement.decimals));
+  return `${formatRatio(numerator, denominator)} ${settlement.symbol} / ${asset.symbol}`;
 }
 function setStatus(id, text, kind = "") { $(id).textContent = text; $(id).className = `inline-status ${kind}`; }
 function addActivity(title, detail) {
@@ -85,7 +121,7 @@ function selectedWallet() {
 }
 
 async function loadState() {
-  chainState = await api("/demo/state");
+  [chainState, marketHistory] = await Promise.all([api("/demo/state"), api("/demo/market-history")]);
   stateLoadedAt = Date.now();
   for (const wallet of chainState.wallets || []) profiles[wallet.id] = {...wallet, role: "user"};
   configurePresentation();
@@ -107,12 +143,99 @@ function configurePresentation() {
   $("portfolioAssetName").textContent = asset.name;
   $("portfolioQuoteName").textContent = chainState.presentation.quoteAsset.name;
   $("referencePrice").textContent = referencePrice();
-  $("assetReferencePrice").textContent = `${referencePrice()} · scenario`;
-  $("portfolioReferencePrice").textContent = `${referencePrice()} · scenario`;
-  $("minimumHelp").textContent = `주입된 최소 투자금액 ${minimum} · ${asset.decimals} decimals`;
-  if (firstLoad || !$("amount").value) $("amount").value = minimum;
+  $("assetReferencePrice").textContent = `${referencePrice()} · ${chainState.presentation.execution.pricing.provider}`;
+  $("portfolioReferencePrice").textContent = `${referencePrice()} · ${chainState.presentation.execution.pricing.provider}`;
+  $("minimumHelp").textContent = `최소 ${minimum} ${asset.symbol} · 현재 가격 기준 ${chainState.suggestedTradeAmounts.bufferBps} bps 여유분 자동 반영`;
+  if (firstLoad || !$("amount").value) applySuggestedAmount();
+  const injectedTtl = String(chainState.presentation.execution.defaultQuoteTtlSeconds);
+  if (![...$("ttl").options].some((option) => option.value === injectedTtl)) {
+    $("ttl").add(new Option(`${injectedTtl}초 · scenario`, injectedTtl));
+  }
+  $("ttl").value = injectedTtl;
   $("liveMakerDescription").textContent = chainState.presentation.maker.label;
+  renderMarketChart();
   updateSidePresentation();
+}
+function renderMarketChart() {
+  if (!marketHistory || !chainState) return;
+  const width = 920, height = 300;
+  const pad = {left: 58, right: 32, top: 34, bottom: 38};
+  const valueOf = (point) => Number(point.numerator) / Number(point.denominator);
+  const spreadHalf = marketHistory.spreadBps / 20_000;
+  const fixtureCount = Math.max(marketHistory.oracle.length, marketHistory.indicative.length - marketHistory.fills.length);
+  const allHistory = [...marketHistory.oracle, ...marketHistory.indicative, ...marketHistory.fills];
+  const latestTime = Math.max(...allHistory.map((point) => Number(point.timestamp)));
+  const rangeSeconds = { "1m": 60, "5m": 300, "1h": 3600, all: Infinity }[marketRange];
+  const cutoff = Number.isFinite(rangeSeconds) ? latestTime - rangeSeconds : -Infinity;
+  const visible = (points, orderFor) => points
+    .map((point, index) => ({...point, displayOrder: orderFor(index)}))
+    .filter((point) => Number(point.timestamp) >= cutoff);
+  let oracle = visible(marketHistory.oracle, (index) => index);
+  let indicative = visible(marketHistory.indicative, (index) => index);
+  const fills = visible(marketHistory.fills, (index) => fixtureCount + index);
+  if (!oracle.length && marketHistory.oracle.length) {
+    oracle = [{...marketHistory.oracle.at(-1), displayOrder: fixtureCount - 1}];
+  }
+  if (!indicative.length && marketHistory.indicative.length) {
+    indicative = [{...marketHistory.indicative.at(-1), displayOrder: fixtureCount - 1 + marketHistory.fills.length}];
+  }
+  const all = [...oracle, ...indicative, ...fills];
+  if (!all.length) return;
+  const times = all.map((point) => Number(point.timestamp));
+  const values = all.map(valueOf).concat(
+    indicative.flatMap((point) => [
+      valueOf(point) * (1 + spreadHalf),
+      valueOf(point) * (1 - spreadHalf)
+    ])
+  );
+  const minTime = Math.min(...times);
+  const rawMin = Math.min(...values), rawMax = Math.max(...values);
+  const centerPrice = (rawMin + rawMax) / 2;
+  const priceSpan = Math.max((rawMax - rawMin) * 1.2, centerPrice * 0.01);
+  const minPrice = centerPrice - priceSpan / 2, maxPrice = centerPrice + priceSpan / 2;
+  const minOrder = Math.min(...all.map((point) => point.displayOrder));
+  const maxOrder = Math.max(...all.map((point) => point.displayOrder));
+  const x = (order) => pad.left + ((Number(order) - minOrder) / Math.max(maxOrder - minOrder, 1)) * (width - pad.left - pad.right);
+  const y = (price) => pad.top + (1 - (price - minPrice) / Math.max(maxPrice - minPrice, 0.000001)) * (height - pad.top - pad.bottom);
+  const line = (points) => points.map((point, index) => `${index ? "L" : "M"}${x(point.displayOrder).toFixed(1)},${y(valueOf(point)).toFixed(1)}`).join(" ");
+  const upper = indicative.map((point) => `${x(point.displayOrder).toFixed(1)},${y(valueOf(point) * (1 + spreadHalf)).toFixed(1)}`);
+  const lower = [...indicative].reverse().map((point) => {
+    return `${x(point.displayOrder).toFixed(1)},${y(valueOf(point) * (1 - spreadHalf)).toFixed(1)}`;
+  });
+  const grid = [0, 1, 2, 3].map((index) => {
+    const price = minPrice + (maxPrice - minPrice) * (3 - index) / 3;
+    const yy = pad.top + (height - pad.top - pad.bottom) * index / 3;
+    return `<line x1="${pad.left}" y1="${yy}" x2="${width-pad.right}" y2="${yy}" class="chart-grid"/><text x="${pad.left-9}" y="${yy+4}" text-anchor="end" class="chart-axis">${price.toFixed(4)}</text>`;
+  }).join("");
+  const fillMarkers = fills.map((point, index) => {
+    const xx = x(point.displayOrder);
+    const yy = y(valueOf(point));
+    const alignRight = xx > width - 150;
+    const labelY = Math.max(13, Math.min(height - 18, yy + (index % 2 ? 19 : -12)));
+    const price = valueOf(point).toFixed(4);
+    return `<g class="fill-point ${point.side}" tabindex="0"><circle cx="${xx.toFixed(1)}" cy="${yy.toFixed(1)}" r="5"/><text x="${(xx + (alignRight ? -9 : 9)).toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="${alignRight ? "end" : "start"}" class="fill-label">${point.side === "buy" ? "B" : "S"} ${price}</text><title>${point.side === "buy" ? "매수" : "매도"} 체결 · ${price} ${marketHistory.quoteSymbol}/${marketHistory.assetSymbol} · ${formatBaseUnits(point.amountRwa)} ${marketHistory.assetSymbol} · ${new Date(Number(point.timestamp) * 1000).toLocaleTimeString("ko-KR")}</title></g>`;
+  }).join("");
+  const firstTime = new Date(minTime * 1000).toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit"});
+  const lastTime = new Date(Math.max(...times) * 1000).toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit", second: "2-digit"});
+  $("marketChart").innerHTML = `${grid}<polygon points="${upper.concat(lower).join(" ")}" class="spread-band"/><path d="${line(oracle)}" class="chart-line oracle-line"/><path d="${line(indicative)}" class="chart-line indicative-line"/>${fillMarkers}<text x="${pad.left}" y="${height-10}" class="chart-axis">${firstTime}</text><text x="${width-pad.right}" y="${height-10}" text-anchor="end" class="chart-axis">${lastTime}</text>`;
+  $("marketCurrent").textContent = referencePrice();
+  $("marketMove").textContent = marketHistory.current.lastMove === "buy-up" ? "최근 매수 후 상승" : marketHistory.current.lastMove === "sell-down" ? "최근 매도 후 하락" : "주입된 초기 가격";
+  $("marketSpread").textContent = `${marketHistory.spreadBps} bps`;
+  const volume = fills.reduce((sum, fill) => sum + BigInt(fill.amountQuote), 0n);
+  $("marketVolume").textContent = `${formatBaseUnits(volume, chainState.presentation.quoteAsset.decimals)} ${chainState.presentation.quoteAsset.symbol}`;
+  $("marketTrades").textContent = String(fills.length);
+  const latestFill = fills.at(-1);
+  $("marketLastFill").textContent = latestFill
+    ? `${valueOf(latestFill).toFixed(4)} ${marketHistory.quoteSymbol}/${marketHistory.assetSymbol}`
+    : "아직 체결 없음";
+  $("marketFillTape").innerHTML = fills.length
+    ? [...fills].reverse().slice(0, 6).map((fill) => `<article class="fill-ticket ${fill.side}"><strong>${fill.side === "buy" ? "매수" : "매도"} · ${valueOf(fill).toFixed(4)} ${marketHistory.quoteSymbol}/${marketHistory.assetSymbol}</strong><small>${formatBaseUnits(fill.amountRwa)} ${marketHistory.assetSymbol} · ${new Date(Number(fill.timestamp) * 1000).toLocaleTimeString("ko-KR")} · ${shortAddress(fill.transactionHash)}</small></article>`).join("")
+    : "<span>선택 구간에 실제 Router 체결이 없습니다.</span>";
+  document.querySelectorAll("[data-market-range]").forEach((button) => button.classList.toggle("active", button.dataset.marketRange === marketRange));
+}
+function setMarketRange(range) {
+  marketRange = range;
+  renderMarketChart();
 }
 function updateSidePresentation() {
   if (!chainState) return;
@@ -132,9 +255,25 @@ async function setTradeSide(side) {
   session.status = null;
   $("quoteComparison").classList.add("hidden");
   $("rfqRows").innerHTML = '<tr><td colspan="7"><div class="empty-row">아직 RFQ가 없습니다.</div></td></tr>';
+  applySuggestedAmount(side);
   updateSidePresentation();
   await runPrecheck();
   updateSummary();
+}
+async function beginNewRfq() {
+  live = null;
+  quoteConsumed = false;
+  session.rfqId = null;
+  session.status = null;
+  if (quoteTimer) clearTimeout(quoteTimer);
+  $("executeQuote").disabled = false;
+  $("quoteComparison").classList.add("hidden");
+  $("result").innerHTML = "";
+  $("rfqRows").innerHTML = '<tr><td colspan="7"><div class="empty-row">아직 RFQ가 없습니다.</div></td></tr>';
+  applySuggestedAmount();
+  updateSummary();
+  showView("create");
+  await runPrecheck();
 }
 function renderWalletBalances() {
   if (currentProfile.role !== "user") return;
@@ -155,10 +294,11 @@ async function switchProfile() {
   if (admin) showView("adminDashboard");
   else {
     showView("dashboard");
+    applySuggestedAmount();
     const latest = await runPrecheck();
     $("dashboardEligibility").textContent = latest?.allowed
       ? `현재 지갑은 ${chainState.assetProfile} RFQ 거래가 가능합니다.`
-      : "현재 지갑은 조회만 가능하며 RFQ 거래는 차단됩니다.";
+      : `RFQ 거래가 차단되었습니다: ${latest?.verdict?.reason || "현재 정책을 확인하세요."}`;
     $("newRfq").disabled = !latest?.allowed;
     $("portfolioRfq").disabled = !latest?.allowed;
     renderWalletBalances();
@@ -190,6 +330,7 @@ async function runPrecheck() {
   } catch (error) {
     precheck = null; $("requestQuote").disabled = true;
     $("precheckRows").innerHTML = `<div class="fail"><span>✕ 검사 실패</span><strong>${escapeHtml(error.message)}</strong></div>`;
+    return {allowed: false, verdict: {reason: error.message}};
   }
 }
 
@@ -204,8 +345,9 @@ async function setupDemo() {
     await loadState(); await switchProfile();
     $("environmentBadge").textContent = "Ready"; $("environmentBadge").className = "status-pill live";
     $("setupChecks").classList.remove("hidden");
-    $("setupChecks").innerHTML = `<div><span>RFQ backend</span><strong>Ready</strong></div><div><span>Maker</span><strong>${chainState.makerApproved ? "Approved" : "Revoked"}</strong></div><div><span>Demo wallets</span><strong>${chainState.wallets.length} loaded</strong></div>`;
-    setStatus("setupStatus", "클릭형 RFQ 데모가 준비되었습니다.", "good");
+    const pricing = chainState.presentation.execution.pricing;
+    $("setupChecks").innerHTML = `<div><span>RFQ backend</span><strong>Ready</strong></div><div><span>Maker</span><strong>${chainState.makerApproved ? "Approved" : "Revoked"}</strong></div><div><span>Injected wallets</span><strong>${chainState.wallets.length} loaded</strong></div><div><span>Pricing source</span><strong>${escapeHtml(pricing.provider)}</strong></div><div><span>Maker inventory</span><strong>${formatBaseUnits(chainState.makerInventory.rwaBalance)} ${escapeHtml(chainState.presentation.asset.symbol)} / ${formatBaseUnits(chainState.makerInventory.quoteBalance, chainState.presentation.quoteAsset.decimals)} ${escapeHtml(chainState.presentation.quoteAsset.symbol)}</strong></div>`;
+    setStatus("setupStatus", `Scenario v${chainState.presentation.schemaVersion} 데이터와 실제 온체인 상태를 준비했습니다.`, "good");
   } catch (error) { setStatus("setupStatus", error.message, "bad"); }
   finally { $("setupDemo").disabled = false; }
 }
@@ -224,6 +366,7 @@ async function requestQuote(event) {
       ttlSeconds: Number($("ttl").value)
     });
     quoteConsumed = false;
+    $("executeQuote").disabled = false;
     session.rfqId = `#${String(live.quote.nonce).slice(-6)}`; session.status = "quoted"; session.quoteCount += 1;
     addActivity("Firm quote 도착", `${wallet.label} · ${chainState.presentation.maker.label}`);
     renderQuote(); updateSummary(); showView("rfqs");
@@ -242,8 +385,15 @@ function renderQuote() {
   const liveRate = quoteRate(live.quote);
   const input = tradeSide === "buy" ? chainState.presentation.quoteAsset : chainState.presentation.asset;
   const output = tradeSide === "buy" ? chainState.presentation.asset : chainState.presentation.quoteAsset;
-  $("quoteCards").innerHTML = `<article class="quote-card live"><div class="maker-line"><strong>${escapeHtml(maker)}</strong><span>${quoteConsumed ? "Settled · consumed" : "Live · executable"}</span></div><strong class="rate">${liveRate}</strong><small>${tradeSide === "buy" ? "매수" : "매도"} · Backend-generated firm quote</small><dl><div><dt>Pay</dt><dd>${formatBaseUnits(live.quote.amountIn, input.decimals)} ${escapeHtml(input.symbol)}</dd></div><div><dt>Receive</dt><dd>${formatBaseUnits(live.quote.amountOut, output.decimals)} ${escapeHtml(output.symbol)}</dd></div><div><dt>유효시간</dt><dd id="liveExpiry">${quoteConsumed ? "Consumed" : "—"}</dd></div><div><dt>Taker</dt><dd>${shortAddress(live.quote.taker)}</dd></div></dl><button id="selectLive" class="primary" ${quoteConsumed ? "disabled" : ""}>${quoteConsumed ? "체결 완료" : "이 견적 검토"}</button></article>${chainState.presentation.previewQuotes.map((quote) => `<article class="quote-card preview"><div class="maker-line"><strong>${escapeHtml(quote.maker)}</strong><span>Scenario fixture</span></div><strong class="rate">${escapeHtml(quote.rate)}</strong><small>Indicative only</small><button class="secondary" disabled>Preview only</button></article>`).join("")}`;
-  if (!quoteConsumed) $("selectLive").onclick = selectQuote;
+  const ownsQuote = currentProfile.role === "user" &&
+    currentProfile.address?.toLowerCase() === live.quote.taker.toLowerCase();
+  const quoteAction = quoteConsumed
+    ? "새 RFQ 만들기"
+    : ownsQuote
+      ? "이 견적 검토"
+      : "현재 지갑으로 새 RFQ";
+  $("quoteCards").innerHTML = `<article class="quote-card live"><div class="maker-line"><strong>${escapeHtml(maker)}</strong><span>${quoteConsumed ? "Settled · consumed" : "Live · executable"}</span></div><strong class="rate">${liveRate}</strong><small>${tradeSide === "buy" ? "매수" : "매도"} · Backend-generated firm quote</small><dl><div><dt>Pay</dt><dd>${formatBaseUnits(live.quote.amountIn, input.decimals)} ${escapeHtml(input.symbol)}</dd></div><div><dt>Receive</dt><dd>${formatBaseUnits(live.quote.amountOut, output.decimals)} ${escapeHtml(output.symbol)}</dd></div><div><dt>유효시간</dt><dd id="liveExpiry">${quoteConsumed ? "Consumed" : "—"}</dd></div><div><dt>Taker</dt><dd>${shortAddress(live.quote.taker)}</dd></div></dl><button id="selectLive" class="primary">${quoteAction}</button></article>${chainState.presentation.previewQuotes.map((quote) => `<article class="quote-card preview"><div class="maker-line"><strong>${escapeHtml(quote.maker)}</strong><span>Scenario fixture</span></div><strong class="rate">${escapeHtml(quote.rate)}</strong><small>Indicative only</small><button class="secondary" disabled>Preview only</button></article>`).join("")}`;
+  $("selectLive").onclick = quoteConsumed || !ownsQuote ? beginNewRfq : selectQuote;
   if (quoteTimer) clearTimeout(quoteTimer);
   if (quoteConsumed) return;
   const tick = () => {
@@ -265,12 +415,14 @@ async function selectQuote() {
   const output = tradeSide === "buy" ? chainState.presentation.asset : chainState.presentation.quoteAsset;
   $("review").innerHTML = `<div><span>방향</span><strong>${tradeSide === "buy" ? "매수" : "매도"}</strong></div><div><span>Maker</span><strong>${escapeHtml(chainState.presentation.maker.label)}</strong></div><div><span>Taker</span><strong>${shortAddress(live.quote.taker)}</strong></div><div><span>Pay</span><strong>${formatBaseUnits(live.quote.amountIn, input.decimals)} ${escapeHtml(input.symbol)}</strong></div><div><span>Receive</span><strong>${formatBaseUnits(live.quote.amountOut, output.decimals)} ${escapeHtml(output.symbol)}</strong></div><div><span>Nonce</span><strong>${live.quote.nonce}</strong></div><details class="payload-review"><summary>Signed quote payload</summary><pre>${escapeHtml(JSON.stringify(live,null,2))}</pre></details>`;
   $("executeQuote").textContent = latest.allowed ? "견적 수락 및 체결" : "최종 온체인 검사 시도";
+  $("executeQuote").disabled = false;
   $("confirmBackdrop").classList.remove("hidden");
 }
 async function execute() {
   if (!live) return;
   $("executeQuote").disabled = true;
   try {
+    const priceBefore = referencePrice();
     const latest = await runPrecheck();
     const action = latest.allowed ? "settle" : latest.wallet.qualifiedPurchaser ? "revoked-maker" : "compliance-proof";
     const result = await post("/demo/trade", {amountIn: live.quote.amountIn, action, quote: live});
@@ -288,6 +440,9 @@ async function execute() {
       addActivity(`${result.side === "sell" ? "매도" : "매수"} RFQ 체결 완료`, `Block ${result.transaction.blockNumber}`);
     }
     $("confirmBackdrop").classList.add("hidden"); updateSummary(); renderQuote(); await loadState(); renderWalletBalances();
+    if (result.transaction) {
+      $("result").innerHTML = `<div class="inline-status good"><strong>체결 완료</strong><br>Block ${result.transaction.blockNumber}<br><small>${escapeHtml(priceBefore)} → ${escapeHtml(referencePrice())}</small></div>`;
+    }
   } catch (error) { $("result").innerHTML = `<div class="inline-status bad">체결 실패: ${escapeHtml(error.message)}</div>`; }
   finally { $("executeQuote").disabled = quoteConsumed; }
 }
@@ -318,9 +473,14 @@ async function refreshAdmin() {
     $("adminStats").innerHTML = `<article class="stat-card"><span>진행 중 RFQ</span><strong>${session.status === "quoted" ? 1 : 0}</strong></article><article class="stat-card"><span>오늘 거부</span><strong>${rejected}</strong></article><article class="stat-card"><span>적격 / 비적격</span><strong>${chainState.wallets.filter((w)=>w.qualifiedPurchaser).length} / ${chainState.wallets.filter((w)=>!w.qualifiedPurchaser).length}</strong></article>`;
     $("adminRecent").innerHTML = events.length ? events.slice(-6).reverse().map(eventRow).join("") : '<div class="empty-row">아직 이벤트가 없습니다.</div>';
     $("monitoringContent").innerHTML = `<div><span>현재 RFQ</span><strong>${session.rfqId || "없음"}</strong></div><div><span>상태</span><strong>${session.status || "—"}</strong></div><div><span>Quote taker</span><strong>${live ? shortAddress(live.quote.taker) : "—"}</strong></div>`;
-    $("adminUserRows").innerHTML = chainState.wallets.map((w) => `<tr><td><strong>${escapeHtml(w.label)}</strong></td><td><code>${shortAddress(w.address)}</code></td><td><span class="status-pill ${w.qualifiedPurchaser ? "live" : "warning"}">${w.qualifiedPurchaser ? "Eligible" : escapeHtml(w.eligibilityReason || "Ineligible")}</span>${w.expiresAt ? `<small>expires ${new Date(w.expiresAt * 1000).toLocaleTimeString("ko-KR")}</small>` : ""}</td><td><button class="${w.qualifiedPurchaser ? "danger" : "primary"} admin-user-toggle" data-wallet="${escapeHtml(w.id)}" data-eligible="${!w.qualifiedPurchaser}">${w.qualifiedPurchaser ? "적격 해제" : "적격 부여"}</button></td></tr>`).join("");
-    document.querySelectorAll(".admin-user-toggle").forEach((button) => button.onclick = () => toggleUser(button));
-    $("makerFacts").innerHTML = `<div><span>Maker</span><strong>${escapeHtml(chainState.presentation.maker.label)} · ${shortAddress(chainState.maker)}</strong></div><div><span>상태</span><strong>${chainState.makerApproved ? "Active" : "Cancelled"}</strong></div>`;
+    $("adminUserRows").innerHTML = chainState.wallets.map(renderClaimEditor).join("");
+    document.querySelectorAll(".admin-claim-save").forEach((button) => button.onclick = () => saveClaim(button));
+    document.querySelectorAll('[data-claim-field="basis"]').forEach((select) => {
+      select.onchange = () => {
+        select.closest(".claim-editor").querySelector(".claim-basis-help").textContent = qpBasisHelp(select.value);
+      };
+    });
+    $("makerFacts").innerHTML = `<div><span>Maker</span><strong>${escapeHtml(chainState.presentation.maker.label)} · ${shortAddress(chainState.maker)}</strong></div><div><span>상태</span><strong>${chainState.makerApproved ? "Active" : "Cancelled"}</strong></div><div><span>RWA inventory</span><strong>${formatBaseUnits(chainState.makerInventory.rwaBalance)} ${escapeHtml(chainState.presentation.asset.symbol)}</strong></div><div><span>Settlement inventory</span><strong>${formatBaseUnits(chainState.makerInventory.quoteBalance, chainState.presentation.quoteAsset.decimals)} ${escapeHtml(chainState.presentation.quoteAsset.symbol)}</strong></div>`;
     const temporal = chainState.presentation.temporalEligibility;
     const target = chainState.wallets.find((wallet) => wallet.id === temporal.walletId);
     $("temporalFacts").innerHTML = `<div><span>대상 지갑</span><strong>${escapeHtml(target?.label || temporal.walletId)}</strong></div><div><span>현재 chain time</span><strong>${new Date(chainState.chainTimestamp * 1000).toLocaleTimeString("ko-KR")}</strong></div><div><span>주입 freshness</span><strong>${temporal.freshnessSeconds}초</strong></div><div><span>시간 전진</span><strong>+${temporal.advanceSeconds}초</strong></div>`;
@@ -331,12 +491,67 @@ async function refreshAdmin() {
     renderEvents(events);
   } catch (error) { setStatus("makerStatus", error.message, "bad"); }
 }
-async function toggleUser(button) {
+function renderClaimEditor(wallet) {
+  const claim = wallet.qpClaim;
+  const basisOptions = [
+    ["NONE", "Claim 없음"],
+    ["NATURAL", "개인 투자자 · $5M investments"],
+    ["FAMILY_COMPANY", "가족회사 · $5M + 소유자 확인"],
+    ["TRUST", "신탁 · 설정자/수탁자 확인"],
+    ["INSTITUTIONAL", "기관 · $25M discretionary investments"],
+    ["QIB", "QIB · 적격기관투자자 간주 경로"],
+    ["KNOWLEDGEABLE_EMPLOYEE", "KE · Rule 3c-5 임직원 예외"],
+    ["OTHER", "기타 · 수동 검토"]
+  ].map(([value, label]) => `<option value="${value}" ${claim.basis === value ? "selected" : ""}>${label}</option>`).join("");
+  const lookThroughOptions = ["NONE", "PENDING", "COMPLETED", "FAILED"]
+    .map((value) => `<option value="${value}" ${claim.lookThroughStatus === value ? "selected" : ""}>${value}</option>`).join("");
+  return `<tr data-claim-wallet="${escapeHtml(wallet.id)}">
+    <td><strong>${escapeHtml(wallet.label)}</strong><small><code>${shortAddress(wallet.address)}</code></small></td>
+    <td><span class="status-pill ${wallet.qualifiedPurchaser ? "live" : "warning"}">${wallet.qualifiedPurchaser ? "거래 허용" : "차단"}</span><small>${escapeHtml(wallet.eligibilityReason || "ICA 투자자 요건 통과")}</small>${wallet.expiresAt ? `<small>claim expires ${new Date(wallet.expiresAt * 1000).toLocaleString("ko-KR")}</small>` : ""}</td>
+    <td><div class="claim-editor">
+      <label>QP 근거<select data-claim-field="basis">${basisOptions}</select></label>
+      <label>Look-through<select data-claim-field="lookThroughStatus">${lookThroughOptions}</select></label>
+      <label class="claim-check"><input type="checkbox" data-claim-field="signatureValid" ${claim.signatureValid ? "checked" : ""}> 서명 유효</label>
+      <label class="claim-check"><input type="checkbox" data-claim-field="issuerTrusted" ${claim.issuerTrusted ? "checked" : ""}> Trusted Issuer</label>
+      <label class="claim-check"><input type="checkbox" data-claim-field="coveredCompanyMatchesFund" ${claim.coveredCompanyMatchesFund ? "checked" : ""}> KE 대상 펀드 일치</label>
+      <small class="claim-basis-help">${escapeHtml(qpBasisHelp(claim.basis))}</small>
+    </div></td>
+    <td><button class="primary admin-claim-save" data-wallet="${escapeHtml(wallet.id)}">Claim 기록</button></td>
+  </tr>`;
+}
+function qpBasisHelp(basis) {
+  return {
+    NONE: "QP claim이 없어 거래가 차단됩니다.",
+    NATURAL: "개인 투자자 경로입니다. Trusted Issuer가 $5M 이상 investments 요건을 오프체인에서 확인한 claim이면 통과합니다.",
+    FAMILY_COMPANY: "가족회사 경로입니다. $5M 요건과 실소유자 look-through가 COMPLETED여야 통과합니다.",
+    TRUST: "신탁 경로입니다. 법정 관계자 요건을 확인하고 look-through가 COMPLETED여야 통과합니다.",
+    INSTITUTIONAL: "기관 경로입니다. Trusted Issuer가 $25M 이상 discretionary investments 요건을 확인한 claim이면 통과합니다.",
+    QIB: "Rule 144A의 Qualified Institutional Buyer 지위를 확인한 간주 경로입니다.",
+    KNOWLEDGEABLE_EMPLOYEE: "QP 자체가 아니라 Rule 3c-5의 KE 예외 경로입니다. 해당 펀드의 투자 업무에 관여하는 임직원이어야 하며 대상 펀드가 일치해야 합니다.",
+    OTHER: "자동 판정할 수 없는 예외 경로이므로 수동 검토 상태로 처리됩니다."
+  }[basis] || "";
+}
+async function saveClaim(button) {
   button.disabled = true;
   try {
-    const updated = await post("/demo/admin/user", {walletId: button.dataset.wallet, eligible: button.dataset.eligible === "true"});
-    setStatus("adminUserStatus", `${updated.label}: ${updated.qualifiedPurchaser ? "적격" : "비적격"}로 변경되었습니다.`, "good"); await refreshAdmin();
+    const row = button.closest("[data-claim-wallet]");
+    const value = (field) => row.querySelector(`[data-claim-field="${field}"]`);
+    const claim = {
+      basis: value("basis").value,
+      signatureValid: value("signatureValid").checked,
+      issuerTrusted: value("issuerTrusted").checked,
+      lookThroughStatus: value("lookThroughStatus").value,
+      coveredCompanyMatchesFund: value("coveredCompanyMatchesFund").checked
+    };
+    const updated = await post("/demo/admin/claim", {walletId: button.dataset.wallet, claim});
+    setStatus(
+      "adminUserStatus",
+      `${updated.label}: 입력 claim을 기록했고 ICA 투자자 판정은 ${updated.qualifiedPurchaser ? "거래 허용" : `차단 (${updated.eligibilityReason})`}입니다.`,
+      updated.qualifiedPurchaser ? "good" : "bad"
+    );
+    await refreshAdmin();
   } catch (error) { setStatus("adminUserStatus", error.message, "bad"); }
+  finally { button.disabled = false; }
 }
 async function setMaker(approved) {
   try { await post("/demo/admin/maker", {approved}); addActivity("Maker 상태 변경", approved ? "복구" : "취소"); await refreshAdmin(); }
@@ -372,7 +587,11 @@ async function refreshHistory() { try { renderEvents((await operatorApi("/api/v1
 
 document.querySelectorAll("[data-view]").forEach((button) => button.onclick = () => showView(button.dataset.view));
 $("walletSelector").onchange = switchProfile;
-$("newRfq").onclick = () => showView("create"); $("newRfqFromList").onclick = () => showView("create"); $("portfolioRfq").onclick = () => showView("create");
+$("range1m").onclick = () => setMarketRange("1m");
+$("range5m").onclick = () => setMarketRange("5m");
+$("range1h").onclick = () => setMarketRange("1h");
+$("rangeAll").onclick = () => setMarketRange("all");
+$("newRfq").onclick = beginNewRfq; $("newRfqFromList").onclick = beginNewRfq; $("portfolioRfq").onclick = beginNewRfq;
 $("setupDemo").onclick = setupDemo; $("connect").onclick = check; $("rfqForm").onsubmit = requestQuote; $("proveCompliance").onclick = proveCompliance;
 $("buySide").onclick = () => setTradeSide("buy"); $("sellSide").onclick = () => setTradeSide("sell");
 $("amount").oninput = () => { clearTimeout(window.precheckTimer); window.precheckTimer = setTimeout(runPrecheck, 250); };

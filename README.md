@@ -137,7 +137,9 @@ For the short RFQ-first stakeholder walkthrough, omit the AMM scenario suite:
 scripts/e2e-anvil.sh --profile buidl-like --mode rfq
 ```
 
-Use another versioned local fixture without editing application code:
+Use another versioned local fixture without editing application code. Schema v2
+can replace account bindings, initial balances, fixed mock pricing, default
+buy/sell amounts, wallet/QP facts and presentation values:
 
 ```shell
 scripts/demo.sh --profile buidl-like \
@@ -146,6 +148,10 @@ scripts/demo.sh --profile buidl-like \
 
 Add `--keep` for an interactive follow-up; the runner restores the demo maker
 after its rejection check so a new quote can be filled immediately.
+
+The selected scenario is copied into the deployment runtime input and its hash is
+written to the deployment artifact. The backend refuses a mismatched scenario,
+while balances displayed after deployment are read from the live token contracts.
 
 `--keep` leaves both Anvil and the RFQ demo backend running. Open the printed
 dashboard URL, choose a demo wallet, select **매수** or **매도**, request a firm

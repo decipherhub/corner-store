@@ -98,17 +98,30 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     MockPool internal pool;
     string internal assetProfile;
     bool internal useBuidlLikeProfile;
+    uint256 internal deployerAccount;
+    uint256 internal investorAccount;
+    uint256 internal makerAccount;
+    uint256 internal unapprovedMakerAccount;
+    uint256 internal eligibleInvestorBAccount;
+    uint256 internal ineligibleInvestorAccount;
+    uint256 internal investorQuoteBalance;
+    uint256 internal investorRwaBalance;
+    uint256 internal makerQuoteBalance;
+    uint256 internal makerRwaBalance;
+    uint256 internal poolRwaBalance;
+    bytes32 internal scenarioHash;
 
     function run() external {
-        uint256 deployerPk = vm.deriveKey(MNEMONIC, 0);
-        uint256 investorPk = vm.deriveKey(MNEMONIC, 1);
-        uint256 makerPk = vm.deriveKey(MNEMONIC, 2);
-        uint256 eligibleInvestorBPk = vm.deriveKey(MNEMONIC, 4);
-        uint256 ineligibleInvestorPk = vm.deriveKey(MNEMONIC, 5);
+        _loadInjectedScenario();
+        uint256 deployerPk = vm.deriveKey(MNEMONIC, uint32(deployerAccount));
+        uint256 investorPk = vm.deriveKey(MNEMONIC, uint32(investorAccount));
+        uint256 makerPk = vm.deriveKey(MNEMONIC, uint32(makerAccount));
+        uint256 eligibleInvestorBPk = vm.deriveKey(MNEMONIC, uint32(eligibleInvestorBAccount));
+        uint256 ineligibleInvestorPk = vm.deriveKey(MNEMONIC, uint32(ineligibleInvestorAccount));
         address deployer = vm.addr(deployerPk);
         address investor = vm.addr(investorPk);
         address maker = vm.addr(makerPk);
-        address unapprovedMaker = vm.addr(vm.deriveKey(MNEMONIC, 3));
+        address unapprovedMaker = vm.addr(vm.deriveKey(MNEMONIC, uint32(unapprovedMakerAccount)));
         address eligibleInvestorB = vm.addr(eligibleInvestorBPk);
         address ineligibleInvestor = vm.addr(ineligibleInvestorPk);
 
@@ -185,15 +198,15 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         verifyInvestor(maker);
         registerVenueIdentity(address(pool));
 
-        quote.mint(investor, INVESTOR_QUOTE);
-        quote.mint(eligibleInvestorB, INVESTOR_QUOTE);
-        quote.mint(ineligibleInvestor, INVESTOR_QUOTE);
-        quote.mint(maker, MAKER_QUOTE);
-        mint(investor, INVESTOR_RWA);
-        mint(eligibleInvestorB, INVESTOR_RWA);
-        mint(ineligibleInvestor, INVESTOR_RWA);
-        mint(maker, MAKER_RWA);
-        mint(address(pool), POOL_RWA);
+        quote.mint(investor, investorQuoteBalance);
+        quote.mint(eligibleInvestorB, investorQuoteBalance);
+        quote.mint(ineligibleInvestor, investorQuoteBalance);
+        quote.mint(maker, makerQuoteBalance);
+        mint(investor, investorRwaBalance);
+        mint(eligibleInvestorB, investorRwaBalance);
+        mint(ineligibleInvestor, investorRwaBalance);
+        mint(maker, makerRwaBalance);
+        mint(address(pool), poolRwaBalance);
 
         ammAdapter.setPool(address(pool), true);
         rfqAdapter.setMakerApproved(maker, true);
@@ -245,6 +258,48 @@ contract DeployStack is Script, TREXCore, DemoConstants {
 
         _writeArtifact(deployer, investor, eligibleInvestorB, ineligibleInvestor, maker, unapprovedMaker);
         _printSummary(deployer, investor, maker);
+    }
+
+    function _loadInjectedScenario() internal {
+        string memory json = vm.readFile(SCENARIO_RUNTIME_PATH);
+        require(vm.parseJsonUint(json, ".schemaVersion") == 2, "demo scenario schemaVersion must be 2");
+        scenarioHash = keccak256(bytes(json));
+
+        deployerAccount = vm.parseJsonUint(json, ".deployment.accounts.deployer");
+        investorAccount = vm.parseJsonUint(json, ".deployment.accounts.investor");
+        makerAccount = vm.parseJsonUint(json, ".deployment.accounts.maker");
+        unapprovedMakerAccount = vm.parseJsonUint(json, ".deployment.accounts.unapprovedMaker");
+        eligibleInvestorBAccount = vm.parseJsonUint(json, ".deployment.accounts.eligibleInvestorB");
+        ineligibleInvestorAccount = vm.parseJsonUint(json, ".deployment.accounts.ineligibleInvestor");
+        require(
+            deployerAccount <= 9 && investorAccount <= 9 && makerAccount <= 9 && unapprovedMakerAccount <= 9
+                && eligibleInvestorBAccount <= 9 && ineligibleInvestorAccount <= 9,
+            "demo scenario accounts must be in range 0-9"
+        );
+        require(
+            deployerAccount != investorAccount && deployerAccount != makerAccount
+                && deployerAccount != unapprovedMakerAccount && deployerAccount != eligibleInvestorBAccount
+                && deployerAccount != ineligibleInvestorAccount && investorAccount != makerAccount
+                && investorAccount != unapprovedMakerAccount && investorAccount != eligibleInvestorBAccount
+                && investorAccount != ineligibleInvestorAccount && makerAccount != unapprovedMakerAccount
+                && makerAccount != eligibleInvestorBAccount && makerAccount != ineligibleInvestorAccount
+                && unapprovedMakerAccount != eligibleInvestorBAccount
+                && unapprovedMakerAccount != ineligibleInvestorAccount
+                && eligibleInvestorBAccount != ineligibleInvestorAccount,
+            "demo scenario accounts must be unique"
+        );
+
+        investorQuoteBalance =
+            vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.investorQuote"));
+        investorRwaBalance = vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.investorRwa"));
+        makerQuoteBalance = vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.makerQuote"));
+        makerRwaBalance = vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.makerRwa"));
+        poolRwaBalance = vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.poolRwa"));
+        require(
+            investorQuoteBalance > 0 && investorRwaBalance > 0 && makerQuoteBalance > 0 && makerRwaBalance > 0
+                && poolRwaBalance > 0,
+            "demo scenario balances must be positive"
+        );
     }
 
     function _deployAndRegisterElements() internal {
@@ -306,6 +361,8 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         vm.serializeAddress(k, "maker", maker);
         vm.serializeAddress(k, "unapprovedMaker", unapprovedMaker);
         vm.serializeString(k, "assetProfile", assetProfile);
+        vm.serializeUint(k, "scenarioSchemaVersion", 2);
+        vm.serializeBytes32(k, "scenarioHash", scenarioHash);
         vm.serializeAddress(k, "rwaToken", address(rwaToken));
         vm.serializeAddress(k, "quote", address(quote));
         vm.serializeAddress(k, "pool", address(pool));

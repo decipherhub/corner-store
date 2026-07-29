@@ -66,6 +66,8 @@ restore the maker. The private keys remain in the local backend.
 The local-only dashboard control endpoints are:
 
 - `GET /demo/state`: read maker approval and the three demo wallet/QP states.
+- `GET /demo/market-history`: read injected NAV/indicative series and actual
+  Router fill points without merging their data provenance.
 - `POST /demo/setup`: prepare the reusable demo state and return its status.
 - `POST /demo/restore`: explicitly re-approve the demo maker.
 - `POST /demo/precheck`: evaluate current QP, maker and asset policy for a wallet
@@ -73,7 +75,10 @@ The local-only dashboard control endpoints are:
 - `POST /demo/quote`: issue a direction-aware, taker-bound signed quote for a
   configured demo wallet.
 - `POST /demo/trade`: settle or run maker/compliance final-enforcement proofs.
-- `POST /demo/admin/user`: set a demo wallet's live QP fixture.
+- `POST /demo/admin/claim`: record the wallet's QP basis, signature validity,
+  trusted-issuer status, look-through result and fund binding. The A-13 Element
+  derives eligibility from those facts; the API cannot directly set an
+  eligible/ineligible result.
 - `POST /demo/admin/maker`: set the live maker approval.
 - `POST /demo/admin/temporal/prepare`: inject the short freshness cap and refresh
   the configured target wallet's QP claim.
@@ -91,14 +96,51 @@ Command flags have matching `RFQ_DEMO_*` environment variables:
 
 - `--host`, `--port`, `--artifact`, `--scenario`, `--chain-id`, `--rpc`
 - `--maker-account` or `--maker-key`
-- `--ttl`
-- `--price-numerator`, `--price-denominator`
 - `RFQ_DEMO_OPERATOR_ACCOUNT`
 
-`--scenario` or `RFQ_DEMO_SCENARIO` selects a validated JSON fixture. The file
-owns RWA and settlement-asset presentation data, minimum base units, maker label,
-wallet persona mapping and initial QP status, preview quotes, and temporal-expiry
-parameters.
+`--scenario` or `RFQ_DEMO_SCENARIO` selects a validated schema-v2 JSON fixture.
+The file owns:
+
+- Anvil account bindings for deployer, investors and makers;
+- initial investor, maker and pool balances in base units;
+- an initial mock price, per-fill price impact, buy/sell defaults and quote TTL;
+- mock NAV/oracle and indicative-mid history, interval and spread;
+- RWA and settlement-asset presentation data and minimum base units;
+- wallet persona mapping and initial QP status;
+- preview quotes and temporal-expiry parameters.
+
+The runner copies the selected file to the deployment runtime input before
+`DeployStack` runs. Those values therefore drive real Anvil account derivation,
+minting and settlement rather than only changing dashboard labels. The deployment
+artifact binds the exact scenario schema version and content hash; the backend
+refuses to start with a different file. Quote TTL and mock-market pricing cannot
+be overridden independently; change the scenario and redeploy so the executable
+configuration remains reproducible.
+
+`execution.pricing.numerator / denominator` is the initial settlement-asset price of
+one whole RWA (`qUSD per RWA`). Buy quotes invert that price to calculate RWA
+output, while sell quotes apply it directly. After a successful fill,
+`impactBpsPerFill` moves the in-memory demo market up for a buy and down for a
+sell. The next quote and dashboard reference price use that updated value.
+Rejected trades do not move it, and `/demo/setup` restores the injected initial
+price. There is no separate display-only price.
+
+`minimumTradeBufferBps` controls the safety margin used by
+`suggestedTradeAmounts`. The backend recalculates these suggested buy/sell inputs
+from the current price and the asset minimum after every fill, while manually
+entered smaller amounts still exercise the real minimum-investment rejection.
+
+`GET /demo/market-history` returns the injected NAV/oracle and indicative-mid
+series plus actual Router fills recorded by the current backend process. Fixture
+series and live fills remain separate fields so the dashboard does not present
+sparse RFQ trading as continuous exchange candles.
+
+`marketHistory.intervalSeconds` is the spacing between injected price anchors.
+`sampleIntervalSeconds` deterministically interpolates those anchors for the
+dashboard's visible windows. The default keeps hourly anchors and emits one-minute
+samples, making the 1-minute, 5-minute, 1-hour and full-history controls materially
+different without embedding display-only prices in the frontend.
+
 The tracked default is:
 
 ```text
@@ -114,7 +156,10 @@ scripts/demo.sh --profile buidl-like --scenario /path/to/scenario.json
 Wallets are not arbitrary browser-only addresses. Each scenario wallet maps an
 Anvil account to a named address in the fresh deployment artifact. The backend
 verifies that mapping before signing or sending a transaction. Scenario policy
-amounts must also remain consistent with the deployed contract policy.
+amounts must also remain consistent with the deployed contract policy. Validation
+rejects duplicate/out-of-range accounts, unsafe base-unit values, default trades
+that cannot be funded by the injected inventory, and BUIDL-like defaults below
+the configured RWA minimum.
 
 `RFQ_DEMO_ENABLE_SETTLEMENT=1` additionally enables the click-through settlement
 endpoint. It is set by `scripts/e2e-anvil.sh` only after it has started local
@@ -124,9 +169,10 @@ Run `npm start -- --help` for defaults. Never commit a maker key.
 
 ## Production boundary
 
-The included fixed pricing, deterministic Anvil keys, scenario fixtures,
+The included trade-impact mock pricing, deterministic Anvil keys, scenario fixtures,
 in-memory nonce and no-op inventory check are demo components. A production
-operator must replace pricing, signer custody,
+operator supplies actual balances through chain/indexer reads and replaces the
+RFQ SDK pricing, signer custody,
 persistent nonce storage, inventory/risk controls, authentication, rate limiting,
 monitoring and hosting. The backend cannot approve a trade: final compliance is
 evaluated at fill time by `ExecutionRouter` and `ComplianceEngine`.
