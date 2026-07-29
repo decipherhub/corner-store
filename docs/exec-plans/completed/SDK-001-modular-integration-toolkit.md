@@ -40,8 +40,5 @@ Corner Store를 채택하는 팀이 reference demo server나 저장소 구조 �
   (Forge 643/643 포함)
 - BUIDL-like RFQ live Anvil E2E 통과
 - independent code review에서 portable scaffold blocker 수정 후 재검토 통과
-
-## Validation Gap
-
-- optional Docker image build는 생성물 검증까지 완료했지만 local Docker daemon이
-  실행 중이지 않아 실제 `docker build`는 수행하지 못했다.
+- optional Compose config, generated Docker image build와 container 내부
+  signed quote HTTP runtime 통과

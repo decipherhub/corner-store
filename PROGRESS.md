@@ -22,8 +22,8 @@ source of truth로 사용한다.
   RFQ SDK source를 vendoring해 저장소 밖과 선택형 Docker context에서도 재현 가능하다.
   RFQ·Toolkit·CLI·demo backend test, pinned Foundry 기준 repository check
   (Forge 643/643), BUIDL-like RFQ E2E, clean generated-project install/build와
-  독립 code review를 통과했다. Docker daemon이 실행 중이지 않아 실제 image build는
-  수행하지 못했다.
+  독립 code review를 통과했다. 선택형 Compose config, generated Docker image
+  build와 container 내부 signed quote HTTP runtime도 검증했다.
 - `DEMO-012 — Enforcement Case Workflow`: Admin에 단계형 Enforcement Cases
   워크스페이스를 추가했다. Adapter 직접 호출, quote 이후 claim 만료, quote 이후
   Maker 취소를 기준 상태→quote→정책 변경→실행→증거→복구로 분리하며, 실제 실패
@@ -185,7 +185,8 @@ source of truth로 사용한다.
   생성한다. 기본 출력은 local absolute path 없이 SDK source를 포함하며 Docker
   Compose는 선택적으로만 생성된다.
 - 전체 repository check, BUIDL-like RFQ E2E와 clean generated-project build를
-  통과했다. Docker image build만 local daemon 부재로 미실행 상태다.
+  통과했다. Docker daemon에서 Compose config, generated image build와 container
+  signed quote runtime까지 추가 검증했다.
 - RFQ 데모의 실행 상태를 schema-v2 scenario로 통합했다. 배포 스크립트가 계정과
   초기 qUSD/RWA 물량을 실제 mint/approval에 사용하고, backend와 CLI는 같은
   scenario의 가격·수량·TTL·signer binding을 사용한다.
