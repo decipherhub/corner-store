@@ -40,12 +40,14 @@ Request a quote using base units:
 ```sh
 curl -X POST http://127.0.0.1:8787/rfq/quote \
   -H 'content-type: application/json' \
-  -d '{"taker":"0x...","amountIn":"5000000000000000000000000","ttlSeconds":3600}'
+  -d '{"taker":"0x...","amountIn":"5000000000000000000000000","side":"buy","ttlSeconds":3600}'
 ```
 
-The backend fixes `tokenIn`, `tokenOut`, RFQ venue and verifying contract to the
-deployment artifact. The response is the existing `{quote, signature,
-typedData}` format consumed by the CLI and `RFQAdapter`.
+`side` defaults to `buy`. Buy binds `tokenIn=QUOTE, tokenOut=RWA`; sell binds
+`tokenIn=RWA, tokenOut=QUOTE`. The backend fixes both supported directions, RFQ
+venue and verifying contract to the deployment artifact. The response is the
+existing `{quote, signature, typedData}` format consumed by the CLI and
+`RFQAdapter`.
 
 For the click-through local demo, run:
 
@@ -66,8 +68,10 @@ The local-only dashboard control endpoints are:
 - `GET /demo/state`: read maker approval and the three demo wallet/QP states.
 - `POST /demo/setup`: prepare the reusable demo state and return its status.
 - `POST /demo/restore`: explicitly re-approve the demo maker.
-- `POST /demo/precheck`: evaluate current QP, maker and asset policy for a wallet.
-- `POST /demo/quote`: issue a taker-bound signed quote for a configured demo wallet.
+- `POST /demo/precheck`: evaluate current QP, maker and asset policy for a wallet
+  and a `buy | sell` side.
+- `POST /demo/quote`: issue a direction-aware, taker-bound signed quote for a
+  configured demo wallet.
 - `POST /demo/trade`: settle or run maker/compliance final-enforcement proofs.
 - `POST /demo/admin/user`: set a demo wallet's live QP fixture.
 - `POST /demo/admin/maker`: set the live maker approval.
@@ -92,8 +96,9 @@ Command flags have matching `RFQ_DEMO_*` environment variables:
 - `RFQ_DEMO_OPERATOR_ACCOUNT`
 
 `--scenario` or `RFQ_DEMO_SCENARIO` selects a validated JSON fixture. The file
-owns asset presentation data, minimum base units, maker label, wallet persona
-mapping and initial QP status, preview quotes, and temporal-expiry parameters.
+owns RWA and settlement-asset presentation data, minimum base units, maker label,
+wallet persona mapping and initial QP status, preview quotes, and temporal-expiry
+parameters.
 The tracked default is:
 
 ```text
@@ -137,5 +142,6 @@ requests two quotes, verifies the maker signature and monotonic nonce, rejects
 numeric on-chain amounts, and confirms demo controls remain disabled outside
 the local runner. The live runner additionally proves setup → protected Router
 fill → persistent revoke state → explicit restore, role-aware pre-check,
-ineligible final rejection, Admin QP round-trip, and quote-time eligibility
-expiring before Router settlement.
+ineligible final rejection, Admin QP round-trip, quote-time eligibility expiring
+before Router settlement, and a reverse sell whose RWA decreases while the
+settlement-asset balance increases.

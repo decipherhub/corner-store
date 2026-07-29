@@ -13,7 +13,8 @@ let precheck = null;
 let live = null;
 let quoteConsumed = false;
 let quoteTimer = null;
-let session = {rfqId: null, status: null, quoteCount: 0, settledCount: 0, delta: 0n, activities: []};
+let tradeSide = "buy";
+let session = {rfqId: null, status: null, quoteCount: 0, settledCount: 0, rwaDelta: 0n, quoteDelta: 0n, activities: []};
 
 function endpoint(path) { return `${$("backend").value.replace(/\/$/, "")}${path}`; }
 async function api(path, init) {
@@ -31,21 +32,24 @@ async function operatorApi(path) {
 function post(path, value) { return api(path, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(value)}); }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function shortAddress(value) { return value ? `${value.slice(0, 6)}…${value.slice(-4)}` : "—"; }
-function baseAmount(value) {
-  const decimals = chainState?.presentation.asset.decimals ?? 18;
+function activeInputAsset() {
+  return tradeSide === "buy" ? chainState?.presentation.quoteAsset : chainState?.presentation.asset;
+}
+function baseAmount(value, decimals = activeInputAsset()?.decimals ?? 18) {
   if (!new RegExp(`^\\d+(\\.\\d{1,${decimals}})?$`).test(value)) throw Error(`금액은 소수점 ${decimals}자리 이하의 양수여야 합니다.`);
   const [whole, fraction = ""] = value.split(".");
   const amount = (whole + fraction.padEnd(decimals, "0")).replace(/^0+/, "") || "0";
   if (BigInt(amount) <= 0n) throw Error("금액은 0보다 커야 합니다.");
   return amount;
 }
-function formatBaseUnits(value) {
-  const decimals = chainState?.presentation.asset.decimals ?? 18;
+function formatBaseUnits(value, decimals = chainState?.presentation.asset.decimals ?? 18) {
   const raw = BigInt(value);
+  const sign = raw < 0n ? "-" : "";
+  const absolute = raw < 0n ? -raw : raw;
   const scale = 10n ** BigInt(decimals);
-  const whole = raw / scale;
-  const fraction = (raw % scale).toString().padStart(decimals, "0").replace(/0+$/, "").slice(0, 4);
-  return `${whole.toLocaleString("en-US")}${fraction ? `.${fraction}` : ""}`;
+  const whole = absolute / scale;
+  const fraction = (absolute % scale).toString().padStart(decimals, "0").replace(/0+$/, "").slice(0, 4);
+  return `${sign}${whole.toLocaleString("en-US")}${fraction ? `.${fraction}` : ""}`;
 }
 function chainNow() { return Number(chainState?.chainTimestamp || 0) + Math.floor((Date.now() - stateLoadedAt) / 1000); }
 function referencePrice() {
@@ -101,12 +105,43 @@ function configurePresentation() {
   $("asset").innerHTML = `<option>${escapeHtml(asset.name)} · ${escapeHtml(asset.symbol)}</option>`;
   $("assetName").textContent = asset.name; $("assetSymbol").textContent = asset.symbol;
   $("portfolioAssetName").textContent = asset.name;
+  $("portfolioQuoteName").textContent = chainState.presentation.quoteAsset.name;
   $("referencePrice").textContent = referencePrice();
   $("assetReferencePrice").textContent = `${referencePrice()} · scenario`;
   $("portfolioReferencePrice").textContent = `${referencePrice()} · scenario`;
   $("minimumHelp").textContent = `주입된 최소 투자금액 ${minimum} · ${asset.decimals} decimals`;
   if (firstLoad || !$("amount").value) $("amount").value = minimum;
   $("liveMakerDescription").textContent = chainState.presentation.maker.label;
+  updateSidePresentation();
+}
+function updateSidePresentation() {
+  if (!chainState) return;
+  const asset = chainState.presentation.asset;
+  const quote = chainState.presentation.quoteAsset;
+  $("buySide").classList.toggle("active", tradeSide === "buy");
+  $("sellSide").classList.toggle("active", tradeSide === "sell");
+  $("amountLabel").textContent = tradeSide === "buy" ? "결제 금액" : "매도 수량";
+  $("amountUnit").textContent = tradeSide === "buy" ? quote.symbol : asset.symbol;
+  $("requestQuote").textContent = tradeSide === "buy" ? "매수 Quote 요청" : "매도 Quote 요청";
+}
+async function setTradeSide(side) {
+  tradeSide = side;
+  live = null;
+  quoteConsumed = false;
+  session.rfqId = null;
+  session.status = null;
+  $("quoteComparison").classList.add("hidden");
+  $("rfqRows").innerHTML = '<tr><td colspan="7"><div class="empty-row">아직 RFQ가 없습니다.</div></td></tr>';
+  updateSidePresentation();
+  await runPrecheck();
+  updateSummary();
+}
+function renderWalletBalances() {
+  if (currentProfile.role !== "user") return;
+  $("dashboardHolding").textContent = `${formatBaseUnits(currentProfile.rwaBalance)} ${chainState.presentation.asset.symbol}`;
+  $("portfolioTotal").textContent = `${formatBaseUnits(currentProfile.rwaBalance)} ${chainState.presentation.asset.symbol}`;
+  $("buidlHolding").textContent = formatBaseUnits(currentProfile.rwaBalance);
+  $("quoteHolding").textContent = `${formatBaseUnits(currentProfile.quoteBalance, chainState.presentation.quoteAsset.decimals)} ${chainState.presentation.quoteAsset.symbol}`;
 }
 async function switchProfile() {
   currentProfile = profiles[$("walletSelector").value];
@@ -126,9 +161,7 @@ async function switchProfile() {
       : "현재 지갑은 조회만 가능하며 RFQ 거래는 차단됩니다.";
     $("newRfq").disabled = !latest?.allowed;
     $("portfolioRfq").disabled = !latest?.allowed;
-    $("dashboardHolding").textContent = `${formatBaseUnits(currentProfile.rwaBalance)} ${chainState.presentation.asset.symbol}`;
-    $("portfolioTotal").textContent = `${formatBaseUnits(currentProfile.rwaBalance)} ${chainState.presentation.asset.symbol}`;
-    $("buidlHolding").textContent = formatBaseUnits(currentProfile.rwaBalance);
+    renderWalletBalances();
   }
 }
 
@@ -140,7 +173,7 @@ async function runPrecheck() {
   if (currentProfile.role !== "user" || !currentProfile.address) return;
   try {
     const amountIn = baseAmount($("amount").value.trim());
-    precheck = await post("/demo/precheck", {taker: currentProfile.address, amountIn});
+    precheck = await post("/demo/precheck", {taker: currentProfile.address, amountIn, side: tradeSide});
     $("precheckRows").innerHTML = precheckHtml(precheck);
     $("precheckVerdict").textContent = precheck.allowed ? "예상 결과: 체결 가능" : `예상 결과: 체결 불가 · ${precheck.verdict.reason || "policy rejected"}`;
     $("precheckCard").classList.toggle("blocked", !precheck.allowed);
@@ -184,7 +217,12 @@ async function requestQuote(event) {
     const latest = await runPrecheck();
     if (!latest?.allowed) throw Error(latest?.verdict.reason || "Compliance Pre-check failed");
     const wallet = selectedWallet();
-    live = await post("/demo/quote", {taker: wallet.address, amountIn: latest.amountIn, ttlSeconds: Number($("ttl").value)});
+    live = await post("/demo/quote", {
+      taker: wallet.address,
+      amountIn: latest.amountIn,
+      side: tradeSide,
+      ttlSeconds: Number($("ttl").value)
+    });
     quoteConsumed = false;
     session.rfqId = `#${String(live.quote.nonce).slice(-6)}`; session.status = "quoted"; session.quoteCount += 1;
     addActivity("Firm quote 도착", `${wallet.label} · ${chainState.presentation.maker.label}`);
@@ -195,14 +233,16 @@ async function requestQuote(event) {
 function renderRfqRows() {
   if (!live) return;
   const owner = Object.values(profiles).find((p) => p.address?.toLowerCase() === live.quote.taker.toLowerCase());
-  $("rfqRows").innerHTML = `<tr><td><strong>${session.rfqId}</strong></td><td>${escapeHtml(owner?.label || shortAddress(live.quote.taker))}</td><td>${escapeHtml(chainState.presentation.asset.name)}</td><td><span class="status-pill neutral">${session.status}</span></td><td>1 live + ${chainState.presentation.previewQuotes.length} preview</td><td><button id="viewQuote" class="text-button">견적 보기 →</button></td></tr>`;
+  $("rfqRows").innerHTML = `<tr><td><strong>${session.rfqId}</strong></td><td>${escapeHtml(owner?.label || shortAddress(live.quote.taker))}</td><td><strong>${tradeSide === "buy" ? "매수" : "매도"}</strong></td><td>${escapeHtml(chainState.presentation.asset.name)}</td><td><span class="status-pill neutral">${session.status}</span></td><td>1 live + ${chainState.presentation.previewQuotes.length} preview</td><td><button id="viewQuote" class="text-button">견적 보기 →</button></td></tr>`;
   $("viewQuote").onclick = () => $("quoteComparison").scrollIntoView({behavior:"smooth"});
 }
 function renderQuote() {
   renderRfqRows(); $("quoteComparison").classList.remove("hidden");
   const maker = chainState.presentation.maker.label;
   const liveRate = quoteRate(live.quote);
-  $("quoteCards").innerHTML = `<article class="quote-card live"><div class="maker-line"><strong>${escapeHtml(maker)}</strong><span>${quoteConsumed ? "Settled · consumed" : "Live · executable"}</span></div><strong class="rate">${liveRate}</strong><small>Backend-generated firm quote</small><dl><div><dt>Pay</dt><dd>${formatBaseUnits(live.quote.amountIn)}</dd></div><div><dt>Receive</dt><dd>${formatBaseUnits(live.quote.amountOut)}</dd></div><div><dt>유효시간</dt><dd id="liveExpiry">${quoteConsumed ? "Consumed" : "—"}</dd></div><div><dt>Taker</dt><dd>${shortAddress(live.quote.taker)}</dd></div></dl><button id="selectLive" class="primary" ${quoteConsumed ? "disabled" : ""}>${quoteConsumed ? "체결 완료" : "이 견적 검토"}</button></article>${chainState.presentation.previewQuotes.map((quote) => `<article class="quote-card preview"><div class="maker-line"><strong>${escapeHtml(quote.maker)}</strong><span>Scenario fixture</span></div><strong class="rate">${escapeHtml(quote.rate)}</strong><small>Indicative only</small><button class="secondary" disabled>Preview only</button></article>`).join("")}`;
+  const input = tradeSide === "buy" ? chainState.presentation.quoteAsset : chainState.presentation.asset;
+  const output = tradeSide === "buy" ? chainState.presentation.asset : chainState.presentation.quoteAsset;
+  $("quoteCards").innerHTML = `<article class="quote-card live"><div class="maker-line"><strong>${escapeHtml(maker)}</strong><span>${quoteConsumed ? "Settled · consumed" : "Live · executable"}</span></div><strong class="rate">${liveRate}</strong><small>${tradeSide === "buy" ? "매수" : "매도"} · Backend-generated firm quote</small><dl><div><dt>Pay</dt><dd>${formatBaseUnits(live.quote.amountIn, input.decimals)} ${escapeHtml(input.symbol)}</dd></div><div><dt>Receive</dt><dd>${formatBaseUnits(live.quote.amountOut, output.decimals)} ${escapeHtml(output.symbol)}</dd></div><div><dt>유효시간</dt><dd id="liveExpiry">${quoteConsumed ? "Consumed" : "—"}</dd></div><div><dt>Taker</dt><dd>${shortAddress(live.quote.taker)}</dd></div></dl><button id="selectLive" class="primary" ${quoteConsumed ? "disabled" : ""}>${quoteConsumed ? "체결 완료" : "이 견적 검토"}</button></article>${chainState.presentation.previewQuotes.map((quote) => `<article class="quote-card preview"><div class="maker-line"><strong>${escapeHtml(quote.maker)}</strong><span>Scenario fixture</span></div><strong class="rate">${escapeHtml(quote.rate)}</strong><small>Indicative only</small><button class="secondary" disabled>Preview only</button></article>`).join("")}`;
   if (!quoteConsumed) $("selectLive").onclick = selectQuote;
   if (quoteTimer) clearTimeout(quoteTimer);
   if (quoteConsumed) return;
@@ -221,7 +261,9 @@ async function selectQuote() {
   const latest = await runPrecheck();
   $("acceptPrecheck").innerHTML = `<strong>Accept 전 Pre-check</strong>${precheckHtml(latest)}<b>${latest.allowed ? "현재 체결 가능" : "현재 체결 불가"}</b>`;
   $("modalPrecheck").innerHTML = $("acceptPrecheck").innerHTML;
-  $("review").innerHTML = `<div><span>Maker</span><strong>${escapeHtml(chainState.presentation.maker.label)}</strong></div><div><span>Taker</span><strong>${shortAddress(live.quote.taker)}</strong></div><div><span>Amount</span><strong>${formatBaseUnits(live.quote.amountIn)}</strong></div><div><span>Nonce</span><strong>${live.quote.nonce}</strong></div><details class="payload-review"><summary>Signed quote payload</summary><pre>${escapeHtml(JSON.stringify(live,null,2))}</pre></details>`;
+  const input = tradeSide === "buy" ? chainState.presentation.quoteAsset : chainState.presentation.asset;
+  const output = tradeSide === "buy" ? chainState.presentation.asset : chainState.presentation.quoteAsset;
+  $("review").innerHTML = `<div><span>방향</span><strong>${tradeSide === "buy" ? "매수" : "매도"}</strong></div><div><span>Maker</span><strong>${escapeHtml(chainState.presentation.maker.label)}</strong></div><div><span>Taker</span><strong>${shortAddress(live.quote.taker)}</strong></div><div><span>Pay</span><strong>${formatBaseUnits(live.quote.amountIn, input.decimals)} ${escapeHtml(input.symbol)}</strong></div><div><span>Receive</span><strong>${formatBaseUnits(live.quote.amountOut, output.decimals)} ${escapeHtml(output.symbol)}</strong></div><div><span>Nonce</span><strong>${live.quote.nonce}</strong></div><details class="payload-review"><summary>Signed quote payload</summary><pre>${escapeHtml(JSON.stringify(live,null,2))}</pre></details>`;
   $("executeQuote").textContent = latest.allowed ? "견적 수락 및 체결" : "최종 온체인 검사 시도";
   $("confirmBackdrop").classList.remove("hidden");
 }
@@ -236,14 +278,16 @@ async function execute() {
       $("result").innerHTML = `<div class="inline-status good"><strong>Router가 체결을 거부했습니다.</strong><br>${escapeHtml(result.rejection)}<br><small>${escapeHtml(result.reasonCode || "")}</small></div>`;
       addActivity("RFQ 체결 거부", result.rejection); session.status = "rejected";
     } else {
-      session.status = "accepted"; session.settledCount += 1; session.delta += BigInt(result.transaction.rwaDelta);
+      session.status = "accepted"; session.settledCount += 1;
+      session.rwaDelta += BigInt(result.transaction.rwaDelta);
+      session.quoteDelta += BigInt(result.transaction.quoteDelta);
       quoteConsumed = true;
       if (quoteTimer) clearTimeout(quoteTimer);
       $("result").innerHTML = `<div class="inline-status good"><strong>체결 완료</strong><br>Block ${result.transaction.blockNumber}<br><small>${result.transaction.hash}</small></div>`;
-      $("portfolioDelta").textContent = `현재 세션 실제 체결: +${session.delta} base units`;
-      addActivity("RFQ 체결 완료", `Block ${result.transaction.blockNumber}`);
+      $("portfolioDelta").textContent = `현재 세션 실제 체결: ${formatBaseUnits(session.rwaDelta)} ${chainState.presentation.asset.symbol} / ${formatBaseUnits(session.quoteDelta, chainState.presentation.quoteAsset.decimals)} ${chainState.presentation.quoteAsset.symbol}`;
+      addActivity(`${result.side === "sell" ? "매도" : "매수"} RFQ 체결 완료`, `Block ${result.transaction.blockNumber}`);
     }
-    $("confirmBackdrop").classList.add("hidden"); updateSummary(); renderQuote(); await loadState();
+    $("confirmBackdrop").classList.add("hidden"); updateSummary(); renderQuote(); await loadState(); renderWalletBalances();
   } catch (error) { $("result").innerHTML = `<div class="inline-status bad">체결 실패: ${escapeHtml(error.message)}</div>`; }
   finally { $("executeQuote").disabled = quoteConsumed; }
 }
@@ -254,6 +298,7 @@ async function proveCompliance() {
     const quote = await post("/demo/quote", {
       taker: currentProfile.address,
       amountIn: latest.amountIn,
+      side: tradeSide,
       ttlSeconds: chainState.presentation.temporalEligibility.quoteTtlSeconds
     });
     const result = await post("/demo/trade", {amountIn: quote.quote.amountIn, action: "compliance-proof", quote});
@@ -329,6 +374,7 @@ document.querySelectorAll("[data-view]").forEach((button) => button.onclick = ()
 $("walletSelector").onchange = switchProfile;
 $("newRfq").onclick = () => showView("create"); $("newRfqFromList").onclick = () => showView("create"); $("portfolioRfq").onclick = () => showView("create");
 $("setupDemo").onclick = setupDemo; $("connect").onclick = check; $("rfqForm").onsubmit = requestQuote; $("proveCompliance").onclick = proveCompliance;
+$("buySide").onclick = () => setTradeSide("buy"); $("sellSide").onclick = () => setTradeSide("sell");
 $("amount").oninput = () => { clearTimeout(window.precheckTimer); window.precheckTimer = setTimeout(runPrecheck, 250); };
 $("executeQuote").onclick = execute; $("closeConfirm").onclick = $("cancelConfirm").onclick = () => $("confirmBackdrop").classList.add("hidden");
 $("adminRefresh").onclick = refreshAdmin; $("refresh").onclick = refreshHistory; $("revokeMaker").onclick = () => setMaker(false); $("restoreMaker").onclick = () => setMaker(true);

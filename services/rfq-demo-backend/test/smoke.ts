@@ -37,6 +37,11 @@ async function main(): Promise<void> {
       minimumAmountBaseUnits: "1",
       decimals: 18
     },
+    quoteAsset: {
+      name: "Injected Settlement Asset",
+      symbol: "iUSD",
+      decimals: 18
+    },
     maker: {label: "Injected Maker"},
     wallets: [
       {
@@ -79,6 +84,7 @@ async function main(): Promise<void> {
   ], {});
   assert(loaded.scenario.asset.name === "Injected Asset", "scenario data is loaded from the injected file");
   assert(loaded.scenario.wallets[0].label === "Injected Investor", "scenario wallet is not embedded in application code");
+  assert(loaded.scenario.quoteAsset.symbol === "iUSD", "settlement asset presentation is injected");
   assertThrows(
     () => loadConfig(["--artifact", artifactPath, "--scenario", join(dir, "missing.json")], {}),
     "explicit missing scenario is rejected instead of falling back"
@@ -128,6 +134,16 @@ async function main(): Promise<void> {
     assert(demoQuoteResponse.status === 200, "demo quote returns 200 with the canonical taker default");
     const demoQuote = JSON.parse(demoQuoteResponse.body) as any;
     assert(demoQuote.quote.taker.toLowerCase() === artifact.investor.toLowerCase(), "demo quote uses canonical taker");
+
+    const sellQuoteResponse = await requestJson(`${running.baseUrl}/demo/quote`, "POST", {
+      taker: artifact.investor,
+      amountIn: "100",
+      side: "sell"
+    });
+    assert(sellQuoteResponse.status === 200, "sell quote returns 200");
+    const sellQuote = JSON.parse(sellQuoteResponse.body) as any;
+    assert(sellQuote.quote.tokenIn.toLowerCase() === artifact.rwaToken.toLowerCase(), "sell tokenIn is deployment RWA");
+    assert(sellQuote.quote.tokenOut.toLowerCase() === artifact.quote.toLowerCase(), "sell tokenOut is deployment QUOTE");
 
     const secondResponse = await requestJson(`${running.baseUrl}/quote`, "POST", {
       taker: artifact.investor,

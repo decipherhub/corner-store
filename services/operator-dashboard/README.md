@@ -7,11 +7,12 @@ Anvil persona selector, not authentication.
 
 - **Dashboard** shows presentation fixtures separately from current-session
   live RFQ and settlement counts, and prepares the local demo environment.
-- **RFQ 거래** requests a live firm quote for the scenario asset.
+- **RFQ 거래** requests either a buy quote (settlement asset → RWA) or a sell
+  quote (RWA → settlement asset).
 - **My RFQs** compares the executable quote with visibly disabled preview
   fixtures, then requires review of the exact signed payload before settlement.
-- **Portfolio** shows the selected wallet's actual local-chain token balance and
-  the real balance delta produced by the current session's Router settlement.
+- **Portfolio** shows both actual local-chain balances and the opposite RWA /
+  settlement-asset deltas produced by each Router settlement.
 
 Admin gets separate monitoring, user/QP fixture control, maker control,
 temporal-eligibility proof and transaction-history screens. Those controls send
@@ -47,7 +48,9 @@ without editing frontend code. Addresses remain bound to the fresh deployment
 artifact and deterministic funded Anvil accounts.
 
 Open the printed URL, prepare the environment and follow the four primary
-screens. Switch to the ineligible fixture to show pre-check failure and the
+screens. Toggle **매수 / 매도** before requesting a quote; either direction can
+run first because the deployment seeds both sides of the demo inventory. Switch
+to the ineligible fixture to show pre-check failure and the
 explicit final-enforcement proof. Switch to Admin to change QP or maker state.
 The temporal proof issues a quote while the configured investor is eligible,
 advances Anvil beyond the injected claim freshness window, and then shows the

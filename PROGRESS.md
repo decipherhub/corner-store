@@ -89,6 +89,8 @@ source of truth로 사용한다.
 - `DEMO-004 — Injectable Temporal RFQ Scenario`(scenario JSON 기반 자산 표시값,
   지갑/QP fixture와 시간 조건 주입, quote-time 적격 claim 만료 후 동일 signed
   quote의 fill-time Router 거부 증명).
+- `DEMO-005 — Bidirectional RFQ Demo`(매수 qUSD→RWA와 매도 RWA→qUSD를 동일
+  backend/Router/RFQAdapter 경로로 체결하고 두 자산의 실제 잔액 증감을 표시).
 
 ## Blocked
 
@@ -108,6 +110,13 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- RFQ quote API와 대시보드에 `buy | sell` 방향을 추가했다. 매도 quote는
+  `tokenIn=RWA`, `tokenOut=결제 자산`으로 서명되며 E2E에서 투자자 RWA 감소와
+  결제 자산 증가를 검증했다.
+- fresh 배포가 투자자 RWA와 maker 결제 자산 inventory 및 양방향 allowance를
+  준비하므로 매수를 먼저 하지 않아도 매도 데모를 바로 실행할 수 있다.
+- `ComplianceEngine.commit`이 regulated token 위치에 따라 실제 이동 방향을
+  기록하도록 수정해, tokenIn 매도의 stateful accounting을 buyer→seller로 맞췄다.
 - RFQ 데모의 사용자명, maker/preview 표시, 기준가격, 최소금액, 초기 QP 상태와
   freshness/시간 경과 조건을 validated scenario JSON으로 분리했다. 최상위
   `scripts/demo.sh --scenario <path>`와 E2E가 같은 입력을 사용하고 주소는 fresh

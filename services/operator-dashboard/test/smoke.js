@@ -14,6 +14,7 @@ for (const marker of [
   'id="userNav"', 'id="adminNav"', 'id="dashboardView"', 'id="createView"', 'id="rfqsView"',
   'id="portfolioView"', 'id="adminDashboardView"', 'id="adminUsersView"', 'id="adminMakerView"',
   "Compliance Pre-check", "참고가격", "최종 온체인 거부 시연", 'id="prepareTemporal"', 'id="advanceTemporal"',
+  'id="buySide"', 'id="sellSide"', 'id="quoteHolding"',
   'id="confirmDialog"', 'id="demoGuide"', 'aria-modal="true"',
   '<link rel="stylesheet" href="/styles.css">', '<script src="/app.js"></script>'
 ]) {
@@ -28,6 +29,7 @@ for (const marker of [
   "configurePresentation", "chainNow", "quote.taker", "Router가 체결을 거부했습니다",
   "Scenario fixture", "Live · executable", "refreshAdmin", "toggleUser", "setMaker",
   "prepareTemporal", "advanceTemporal"
+  , 'side: tradeSide', 'setTradeSide("sell")', "transaction.quoteDelta"
 ]) {
   if (!app.includes(marker)) throw new Error(`dashboard API/state marker missing: ${marker}`);
 }
@@ -38,6 +40,7 @@ for (const [control, handler] of [
   ["adminRefresh", "refreshAdmin"], ["revokeMaker", "setMaker(false)"],
   ["restoreMaker", "setMaker(true)"], ["openGuide", "guideBackdrop"]
   ,["prepareTemporal", "prepareTemporal"], ["advanceTemporal", "advanceTemporal"]
+  ,["buySide", 'setTradeSide("buy")'], ["sellSide", 'setTradeSide("sell")']
 ]) {
   const binding = app.indexOf(`$("` + control + `").onclick`);
   if (binding < 0 || !app.slice(binding, binding + 280).includes(handler)) {

@@ -11,6 +11,7 @@ const MAX_BODY_BYTES = 16 * 1024;
 export interface QuoteRequestBody {
   taker: string;
   amountIn: string;
+  side?: "buy" | "sell";
   ttlSeconds?: number;
 }
 
@@ -111,7 +112,11 @@ async function handleRequest(
       const body = await readJsonBody(req);
       if (!isRecord(body) || typeof body.taker !== "string") throw new Error("taker is required");
       const amountIn = parseAmount(body.amountIn);
-      sendJson(res, 200, await settlement.precheck(asAddress(body.taker, "taker"), amountIn));
+      sendJson(res, 200, await settlement.precheck(
+        asAddress(body.taker, "taker"),
+        amountIn,
+        parseSide(body.side)
+      ));
       return;
     }
 
@@ -233,15 +238,22 @@ async function createQuote(
   if (body.ttlSeconds !== undefined && (!Number.isSafeInteger(body.ttlSeconds) || Number(body.ttlSeconds) <= 0)) {
     throw new Error("ttlSeconds must be a positive integer");
   }
+  const side = parseSide(body.side);
 
   return quoteService.quote({
     taker,
-    tokenIn: asAddress(config.artifact.quote, "artifact quote"),
-    tokenOut: asAddress(config.artifact.rwaToken, "artifact rwaToken"),
+    tokenIn: asAddress(side === "buy" ? config.artifact.quote : config.artifact.rwaToken, "artifact tokenIn"),
+    tokenOut: asAddress(side === "buy" ? config.artifact.rwaToken : config.artifact.quote, "artifact tokenOut"),
     amountIn: body.amountIn,
     venue: asAddress(config.artifact.rfqVenue, "artifact rfqVenue"),
     ttlSeconds: body.ttlSeconds as number | undefined
   });
+}
+
+function parseSide(value: unknown): "buy" | "sell" {
+  if (value === undefined || value === "buy") return "buy";
+  if (value === "sell") return "sell";
+  throw new Error("side must be buy or sell");
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {

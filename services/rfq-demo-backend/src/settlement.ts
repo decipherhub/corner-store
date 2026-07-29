@@ -47,6 +47,7 @@ const RFQ_MAKER_NOT_APPROVED_SELECTOR = id("RFQMakerNotApproved()").slice(0, 10)
 const COMPLIANCE_REJECTED_SELECTOR = id("ComplianceRejected(bytes32)").slice(0, 10).toLowerCase();
 export type DemoWalletId = string;
 export type DemoTradeAction = "settle" | "revoked-maker" | "compliance-proof";
+export type DemoTradeSide = "buy" | "sell";
 
 export interface DemoWalletState {
   id: DemoWalletId;
@@ -55,6 +56,7 @@ export interface DemoWalletState {
   qualifiedPurchaser: boolean;
   claimPresent: boolean;
   rwaBalance: string;
+  quoteBalance: string;
   eligibilityReason?: string;
   verifiedAt?: number;
   expiresAt?: number;
@@ -63,16 +65,28 @@ export interface DemoWalletState {
 export interface DemoPrecheckResult {
   allowed: boolean;
   wallet: DemoWalletState;
+  side: DemoTradeSide;
   amountIn: string;
+  amountOut: string;
   checks: Array<{key: "investor" | "maker" | "asset"; label: string; pass: boolean; reason?: string}>;
   verdict: {allowed: boolean; reasonCode: string; reason?: string};
 }
 
 export interface DemoTradeResult {
   action: DemoTradeAction;
+  side: DemoTradeSide;
   quote: SignedRFQQuote;
   trace: Array<{stage: string; detail: string; status: "passed" | "rejected"}>;
-  transaction?: {hash: string; blockNumber: number; rwaBefore: string; rwaAfter: string; rwaDelta: string};
+  transaction?: {
+    hash: string;
+    blockNumber: number;
+    rwaBefore: string;
+    rwaAfter: string;
+    rwaDelta: string;
+    quoteBefore: string;
+    quoteAfter: string;
+    quoteDelta: string;
+  };
   rejection?: string;
   reasonCode?: string;
 }
@@ -160,7 +174,7 @@ export class DemoSettlementService {
     return this.setMakerApproved(true);
   }
 
-  async precheck(taker: string, amountIn: string): Promise<DemoPrecheckResult> {
+  async precheck(taker: string, amountIn: string, side: DemoTradeSide = "buy"): Promise<DemoPrecheckResult> {
     const entry = this.walletFor(taker);
     const amount = BigInt(amountIn);
     const qp = await this.qpEligibility(entry.signer.address);
@@ -170,9 +184,10 @@ export class DemoSettlementService {
     const policy = new Contract(this.requiredArtifact("policyReg"), POLICY_ABI, this.provider);
     const assetActive = Number(await policy.statusOf(this.config.artifact.rwaToken)) === 2;
     const minimum = BigInt(this.config.scenario.asset.minimumAmountBaseUnits);
-    const amountAllowed = !requiresQp || amount >= minimum;
     const amountOut = this.price(amount);
-    const context = this.context(entry.signer.address, amountIn, amountOut.toString());
+    const rwaAmount = side === "buy" ? amountOut : amount;
+    const amountAllowed = !requiresQp || rwaAmount >= minimum;
+    const context = this.context(entry.signer.address, amountIn, amountOut.toString(), side);
     const engine = new Contract(this.requiredArtifact("engine"), ENGINE_ABI, this.provider);
     const decision = await engine.evaluate(context);
     const assetPass = assetActive && amountAllowed;
@@ -191,7 +206,9 @@ export class DemoSettlementService {
     return {
       allowed: Boolean(investorAllowed && maker && assetPass && decision.allowed),
       wallet: await this.walletState(entry),
+      side,
       amountIn,
+      amountOut: amountOut.toString(),
       checks: [
         {
           key: "investor",
@@ -274,6 +291,7 @@ export class DemoSettlementService {
       venue: asAddress(this.config.artifact.rfqVenue, "artifact rfqVenue")
     });
     const wallet = this.validateQuote(signed);
+    const side = this.sideOf(signed.quote);
     if (BigInt(signed.quote.amountIn) !== BigInt(amountIn)) throw new Error("quote amount does not match trade amount");
     const trace: DemoTradeResult["trace"] = [
       {stage: "Selected wallet", detail: `${wallet.label} · ${wallet.signer.address}`, status: "passed"},
@@ -294,7 +312,8 @@ export class DemoSettlementService {
           maker: signed.quote.maker,
           taker: signed.quote.taker,
           amountIn: signed.quote.amountIn,
-          amountOut: signed.quote.amountOut
+          amountOut: signed.quote.amountOut,
+          side
         }
       });
     } else if (result.rejection) {
@@ -316,18 +335,21 @@ export class DemoSettlementService {
   ): Promise<DemoTradeResult> {
     const q = signed.quote;
     const investorAddress = wallet.signer.address;
+    const side = this.sideOf(q);
     const rwa = new Contract(this.config.artifact.rwaToken, ERC20_ABI, this.provider);
-    const quote = new Contract(this.config.artifact.quote, ERC20_ABI, wallet.signer);
+    const quote = new Contract(this.config.artifact.quote, ERC20_ABI, this.provider);
+    const inputToken = new Contract(q.tokenIn, ERC20_ABI, wallet.signer);
     const router = new Contract(this.config.artifact.router, ROUTER_ABI, wallet.signer);
-    const before = await rwa.balanceOf(investorAddress) as bigint;
+    const rwaBefore = await rwa.balanceOf(investorAddress) as bigint;
+    const quoteBefore = await quote.balanceOf(investorAddress) as bigint;
     const amountIn = BigInt(q.amountIn);
-    const allowance = await quote.allowance(investorAddress, this.config.artifact.rfqAdapter) as bigint;
+    const allowance = await inputToken.allowance(investorAddress, this.config.artifact.rfqAdapter) as bigint;
     if (allowance < amountIn) {
-      const approval = await quote.approve(this.config.artifact.rfqAdapter, MaxUint256, {
+      const approval = await inputToken.approve(this.config.artifact.rfqAdapter, MaxUint256, {
         nonce: await this.pendingNonce(investorAddress)
       });
       await approval.wait();
-      trace.push({stage: "Quote allowance", detail: `${wallet.label} approved RFQAdapter`, status: "passed"});
+      trace.push({stage: "Input allowance", detail: `${wallet.label} approved RFQAdapter`, status: "passed"});
     }
 
     const latest = await this.provider.getBlock("latest");
@@ -337,7 +359,7 @@ export class DemoSettlementService {
       [[q.maker, q.taker, q.tokenIn, q.tokenOut, q.amountIn, q.amountOut, q.venue, q.nonce, q.expiry], signed.signature]
     );
     const request = [
-      this.context(investorAddress, q.amountIn, q.amountOut),
+      this.context(investorAddress, q.amountIn, q.amountOut, side),
       q.amountOut,
       BigInt(latest.timestamp + 3600),
       this.nextRouterNonce++,
@@ -347,31 +369,43 @@ export class DemoSettlementService {
     try {
       const tx = await router.execute(request, {nonce: await this.pendingNonce(investorAddress)});
       const receipt = await tx.wait();
-      const after = await rwa.balanceOf(investorAddress) as bigint;
+      const rwaAfter = await rwa.balanceOf(investorAddress) as bigint;
+      const quoteAfter = await quote.balanceOf(investorAddress) as bigint;
+      const rwaDelta = rwaAfter - rwaBefore;
+      const quoteDelta = quoteAfter - quoteBefore;
       trace.push({stage: "ComplianceEngine", detail: "latest policy accepted at fill time", status: "passed"});
-      trace.push({stage: "RFQ settlement", detail: `ERC-3643 balance +${formatEther(after - before)}`, status: "passed"});
+      trace.push({
+        stage: "RFQ settlement",
+        detail: `${side.toUpperCase()} · RWA ${formatSigned(rwaDelta)} · qUSD ${formatSigned(quoteDelta)}`,
+        status: "passed"
+      });
       return {
         action,
+        side,
         quote: signed,
         trace,
         transaction: {
           hash: tx.hash,
           blockNumber: receipt?.blockNumber ?? 0,
-          rwaBefore: before.toString(),
-          rwaAfter: after.toString(),
-          rwaDelta: (after - before).toString()
+          rwaBefore: rwaBefore.toString(),
+          rwaAfter: rwaAfter.toString(),
+          rwaDelta: rwaDelta.toString(),
+          quoteBefore: quoteBefore.toString(),
+          quoteAfter: quoteAfter.toString(),
+          quoteDelta: quoteDelta.toString()
         }
       };
     } catch (error) {
       const detail = error instanceof Error ? (error as any).shortMessage ?? error.message : String(error);
       trace.push({stage: "Final Router check", detail, status: "rejected"});
       if (action === "revoked-maker" && isError(error, RFQ_MAKER_NOT_APPROVED_SELECTOR, "RFQMakerNotApproved")) {
-        return {action, quote: signed, trace, rejection: "RFQMakerNotApproved"};
+        return {action, side, quote: signed, trace, rejection: "RFQMakerNotApproved"};
       }
       if (action === "compliance-proof" && isError(error, COMPLIANCE_REJECTED_SELECTOR, "ComplianceRejected")) {
-        const precheck = await this.precheck(investorAddress, q.amountIn);
+        const precheck = await this.precheck(investorAddress, q.amountIn, side);
         return {
           action,
+          side,
           quote: signed,
           trace,
           rejection: precheck.verdict.reason ?? "ComplianceRejected",
@@ -419,6 +453,7 @@ export class DemoSettlementService {
   private async walletState(entry: WalletEntry): Promise<DemoWalletState> {
     const qp = await this.qpEligibility(entry.signer.address);
     const rwa = new Contract(this.config.artifact.rwaToken, ERC20_ABI, this.provider);
+    const quote = new Contract(this.config.artifact.quote, ERC20_ABI, this.provider);
     return {
       id: entry.id,
       label: entry.label,
@@ -426,6 +461,7 @@ export class DemoSettlementService {
       qualifiedPurchaser: qp.eligible,
       claimPresent: qp.present,
       rwaBalance: String(await rwa.balanceOf(entry.signer.address)),
+      quoteBalance: String(await quote.balanceOf(entry.signer.address)),
       ...(qp.reason ? {eligibilityReason: qp.reason} : {}),
       ...(qp.verifiedAt !== undefined ? {verifiedAt: qp.verifiedAt, expiresAt: qp.expiresAt} : {})
     };
@@ -444,13 +480,13 @@ export class DemoSettlementService {
     return entry;
   }
 
-  private context(taker: string, amountIn: string, amountOut: string): unknown[] {
+  private context(taker: string, amountIn: string, amountOut: string, side: DemoTradeSide): unknown[] {
     return [
       taker,
       taker,
       this.config.artifact.maker,
-      this.config.artifact.quote,
-      this.config.artifact.rwaToken,
+      side === "buy" ? this.config.artifact.quote : this.config.artifact.rwaToken,
+      side === "buy" ? this.config.artifact.rwaToken : this.config.artifact.quote,
       amountIn,
       amountOut,
       2,
@@ -529,16 +565,15 @@ export class DemoSettlementService {
     const wallet = this.walletFor(q.taker);
     const expected = {
       maker: asAddress(this.config.artifact.maker, "artifact maker"),
-      tokenIn: asAddress(this.config.artifact.quote, "artifact quote"),
-      tokenOut: asAddress(this.config.artifact.rwaToken, "artifact rwaToken"),
       venue: asAddress(this.config.artifact.rfqVenue, "artifact rfqVenue"),
       verifyingContract: asAddress(this.config.artifact.rfqAdapter, "artifact rfqAdapter")
     };
-    for (const key of ["maker", "tokenIn", "tokenOut", "venue"] as const) {
+    for (const key of ["maker", "venue"] as const) {
       if (asAddress(q[key], `quote ${key}`).toLowerCase() !== expected[key].toLowerCase()) {
         throw new Error(`quote ${key} does not match the deployment artifact`);
       }
     }
+    this.sideOf(q);
     const domain = signed.typedData?.domain;
     if (
       !domain
@@ -565,6 +600,16 @@ export class DemoSettlementService {
       throw new Error("quote signature does not recover the approved maker");
     }
     return wallet;
+  }
+
+  private sideOf(quote: SignedRFQQuote["quote"]): DemoTradeSide {
+    const tokenIn = asAddress(quote.tokenIn, "quote tokenIn").toLowerCase();
+    const tokenOut = asAddress(quote.tokenOut, "quote tokenOut").toLowerCase();
+    const cash = asAddress(this.config.artifact.quote, "artifact quote").toLowerCase();
+    const rwa = asAddress(this.config.artifact.rwaToken, "artifact rwaToken").toLowerCase();
+    if (tokenIn === cash && tokenOut === rwa) return "buy";
+    if (tokenIn === rwa && tokenOut === cash) return "sell";
+    throw new Error("quote token pair does not match the deployment artifact");
   }
 
   private requireCanonical(wallet: HDNodeWallet, artifactAddress: string | undefined, label: string): void {
@@ -606,6 +651,10 @@ function isError(value: unknown, selector: string, name: string, seen = new Set<
   if (!value || typeof value !== "object" || seen.has(value)) return false;
   seen.add(value);
   return Object.values(value).some((nested) => isError(nested, selector, name, seen));
+}
+
+function formatSigned(value: bigint): string {
+  return `${value >= 0n ? "+" : ""}${formatEther(value)}`;
 }
 
 function demoWallet(account: number): HDNodeWallet {

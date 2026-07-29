@@ -178,6 +178,42 @@ contract RFQFlowTest is IntegrationBase {
         assertEq(rwaToken.balanceOf(address(rfqAdapter)), 0, "adapter holds no RWA");
     }
 
+    /// @notice Reverse RFQ direction: the taker delivers regulated inventory
+    ///         and receives the quote asset from the approved maker.
+    function test_rfqSell_succeedsForApprovedMaker() public {
+        mint(alice, RWA_OUT);
+        quote.mint(maker, 1_000 ether);
+        vm.prank(alice);
+        rwaToken.approve(address(rfqAdapter), type(uint256).max);
+        vm.prank(maker);
+        quote.approve(address(rfqAdapter), type(uint256).max);
+
+        RFQQuote memory q = _quote(2, uint64(block.timestamp + 1 hours));
+        q.tokenIn = address(rwaToken);
+        q.tokenOut = address(quote);
+        q.amountIn = RWA_OUT;
+        q.amountOut = QUOTE_IN;
+
+        ExecutionRequest memory req = _buildRfqRequest(q);
+        req.context.tokenIn = q.tokenIn;
+        req.context.tokenOut = q.tokenOut;
+        req.context.amountIn = q.amountIn;
+        req.context.amountOut = q.amountOut;
+
+        uint256 aliceRwaBefore = rwaToken.balanceOf(alice);
+        uint256 aliceQuoteBefore = quote.balanceOf(alice);
+        uint256 makerRwaBefore = rwaToken.balanceOf(maker);
+        uint256 makerQuoteBefore = quote.balanceOf(maker);
+
+        vm.prank(alice);
+        router.execute(req);
+
+        assertEq(rwaToken.balanceOf(alice), aliceRwaBefore - RWA_OUT, "taker sold RWA");
+        assertEq(quote.balanceOf(alice), aliceQuoteBefore + QUOTE_IN, "taker received QUOTE");
+        assertEq(rwaToken.balanceOf(maker), makerRwaBefore + RWA_OUT, "maker received RWA");
+        assertEq(quote.balanceOf(maker), makerQuoteBefore - QUOTE_IN, "maker paid QUOTE");
+    }
+
     /// @notice An unapproved maker is rejected at settlement even with a valid
     ///         signature and a compliant taker.
     function test_rfqFill_revertsWhenMakerUnapproved() public {

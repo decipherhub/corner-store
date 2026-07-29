@@ -39,6 +39,11 @@ export interface DemoScenario {
     minimumAmountBaseUnits: string;
     decimals: number;
   };
+  quoteAsset: {
+    name: string;
+    symbol: string;
+    decimals: number;
+  };
   maker: {label: string};
   wallets: Array<{
     id: string;
@@ -197,11 +202,15 @@ function resolveScenarioPath(opt?: string): string {
 function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]): DemoScenario {
   if (!isRecord(value) || value.schemaVersion !== 1) throw new Error("demo scenario schemaVersion must be 1");
   const asset = value.asset;
+  const quoteAsset = value.quoteAsset;
   const maker = value.maker;
   const wallets = value.wallets;
   const previewQuotes = value.previewQuotes;
   const temporal = value.temporalEligibility;
-  if (!isRecord(asset) || !isRecord(maker) || !Array.isArray(wallets) || !Array.isArray(previewQuotes) || !isRecord(temporal)) {
+  if (
+    !isRecord(asset) || !isRecord(quoteAsset) || !isRecord(maker) ||
+    !Array.isArray(wallets) || !Array.isArray(previewQuotes) || !isRecord(temporal)
+  ) {
     throw new Error("demo scenario is missing required sections");
   }
   if (
@@ -212,6 +221,9 @@ function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]
     typeof asset.minimumAmountBaseUnits !== "string" || !/^\d+$/.test(asset.minimumAmountBaseUnits) ||
     BigInt(asset.minimumAmountBaseUnits) <= 0n ||
     !Number.isInteger(asset.decimals) || Number(asset.decimals) < 0 || Number(asset.decimals) > 36 ||
+    typeof quoteAsset.name !== "string" || quoteAsset.name.trim() === "" ||
+    typeof quoteAsset.symbol !== "string" || quoteAsset.symbol.trim() === "" ||
+    !Number.isInteger(quoteAsset.decimals) || Number(quoteAsset.decimals) < 0 || Number(quoteAsset.decimals) > 36 ||
     typeof maker.label !== "string" || maker.label.trim() === ""
   ) throw new Error("demo scenario asset or maker is invalid");
   const normalizedWallets = wallets.map((wallet) => {
@@ -272,6 +284,11 @@ function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]
       referenceCurrency: asset.referenceCurrency,
       minimumAmountBaseUnits: asset.minimumAmountBaseUnits,
       decimals: Number(asset.decimals)
+    },
+    quoteAsset: {
+      name: quoteAsset.name,
+      symbol: quoteAsset.symbol,
+      decimals: Number(quoteAsset.decimals)
     },
     maker: {label: maker.label},
     wallets: normalizedWallets,

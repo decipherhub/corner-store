@@ -8,6 +8,11 @@
     "minimumAmountBaseUnits": "5000000000000000000000000",
     "decimals": 18
   },
+  "quoteAsset": {
+    "name": "Quote USD",
+    "symbol": "qUSD",
+    "decimals": 18
+  },
   "maker": {
     "label": "Meridian OTC"
   },

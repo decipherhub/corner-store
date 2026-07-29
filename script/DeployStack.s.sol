@@ -188,6 +188,10 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         quote.mint(investor, INVESTOR_QUOTE);
         quote.mint(eligibleInvestorB, INVESTOR_QUOTE);
         quote.mint(ineligibleInvestor, INVESTOR_QUOTE);
+        quote.mint(maker, MAKER_QUOTE);
+        mint(investor, INVESTOR_RWA);
+        mint(eligibleInvestorB, INVESTOR_RWA);
+        mint(ineligibleInvestor, INVESTOR_RWA);
         mint(maker, MAKER_RWA);
         mint(address(pool), POOL_RWA);
 
@@ -219,20 +223,24 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         vm.startBroadcast(investorPk);
         quote.approve(address(ammAdapter), type(uint256).max);
         quote.approve(address(rfqAdapter), type(uint256).max);
+        rwaToken.approve(address(rfqAdapter), type(uint256).max);
         vm.stopBroadcast();
 
         vm.startBroadcast(eligibleInvestorBPk);
         quote.approve(address(ammAdapter), type(uint256).max);
         quote.approve(address(rfqAdapter), type(uint256).max);
+        rwaToken.approve(address(rfqAdapter), type(uint256).max);
         vm.stopBroadcast();
 
         vm.startBroadcast(ineligibleInvestorPk);
         quote.approve(address(ammAdapter), type(uint256).max);
         quote.approve(address(rfqAdapter), type(uint256).max);
+        rwaToken.approve(address(rfqAdapter), type(uint256).max);
         vm.stopBroadcast();
 
         vm.startBroadcast(makerPk);
         rwaToken.approve(address(rfqAdapter), type(uint256).max);
+        quote.approve(address(rfqAdapter), type(uint256).max);
         vm.stopBroadcast();
 
         _writeArtifact(deployer, investor, eligibleInvestorB, ineligibleInvestor, maker, unapprovedMaker);

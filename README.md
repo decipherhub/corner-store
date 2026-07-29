@@ -148,9 +148,10 @@ Add `--keep` for an interactive follow-up; the runner restores the demo maker
 after its rejection check so a new quote can be filled immediately.
 
 `--keep` leaves both Anvil and the RFQ demo backend running. Open the printed
-dashboard URL, select **RFQ demo**, and click **Run compliant RFQ trade**. The
-dashboard requests the quote and asks the local backend to settle it through the
-protected Router; no CLI copy/paste is required.
+dashboard URL, choose a demo wallet, select **매수** or **매도**, request a firm
+quote and settle it through the protected Router; no CLI copy/paste is required.
+Buy moves the settlement asset to the maker and RWA to the investor. Sell
+reverses those token legs, and Portfolio shows both live balance deltas.
 
 For a terminal-only flow, request and settle the quote directly:
 

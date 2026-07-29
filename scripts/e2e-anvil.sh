@@ -204,6 +204,7 @@ node -e 'const value=JSON.parse(process.argv[1]); if (!value.ready || !value.mak
 DEMO_AMOUNT=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.presentation.asset.minimumAmountBaseUnits);' "$DEMO_READY")
 DEMO_AMOUNT_DISPLAY=$(node -e 'const value=JSON.parse(process.argv[1]); const a=BigInt(value.presentation.asset.minimumAmountBaseUnits), d=BigInt(value.presentation.asset.decimals), s=10n**d; process.stdout.write(`${a/s}${a%s ? `.${(a%s).toString().padStart(Number(d),"0").replace(/0+$/,"")}` : ""}`);' "$DEMO_READY")
 DEMO_MAKER=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.maker);' "$DEMO_READY")
+DEMO_INVESTOR=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.investor);' "$DEMO_READY")
 DEMO_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
   -H "content-type: application/json" \
   -d "{\"amountIn\":\"${DEMO_AMOUNT}\",\"ttlSeconds\":900}")
@@ -211,12 +212,25 @@ DEMO_TAMPER_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); quote.quote
 DEMO_TAMPERED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
   -d "$DEMO_TAMPER_BODY")
-node -e 'const value=JSON.parse(process.argv[1]); if (value.error !== "invalid_request" || !/tokenOut does not match/.test(value.message || "")) { console.error(value); process.exit(1); } console.log("    PASS: dashboard trade rejected a tampered quote payload");' "$DEMO_TAMPERED"
+node -e 'const value=JSON.parse(process.argv[1]); if (value.error !== "invalid_request" || !/token pair does not match/.test(value.message || "")) { console.error(value); process.exit(1); } console.log("    PASS: dashboard trade rejected a tampered quote payload");' "$DEMO_TAMPERED"
 DEMO_TRADE_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"settle",quote}));' "$DEMO_QUOTE")
-DEMO_SETTLED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
+DEMO_SETTLED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
   -d "$DEMO_TRADE_BODY")
 node -e 'const value=JSON.parse(process.argv[1]); if (!value.transaction?.hash || BigInt(value.transaction.rwaDelta) <= 0n) process.exit(1); console.log(`    PASS: dashboard trade settled in block ${value.transaction.blockNumber}`);' "$DEMO_SETTLED"
+echo "==> Proving the dashboard's reverse RFQ sell flow"
+DEMO_SELL_PRECHECK=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/precheck" \
+  -H "content-type: application/json" \
+  -d "{\"taker\":\"${DEMO_INVESTOR}\",\"amountIn\":\"${DEMO_AMOUNT}\",\"side\":\"sell\"}")
+node -e 'const value=JSON.parse(process.argv[1]); if (!value.allowed || value.side !== "sell") { console.error(value); process.exit(1); } console.log("    PASS: sell-side compliance pre-check passed");' "$DEMO_SELL_PRECHECK"
+DEMO_SELL_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
+  -H "content-type: application/json" \
+  -d "{\"amountIn\":\"${DEMO_AMOUNT}\",\"side\":\"sell\",\"ttlSeconds\":900}")
+DEMO_SELL_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"settle",quote}));' "$DEMO_SELL_QUOTE")
+DEMO_SOLD=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
+  -H "content-type: application/json" \
+  -d "$DEMO_SELL_BODY")
+node -e 'const value=JSON.parse(process.argv[1]); if (value.side !== "sell" || !value.transaction?.hash || BigInt(value.transaction.rwaDelta) >= 0n || BigInt(value.transaction.quoteDelta) <= 0n) { console.error(value); process.exit(1); } console.log(`    PASS: dashboard sell moved RWA to maker and quote asset to investor in block ${value.transaction.blockNumber}`);' "$DEMO_SOLD"
 DEMO_REJECT_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
   -H "content-type: application/json" \
   -d "{\"amountIn\":\"${DEMO_AMOUNT}\",\"ttlSeconds\":900}")

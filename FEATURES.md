@@ -896,3 +896,35 @@ passing
 - scenario는 local deterministic fixture이며 실제 identity provider가 아니다.
 - 임의 주소를 UI에서 가장하지 않는다. 거래 지갑은 배포 artifact와 일치하는
   funded Anvil signer여야 한다.
+
+## DEMO-005 — Bidirectional RFQ Demo
+
+### Behavior
+
+- 매수는 taker의 결제 자산을 maker에게 보내고 maker의 ERC-3643 RWA를 받는다.
+- 매도는 token pair를 반대로 binding해 taker의 RWA를 maker에게 보내고 maker의
+  결제 자산을 받는다.
+- scenario가 RWA와 결제 자산의 표시 정보/decimals를 주입하며 UI 주소나 자산
+  symbol에 의존하지 않는다.
+- 배포 fixture는 매수·매도를 어느 순서로 실행해도 되도록 양쪽 inventory와
+  RFQAdapter allowance를 준비한다.
+- Portfolio와 체결 결과는 RWA 및 결제 자산의 실제 온체인 증감량을 함께 표시한다.
+- stateful commit은 RWA가 tokenOut이면 maker→taker, tokenIn이면 taker→maker로
+  실제 regulated transfer 방향을 기록한다.
+
+### Verification
+
+- `forge test --offline --match-contract RFQFlowTest`
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- RFQ 가격은 여전히 local demo fixed-rate provider이며 production pricing,
+  inventory/risk engine과 multi-maker aggregation은 후속 범위다.

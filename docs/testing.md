@@ -112,6 +112,8 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - Adapter 등록·교체·중단 시 Router와 compliance policy 불변성
 - `buidl-like | reg-d` asset profile 선택과 동일한 protected execution path
 - backend-signed quote의 CLI 요청과 Router/RFQAdapter settlement
+- backend/UI 매수(결제 자산→RWA)와 매도(RWA→결제 자산)의 실제 양방향 settlement
+- 매도 후 taker RWA 감소와 결제 자산 증가
 - backend quote 발급 후 maker revoke 시 fill-time 거부
 - 적격 A/B와 비적격 wallet fixture의 실제 QP pre-check
 - 비적격 taker-bound signed quote의 Router fill-time compliance 거부
