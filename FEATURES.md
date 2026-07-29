@@ -375,9 +375,11 @@ passing
 - `scripts/e2e-anvil.sh --mode rfq`는 AMM·lifecycle·surveillance 설명을 건너뛰고
   mock TA profile → Toolkit/CLI → backend-signed quote → protected RFQ settlement
   → revoked-maker rejection만 보여주는 짧은 MVP 시연 경로를 제공한다.
-- Operator dashboard는 Trader, Security demo와 read-only Operator view를
-  제공한다. Trader는 local backend에서 exact signed quote를 요청·검토한 뒤 protected
-  Router settlement를 실행하고, Security demo는 on-chain maker revoke 상태를
+- Dashboard는 사용자 중심의 Dashboard → RFQ 거래 → My RFQs → Portfolio 흐름을
+  기본 navigation으로 제공하고 Security proof와 read-only Operator view는 Advanced로
+  분리한다. 사용자는 local backend에서 exact signed quote를 요청·비교·검토한 뒤
+  protected Router settlement를 실행하고 실제 session balance delta를 Portfolio에서
+  확인한다. Security proof는 on-chain maker revoke 상태를
   명시적 restore 전까지 유지해 현재 정책 enforcement를 가시화한다. 브라우저에는
   private key가 전달되지 않는다.
 - Trader의 live firm rate는 `/demo/quote` 금액에서 계산한다. 비교 maker, 가격 곡선,
@@ -387,6 +389,14 @@ passing
   live/fixture 경계와 각 버튼의 실제 backend/Operator API 연결을 대시보드 안에서
   설명한다.
 - backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
+- long-lived demo backend는 CLI와 동일한 Anvil 계정을 함께 사용해도 각 transaction의
+  pending nonce를 다시 조회하고 settlement action을 직렬화해 stale nonce와 중복 제출을
+  방지한다. live E2E는 UI와 동일하게 quote 요청 후 그 exact quote를 trade endpoint에
+  제출하고, CLI activity 이후 backend 재체결까지 검증한다.
+- dashboard는 `/rfq-api` same-origin proxy로 backend에 연결되어 custom launcher
+  port에서도 frontend 수정 없이 동작한다. trade endpoint는 제출된 quote의
+  maker/taker/token pair/venue/domain/signature를 deployment artifact와 대조한 뒤에만
+  local settlement를 실행한다.
 - production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
 
 ### Verification
@@ -410,8 +420,9 @@ passing
 - CLI smoke가 `--backend` request path를 검증하고 기존 `RFQFlow.t.sol`이 protected Router settlement의 성공/거부 경로를 검증한다.
 - Foundry v1.7.1 clean build에서 `buidl-like`과 `reg-d` 두 profile 모두
   통과: 각각 7/7 scenarios, backend-signed quote settlement, revoked-maker 거부.
-- RFQ-first dashboard/runbook: `services/operator-dashboard`의 두 모드와 local
-  HTTP server smoke, `--mode rfq` live E2E를 검증했다. 시연 순서는
+- RFQ-first dashboard/runbook: `services/operator-dashboard`의 사용자 중심 4개
+  기본 화면과 2개 Advanced 화면, local HTTP server smoke, `--mode rfq` live E2E를
+  검증했다. 시연 순서는
   `docs/rfq-demo-guide.md`를 기준으로 한다.
 
 ## CLI-001 — corner-store Reference CLI
@@ -823,3 +834,290 @@ passing
 
 - snapshot은 demo/reference checkpoint이며 production indexer나 live RPC provider가 아니다.
 - production Manifest lifecycle mutation과 governance action은 별도 범위다.
+
+## DEMO-003 — Role-aware RFQ Compliance Walkthrough
+
+### Behavior
+
+- 헤더에서 Admin, 적격투자자 A/B와 비적격투자자 fixture를 전환한다.
+- 사용자 RFQ 생성·수락 전에 현재 온체인 QP, maker 승인과 자산 정책을 pre-check한다.
+- quote는 선택한 taker 지갑에 EIP-712로 binding되고 다른 지갑이 재사용할 수 없다.
+- 비적격 사용자의 일반 quote 요청은 차단되며, 별도 proof action은 signed quote도
+  Router의 최신 `ComplianceEngine` 검사에서 거부됨을 보여준다.
+- Admin은 QP 결과를 직접 토글하지 않고 로컬 Anvil의 QP basis, claim 서명,
+  trusted issuer, look-through와 fund binding 사실을 실제 트랜잭션으로 기록한다.
+  A-13 Element가 법률-기술 변환 규칙에 따라 적격 결과를 계산하며, maker 승인과
+  체결·거부·정책 변경 내역도 조회한다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `forge build --offline --force`
+- `forge test --offline`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- 지갑 선택은 local demo persona이며 production authentication/custody가 아니다.
+- pre-check는 UX용 사전 판단이고 최종 권한은 Router fill-time evaluation에 있다.
+
+## DEMO-004 — Injectable Temporal RFQ Scenario
+
+### Behavior
+
+- 데모 자산 표시값, maker 이름, 지갑 persona, 초기 QP 상태, preview quote와
+  freshness 시간 조건을 versioned scenario JSON으로 주입한다.
+- 주소는 UI에 하드코딩하지 않고 fresh Anvil 배포 artifact와 scenario의
+  `artifactKey` mapping으로 확인한다.
+- `scripts/demo.sh --scenario <path>`와 E2E가 동일한 scenario를 사용한다.
+- scenario 준비는 초기 QP 상태와 freshness cap을 실제 로컬 Anvil 트랜잭션으로
+  기록한다.
+- quote 발급 당시 적격이던 투자자의 QP claim만 만료시키고, 아직 유효한 동일
+  signed quote가 Router의 fill-time 검사에서 거부되는 것을 보여준다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- scenario는 local deterministic fixture이며 실제 identity provider가 아니다.
+- 임의 주소를 UI에서 가장하지 않는다. 거래 지갑은 배포 artifact와 일치하는
+  funded Anvil signer여야 한다.
+
+## DEMO-005 — Bidirectional RFQ Demo
+
+### Behavior
+
+- 매수는 taker의 결제 자산을 maker에게 보내고 maker의 ERC-3643 RWA를 받는다.
+- 매도는 token pair를 반대로 binding해 taker의 RWA를 maker에게 보내고 maker의
+  결제 자산을 받는다.
+- scenario가 RWA와 결제 자산의 표시 정보/decimals를 주입하며 UI 주소나 자산
+  symbol에 의존하지 않는다.
+- 배포 fixture는 매수·매도를 어느 순서로 실행해도 되도록 양쪽 inventory와
+  RFQAdapter allowance를 준비한다.
+- Portfolio와 체결 결과는 RWA 및 결제 자산의 실제 온체인 증감량을 함께 표시한다.
+- stateful commit은 RWA가 tokenOut이면 maker→taker, tokenIn이면 taker→maker로
+  실제 regulated transfer 방향을 기록한다.
+
+### Verification
+
+- `forge test --offline --match-contract RFQFlowTest`
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- RFQ 가격은 local demo trade-impact provider이며 production pricing,
+  inventory/risk engine과 multi-maker aggregation은 후속 범위다.
+
+## DEMO-006 — Deployment-bound Injectable RFQ Fixtures
+
+### Behavior
+
+- versioned scenario가 데모 계정 binding, 초기 투자자/maker/pool 물량, 매수·매도
+  기본 수량, quote TTL과 mock pricing을 주입한다.
+- 배포 스크립트가 선택한 scenario를 읽어 실제 Anvil mint/approval 계정과 금액에
+  반영하며, UI 전용 하드코딩 값으로 가장하지 않는다.
+- scenario의 지갑별 초기 QP 상태를 실제 A-13 fixture에 반영하고, `qUSD / RWA`
+  가격은 backend와 Solidity demo 모두 매수 시 역산·매도 시 정방향으로 계산한다.
+- 배포 artifact가 scenario schema version과 content hash를 보존하고 backend는
+  다른 scenario로 시작하려는 경우 fail-closed한다.
+- 사용자와 maker 잔액은 scenario 값을 그대로 표시하지 않고 배포 후 실제
+  `balanceOf`를 조회한다.
+- CLI/E2E는 scenario에 지정된 investor 계정을 사용하므로 기본 Anvil account 1에
+  의존하지 않는다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `forge build --offline`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- 비기본 account, 초기 물량과 비 1:1 mock price·변경된 지갑별 QP 상태 scenario 전체 E2E
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- scenario는 local mock data provider다. production은 RFQ SDK의 pricing,
+  nonce, signer와 inventory/risk interface에 실제 provider를 주입한다.
+- preview quote는 계속 명시적인 presentation fixture이며 executable liquidity로
+  취급하지 않는다.
+
+## DEMO-007 — Law-first QP and Dynamic RFQ Market Demo
+
+### Behavior
+
+- 사용자 화면은 내부 Element ID보다 ICA §3(c)(7)와 §2(a)(51)의 Qualified
+  Purchaser 법적 기준을 우선 표시하고, `A-13-v1`은 기술 상세로만 제공한다.
+- QP basis별 통과 조건과 KE(Knowledgeable Employee)의 대상 펀드 일치 요건을
+  Admin 화면에서 바로 설명한다.
+- scenario가 초기 `qUSD / RWA` 가격과 fill당 impact bps를 주입한다.
+- 성공한 매수는 다음 mock 시장가격을 올리고 성공한 매도는 내리며, 이후
+  pre-check, firm quote, 포트폴리오 참고가격이 동일한 runtime 가격을 사용한다.
+- 거부된 거래는 가격을 바꾸지 않고 demo setup은 초기 가격으로 복원한다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- 이 가격 변화는 발표용 결정론적 mock market이다. 실제 RFQ 가격은 외부 시세,
+  maker inventory, spread와 risk engine을 주입해야 한다.
+
+## DEMO-008 — RWA-aware RFQ Market Chart
+
+### Behavior
+
+- 사용자 Dashboard는 scenario에서 주입한 기초자산/NAV와 indicative RFQ mid
+  히스토리를 서로 다른 series로 표시한다.
+- indicative spread band를 표시하고 실제 Router 체결만 매수/매도 fill point와
+  거래량에 포함한다.
+- 성공한 체결은 다음 indicative 가격과 history API를 함께 갱신하며, 거부된
+  거래는 가격·체결 history를 변경하지 않는다.
+- 차트는 fixture와 live fill의 출처를 명확히 구분하고 sparse RFQ 거래를 연속
+  CLOB/AMM 캔들처럼 가장하지 않는다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- production에서는 mock NAV series를 실제 oracle/NAV provider로, in-memory
+  fill history를 indexer/query service로 교체한다.
+
+## DEMO-009 — Resilient Repeated-Trade UX
+
+### Behavior
+
+- backend는 현재 RFQ 가격, 자산 최소수량과 scenario buffer를 사용해 다음
+  매수·매도의 최소 안전 입력값을 계산한다.
+- 새 RFQ와 매수/매도 전환은 이 값을 기본 입력으로 사용하되, 사용자가 더 작은
+  값을 직접 입력하면 기존 minimum-investment 정책이 그대로 거부한다.
+- 짧은 시간에 생성된 체결점은 실제 timestamp를 보존하면서 차트에서는 체결
+  순서로 분리하고, 가격축은 최소 범위를 유지해 작은 mock 변동을 과장하지 않는다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+## DEMO-010 — RFQ Chart Range and Fill Evidence
+
+### Behavior
+
+- 사용자 차트는 1분, 5분, 1시간, 전체 표시 구간을 전환할 수 있다.
+- 실제 Router fill은 매수/매도 marker와 체결 단가를 차트 위에 표시한다.
+- 선택 구간의 최근 체결은 단가, RWA 수량, 실제 timestamp와 transaction hash를
+  별도 fill tape로 제공하고 fixture line과 구분한다.
+- RFQ가 sparse하거나 같은 초에 체결되어도 marker는 실행 순서로 분리한다.
+
+### Verification
+
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+## DEMO-011 — Multi-resolution History and Repeat Liquidity
+
+### Behavior
+
+- scenario의 가격 anchor를 주입된 sample interval로 보간해 1분·5분·1시간·
+  전체 차트가 서로 다른 관측 구간과 데이터 밀도를 표시한다.
+- 원본 가격 경로와 sample interval은 scenario에 남아 있고 Dashboard에
+  별도 가격 fixture를 하드코딩하지 않는다.
+- demo investor와 maker의 양방향 재고는 최소수량 RFQ를 연속으로 시연할 수
+  있도록 설정한다.
+- E2E는 동일 투자자의 연속 매수 4회와 연속 매도 4회를 실제 Router에서
+  체결해 재고와 nonce 경로를 검증한다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+## DEMO-012 — Enforcement Case Workflow
+
+### Behavior
+
+- Admin은 Adapter 직접 호출, quote 이후 claim 만료, quote 이후 Maker 승인 취소를
+  각각 독립된 enforcement case로 연다.
+- 각 case는 기준 상태 준비, firm quote 발급, 정책 변경, 실행 제출, 증거 검토,
+  상태 복구를 별도 단계로 수행하며 한 버튼으로 전체 시나리오를 연출하지 않는다.
+- 차단 증거는 실제 status `0` transaction receipt, 거부 사유 또는 reasonCode,
+  실패 전후 RWA/결제 자산 잔액 불변과 실행 trace를 함께 제공한다.
+- UI는 Element → Recipe → Manifest → ExecutionRouter → Adapter binding과
+  일반 ERC-3643 token enforcement 대비 Corner Store 실행 경로 통제를 표시한다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- case와 evidence는 local Anvil 운영 워크스페이스다. production의 영속 case store,
+  인증, 감사 로그 서명과 외부 indexer를 대신하지 않는다.

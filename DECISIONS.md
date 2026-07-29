@@ -657,3 +657,34 @@ lineage 상태 없이 단일 timestamp만 읽었고, 실제 provider 계약이 �
 - `services/compliance-data/`
 - `src/registry/AttestedAcquisitionSource.sol`
 - `src/compliance/elements/Lockup.sol`
+
+## D013 — Stateful commit은 regulated token 위치에서 실제 이동 방향을 유도한다
+
+Date: 2026-07-29
+
+### Context
+
+`ctx.buyer`와 `ctx.seller`는 엔진의 검증 대상/상대방 역할이다. RFQ 매도처럼 검증
+대상 taker가 RWA를 `tokenIn`으로 보내는 거래에서도 taker를 `buyer` 역할에 유지한다.
+기존 commit은 항상 `seller → buyer`로 기록해 실제 `tokenIn` 이동과 반대였다.
+
+### Decision
+
+stateful element의 `onTransfer` 방향은 regulated token 위치에서 결정한다.
+
+- regulated token이 `tokenOut`: `seller → buyer`, `amountOut`
+- regulated token이 `tokenIn`: `buyer → seller`, `amountIn`
+
+pre-trade element의 검증 대상 역할과 post-trade 자산 이동 방향을 분리한다.
+
+### Consequences
+
+- RFQ/AMM 매도에서 holder count, surveillance와 후속 stateful element가 실제 RWA
+  이동 방향을 받는다.
+- `buyer/seller` 명칭만 보고 실제 token sender/recipient를 추론하면 안 된다.
+
+### Related Files
+
+- `src/compliance/ComplianceEngine.sol`
+- `test/unit/compliance/Engine.t.sol`
+- `docs/architecture/SKELETON_GUIDE.md`

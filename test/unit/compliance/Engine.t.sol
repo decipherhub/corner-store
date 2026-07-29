@@ -604,6 +604,26 @@ contract EngineTest is Test {
         assertEq(surveillance.transferCount(), 1, "same stateful element commits once per asset side");
     }
 
+    function test_commit_tokenInUsesBuyerToSellerTransferDirection() public {
+        RecordingStatefulElement recorder = new RecordingStatefulElement();
+        elementReg.registerElement(bytes32("F-DIRECTION"), address(recorder));
+        _registerSingleElementRecipe(8, bytes32("F-DIRECTION"));
+        _registerBindings(_singleBinding(8, 1));
+
+        ComplianceContext memory sell = _ctxBuy();
+        sell.tokenIn = RWA;
+        sell.tokenOut = CASH;
+        sell.amountIn = 75;
+        sell.amountOut = 1_500;
+
+        assertTrue(engine.evaluate(sell).allowed);
+        engine.commit(sell);
+
+        assertEq(recorder.lastFrom(), BUYER, "tokenIn RWA leaves screened taker");
+        assertEq(recorder.lastTo(), SELLER, "tokenIn RWA reaches counterparty");
+        assertEq(recorder.lastAmount(), 75, "tokenIn RWA amount is committed");
+    }
+
     // Auth: a non-router caller cannot drive the post-trade write path. The
     // engine only accepts commit from the wired router (here the test contract);
     // any stranger must revert NotAuthorized.
@@ -742,6 +762,39 @@ contract RevertingStatefulElement is IStatefulElement {
 
     function onTransfer(address, address, uint256) external pure override {
         revert("FLAG_ONLY_HOOK_MUST_NOT_RUN");
+    }
+}
+
+contract RecordingStatefulElement is IStatefulElement {
+    address public lastFrom;
+    address public lastTo;
+    uint256 public lastAmount;
+
+    function check(address, address, address, uint256, bytes calldata)
+        external
+        pure
+        override
+        returns (bool passed, bytes32 reasonCode)
+    {
+        return (true, bytes32(0));
+    }
+
+    function elementMetadata() external pure override returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: bytes32("F-DIRECTION"),
+            category: ElementCategory.CONDUCT_MONITORING,
+            version: "F-DIRECTION-v1",
+            temporal: TemporalNature.CUMULATIVE,
+            decidability: Decidability.DETERMINISTIC,
+            timing: ObligationTiming.EX_POST_TRIGGER,
+            statefulness: Statefulness.STATEFUL
+        });
+    }
+
+    function onTransfer(address from, address to, uint256 amount) external override {
+        lastFrom = from;
+        lastTo = to;
+        lastAmount = amount;
     }
 }
 

@@ -1,19 +1,35 @@
-# Corner Store Operator Dashboard
+# Corner Store RFQ Demo Dashboard
 
-This dashboard has three modes:
+The primary demo is a role-aware journey. The header switches between Admin and
+the wallet personas injected by the selected demo scenario. The tracked default
+contains two eligible investors and one ineligible investor. This is a local
+Anvil persona selector, not authentication.
 
-- **Operator view** is a read-only view backed by `services/operator-api` through
-  the dashboard's same-origin proxy.
-- **RFQ demo** requests a live firm quote, lets the trader review the exact
-  signed payload, and settles that same quote through the protected Router.
-  Additional maker rows are explicitly preview fixtures until multi-maker
-  backend support exists. The price-context chart combines a live rate marker
-  derived from that quote with visibly labeled fixture curves and statistics;
-  it does not claim an external market-data feed.
-- **Security demo** is an independent flow: create a signed quote, revoke the
-  maker, and submit the stored quote to prove the Router rejects it at fill
-  time. The maker remains revoked until **Restore maker** performs the explicit
-  on-chain restore. It does not require first visiting the Trader view.
+- **Dashboard** shows presentation fixtures separately from current-session
+  live RFQ and settlement counts, and prepares the local demo environment.
+- **RFQ 거래** requests either a buy quote (settlement asset → RWA) or a sell
+  quote (RWA → settlement asset).
+- **My RFQs** compares the executable quote with visibly disabled preview
+  fixtures, then requires review of the exact signed payload before settlement.
+- **Portfolio** shows both actual local-chain balances and the opposite RWA /
+  settlement-asset deltas produced by each Router settlement.
+
+Admin gets separate monitoring, user/QP fixture control, maker control,
+temporal-eligibility proof and transaction-history screens. Those controls send
+real local-chain transactions or advance local Anvil time; they are not cosmetic
+browser state.
+
+**Enforcement Cases** is the operator investigation workspace. It treats direct
+Adapter calls, post-quote claim expiry and post-quote Maker revocation as
+separate cases. The operator prepares a baseline, issues the relevant quote,
+changes policy state, submits the execution and reviews the resulting failed
+receipt, rejection code, unchanged balances and trace before restoring state.
+The stages are deliberately separate; there is no “run every proof” button.
+
+The executable flow requests a live firm quote, lets the trader review the exact
+signed payload, and settles that same quote through the protected Router.
+Additional maker rows are explicitly preview fixtures until multi-maker backend
+support exists. The UI does not claim an external market-data feed.
 
 - It displays the selected asset profile, enabled venues and indexed events.
 - It displays the deployment artifact and the read-only Manifest snapshot generated
@@ -33,9 +49,28 @@ For the RFQ-first MVP demo, use the one-command launcher:
 scripts/demo.sh --profile buidl-like
 ```
 
-Open the printed URL and select a view. Press Ctrl-C to stop all local services.
-Use the **?** button in the dashboard header for the presenter flow, the
-security scenario, live-versus-fixture labeling, and a button-to-endpoint map.
+Use `--scenario /path/to/scenario.json` to replace presentation values, wallet
+personas and initial QP states, preview rows, and temporal-expiry parameters
+without editing frontend code. Addresses remain bound to the fresh deployment
+artifact and deterministic funded Anvil accounts.
+
+Open the printed URL, prepare the environment and follow the four primary
+screens. Toggle **매수 / 매도** before requesting a quote; either direction can
+run first because the deployment seeds both sides of the demo inventory. Switch
+to the ineligible fixture to show pre-check failure and the
+explicit final-enforcement proof. Switch to Admin to change QP or maker state.
+The temporal proof issues a quote while the configured investor is eligible,
+advances Anvil beyond the injected claim freshness window, and then shows the
+same still-live quote fail the Router's latest-policy check.
+Use **Enforcement Cases** when the audience needs durable execution evidence
+rather than only the trader-facing rejection message.
+Press Ctrl-C to stop all local services. Use the **?** button for the presenter
+sequence and the taker-binding warning.
+The launcher refuses to start when one of its ports is already occupied instead
+of accidentally attaching to a stale local process. Browser RFQ calls use the
+dashboard's `/rfq-api` same-origin proxy, so custom launcher ports do not require
+editing frontend source or weakening backend CORS.
+
 For manual composition, start Operator API on port 8788 and set
 `CORNER_STORE_OPERATOR_API` to its URL. If the API uses authentication, set
 `CORNER_STORE_API_TOKEN` on the dashboard process; the token stays server side

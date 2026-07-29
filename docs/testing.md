@@ -43,9 +43,10 @@ cd services/rfq-demo-backend && npm ci && npm test
 cd services/cli && npm ci && npm test
 ```
 
-Backend smoke는 ephemeral HTTP server의 health/quote API, fixed-rate pricing,
-maker signature, monotonic nonce와 numeric amount 거부를 검증한다. CLI smoke는
-backend quote request path와 기존 quote-file/서명 검증 경로를 함께 검증한다.
+Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
+API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
+거부를 검증한다. CLI smoke는 backend quote request path와 기존
+quote-file/서명 검증 경로를 함께 검증한다.
 
 Compliance data SDK smoke test:
 
@@ -111,7 +112,22 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - Adapter 등록·교체·중단 시 Router와 compliance policy 불변성
 - `buidl-like | reg-d` asset profile 선택과 동일한 protected execution path
 - backend-signed quote의 CLI 요청과 Router/RFQAdapter settlement
+- backend/UI 매수(결제 자산→RWA)와 매도(RWA→결제 자산)의 실제 양방향 settlement
+- 매도 후 taker RWA 감소와 결제 자산 증가
 - backend quote 발급 후 maker revoke 시 fill-time 거부
+- RFQAdapter 직접 호출의 status `0` receipt와 RWA/결제 자산 잔액 불변
+- quote 이후 maker revoke 거부의 실패 receipt와 잔액 불변
+- 적격 A/B와 비적격 wallet fixture의 실제 QP pre-check
+- 비적격 taker-bound signed quote의 Router fill-time compliance 거부
+- quote 이후 QP claim 만료 거부의 reasonCode, 실패 receipt와 잔액 불변
+- Admin QP fixture 변경과 원상복구
+- scenario JSON에서 wallet/표시값/최소금액/시간 조건 주입
+- scenario JSON에서 Anvil account, 초기 investor/maker/pool 물량, 양방향 기본
+  거래량, TTL과 mock pricing 주입
+- 배포 artifact의 scenario hash와 backend 입력 일치 검증
+- quote 발급 당시 적격인 투자자의 QP freshness 만료
+- 아직 TTL이 남은 동일 quote의 Router fill-time `FAIL_QP_CLAIM_EXPIRED` 거부
+- temporal scenario 후 injected baseline QP 상태 복원
 
 ### Integrated Check
 

@@ -167,6 +167,14 @@ Element 실패가 있으면 동일한 signed quote라도 Router fill 시점의 �
 거부된다. 자세한 API와 production 교체 지점은
 `services/rfq-demo-backend/README.md`를 참고한다.
 
+대시보드에서는 **매수**와 **매도**를 선택할 수 있다.
+
+- 매수: 투자자 `qUSD → maker`, maker `RWA → 투자자`
+- 매도: 투자자 `RWA → maker`, maker `qUSD → 투자자`
+
+fresh demo 배포는 두 방향의 inventory와 allowance를 모두 준비하므로 어느 방향을
+먼저 실행해도 된다. Portfolio에서 두 토큰의 실제 반대 방향 잔액 변화를 확인한다.
+
 ## Related
 
 - Test layers and the automated suite: `docs/testing.md`.

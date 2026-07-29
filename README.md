@@ -121,9 +121,11 @@ npm test
 ### Local RFQ Demo Backend
 
 `services/rfq-demo-backend` is a local-only HTTP application built from the RFQ
-SDK. It reads the live Anvil deployment artifact, uses the configured mock maker
-and fixed-rate pricing, and returns `RFQAdapter`-compatible signed quotes. It is
-not a hosted or production RFQ operator service.
+SDK. It reads addresses from the live Anvil deployment artifact and presentation,
+wallet, initial qualification and temporal-expiry fixtures from a validated
+scenario JSON. It uses the configured mock maker and fixed-rate pricing and
+returns `RFQAdapter`-compatible signed quotes. It is not a hosted or production
+RFQ operator service.
 
 ```shell
 scripts/e2e-anvil.sh --profile buidl-like --keep
@@ -135,17 +137,32 @@ For the short RFQ-first stakeholder walkthrough, omit the AMM scenario suite:
 scripts/e2e-anvil.sh --profile buidl-like --mode rfq
 ```
 
+Use another versioned local fixture without editing application code. Schema v2
+can replace account bindings, initial balances, fixed mock pricing, default
+buy/sell amounts, wallet/QP facts and presentation values:
+
+```shell
+scripts/demo.sh --profile buidl-like \
+  --scenario services/rfq-demo-backend/config/demo-scenario.json
+```
+
 Add `--keep` for an interactive follow-up; the runner restores the demo maker
 after its rejection check so a new quote can be filled immediately.
 
+The selected scenario is copied into the deployment runtime input and its hash is
+written to the deployment artifact. The backend refuses a mismatched scenario,
+while balances displayed after deployment are read from the live token contracts.
+
 `--keep` leaves both Anvil and the RFQ demo backend running. Open the printed
-dashboard URL, select **RFQ demo**, and click **Run compliant RFQ trade**. The
-dashboard requests the quote and asks the local backend to settle it through the
-protected Router; no CLI copy/paste is required.
+dashboard URL, choose a demo wallet, select **매수** or **매도**, request a firm
+quote and settle it through the protected Router; no CLI copy/paste is required.
+Buy moves the settlement asset to the maker and RWA to the investor. Sell
+reverses those token legs, and Portfolio shows both live balance deltas.
 
 For a terminal-only flow, request and settle the quote directly:
 
 ```shell
+# 5,000,000 is the tracked default scenario amount.
 node services/cli/dist/cli/src/index.js rfq-quote \
   --backend http://127.0.0.1:8787 --amount-in 5000000 --out quote.json
 node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json

@@ -136,6 +136,8 @@
    Manifest core와 `RecipeBinding[]` hash를 포함한다.
 6. **엔진은 거래 방향(buy/sell)을 구분하지 않는다.** 항상 `ctx.buyer`를 검사한다.
    `ctx.buyer`/`ctx.seller`는 거래 방향이 아니라 **엔진 역할 라벨**(검증 대상/상대방)이다.
+   단, stateful `commit`의 실제 자산 이동은 토큰 위치를 따른다. regulated asset이
+   `tokenOut`이면 `seller → buyer`, `tokenIn`이면 `buyer → seller`로 기록한다.
 7. **`VenueType` enum 순서는 load-bearing.** `ManifestCore.supportedEngines` 비트마스크가
    `VenueType` 값으로 인덱싱되므로 순서를 바꾸면 Manifest 의미가 조용히 바뀐다.
 

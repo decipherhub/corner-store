@@ -300,8 +300,13 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         for (uint256 i = 0; i < elements.count; i++) {
             address element = elementReg.elementOf(elements.ids[i]);
             if (IComplianceElement(element).elementMetadata().statefulness == Statefulness.STATEFUL) {
-                uint256 rwaAmount = elements.tokens[i] == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
-                IStatefulElement(element).onTransfer(ctx.seller, ctx.buyer, rwaAmount);
+                bool isOutput = elements.tokens[i] == ctx.tokenOut;
+                uint256 rwaAmount = isOutput ? ctx.amountOut : ctx.amountIn;
+                // `buyer` is the screened subject, not an unconditional token
+                // recipient. For tokenOut the regulated asset moves
+                // seller→buyer; for tokenIn it moves buyer→seller.
+                IStatefulElement(element)
+                    .onTransfer(isOutput ? ctx.seller : ctx.buyer, isOutput ? ctx.buyer : ctx.seller, rwaAmount);
             }
         }
     }
