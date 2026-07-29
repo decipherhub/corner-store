@@ -62,6 +62,19 @@ case "$DEMO_MODE" in
   *) echo "invalid --mode: $DEMO_MODE (expected full or rfq)" >&2; exit 2 ;;
 esac
 
+require_available_port() {
+  local port=$1
+  local label=$2
+  if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "ERROR: ${label} port ${port} is already in use." >&2
+    echo "Stop the existing demo or choose another port." >&2
+    exit 1
+  fi
+}
+
+require_available_port "$PORT" "Anvil"
+require_available_port "$BACKEND_PORT" "RFQ backend"
+
 RPC="http://127.0.0.1:${PORT}"
 ANVIL_LOG=$(mktemp -t corner-store-anvil.XXXXXX)
 ANVIL_PID=""
@@ -261,7 +274,7 @@ DEMO_SETTLED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -d "$DEMO_TRADE_BODY")
 node -e 'const value=JSON.parse(process.argv[1]); if (!value.transaction?.hash || BigInt(value.transaction.rwaDelta) <= 0n) { console.error(value); process.exit(1); } console.log(`    PASS: dashboard trade settled in block ${value.transaction.blockNumber}`);' "$DEMO_SETTLED"
 DEMO_AFTER_BUY=$(curl -fsS "http://127.0.0.1:${BACKEND_PORT}/demo/state")
-node -e 'const value=JSON.parse(process.argv[1]); if (value.marketPrice?.lastMove !== "buy-up" || BigInt(value.marketPrice.numerator) <= BigInt(value.marketPrice.denominator) || BigInt(value.suggestedTradeAmounts.buyAmountIn) <= BigInt(value.presentation.execution.defaultBuyAmountBaseUnits)) { console.error(value); process.exit(1); } console.log(`    PASS: successful buy moved the market and raised the suggested minimum-safe input to ${value.suggestedTradeAmounts.buyAmountIn}`);' "$DEMO_AFTER_BUY"
+node -e 'const before=JSON.parse(process.argv[1]), value=JSON.parse(process.argv[2]); const movedUp=BigInt(value.marketPrice.numerator)*BigInt(before.marketPrice.denominator)>BigInt(before.marketPrice.numerator)*BigInt(value.marketPrice.denominator); if (value.marketPrice?.lastMove !== "buy-up" || !movedUp || BigInt(value.suggestedTradeAmounts.buyAmountIn) <= 0n) { console.error(value); process.exit(1); } console.log(`    PASS: successful buy moved the market and recalculated the suggested input to ${value.suggestedTradeAmounts.buyAmountIn}`);' "$DEMO_READY" "$DEMO_AFTER_BUY"
 DEMO_NEXT_BUY_AMOUNT=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.suggestedTradeAmounts.buyAmountIn);' "$DEMO_AFTER_BUY")
 DEMO_NEXT_BUY_PRECHECK=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/precheck" \
   -H "content-type: application/json" \
@@ -273,18 +286,18 @@ echo "==> Proving the dashboard's reverse RFQ sell flow"
 DEMO_SELL_PRECHECK=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/precheck" \
   -H "content-type: application/json" \
   -d "{\"taker\":\"${DEMO_INVESTOR}\",\"amountIn\":\"${DEMO_SELL_AMOUNT}\",\"side\":\"sell\"}")
-node -e 'const value=JSON.parse(process.argv[1]); if (!value.allowed || value.side !== "sell" || BigInt(value.amountOut) <= BigInt(value.amountIn)) { console.error(value); process.exit(1); } console.log("    PASS: next sell pre-check used the buy-raised runtime price");' "$DEMO_SELL_PRECHECK"
+node -e 'const value=JSON.parse(process.argv[1]); if (!value.allowed || value.side !== "sell" || BigInt(value.amountOut) <= 0n) { console.error(value); process.exit(1); } console.log("    PASS: next sell pre-check used the current runtime price");' "$DEMO_SELL_PRECHECK"
 DEMO_SELL_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
   -H "content-type: application/json" \
   -d "{\"amountIn\":\"${DEMO_SELL_AMOUNT}\",\"side\":\"sell\",\"ttlSeconds\":${SCENARIO_TTL}}")
-node -e 'const value=JSON.parse(process.argv[1]); if (BigInt(value.quote.amountOut) <= BigInt(value.quote.amountIn)) { console.error(value); process.exit(1); } console.log("    PASS: firm quote signer used the same raised runtime market price");' "$DEMO_SELL_QUOTE"
+node -e 'const precheck=JSON.parse(process.argv[1]), value=JSON.parse(process.argv[2]); if (value.quote.amountOut !== precheck.amountOut || value.quote.amountIn !== precheck.amountIn) { console.error({precheck,value}); process.exit(1); } console.log("    PASS: firm quote signer used the same runtime price as pre-check");' "$DEMO_SELL_PRECHECK" "$DEMO_SELL_QUOTE"
 DEMO_SELL_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"settle",quote}));' "$DEMO_SELL_QUOTE")
 DEMO_SOLD=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
   -d "$DEMO_SELL_BODY")
 node -e 'const value=JSON.parse(process.argv[1]); if (value.side !== "sell" || !value.transaction?.hash || BigInt(value.transaction.rwaDelta) >= 0n || BigInt(value.transaction.quoteDelta) <= 0n) { console.error(value); process.exit(1); } console.log(`    PASS: dashboard sell moved RWA to maker and quote asset to investor in block ${value.transaction.blockNumber}`);' "$DEMO_SOLD"
 DEMO_AFTER_SELL=$(curl -fsS "http://127.0.0.1:${BACKEND_PORT}/demo/state")
-node -e 'const value=JSON.parse(process.argv[1]); if (value.marketPrice?.lastMove !== "sell-down") { console.error(value); process.exit(1); } console.log(`    PASS: successful sell moved the injected market price down to ${value.marketPrice.numerator}/${value.marketPrice.denominator}`);' "$DEMO_AFTER_SELL"
+node -e 'const before=JSON.parse(process.argv[1]), value=JSON.parse(process.argv[2]); const movedDown=BigInt(value.marketPrice.numerator)*BigInt(before.marketPrice.denominator)<BigInt(before.marketPrice.numerator)*BigInt(value.marketPrice.denominator); if (value.marketPrice?.lastMove !== "sell-down" || !movedDown) { console.error(value); process.exit(1); } console.log(`    PASS: successful sell moved the injected market price down to ${value.marketPrice.numerator}/${value.marketPrice.denominator}`);' "$DEMO_AFTER_BUY" "$DEMO_AFTER_SELL"
 DEMO_MARKET_AFTER_SELL=$(curl -fsS "http://127.0.0.1:${BACKEND_PORT}/demo/market-history")
 node -e 'const value=JSON.parse(process.argv[1]); if (value.fills?.length !== 2 || value.fills[1].side !== "sell" || BigInt(value.fills[1].amountQuote) <= 0n) { console.error(value); process.exit(1); } console.log("    PASS: market history recorded both live fills and quote volume");' "$DEMO_MARKET_AFTER_SELL"
 echo "==> Proving repeated buy/sell liquidity for the interactive demo"

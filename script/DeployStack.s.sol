@@ -109,7 +109,19 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     uint256 internal makerQuoteBalance;
     uint256 internal makerRwaBalance;
     uint256 internal poolRwaBalance;
+    bool internal investorInitialQp;
+    bool internal eligibleInvestorBInitialQp;
+    bool internal ineligibleInvestorInitialQp;
     bytes32 internal scenarioHash;
+
+    // vm.parseJson encodes object fields in lexicographic key order.
+    struct ScenarioWallet {
+        uint256 account;
+        string artifactKey;
+        string id;
+        bool initialQualifiedPurchaser;
+        string label;
+    }
 
     function run() external {
         _loadInjectedScenario();
@@ -189,12 +201,11 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         // 9. verified holders + liquidity: investor (buyer/taker), maker (dealer),
         //    pool (custody-as-holder). Investor gets full engine attestations.
         verifyInvestor(investor);
-        _attestInvestor(investor);
+        _attestInvestor(investor, investorInitialQp);
         verifyInvestor(eligibleInvestorB);
-        _attestInvestor(eligibleInvestorB);
+        _attestInvestor(eligibleInvestorB, eligibleInvestorBInitialQp);
         verifyInvestor(ineligibleInvestor);
-        _attestInvestor(ineligibleInvestor);
-        if (useBuidlLikeProfile) qualifiedPurchaser.setQp(ineligibleInvestor, false);
+        _attestInvestor(ineligibleInvestor, ineligibleInvestorInitialQp);
         verifyInvestor(maker);
         registerVenueIdentity(address(pool));
 
@@ -300,6 +311,39 @@ contract DeployStack is Script, TREXCore, DemoConstants {
                 && poolRwaBalance > 0,
             "demo scenario balances must be positive"
         );
+
+        ScenarioWallet[] memory wallets = abi.decode(vm.parseJson(json, ".wallets"), (ScenarioWallet[]));
+        bool investorSeen;
+        bool eligibleInvestorBSeen;
+        bool ineligibleInvestorSeen;
+        for (uint256 i = 0; i < wallets.length; i++) {
+            bytes32 key = keccak256(bytes(wallets[i].artifactKey));
+            if (key == keccak256("investor")) {
+                require(!investorSeen && wallets[i].account == investorAccount, "scenario investor wallet mismatch");
+                investorInitialQp = wallets[i].initialQualifiedPurchaser;
+                investorSeen = true;
+            } else if (key == keccak256("eligibleInvestorB")) {
+                require(
+                    !eligibleInvestorBSeen && wallets[i].account == eligibleInvestorBAccount,
+                    "scenario eligibleInvestorB wallet mismatch"
+                );
+                eligibleInvestorBInitialQp = wallets[i].initialQualifiedPurchaser;
+                eligibleInvestorBSeen = true;
+            } else if (key == keccak256("ineligibleInvestor")) {
+                require(
+                    !ineligibleInvestorSeen && wallets[i].account == ineligibleInvestorAccount,
+                    "scenario ineligibleInvestor wallet mismatch"
+                );
+                ineligibleInvestorInitialQp = wallets[i].initialQualifiedPurchaser;
+                ineligibleInvestorSeen = true;
+            } else {
+                revert("scenario wallet artifactKey invalid");
+            }
+        }
+        require(
+            investorSeen && eligibleInvestorBSeen && ineligibleInvestorSeen,
+            "scenario must configure all demo investor wallets"
+        );
     }
 
     function _deployAndRegisterElements() internal {
@@ -329,11 +373,11 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     ///      Sanctions (A-01) and US-tax (A-05) pass by default (not blocked /
     ///      not flagged). Anvil's genesis timestamp is real wall-clock time, far
     ///      past the Rule 144 lockup window seeded at t=1, so C-01 passes on-chain.
-    function _attestInvestor(address who) internal {
+    function _attestInvestor(address who, bool initialQp) internal {
         jurisdiction.setJurisdiction(who, ALLOWED_JURISDICTION); // A-02
         IdentityUniqueness(elementReg.elementOf(bytes32("A-04-v1"))).bindIdentity(who, keccak256(abi.encode("ID", who))); // A-04
         AccreditedInvestor(elementReg.elementOf(bytes32("A-03-v1"))).setAccredited(who, true); // A-03
-        if (useBuidlLikeProfile) qualifiedPurchaser.setQp(who, true); // A-13
+        if (useBuidlLikeProfile) qualifiedPurchaser.setQp(who, initialQp); // A-13
         acqSource.setSnapshot(
             who,
             address(rwaToken),

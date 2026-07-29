@@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {CornerStoreFactory} from "../src/factory/CornerStoreFactory.sol";
 import {TokenPolicyRegistry} from "../src/registry/TokenPolicyRegistry.sol";
@@ -558,14 +559,25 @@ contract DemoScenarios is Script, DemoConstants {
         sellTradeAmount = vm.parseUint(vm.parseJsonString(scenario, ".execution.defaultSellAmountBaseUnits"));
         uint256 pricingNumerator = vm.parseUint(vm.parseJsonString(scenario, ".execution.pricing.numerator"));
         uint256 pricingDenominator = vm.parseUint(vm.parseJsonString(scenario, ".execution.pricing.denominator"));
+        uint256 assetDecimals = vm.parseJsonUint(scenario, ".asset.decimals");
+        uint256 quoteDecimals = vm.parseJsonUint(scenario, ".quoteAsset.decimals");
         uint256 ttl = vm.parseJsonUint(scenario, ".execution.defaultQuoteTtlSeconds");
         require(
             tradeAmount > 0 && sellTradeAmount > 0 && pricingNumerator > 0 && pricingDenominator > 0,
             "runtime scenario execution values must be positive"
         );
+        require(assetDecimals <= 36 && quoteDecimals <= 36, "runtime scenario decimals invalid");
         require(ttl > 0 && ttl <= type(uint64).max - block.timestamp, "runtime scenario quote TTL invalid");
-        rfqBuyAmountOut = tradeAmount * pricingNumerator / pricingDenominator;
-        rfqSellAmountOut = sellTradeAmount * pricingNumerator / pricingDenominator;
+        uint256 assetScale = 10 ** assetDecimals;
+        uint256 quoteScale = 10 ** quoteDecimals;
+        require(
+            pricingDenominator <= type(uint256).max / assetScale && pricingNumerator <= type(uint256).max / quoteScale,
+            "runtime scenario price scale overflow"
+        );
+        // Scenario price is QUOTE per RWA. Buying therefore inverts the price,
+        // while selling applies it in the forward direction.
+        rfqBuyAmountOut = Math.mulDiv(tradeAmount, pricingDenominator * assetScale, pricingNumerator * quoteScale);
+        rfqSellAmountOut = Math.mulDiv(sellTradeAmount, pricingNumerator * quoteScale, pricingDenominator * assetScale);
         require(rfqBuyAmountOut > 0 && rfqSellAmountOut > 0, "runtime scenario pricing returned zero");
         quoteTtlSeconds = uint64(ttl);
 

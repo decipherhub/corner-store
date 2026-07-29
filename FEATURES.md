@@ -939,6 +939,8 @@ passing
   기본 수량, quote TTL과 mock pricing을 주입한다.
 - 배포 스크립트가 선택한 scenario를 읽어 실제 Anvil mint/approval 계정과 금액에
   반영하며, UI 전용 하드코딩 값으로 가장하지 않는다.
+- scenario의 지갑별 초기 QP 상태를 실제 A-13 fixture에 반영하고, `qUSD / RWA`
+  가격은 backend와 Solidity demo 모두 매수 시 역산·매도 시 정방향으로 계산한다.
 - 배포 artifact가 scenario schema version과 content hash를 보존하고 backend는
   다른 scenario로 시작하려는 경우 fail-closed한다.
 - 사용자와 maker 잔액은 scenario 값을 그대로 표시하지 않고 배포 후 실제
@@ -952,7 +954,7 @@ passing
 - `npm test --prefix services/operator-dashboard`
 - `forge build --offline`
 - `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
-- 비기본 account, 초기 물량과 2:1 mock price scenario 전체 E2E
+- 비기본 account, 초기 물량과 비 1:1 mock price·변경된 지갑별 QP 상태 scenario 전체 E2E
 - `scripts/check.sh`
 - `git diff --check`
 

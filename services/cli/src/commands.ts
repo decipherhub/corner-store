@@ -686,7 +686,10 @@ function validateBackendQuote(signed: SignedRFQQuote, a: Artifact, taker: string
   ] as const;
   for (const [actual, wanted, field] of expected) {
     if (typeof actual !== "string" || actual.toLowerCase() !== wanted.toLowerCase()) {
-      throw new CliError(`backend quote ${field} does not match the deployment artifact`);
+      throw new CliError(
+        `backend quote ${field} does not match the deployment artifact ` +
+          `(received ${String(actual)}, expected ${wanted})`
+      );
     }
   }
   if (q.amountIn !== amountIn) throw new CliError("backend quote amountIn does not match the request");
