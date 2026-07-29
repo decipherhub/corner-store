@@ -7,13 +7,14 @@
 # and tears the node down on exit. Runs fully offline.
 #
 # Usage:
-#   scripts/e2e-anvil.sh [--port N] [--backend-port N] [--profile buidl-like|reg-d] [--mode full|rfq] [--pid-file PATH] [--keep]
+#   scripts/e2e-anvil.sh [--port N] [--backend-port N] [--profile buidl-like|reg-d] [--mode full|rfq] [--scenario PATH] [--pid-file PATH] [--keep]
 #
 #   --port N   Anvil port (default 8545).
 #   --backend-port N  RFQ demo backend port (default 8787).
 #   --profile  Asset profile (default buidl-like; alternative reg-d).
 #   --mode     full runs the 7-scenario suite plus RFQ; rfq runs the concise
 #              backend/CLI/Router RFQ walkthrough only (default full).
+#   --scenario  injected demo data and temporal transaction scenario JSON.
 #   --pid-file  write Anvil and RFQ backend PIDs for a supervising launcher.
 #   --keep     Leave Anvil running after the suite (attach a UI / continue the
 #              demo interactively). Otherwise Anvil is killed on exit.
@@ -30,6 +31,7 @@ ASSET_PROFILE=buidl-like
 BACKEND_PORT=8787
 DEMO_MODE=full
 PID_FILE=""
+SCENARIO_FILE="services/rfq-demo-backend/config/demo-scenario.json"
 while [ $# -gt 0 ]; do
   case "$1" in
     --port) PORT="$2"; shift 2 ;;
@@ -40,6 +42,8 @@ while [ $# -gt 0 ]; do
     --backend-port=*) BACKEND_PORT="${1#*=}"; shift ;;
     --mode) DEMO_MODE="$2"; shift 2 ;;
     --mode=*) DEMO_MODE="${1#*=}"; shift ;;
+    --scenario) SCENARIO_FILE="$2"; shift 2 ;;
+    --scenario=*) SCENARIO_FILE="${1#*=}"; shift ;;
     --pid-file) PID_FILE="$2"; shift 2 ;;
     --pid-file=*) PID_FILE="${1#*=}"; shift ;;
     --keep) KEEP=1; shift ;;
@@ -168,10 +172,10 @@ echo "==> Re-onboarding the selected asset profile through the CLI"
 echo "==> Starting RFQ demo backend on http://127.0.0.1:${BACKEND_PORT}"
 if [ "$KEEP" -eq 1 ]; then
   nohup env RFQ_DEMO_ENABLE_SETTLEMENT=1 node services/rfq-demo-backend/dist/rfq-demo-backend/src/index.js \
-    --port "$BACKEND_PORT" --rpc "$RPC" >"$BACKEND_LOG" 2>&1 </dev/null &
+    --port "$BACKEND_PORT" --rpc "$RPC" --scenario "$SCENARIO_FILE" >"$BACKEND_LOG" 2>&1 </dev/null &
 else
   RFQ_DEMO_ENABLE_SETTLEMENT=1 node services/rfq-demo-backend/dist/rfq-demo-backend/src/index.js \
-    --port "$BACKEND_PORT" --rpc "$RPC" >"$BACKEND_LOG" 2>&1 &
+    --port "$BACKEND_PORT" --rpc "$RPC" --scenario "$SCENARIO_FILE" >"$BACKEND_LOG" 2>&1 &
 fi
 BACKEND_PID=$!
 
@@ -197,9 +201,12 @@ DEMO_READY=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/setup" \
   -H "content-type: application/json" \
   -d '{}')
 node -e 'const value=JSON.parse(process.argv[1]); if (!value.ready || !value.makerApproved) { console.error(value); process.exit(1); } console.log("    PASS: dashboard setup prepared the on-chain maker");' "$DEMO_READY"
+DEMO_AMOUNT=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.presentation.asset.minimumAmountBaseUnits);' "$DEMO_READY")
+DEMO_AMOUNT_DISPLAY=$(node -e 'const value=JSON.parse(process.argv[1]); const a=BigInt(value.presentation.asset.minimumAmountBaseUnits), d=BigInt(value.presentation.asset.decimals), s=10n**d; process.stdout.write(`${a/s}${a%s ? `.${(a%s).toString().padStart(Number(d),"0").replace(/0+$/,"")}` : ""}`);' "$DEMO_READY")
+DEMO_MAKER=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.maker);' "$DEMO_READY")
 DEMO_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
   -H "content-type: application/json" \
-  -d '{"amountIn":"5000000000000000000000000","ttlSeconds":900}')
+  -d "{\"amountIn\":\"${DEMO_AMOUNT}\",\"ttlSeconds\":900}")
 DEMO_TAMPER_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); quote.quote.tokenOut="0x0000000000000000000000000000000000000001"; process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"settle",quote}));' "$DEMO_QUOTE")
 DEMO_TAMPERED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
@@ -212,7 +219,7 @@ DEMO_SETTLED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
 node -e 'const value=JSON.parse(process.argv[1]); if (!value.transaction?.hash || BigInt(value.transaction.rwaDelta) <= 0n) process.exit(1); console.log(`    PASS: dashboard trade settled in block ${value.transaction.blockNumber}`);' "$DEMO_SETTLED"
 DEMO_REJECT_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
   -H "content-type: application/json" \
-  -d '{"amountIn":"5000000000000000000000000","ttlSeconds":900}')
+  -d "{\"amountIn\":\"${DEMO_AMOUNT}\",\"ttlSeconds\":900}")
 DEMO_REJECT_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"revoked-maker",quote}));' "$DEMO_REJECT_QUOTE")
 DEMO_REJECTED=$(curl -sS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \
@@ -228,19 +235,20 @@ node -e 'const value=JSON.parse(process.argv[1]); if (!value.ready || !value.mak
 if [[ "$ASSET_PROFILE" == "buidl-like" ]]; then
   echo "==> Proving BUIDL-like role-aware pre-check and final compliance enforcement"
   DEMO_STATE=$(curl -fsS "http://127.0.0.1:${BACKEND_PORT}/demo/state")
-  ELIGIBLE_B=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.wallets.find((wallet) => wallet.id === "eligible-b").address);' "$DEMO_STATE")
-  INELIGIBLE=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.wallets.find((wallet) => wallet.id === "ineligible").address);' "$DEMO_STATE")
+  ELIGIBLE_B=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.wallets.find((wallet) => wallet.qualifiedPurchaser).address);' "$DEMO_STATE")
+  INELIGIBLE_ID=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.wallets.find((wallet) => !wallet.qualifiedPurchaser).id);' "$DEMO_STATE")
+  INELIGIBLE=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.wallets.find((wallet) => !wallet.qualifiedPurchaser).address);' "$DEMO_STATE")
   ELIGIBLE_PRECHECK=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/precheck" \
     -H "content-type: application/json" \
-    -d "{\"taker\":\"${ELIGIBLE_B}\",\"amountIn\":\"5000000000000000000000000\"}")
+    -d "{\"taker\":\"${ELIGIBLE_B}\",\"amountIn\":\"${DEMO_AMOUNT}\"}")
   node -e 'const value=JSON.parse(process.argv[1]); if (!value.allowed || !value.wallet.qualifiedPurchaser) { console.error(value); process.exit(1); } console.log("    PASS: eligible investor B passed the live pre-check");' "$ELIGIBLE_PRECHECK"
   INELIGIBLE_PRECHECK=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/precheck" \
     -H "content-type: application/json" \
-    -d "{\"taker\":\"${INELIGIBLE}\",\"amountIn\":\"5000000000000000000000000\"}")
+    -d "{\"taker\":\"${INELIGIBLE}\",\"amountIn\":\"${DEMO_AMOUNT}\"}")
   node -e 'const value=JSON.parse(process.argv[1]); if (value.allowed || value.wallet.qualifiedPurchaser || value.verdict.reason !== "Qualified Purchaser claim missing") { console.error(value); process.exit(1); } console.log("    PASS: ineligible investor failed pre-check with the QP reason");' "$INELIGIBLE_PRECHECK"
   INELIGIBLE_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
     -H "content-type: application/json" \
-    -d "{\"taker\":\"${INELIGIBLE}\",\"amountIn\":\"5000000000000000000000000\",\"ttlSeconds\":300}")
+    -d "{\"taker\":\"${INELIGIBLE}\",\"amountIn\":\"${DEMO_AMOUNT}\",\"ttlSeconds\":300}")
   INELIGIBLE_TRADE_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"compliance-proof",quote}));' "$INELIGIBLE_QUOTE")
   INELIGIBLE_REJECTED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
     -H "content-type: application/json" \
@@ -248,23 +256,55 @@ if [[ "$ASSET_PROFILE" == "buidl-like" ]]; then
   node -e 'const value=JSON.parse(process.argv[1]); if (value.rejection !== "Qualified Purchaser claim missing" || !value.reasonCode) { console.error(value); process.exit(1); } console.log("    PASS: Router final check rejected the signed ineligible quote");' "$INELIGIBLE_REJECTED"
   ADMIN_ELIGIBLE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/admin/user" \
     -H "content-type: application/json" \
-    -d '{"walletId":"ineligible","eligible":true}')
+    -d "{\"walletId\":\"${INELIGIBLE_ID}\",\"eligible\":true}")
   node -e 'const value=JSON.parse(process.argv[1]); if (!value.qualifiedPurchaser) { console.error(value); process.exit(1); }' "$ADMIN_ELIGIBLE"
   ADMIN_RESTORED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/admin/user" \
     -H "content-type: application/json" \
-    -d '{"walletId":"ineligible","eligible":false}')
+    -d "{\"walletId\":\"${INELIGIBLE_ID}\",\"eligible\":false}")
   node -e 'const value=JSON.parse(process.argv[1]); if (value.qualifiedPurchaser) { console.error(value); process.exit(1); } console.log("    PASS: Admin eligibility control changed and restored the live QP fixture");' "$ADMIN_RESTORED"
+
+  echo "==> Proving quote-time eligibility can expire before fill"
+  TEMPORAL_ID=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.presentation.temporalEligibility.walletId);' "$DEMO_STATE")
+  TEMPORAL_TTL=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(String(value.presentation.temporalEligibility.quoteTtlSeconds));' "$DEMO_STATE")
+  TEMPORAL_ADVANCE=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(String(value.presentation.temporalEligibility.advanceSeconds));' "$DEMO_STATE")
+  TEMPORAL_PREPARED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/admin/temporal/prepare" \
+    -H "content-type: application/json" \
+    -d "{\"walletId\":\"${TEMPORAL_ID}\"}")
+  TEMPORAL_WALLET=$(node -e 'const value=JSON.parse(process.argv[1]); const id=process.argv[2]; process.stdout.write(value.wallets.find((wallet) => wallet.id === id).address);' "$TEMPORAL_PREPARED" "$TEMPORAL_ID")
+  TEMPORAL_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
+    -H "content-type: application/json" \
+    -d "{\"taker\":\"${TEMPORAL_WALLET}\",\"amountIn\":\"${DEMO_AMOUNT}\",\"ttlSeconds\":${TEMPORAL_TTL}}")
+  curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/admin/temporal/advance" \
+    -H "content-type: application/json" \
+    -d "{\"seconds\":${TEMPORAL_ADVANCE}}" >/dev/null
+  TEMPORAL_PRECHECK=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/precheck" \
+    -H "content-type: application/json" \
+    -d "{\"taker\":\"${TEMPORAL_WALLET}\",\"amountIn\":\"${DEMO_AMOUNT}\"}")
+  node -e 'const value=JSON.parse(process.argv[1]); if (value.allowed || value.verdict.reason !== "Qualified Purchaser claim expired") { console.error(value); process.exit(1); } console.log("    PASS: chain-time advance expired the previously valid QP claim");' "$TEMPORAL_PRECHECK"
+  TEMPORAL_TRADE_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"compliance-proof",quote}));' "$TEMPORAL_QUOTE")
+  TEMPORAL_REJECTED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
+    -H "content-type: application/json" \
+    -d "$TEMPORAL_TRADE_BODY")
+  node -e 'const value=JSON.parse(process.argv[1]); if (value.rejection !== "Qualified Purchaser claim expired") { console.error(value); process.exit(1); } console.log("    PASS: Router rejected the still-live quote after eligibility expired");' "$TEMPORAL_REJECTED"
+  TEMPORAL_RESET=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/setup" \
+    -H "content-type: application/json" \
+    -d '{}')
+  RESET_INVESTOR=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.investor);' "$TEMPORAL_RESET")
+  RESET_PRECHECK=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/precheck" \
+    -H "content-type: application/json" \
+    -d "{\"taker\":\"${RESET_INVESTOR}\",\"amountIn\":\"${DEMO_AMOUNT}\"}")
+  node -e 'const value=JSON.parse(process.argv[1]); if (!value.allowed || !value.wallet.qualifiedPurchaser) { console.error(value); process.exit(1); } console.log("    PASS: injected baseline restored eligibility after the temporal scenario");' "$RESET_PRECHECK"
 fi
 
 echo "==> Requesting and filling a backend-signed RFQ quote through the Router"
 "${CLI[@]}" rfq-quote --backend "http://127.0.0.1:${BACKEND_PORT}" \
-  --amount-in 5000000 --out "$QUOTE_FILE"
+  --amount-in "$DEMO_AMOUNT_DISPLAY" --out "$QUOTE_FILE"
 "${CLI[@]}" buy 0 --venue rfq --quote "$QUOTE_FILE"
 
 echo "==> Proving a current maker-policy failure on the same backend flow"
-"${CLI[@]}" maker revoke 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+"${CLI[@]}" maker revoke "$DEMO_MAKER"
 "${CLI[@]}" rfq-quote --backend "http://127.0.0.1:${BACKEND_PORT}" \
-  --amount-in 5000000 --out "$REJECTED_QUOTE_FILE"
+  --amount-in "$DEMO_AMOUNT_DISPLAY" --out "$REJECTED_QUOTE_FILE"
 if "${CLI[@]}" buy 0 --venue rfq --quote "$REJECTED_QUOTE_FILE"; then
   echo "ERROR: revoked maker quote unexpectedly settled" >&2
   exit 1
@@ -272,10 +312,10 @@ fi
 echo "    PASS: revoked maker quote was rejected"
 
 echo "==> Restoring the demo maker and proving backend nonce refresh after CLI activity"
-"${CLI[@]}" maker approve 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+"${CLI[@]}" maker approve "$DEMO_MAKER"
 POST_CLI_QUOTE=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/quote" \
   -H "content-type: application/json" \
-  -d '{"amountIn":"5000000000000000000000000","ttlSeconds":900}')
+  -d "{\"amountIn\":\"${DEMO_AMOUNT}\",\"ttlSeconds\":900}")
 POST_CLI_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"settle",quote}));' "$POST_CLI_QUOTE")
 POST_CLI_SETTLED=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT}/demo/trade" \
   -H "content-type: application/json" \

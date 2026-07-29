@@ -4,7 +4,7 @@ import {RFQBackendSDK, SignedRFQQuote} from "../../rfq/src";
 
 import {DemoBackendConfig, asAddress} from "./config";
 import {createDemoQuoteService} from "./service";
-import {DemoSettlementService, DemoTradeAction, DemoWalletId} from "./settlement";
+import {DemoSettlementService, DemoTradeAction} from "./settlement";
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -124,10 +124,30 @@ async function handleRequest(
     if (req.method === "POST" && req.url === "/demo/admin/user") {
       requireSettlement(settlement);
       const body = await readJsonBody(req);
-      if (!isRecord(body) || !isWalletId(body.walletId) || typeof body.eligible !== "boolean") {
+      if (!isRecord(body) || typeof body.walletId !== "string" || typeof body.eligible !== "boolean") {
         throw new Error("walletId and eligible are required");
       }
       sendJson(res, 200, await settlement.setUserEligibility(body.walletId, body.eligible));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/demo/admin/temporal/prepare") {
+      requireSettlement(settlement);
+      const body = await readJsonBody(req);
+      if (!isRecord(body) || (body.walletId !== undefined && typeof body.walletId !== "string")) {
+        throw new Error("walletId must be a string");
+      }
+      sendJson(res, 200, await settlement.prepareTemporalEligibility(body.walletId as string | undefined));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/demo/admin/temporal/advance") {
+      requireSettlement(settlement);
+      const body = await readJsonBody(req);
+      if (!isRecord(body) || (body.seconds !== undefined && !Number.isSafeInteger(body.seconds))) {
+        throw new Error("seconds must be an integer");
+      }
+      sendJson(res, 200, await settlement.advanceTime(body.seconds as number | undefined));
       return;
     }
 
@@ -148,10 +168,12 @@ async function handleRequest(
 
     if (req.method === "POST" && req.url === "/demo/quote") {
       const body = await readJsonBody(req);
-      const signed = await createQuote({
+      const request = {
         ...(isRecord(body) ? body : {}),
         taker: isRecord(body) && typeof body.taker === "string" ? body.taker : config.artifact.investor
-      }, config, quoteService);
+      };
+      if (settlement) settlement.assertDemoWallet(asAddress(request.taker, "taker"));
+      const signed = await createQuote(request, config, quoteService);
       sendJson(res, 200, signed);
       return;
     }
@@ -247,10 +269,6 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isWalletId(value: unknown): value is DemoWalletId {
-  return value === "eligible-a" || value === "eligible-b" || value === "ineligible";
 }
 
 function parseAmount(value: unknown): string {

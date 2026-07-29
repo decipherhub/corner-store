@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "asset": {
+    "name": "BUIDL-like Treasury Fund",
+    "symbol": "BL",
+    "referencePrice": "12480",
+    "referenceCurrency": "KRW",
+    "minimumAmountBaseUnits": "5000000000000000000000000",
+    "decimals": 18
+  },
+  "maker": {
+    "label": "Meridian OTC"
+  },
+  "wallets": [
+    {
+      "id": "eligible-a",
+      "label": "적격투자자 A",
+      "account": 1,
+      "artifactKey": "investor",
+      "initialQualifiedPurchaser": true
+    },
+    {
+      "id": "eligible-b",
+      "label": "적격투자자 B",
+      "account": 4,
+      "artifactKey": "eligibleInvestorB",
+      "initialQualifiedPurchaser": true
+    },
+    {
+      "id": "ineligible",
+      "label": "비적격투자자",
+      "account": 5,
+      "artifactKey": "ineligibleInvestor",
+      "initialQualifiedPurchaser": false
+    }
+  ],
+  "previewQuotes": [
+    {
+      "maker": "Falcon Markets",
+      "rate": "0.9998"
+    },
+    {
+      "maker": "Nomos Capital",
+      "rate": "1.0003"
+    }
+  ],
+  "temporalEligibility": {
+    "walletId": "eligible-a",
+    "baselineFreshnessSeconds": 31536000,
+    "freshnessSeconds": 60,
+    "advanceSeconds": 61,
+    "quoteTtlSeconds": 900
+  }
+}

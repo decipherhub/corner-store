@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="demo-ribbon"><strong>LIVE DEMO</strong><span>Local Anvil</span><span>BUIDL-like ERC-3643</span><span>Mock TA</span><span>체결 시 최신 정책 재검사</span></div>
+  <div class="demo-ribbon"><strong>LIVE DEMO</strong><span>Local Anvil</span><span id="ribbonAsset">Injected ERC-3643 asset</span><span>Mock TA</span><span>체결 시 최신 정책 재검사</span></div>
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">C</span><div><strong>Corner Store</strong><small>Compliant markets</small></div></div>
@@ -39,9 +39,6 @@
               <small>현재 역할 / 지갑</small>
               <select id="walletSelector" aria-label="데모 역할 및 지갑 선택">
                 <option value="admin">Admin</option>
-                <option value="eligible-a" selected>적격투자자 A</option>
-                <option value="eligible-b">적격투자자 B</option>
-                <option value="ineligible">비적격투자자</option>
               </select>
               <strong id="walletAddress">연결 중…</strong>
             </div>
@@ -55,7 +52,7 @@
 
         <section id="dashboardView" class="view">
           <div class="hero-balance">
-            <div><span class="data-label">총 포트폴리오 가치 <i>Demo fixture</i></span><strong>$128,450,000</strong><p id="dashboardEligibility">적격 상태를 확인하고 있습니다.</p></div>
+            <div><span class="data-label">현재 온체인 보유량 <i>Live</i></span><strong id="dashboardHolding">—</strong><p id="dashboardEligibility">적격 상태를 확인하고 있습니다.</p></div>
             <button id="newRfq" class="primary large">＋ 새 RFQ 만들기</button>
           </div>
           <div class="stat-grid">
@@ -73,36 +70,36 @@
           <div class="page-intro"><div><p class="kicker">New request</p><h2>새 RFQ 만들기</h2><p>현재 지갑 기준의 온체인 정책을 먼저 검사한 뒤 firm quote를 요청합니다.</p></div><span class="flow-badge">1 / 3 · 조건 입력</span></div>
           <div class="create-layout">
             <form id="rfqForm" class="surface rfq-form">
-              <label for="asset">토큰증권</label><select id="asset"><option>BUIDL-like Treasury Fund · RWA</option></select>
+              <label for="asset">토큰증권</label><select id="asset"><option>배포 자산을 불러오는 중…</option></select>
               <label>거래 방향</label><div class="segmented"><button id="buySide" type="button" class="active">매수</button><button id="sellSide" type="button" disabled>매도 <small>후속 범위</small></button></div>
-              <label for="amount">결제 금액</label><div class="amount-field"><span>QUOTE</span><input id="amount" value="5000000" inputmode="decimal"></div>
-              <p class="field-help">BUIDL-like 최소 투자금액 5,000,000 · 18 decimals</p>
+              <label for="amount">결제 금액</label><div class="amount-field"><span>QUOTE</span><input id="amount" value="" inputmode="decimal"></div>
+              <p id="minimumHelp" class="field-help">주입된 자산 정책을 불러오는 중…</p>
               <label for="ttl">견적 유효시간</label><select id="ttl"><option value="300">5분</option><option value="900" selected>15분</option><option value="1800">30분</option></select>
-              <div class="estimate"><span>참고가격 <i>최근 체결가 fixture</i></span><strong>₩12,480</strong></div>
+              <div class="estimate"><span>참고가격 <i>scenario input</i></span><strong id="referencePrice">—</strong></div>
               <div id="precheckCard" class="precheck-card"><strong>Compliance Pre-check</strong><div id="precheckRows">검사 중…</div><b id="precheckVerdict">예상 결과 확인 중</b></div>
               <button id="requestQuote" type="submit" class="primary full large" disabled>Request Quote</button>
               <button id="proveCompliance" type="button" class="danger full hidden">최종 온체인 거부 시연</button>
               <div id="status" class="inline-status">Pre-check가 끝나면 거래 가능 여부가 표시됩니다.</div>
             </form>
-            <aside class="surface asset-summary"><span class="asset-symbol">BL</span><p class="kicker">Selected asset</p><h2>BUIDL-like Treasury Fund</h2><p>Mock TA가 자격 사실을 공급하고, Corner Store Manifest/Recipe/Element가 RFQ 실행을 제한합니다.</p><div class="asset-facts"><div><span>참고가격</span><strong>₩12,480 · fixture</strong></div><div><span>전송 표준</span><strong>ERC-3643</strong></div><div><span>결제 경로</span><strong>Router → RFQ</strong></div><div><span>현재 투자자</span><strong id="assetInvestorState">확인 중</strong></div></div><div id="complianceStatus" class="compliance-note">체결 시점에 정책을 다시 검사합니다.</div></aside>
+            <aside class="surface asset-summary"><span id="assetSymbol" class="asset-symbol">—</span><p class="kicker">Selected asset</p><h2 id="assetName">배포 자산</h2><p>주입된 Mock TA 사실과 배포 artifact를 사용하며, Corner Store Manifest/Recipe/Element가 RFQ 실행을 제한합니다.</p><div class="asset-facts"><div><span>참고가격</span><strong id="assetReferencePrice">—</strong></div><div><span>전송 표준</span><strong>ERC-3643</strong></div><div><span>결제 경로</span><strong>Router → RFQ</strong></div><div><span>현재 투자자</span><strong id="assetInvestorState">확인 중</strong></div></div><div id="complianceStatus" class="compliance-note">체결 시점에 정책을 다시 검사합니다.</div></aside>
           </div>
         </section>
 
         <section id="rfqsView" class="view hidden">
           <div class="page-intro"><div><p class="kicker">Requests & quotes</p><h2>My RFQs</h2><p>참고가격과 firm quote를 비교한 뒤 정확히 검토한 payload를 제출합니다.</p></div><button id="newRfqFromList" class="primary">＋ 새 RFQ</button></div>
           <section class="surface table-surface"><table class="data-table"><thead><tr><th>RFQ ID</th><th>지갑</th><th>자산</th><th>상태</th><th>견적</th><th></th></tr></thead><tbody id="rfqRows"><tr><td colspan="6"><div class="empty-row">아직 RFQ가 없습니다.</div></td></tr></tbody></table></section>
-          <section id="quoteComparison" class="surface quote-comparison hidden"><div class="section-head"><div><p class="kicker">Firm quote</p><h2>받은 견적 비교</h2><p>Meridian은 실제 backend-signed quote이며 나머지는 UI 확장 예시입니다.</p></div><span id="quoteExpiryBadge" class="status-pill live">Live</span></div><div id="acceptPrecheck" class="precheck-card compact"></div><div id="quoteCards" class="quote-grid"></div><div id="result"></div></section>
+          <section id="quoteComparison" class="surface quote-comparison hidden"><div class="section-head"><div><p class="kicker">Firm quote</p><h2>받은 견적 비교</h2><p><span id="liveMakerDescription">Configured maker</span>는 실제 backend-signed quote이며 나머지는 주입된 UI 확장 예시입니다.</p></div><span id="quoteExpiryBadge" class="status-pill live">Live</span></div><div id="acceptPrecheck" class="precheck-card compact"></div><div id="quoteCards" class="quote-grid"></div><div id="result"></div></section>
         </section>
 
         <section id="portfolioView" class="view hidden">
           <div class="page-intro"><div><p class="kicker">Holdings</p><h2>Portfolio</h2><p>비적격 사용자도 조회할 수 있으며 거래만 제한됩니다.</p></div><span class="fixture-label">Fixture + live delta</span></div>
-          <div class="portfolio-total"><span>총 평가금액</span><strong>$128,450,000</strong><small>외부 가격 feed 없음</small></div>
-          <section class="surface table-surface"><table class="data-table"><thead><tr><th>토큰명</th><th>보유수량</th><th>기준가</th><th>평가금액</th><th></th></tr></thead><tbody><tr><td><strong>BUIDL-like Treasury Fund</strong><small>RWA · ERC-3643</small></td><td id="buidlHolding">25,000,000</td><td>$1.0000</td><td id="buidlValue">$25,000,000</td><td><button id="portfolioRfq" class="secondary">RFQ 만들기</button></td></tr></tbody></table></section><div id="portfolioDelta" class="inline-status">실제 체결 후 현재 지갑의 증가분을 표시합니다.</div>
+          <div class="portfolio-total"><span>현재 보유량</span><strong id="portfolioTotal">—</strong><small>온체인 balanceOf</small></div>
+          <section class="surface table-surface"><table class="data-table"><thead><tr><th>토큰명</th><th>보유수량</th><th>참고가격</th><th>데이터 출처</th><th></th></tr></thead><tbody><tr><td><strong id="portfolioAssetName">배포 자산</strong><small>RWA · ERC-3643</small></td><td id="buidlHolding">—</td><td id="portfolioReferencePrice">—</td><td>Live balance + scenario price</td><td><button id="portfolioRfq" class="secondary">RFQ 만들기</button></td></tr></tbody></table></section><div id="portfolioDelta" class="inline-status">실제 체결 후 현재 지갑의 증가분을 표시합니다.</div>
         </section>
 
         <section id="adminDashboardView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>운영 Dashboard</h2><p>실제 데모 fixture의 적격 상태와 maker 정책을 관리합니다.</p></div><button id="adminRefresh" class="secondary">새로고침</button></div><div id="adminStats" class="stat-grid"></div><section class="surface"><h3>최근 거부 / 체결</h3><div id="adminRecent" class="event-list"></div></section></section>
         <section id="adminMonitoringView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>RFQ 모니터링</h2><p>세션 RFQ와 온체인 실행 결과를 함께 봅니다.</p></div></div><section class="surface"><div id="monitoringContent" class="fact-list"></div></section></section>
-        <section id="adminUsersView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>사용자 / 화이트리스트</h2><p>데모용 Qualified Purchaser claim을 실제 Element에 기록합니다.</p></div></div><section class="surface table-surface"><table class="data-table"><thead><tr><th>사용자</th><th>주소</th><th>QP 상태</th><th>데모 제어</th></tr></thead><tbody id="adminUserRows"></tbody></table></section><div id="adminUserStatus" class="inline-status">토글 변경은 로컬 Anvil 트랜잭션입니다.</div></section>
+        <section id="adminUsersView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>사용자 / 화이트리스트</h2><p>주입된 사용자 fixture의 Qualified Purchaser claim을 실제 Element에 기록합니다.</p></div></div><section class="surface table-surface"><table class="data-table"><thead><tr><th>사용자</th><th>주소</th><th>QP 상태</th><th>데모 제어</th></tr></thead><tbody id="adminUserRows"></tbody></table></section><div id="adminUserStatus" class="inline-status">토글 변경은 로컬 Anvil 트랜잭션입니다.</div><section class="surface temporal-demo"><div class="section-head"><div><p class="kicker">Temporal compliance</p><h3>적격성 만료 시나리오</h3><p>짧은 freshness window를 주입한 뒤 Anvil 시간을 실제로 전진시켜, 서명 당시 적격이던 quote가 fill 시점에 거부되는지 증명합니다.</p></div></div><div id="temporalFacts" class="fact-list"></div><div class="button-row"><button id="prepareTemporal" class="secondary">만료 데모 준비</button><button id="advanceTemporal" class="danger">시간 경과시키기</button></div><div id="temporalStatus" class="inline-status">시나리오 설정을 불러오는 중입니다.</div></section></section>
         <section id="adminMakerView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>Maker 관리</h2><p>quote 서명 후 maker를 취소해 fill-time enforcement를 증명할 수 있습니다.</p></div></div><section class="surface"><div id="makerFacts" class="fact-list"></div><div class="button-row"><button id="revokeMaker" class="danger">Maker 취소</button><button id="restoreMaker" class="secondary">Maker 복구</button></div><div id="makerStatus" class="inline-status">상태를 불러오는 중입니다.</div></section></section>
         <section id="adminHistoryView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>거래 내역</h2><p>실제 체결, maker 변경과 데모 거부 기록을 확인합니다.</p></div><button id="refresh" class="secondary">새로고침</button></div><section class="surface"><div id="eventSummary" class="event-stats"></div><div id="events" class="event-list"></div></section></section>
       </main>
@@ -110,7 +107,7 @@
   </div>
 
   <div id="confirmBackdrop" class="modal-backdrop hidden"><section id="confirmDialog" class="modal" role="dialog" aria-modal="true"><button id="closeConfirm" class="modal-close">×</button><p class="kicker">Final review</p><h2>이 견적을 체결할까요?</h2><div id="review" class="review-card"></div><div id="modalPrecheck" class="precheck-card compact"></div><p class="modal-note">Pre-check 결과와 관계없이 Router의 ComplianceEngine이 fill 시점에 최신 상태를 다시 검사합니다.</p><div class="button-row end"><button id="cancelConfirm" class="secondary">취소</button><button id="executeQuote" class="primary">견적 수락 및 체결</button></div></section></div>
-  <div id="guideBackdrop" class="modal-backdrop hidden"><section id="demoGuide" class="modal guide-modal" role="dialog" aria-modal="true"><button id="closeGuide" class="modal-close">×</button><p class="kicker">Presenter guide</p><h2>규제 RFQ 데모 순서</h2><div class="guide-grid"><article><span>01</span><h3>비적격 차단</h3><p>비적격투자자를 선택해 Pre-check 실패를 확인하고 최종 온체인 거부 시연을 실행합니다.</p></article><article><span>02</span><h3>적격 체결</h3><p>적격투자자 A로 새 quote를 요청하고 My RFQs에서 수락합니다.</p></article><article><span>03</span><h3>정책 변경</h3><p>적격 quote를 받은 뒤 Admin의 Maker 관리에서 maker를 취소합니다.</p></article><article><span>04</span><h3>최종 재검사</h3><p>같은 적격 지갑으로 돌아와 저장된 quote를 체결하면 Router가 취소된 maker를 거부합니다.</p></article></div><div class="guide-boundary"><strong>중요</strong> quote는 taker 주소에 묶입니다. 다른 지갑으로 바꾸면 해당 quote를 체결할 수 없으며 새 quote가 필요합니다.</div></section></div>
+  <div id="guideBackdrop" class="modal-backdrop hidden"><section id="demoGuide" class="modal guide-modal" role="dialog" aria-modal="true"><button id="closeGuide" class="modal-close">×</button><p class="kicker">Presenter guide</p><h2>규제 RFQ 데모 순서</h2><div class="guide-grid"><article><span>01</span><h3>주입 데이터 확인</h3><p>환경 준비 버튼으로 scenario JSON의 사용자·자산·정책 fixture를 온체인에 반영합니다.</p></article><article><span>02</span><h3>비적격 차단</h3><p>비적격 사용자의 Pre-check 실패와 Router 최종 거부를 확인합니다.</p></article><article><span>03</span><h3>적격 체결</h3><p>적격 사용자로 새 quote를 요청하고 정상 체결합니다.</p></article><article><span>04</span><h3>시간 만료</h3><p>Admin에서 만료 데모를 준비하고 quote를 받은 뒤 시간을 경과시켜 같은 quote가 최종 검사에서 거부되는지 확인합니다.</p></article></div><div class="guide-boundary"><strong>중요</strong> quote는 taker 주소에 묶이며 Pre-check는 보장이 아닙니다. 체결 시 Router가 최신 claim freshness와 maker 정책을 다시 검사합니다.</div></section></div>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@ import {
   JsonRpcProvider,
   MaxUint256,
   formatEther,
+  formatUnits,
   id,
   verifyTypedData
 } from "ethers";
@@ -33,16 +34,18 @@ const RFQ_ADAPTER_ABI = [
 ];
 const QP_ABI = [
   "function qp(address user) view returns (bool)",
-  "function setQp(address user,bool isQp)"
+  "function claimOf(address user) view returns (uint8 basis,bool signatureValid,bool issuerTrusted,uint64 verifiedAt,uint8 ltStatus,bytes32 coveredCompany)",
+  "function freshnessCap() view returns (uint64)",
+  "function check(address user,address counterparty,address asset,uint256 amount,bytes data) view returns (bool passed,bytes32 reasonCode)",
+  "function setQp(address user,bool isQp)",
+  "function setFreshnessCap(uint64 cap)"
 ];
 const POLICY_ABI = ["function statusOf(address token) view returns (uint8)"];
 const QUOTE_TUPLE =
   "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,uint256 nonce,uint64 expiry)";
 const RFQ_MAKER_NOT_APPROVED_SELECTOR = id("RFQMakerNotApproved()").slice(0, 10).toLowerCase();
 const COMPLIANCE_REJECTED_SELECTOR = id("ComplianceRejected(bytes32)").slice(0, 10).toLowerCase();
-const BUIDL_MINIMUM = 5_000_000n * 10n ** 18n;
-
-export type DemoWalletId = "eligible-a" | "eligible-b" | "ineligible";
+export type DemoWalletId = string;
 export type DemoTradeAction = "settle" | "revoked-maker" | "compliance-proof";
 
 export interface DemoWalletState {
@@ -50,6 +53,11 @@ export interface DemoWalletState {
   label: string;
   address: string;
   qualifiedPurchaser: boolean;
+  claimPresent: boolean;
+  rwaBalance: string;
+  eligibilityReason?: string;
+  verifiedAt?: number;
+  expiresAt?: number;
 }
 
 export interface DemoPrecheckResult {
@@ -73,6 +81,7 @@ interface WalletEntry {
   id: DemoWalletId;
   label: string;
   signer: HDNodeWallet;
+  initialQualifiedPurchaser: boolean;
 }
 
 /** Local-Anvil-only facilitator. Never use this pattern for a hosted service. */
@@ -91,15 +100,15 @@ export class DemoSettlementService {
     this.operator = demoWallet(config.demoSettlement.operatorAccount).connect(this.provider);
     this.requireCanonical(this.operator, config.artifact.deployer, "operator");
 
-    const entries: Array<[DemoWalletId, string, number, string | undefined]> = [
-      ["eligible-a", "적격투자자 A", config.demoSettlement.investorAccount, config.artifact.investor],
-      ["eligible-b", "적격투자자 B", config.demoSettlement.eligibleInvestorBAccount, config.artifact.eligibleInvestorB],
-      ["ineligible", "비적격투자자", config.demoSettlement.ineligibleInvestorAccount, config.artifact.ineligibleInvestor]
-    ];
-    this.wallets = new Map(entries.map(([idValue, label, account, artifactAddress]) => {
-      const signer = demoWallet(account).connect(this.provider);
-      this.requireCanonical(signer, artifactAddress, label);
-      return [signer.address.toLowerCase(), {id: idValue, label, signer}];
+    this.wallets = new Map(config.scenario.wallets.map((wallet) => {
+      const signer = demoWallet(wallet.account).connect(this.provider);
+      this.requireCanonical(signer, config.artifact[wallet.artifactKey], wallet.label);
+      return [signer.address.toLowerCase(), {
+        id: wallet.id,
+        label: wallet.label,
+        signer,
+        initialQualifiedPurchaser: wallet.initialQualifiedPurchaser
+      }];
     }));
   }
 
@@ -108,29 +117,41 @@ export class DemoSettlementService {
     assetProfile: "buidl-like" | "reg-d";
     requiresQualifiedPurchaser: boolean;
     makerApproved: boolean;
+    chainTimestamp: number;
+    qualifiedPurchaserFreshnessCap: number;
     chainId: number;
     maker: string;
     investor: string;
     wallets: DemoWalletState[];
+    presentation: DemoBackendConfig["scenario"];
   }> {
     const makerApproved = await this.makerApproved();
     const network = await this.provider.getNetwork();
     const wallets = await Promise.all([...this.wallets.values()].map((entry) => this.walletState(entry)));
+    const latest = await this.latestBlock();
+    const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.provider);
     return {
       ready: makerApproved && Number(network.chainId) === this.config.chainId,
       assetProfile: this.config.artifact.assetProfile,
       requiresQualifiedPurchaser: this.config.artifact.assetProfile === "buidl-like",
       makerApproved,
+      chainTimestamp: latest.timestamp,
+      qualifiedPurchaserFreshnessCap: Number(await qp.freshnessCap()),
       chainId: Number(network.chainId),
       maker: this.config.artifact.maker,
       investor: asAddress(this.config.artifact.investor, "artifact investor"),
-      wallets
+      wallets,
+      presentation: this.config.scenario
     };
   }
 
   async prepare(): Promise<Awaited<ReturnType<DemoSettlementService["state"]>>> {
     return this.enqueue(async () => {
       if (!await this.makerApproved()) await this.setMakerApproval(true);
+      await this.setFreshnessCap(this.config.scenario.temporalEligibility.baselineFreshnessSeconds);
+      for (const wallet of this.wallets.values()) {
+        await this.setWalletEligibility(wallet, wallet.initialQualifiedPurchaser);
+      }
       return this.state();
     });
   }
@@ -142,26 +163,28 @@ export class DemoSettlementService {
   async precheck(taker: string, amountIn: string): Promise<DemoPrecheckResult> {
     const entry = this.walletFor(taker);
     const amount = BigInt(amountIn);
-    const qp = await this.qualifiedPurchaser(entry.signer.address);
+    const qp = await this.qpEligibility(entry.signer.address);
     const requiresQp = this.config.artifact.assetProfile === "buidl-like";
-    const investorAllowed = !requiresQp || qp;
+    const investorAllowed = !requiresQp || qp.eligible;
     const maker = await this.makerApproved();
     const policy = new Contract(this.requiredArtifact("policyReg"), POLICY_ABI, this.provider);
     const assetActive = Number(await policy.statusOf(this.config.artifact.rwaToken)) === 2;
-    const amountAllowed = !requiresQp || amount >= BUIDL_MINIMUM;
+    const minimum = BigInt(this.config.scenario.asset.minimumAmountBaseUnits);
+    const amountAllowed = !requiresQp || amount >= minimum;
     const amountOut = this.price(amount);
     const context = this.context(entry.signer.address, amountIn, amountOut.toString());
     const engine = new Contract(this.requiredArtifact("engine"), ENGINE_ABI, this.provider);
     const decision = await engine.evaluate(context);
     const assetPass = assetActive && amountAllowed;
+    const investorReason = qp.reason ?? "Qualified Purchaser claim missing";
     const reason = !investorAllowed
-      ? "Qualified Purchaser claim missing"
+      ? investorReason
       : !maker
         ? "Maker is not approved"
         : !assetActive
           ? "Asset manifest is not active"
           : !amountAllowed
-            ? "BUIDL-like minimum investment is 5,000,000"
+            ? `Minimum investment is ${formatUnits(minimum, this.config.scenario.asset.decimals)}`
             : decision.allowed
               ? undefined
               : "Current ComplianceEngine policy rejected the trade";
@@ -174,7 +197,7 @@ export class DemoSettlementService {
           key: "investor",
           label: "투자자 적격성",
           pass: investorAllowed,
-          ...(!investorAllowed ? {reason: "Qualified Purchaser claim missing"} : {})
+          ...(!investorAllowed ? {reason: investorReason} : {})
         },
         {key: "maker", label: "Maker 승인", pass: maker, ...(!maker ? {reason: "Maker is not approved"} : {})},
         {
@@ -184,7 +207,7 @@ export class DemoSettlementService {
           ...(!assetActive
             ? {reason: "Asset manifest is not active"}
             : !amountAllowed
-              ? {reason: "BUIDL-like minimum investment is 5,000,000"}
+              ? {reason: `Minimum investment is ${formatUnits(minimum, this.config.scenario.asset.decimals)}`}
               : {})
         }
       ],
@@ -194,17 +217,36 @@ export class DemoSettlementService {
 
   async setUserEligibility(walletId: DemoWalletId, eligible: boolean): Promise<DemoWalletState> {
     return this.enqueue(async () => {
-      const entry = [...this.wallets.values()].find((candidate) => candidate.id === walletId);
-      if (!entry) throw new Error("unknown demo wallet");
-      const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.operator);
-      const tx = await this.sendOperatorTransaction((nonce) => qp.setQp(entry.signer.address, eligible, {nonce}));
-      this.appendEvent({
-        blockNumber: tx.blockNumber,
-        transactionHash: tx.hash,
-        name: "QualifiedPurchaserSet",
-        args: {investor: entry.signer.address, eligible: String(eligible)}
-      });
+      const entry = this.walletById(walletId);
+      await this.setWalletEligibility(entry, eligible);
       return this.walletState(entry);
+    });
+  }
+
+  async prepareTemporalEligibility(walletId?: DemoWalletId): Promise<Awaited<ReturnType<DemoSettlementService["state"]>>> {
+    return this.enqueue(async () => {
+      const temporal = this.config.scenario.temporalEligibility;
+      const entry = this.walletById(walletId ?? temporal.walletId);
+      await this.setFreshnessCap(temporal.freshnessSeconds);
+      await this.setWalletEligibility(entry, true);
+      return this.state();
+    });
+  }
+
+  async advanceTime(seconds?: number): Promise<Awaited<ReturnType<DemoSettlementService["state"]>>> {
+    return this.enqueue(async () => {
+      const configured = this.config.scenario.temporalEligibility.advanceSeconds;
+      const advance = seconds ?? configured;
+      if (advance !== configured) throw new Error(`advance seconds must match the injected scenario value ${configured}`);
+      await this.provider.send("evm_increaseTime", [advance]);
+      await this.provider.send("evm_mine", []);
+      this.appendEvent({
+        blockNumber: await this.provider.getBlockNumber(),
+        transactionHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+        name: "DemoTimeAdvanced",
+        args: {seconds: String(advance)}
+      });
+      return this.state();
     });
   }
 
@@ -217,6 +259,10 @@ export class DemoSettlementService {
 
   async trade(amountIn: string, action: DemoTradeAction, provided?: SignedRFQQuote): Promise<DemoTradeResult> {
     return this.enqueue(() => this.tradeUnlocked(amountIn, action, provided));
+  }
+
+  assertDemoWallet(address: string): void {
+    this.walletFor(address);
   }
 
   private async tradeUnlocked(amountIn: string, action: DemoTradeAction, provided?: SignedRFQQuote): Promise<DemoTradeResult> {
@@ -347,17 +393,41 @@ export class DemoSettlementService {
     return amountOut;
   }
 
-  private async qualifiedPurchaser(address: string): Promise<boolean> {
+  private async qpEligibility(address: string): Promise<{
+    present: boolean;
+    eligible: boolean;
+    reason?: string;
+    verifiedAt?: number;
+    expiresAt?: number;
+  }> {
     const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.provider);
-    return qp.qp(address) as Promise<boolean>;
+    const claim = await qp.claimOf(address);
+    const cap = Number(await qp.freshnessCap());
+    const [eligible] = await qp.check(address, "0x0000000000000000000000000000000000000000", this.config.artifact.rwaToken, 0, "0x");
+    const present = Number(claim.basis) !== 0;
+    const verifiedAt = present ? Number(claim.verifiedAt) : undefined;
+    const latest = await this.latestBlock();
+    const expired = present && verifiedAt !== undefined && latest.timestamp > verifiedAt + cap;
+    return {
+      present,
+      eligible: Boolean(eligible),
+      ...(!eligible ? {reason: expired ? "Qualified Purchaser claim expired" : "Qualified Purchaser claim missing"} : {}),
+      ...(verifiedAt !== undefined ? {verifiedAt, expiresAt: verifiedAt + cap} : {})
+    };
   }
 
   private async walletState(entry: WalletEntry): Promise<DemoWalletState> {
+    const qp = await this.qpEligibility(entry.signer.address);
+    const rwa = new Contract(this.config.artifact.rwaToken, ERC20_ABI, this.provider);
     return {
       id: entry.id,
       label: entry.label,
       address: entry.signer.address,
-      qualifiedPurchaser: await this.qualifiedPurchaser(entry.signer.address)
+      qualifiedPurchaser: qp.eligible,
+      claimPresent: qp.present,
+      rwaBalance: String(await rwa.balanceOf(entry.signer.address)),
+      ...(qp.reason ? {eligibilityReason: qp.reason} : {}),
+      ...(qp.verifiedAt !== undefined ? {verifiedAt: qp.verifiedAt, expiresAt: qp.expiresAt} : {})
     };
   }
 
@@ -365,6 +435,12 @@ export class DemoSettlementService {
     const normalized = asAddress(address, "taker").toLowerCase();
     const entry = this.wallets.get(normalized);
     if (!entry) throw new Error("taker must be one of the configured demo wallets");
+    return entry;
+  }
+
+  private walletById(walletId: string): WalletEntry {
+    const entry = [...this.wallets.values()].find((candidate) => candidate.id === walletId);
+    if (!entry) throw new Error("unknown demo wallet");
     return entry;
   }
 
@@ -395,6 +471,34 @@ export class DemoSettlementService {
       name: "MakerApprovalSet",
       args: {maker: this.config.artifact.maker, approved: String(approved)}
     });
+  }
+
+  private async setWalletEligibility(entry: WalletEntry, eligible: boolean): Promise<void> {
+    const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.operator);
+    const tx = await this.sendOperatorTransaction((nonce) => qp.setQp(entry.signer.address, eligible, {nonce}));
+    this.appendEvent({
+      blockNumber: tx.blockNumber,
+      transactionHash: tx.hash,
+      name: "QualifiedPurchaserSet",
+      args: {investor: entry.signer.address, eligible: String(eligible)}
+    });
+  }
+
+  private async setFreshnessCap(seconds: number): Promise<void> {
+    const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.operator);
+    const tx = await this.sendOperatorTransaction((nonce) => qp.setFreshnessCap(seconds, {nonce}));
+    this.appendEvent({
+      blockNumber: tx.blockNumber,
+      transactionHash: tx.hash,
+      name: "FreshnessCapSet",
+      args: {seconds: String(seconds)}
+    });
+  }
+
+  private async latestBlock(): Promise<{timestamp: number}> {
+    const latest = await this.provider.getBlock("latest");
+    if (!latest) throw new Error("cannot read latest block");
+    return latest;
   }
 
   private async sendOperatorTransaction(send: (nonce: bigint) => Promise<any>): Promise<{hash: string; blockNumber: number}> {

@@ -121,9 +121,11 @@ npm test
 ### Local RFQ Demo Backend
 
 `services/rfq-demo-backend` is a local-only HTTP application built from the RFQ
-SDK. It reads the live Anvil deployment artifact, uses the configured mock maker
-and fixed-rate pricing, and returns `RFQAdapter`-compatible signed quotes. It is
-not a hosted or production RFQ operator service.
+SDK. It reads addresses from the live Anvil deployment artifact and presentation,
+wallet, initial qualification and temporal-expiry fixtures from a validated
+scenario JSON. It uses the configured mock maker and fixed-rate pricing and
+returns `RFQAdapter`-compatible signed quotes. It is not a hosted or production
+RFQ operator service.
 
 ```shell
 scripts/e2e-anvil.sh --profile buidl-like --keep
@@ -133,6 +135,13 @@ For the short RFQ-first stakeholder walkthrough, omit the AMM scenario suite:
 
 ```shell
 scripts/e2e-anvil.sh --profile buidl-like --mode rfq
+```
+
+Use another versioned local fixture without editing application code:
+
+```shell
+scripts/demo.sh --profile buidl-like \
+  --scenario services/rfq-demo-backend/config/demo-scenario.json
 ```
 
 Add `--keep` for an interactive follow-up; the runner restores the demo maker
@@ -146,6 +155,7 @@ protected Router; no CLI copy/paste is required.
 For a terminal-only flow, request and settle the quote directly:
 
 ```shell
+# 5,000,000 is the tracked default scenario amount.
 node services/cli/dist/cli/src/index.js rfq-quote \
   --backend http://127.0.0.1:8787 --amount-in 5000000 --out quote.json
 node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
