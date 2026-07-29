@@ -864,3 +864,35 @@ passing
 
 - 지갑 선택은 local demo persona이며 production authentication/custody가 아니다.
 - pre-check는 UX용 사전 판단이고 최종 권한은 Router fill-time evaluation에 있다.
+
+## DEMO-004 — Injectable Temporal RFQ Scenario
+
+### Behavior
+
+- 데모 자산 표시값, maker 이름, 지갑 persona, 초기 QP 상태, preview quote와
+  freshness 시간 조건을 versioned scenario JSON으로 주입한다.
+- 주소는 UI에 하드코딩하지 않고 fresh Anvil 배포 artifact와 scenario의
+  `artifactKey` mapping으로 확인한다.
+- `scripts/demo.sh --scenario <path>`와 E2E가 동일한 scenario를 사용한다.
+- scenario 준비는 초기 QP 상태와 freshness cap을 실제 로컬 Anvil 트랜잭션으로
+  기록한다.
+- quote 발급 당시 적격이던 투자자의 QP claim만 만료시키고, 아직 유효한 동일
+  signed quote가 Router의 fill-time 검사에서 거부되는 것을 보여준다.
+
+### Verification
+
+- `npm test --prefix services/rfq-demo-backend`
+- `npm test --prefix services/operator-dashboard`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- scenario는 local deterministic fixture이며 실제 identity provider가 아니다.
+- 임의 주소를 UI에서 가장하지 않는다. 거래 지갑은 배포 artifact와 일치하는
+  funded Anvil signer여야 한다.

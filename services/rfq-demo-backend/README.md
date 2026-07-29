@@ -22,9 +22,10 @@ npm ci
 npm start
 ```
 
-The defaults use `deployments/anvil-e2e.json`, Anvil account 2 as the approved
-maker, chain id 31337, `http://127.0.0.1:8545` for the current chain timestamp,
-a 1:1 fixed rate and one-hour quote expiry.
+The defaults use `deployments/anvil-e2e.json`,
+`config/demo-scenario.json`, Anvil account 2 as the approved maker, chain id
+31337, `http://127.0.0.1:8545` for the current chain timestamp, a 1:1 fixed rate
+and one-hour quote expiry.
 
 ## API
 
@@ -70,6 +71,10 @@ The local-only dashboard control endpoints are:
 - `POST /demo/trade`: settle or run maker/compliance final-enforcement proofs.
 - `POST /demo/admin/user`: set a demo wallet's live QP fixture.
 - `POST /demo/admin/maker`: set the live maker approval.
+- `POST /demo/admin/temporal/prepare`: inject the short freshness cap and refresh
+  the configured target wallet's QP claim.
+- `POST /demo/admin/temporal/advance`: advance local Anvil time so the QP claim
+  expires while the configured quote TTL remains live.
 
 The state/setup/restore/trade controls are disabled unless
 `RFQ_DEMO_ENABLE_SETTLEMENT=1` is set by the local runner. `/demo/quote` remains
@@ -80,13 +85,31 @@ reference-demo controls, not a production operator API.
 
 Command flags have matching `RFQ_DEMO_*` environment variables:
 
-- `--host`, `--port`, `--artifact`, `--chain-id`, `--rpc`
+- `--host`, `--port`, `--artifact`, `--scenario`, `--chain-id`, `--rpc`
 - `--maker-account` or `--maker-key`
 - `--ttl`
 - `--price-numerator`, `--price-denominator`
-- `RFQ_DEMO_OPERATOR_ACCOUNT`, `RFQ_DEMO_INVESTOR_ACCOUNT` (local Anvil
-  account indexes used only when demo settlement is explicitly enabled)
-- `RFQ_DEMO_ELIGIBLE_B_ACCOUNT`, `RFQ_DEMO_INELIGIBLE_ACCOUNT`
+- `RFQ_DEMO_OPERATOR_ACCOUNT`
+
+`--scenario` or `RFQ_DEMO_SCENARIO` selects a validated JSON fixture. The file
+owns asset presentation data, minimum base units, maker label, wallet persona
+mapping and initial QP status, preview quotes, and temporal-expiry parameters.
+The tracked default is:
+
+```text
+services/rfq-demo-backend/config/demo-scenario.json
+```
+
+To inject another test set, copy that file, change its values, and run:
+
+```sh
+scripts/demo.sh --profile buidl-like --scenario /path/to/scenario.json
+```
+
+Wallets are not arbitrary browser-only addresses. Each scenario wallet maps an
+Anvil account to a named address in the fresh deployment artifact. The backend
+verifies that mapping before signing or sending a transaction. Scenario policy
+amounts must also remain consistent with the deployed contract policy.
 
 `RFQ_DEMO_ENABLE_SETTLEMENT=1` additionally enables the click-through settlement
 endpoint. It is set by `scripts/e2e-anvil.sh` only after it has started local
@@ -96,8 +119,9 @@ Run `npm start -- --help` for defaults. Never commit a maker key.
 
 ## Production boundary
 
-The included fixed pricing, Anvil key, in-memory nonce and no-op inventory check
-are demo fixtures. A production operator must replace pricing, signer custody,
+The included fixed pricing, deterministic Anvil keys, scenario fixtures,
+in-memory nonce and no-op inventory check are demo components. A production
+operator must replace pricing, signer custody,
 persistent nonce storage, inventory/risk controls, authentication, rate limiting,
 monitoring and hosting. The backend cannot approve a trade: final compliance is
 evaluated at fill time by `ExecutionRouter` and `ComplianceEngine`.
@@ -108,9 +132,10 @@ evaluated at fill time by `ExecutionRouter` and `ComplianceEngine`.
 npm test
 ```
 
-The smoke test starts an ephemeral local server, requests two quotes, verifies
-the maker signature and monotonic nonce, rejects numeric on-chain amounts, and
-confirms demo controls remain disabled outside the local runner. The live runner
-additionally proves setup → protected Router fill → persistent revoke state →
-explicit restore, role-aware pre-check, ineligible final rejection and Admin QP
-round-trip against the selected asset profile.
+The smoke test loads an injected scenario, starts an ephemeral local server,
+requests two quotes, verifies the maker signature and monotonic nonce, rejects
+numeric on-chain amounts, and confirms demo controls remain disabled outside
+the local runner. The live runner additionally proves setup → protected Router
+fill → persistent revoke state → explicit restore, role-aware pre-check,
+ineligible final rejection, Admin QP round-trip, and quote-time eligibility
+expiring before Router settlement.

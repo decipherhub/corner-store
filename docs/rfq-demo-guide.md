@@ -18,6 +18,19 @@ button-to-endpoint map are available from the **?** button in the dashboard
 header. Non-default ports are supported because the browser uses the dashboard's
 same-origin RFQ proxy rather than a hardcoded backend origin.
 
+The default presenter data is injected from
+`services/rfq-demo-backend/config/demo-scenario.json`. To use another local test
+set without editing the dashboard or backend:
+
+```sh
+scripts/demo.sh --profile buidl-like --scenario /path/to/scenario.json
+```
+
+The scenario supplies labels, reference values, minimum base units, wallet
+personas and initial QP states, preview quotes, and temporal-expiry values.
+Contract addresses still come from the fresh deployment artifact and wallet
+mappings are verified against deterministic funded Anvil signers.
+
 The command exits non-zero on failure. A successful run proves, in order:
 
 1. the selected asset profile is valid for the deployed stack;
@@ -31,7 +44,9 @@ The command exits non-zero on failure. A successful run proves, in order:
    `ComplianceEngine` evaluation;
 8. Admin can change and restore the local QP fixture on chain;
 9. revoking the maker prevents a stored signed quote from settling;
-10. the backend can settle again after CLI activity without reusing a stale
+10. a quote-time eligible investor becomes ineligible after the injected claim
+    freshness window, and the still-live quote is rejected at Router fill time;
+11. the backend can settle again after CLI activity without reusing a stale
    account nonce.
 
 ## Presenter flow
@@ -47,7 +62,12 @@ Use the one-command launcher and open `http://127.0.0.1:8790`.
    quote. The final fill-time check rejects it.
 4. In **사용자/화이트리스트**, show that QP fixture changes are actual local-chain
    transactions. Restore any changed state before ending the demo.
-5. Open **Portfolio** to show that holdings remain readable even when trading is
+5. For the temporal proof, click **만료 데모 준비**, switch to the configured
+   target investor, request a quote, then return to Admin and click **시간
+   경과시키기**. Return to the same investor and submit the stored quote. The
+   quote TTL is still live, but the final Router check rejects the expired QP
+   claim.
+6. Open **Portfolio** to show that holdings remain readable even when trading is
    blocked.
 
 The additional makers and portfolio valuation are presentation fixtures and
@@ -60,7 +80,7 @@ the original taker or request a fresh quote.
 
 The dashboard performs the quote request and Router settlement itself; no CLI
 copy/paste is needed for the normal demo. If you prefer the terminal instead,
-request and settle a new quote with:
+request and settle a new quote with the tracked default scenario amount:
 
 ```sh
 node services/cli/dist/cli/src/index.js \
@@ -83,10 +103,12 @@ What to say while showing it:
   delivers the ERC-3643 token only through the Router.”
 - “When the maker is revoked, a newly signed quote is rejected. A signature
   alone is not permission to trade.”
+- “Eligibility is time-sensitive. Passing pre-check or receiving a quote does
+  not reserve eligibility; the Router checks the current claim again at fill.”
 
 ## Scope boundary
 
 This is a local Anvil demonstration. The fixed-price backend, deterministic
-maker account and mock TA data are not production services. Production signer
-custody, persistent nonce storage, pricing/inventory, real TA integration and
-operator authentication remain separate work.
+Anvil accounts and injected mock TA scenario are not production services.
+Production signer custody, persistent nonce storage, pricing/inventory, real TA
+integration and operator authentication remain separate work.

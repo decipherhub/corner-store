@@ -5,7 +5,7 @@ import {join} from "path";
 import {HDNodeWallet, verifyTypedData} from "ethers";
 
 import {RFQ_QUOTE_TYPES} from "../../rfq/src";
-import {ANVIL_MNEMONIC, DemoBackendConfig} from "../src/config";
+import {ANVIL_MNEMONIC, DemoBackendConfig, loadConfig} from "../src/config";
 import {startDemoServer} from "../src/server";
 
 const makerWallet = HDNodeWallet.fromPhrase(ANVIL_MNEMONIC, "", "m/44'/60'/0'/0/2");
@@ -16,9 +16,9 @@ async function main(): Promise<void> {
   const artifact = {
     assetProfile: "buidl-like" as const,
     deployer: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-    investor: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
-    eligibleInvestorB: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
-    ineligibleInvestor: "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+    investor: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    eligibleInvestorB: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+    ineligibleInvestor: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
     maker: await makerWallet.getAddress(),
     quote: "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
     rfqAdapter: "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0",
@@ -27,25 +27,66 @@ async function main(): Promise<void> {
     router: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
   };
   writeFileSync(artifactPath, JSON.stringify(artifact));
+  const scenario = {
+    schemaVersion: 1 as const,
+    asset: {
+      name: "Injected Asset",
+      symbol: "IA",
+      referencePrice: "100",
+      referenceCurrency: "USD",
+      minimumAmountBaseUnits: "1",
+      decimals: 18
+    },
+    maker: {label: "Injected Maker"},
+    wallets: [
+      {
+        id: "investor",
+        label: "Injected Investor",
+        account: 1,
+        artifactKey: "investor" as const,
+        initialQualifiedPurchaser: true
+      },
+      {
+        id: "investor-b",
+        label: "Injected Investor B",
+        account: 4,
+        artifactKey: "eligibleInvestorB" as const,
+        initialQualifiedPurchaser: true
+      },
+      {
+        id: "blocked-investor",
+        label: "Injected Ineligible Investor",
+        account: 5,
+        artifactKey: "ineligibleInvestor" as const,
+        initialQualifiedPurchaser: false
+      }
+    ],
+    previewQuotes: [],
+    temporalEligibility: {
+      walletId: "investor",
+      baselineFreshnessSeconds: 31_536_000,
+      freshnessSeconds: 60,
+      advanceSeconds: 61,
+      quoteTtlSeconds: 900
+    }
+  };
+  const scenarioPath = join(dir, "scenario.json");
+  writeFileSync(scenarioPath, JSON.stringify(scenario));
+  const loaded = loadConfig([
+    "--artifact", artifactPath,
+    "--scenario", scenarioPath,
+    "--price-numerator", "2"
+  ], {});
+  assert(loaded.scenario.asset.name === "Injected Asset", "scenario data is loaded from the injected file");
+  assert(loaded.scenario.wallets[0].label === "Injected Investor", "scenario wallet is not embedded in application code");
+  assertThrows(
+    () => loadConfig(["--artifact", artifactPath, "--scenario", join(dir, "missing.json")], {}),
+    "explicit missing scenario is rejected instead of falling back"
+  );
 
   const config: DemoBackendConfig = {
-    host: "127.0.0.1",
+    ...loaded,
     port: 0,
-    chainId: 31337,
-    rpcUrl: "http://127.0.0.1:8545",
-    artifactPath,
-    artifact,
-    makerWallet,
-    defaultTtlSeconds: 3600,
-    priceNumerator: "2",
-    priceDenominator: "1",
-    demoSettlement: {
-      enabled: false,
-      operatorAccount: 0,
-      investorAccount: 1,
-      eligibleInvestorBAccount: 4,
-      ineligibleInvestorAccount: 5
-    },
     now: () => 1_700_000_000
   };
   const running = await startDemoServer(config);
@@ -109,6 +150,15 @@ async function main(): Promise<void> {
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(`assertion failed: ${message}`);
+}
+
+function assertThrows(run: () => unknown, message: string): void {
+  try {
+    run();
+  } catch {
+    return;
+  }
+  throw new Error(`assertion failed: ${message}`);
 }
 
 function requestJson(urlValue: string, method: "GET" | "POST", value?: unknown, extraHeaders?: Record<string, string>): Promise<{status: number; body: string; headers: Record<string, string | string[] | undefined>}> {

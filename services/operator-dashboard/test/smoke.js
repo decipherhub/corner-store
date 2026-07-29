@@ -10,10 +10,10 @@ const server = fs.readFileSync(path.join(root, "server.js"), "utf8");
 new Function(app);
 
 for (const marker of [
-  'id="walletSelector"', "Admin", "적격투자자 A", "적격투자자 B", "비적격투자자",
+  'id="walletSelector"', "Admin", 'id="ribbonAsset"', 'id="dashboardHolding"',
   'id="userNav"', 'id="adminNav"', 'id="dashboardView"', 'id="createView"', 'id="rfqsView"',
   'id="portfolioView"', 'id="adminDashboardView"', 'id="adminUsersView"', 'id="adminMakerView"',
-  "Compliance Pre-check", "참고가격", "최종 온체인 거부 시연",
+  "Compliance Pre-check", "참고가격", "최종 온체인 거부 시연", 'id="prepareTemporal"', 'id="advanceTemporal"',
   'id="confirmDialog"', 'id="demoGuide"', 'aria-modal="true"',
   '<link rel="stylesheet" href="/styles.css">', '<script src="/app.js"></script>'
 ]) {
@@ -23,10 +23,11 @@ for (const marker of [
 for (const marker of [
   "/health", "/demo/state", "/demo/setup", "/demo/precheck", "/demo/quote", "/demo/trade",
   "/demo/admin/user", "/demo/admin/maker", "/api/v1/events", "compliance-proof",
-  "Qualified Purchaser claim missing",
+  "/demo/admin/temporal/prepare", "/demo/admin/temporal/advance", "Qualified Purchaser claim missing",
   "selectedWallet", "runPrecheck", "switchProfile", "requiresQualifiedPurchaser", "quoteConsumed",
-  "quote.taker", "Router가 체결을 거부했습니다",
-  "Preview fixture", "Live · executable", "refreshAdmin", "toggleUser", "setMaker"
+  "configurePresentation", "chainNow", "quote.taker", "Router가 체결을 거부했습니다",
+  "Scenario fixture", "Live · executable", "refreshAdmin", "toggleUser", "setMaker",
+  "prepareTemporal", "advanceTemporal"
 ]) {
   if (!app.includes(marker)) throw new Error(`dashboard API/state marker missing: ${marker}`);
 }
@@ -36,6 +37,7 @@ for (const [control, handler] of [
   ["proveCompliance", "proveCompliance"], ["executeQuote", "execute"],
   ["adminRefresh", "refreshAdmin"], ["revokeMaker", "setMaker(false)"],
   ["restoreMaker", "setMaker(true)"], ["openGuide", "guideBackdrop"]
+  ,["prepareTemporal", "prepareTemporal"], ["advanceTemporal", "advanceTemporal"]
 ]) {
   const binding = app.indexOf(`$("` + control + `").onclick`);
   if (binding < 0 || !app.slice(binding, binding + 280).includes(handler)) {

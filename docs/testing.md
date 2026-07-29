@@ -43,9 +43,10 @@ cd services/rfq-demo-backend && npm ci && npm test
 cd services/cli && npm ci && npm test
 ```
 
-Backend smoke는 ephemeral HTTP server의 health/quote API, fixed-rate pricing,
-maker signature, monotonic nonce와 numeric amount 거부를 검증한다. CLI smoke는
-backend quote request path와 기존 quote-file/서명 검증 경로를 함께 검증한다.
+Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
+API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
+거부를 검증한다. CLI smoke는 backend quote request path와 기존
+quote-file/서명 검증 경로를 함께 검증한다.
 
 Compliance data SDK smoke test:
 
@@ -115,6 +116,10 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - 적격 A/B와 비적격 wallet fixture의 실제 QP pre-check
 - 비적격 taker-bound signed quote의 Router fill-time compliance 거부
 - Admin QP fixture 변경과 원상복구
+- scenario JSON에서 wallet/표시값/최소금액/시간 조건 주입
+- quote 발급 당시 적격인 투자자의 QP freshness 만료
+- 아직 TTL이 남은 동일 quote의 Router fill-time `FAIL_QP_CLAIM_EXPIRED` 거부
+- temporal scenario 후 injected baseline QP 상태 복원
 
 ### Integrated Check
 

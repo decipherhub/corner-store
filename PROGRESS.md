@@ -86,6 +86,9 @@ source of truth로 사용한다.
 - `DEMO-003 — Role-aware RFQ Compliance Walkthrough`(Admin/적격 A·B/비적격
   persona, 실제 QP·maker·asset pre-check, Admin 온체인 fixture 제어와
   비적격 signed quote의 fill-time Router 거부 증명).
+- `DEMO-004 — Injectable Temporal RFQ Scenario`(scenario JSON 기반 자산 표시값,
+  지갑/QP fixture와 시간 조건 주입, quote-time 적격 claim 만료 후 동일 signed
+  quote의 fill-time Router 거부 증명).
 
 ## Blocked
 
@@ -105,6 +108,16 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- RFQ 데모의 사용자명, maker/preview 표시, 기준가격, 최소금액, 초기 QP 상태와
+  freshness/시간 경과 조건을 validated scenario JSON으로 분리했다. 최상위
+  `scripts/demo.sh --scenario <path>`와 E2E가 같은 입력을 사용하고 주소는 fresh
+  deployment artifact와 funded Anvil signer mapping으로 검증한다.
+- Admin temporal flow가 짧은 QP freshness를 실제 트랜잭션으로 주입하고 Anvil
+  chain time을 전진시킨다. 견적은 아직 유효하지만 투자자 claim만 만료된 상태에서
+  동일 EIP-712 quote가 Router의 최신 `ComplianceEngine` 검사로 거부됨을 E2E로
+  증명했고, 이후 baseline fixture 복원도 확인했다.
+- `scripts/check.sh` 전체 게이트(Foundry 641/641, 모든 TypeScript/dashboard smoke,
+  deploy-v3 10/10)와 explicit scenario BUIDL-like RFQ E2E가 통과했다.
 - RFQ 데모에 Admin, 적격투자자 A/B와 비적격투자자 persona를 추가했다. 선택된
   지갑별 실제 Anvil signer로 quote와 Router transaction을 실행하고, QP·maker·
   Manifest/minimum 정책을 생성·수락 전에 검사한다. 비적격 일반 거래는 UI에서
