@@ -166,3 +166,21 @@ stack discovered from the artifact's `rwaToken` — no redeploy.
 
 0 = deployer/operator, 1 = investor, 2 = RFQ maker (approved), 3 = unapproved
 maker. Use account 4+ for a fresh investor walkthrough.
+
+## RFQ integration scaffold
+
+Generate an RFQ integration without copying the demo backend:
+
+```sh
+corner-store toolkit-scaffold-rfq ./my-rfq \
+  --mode reference-service --docker
+
+corner-store toolkit-scaffold-rfq ./my-backend-rfq \
+  --mode existing-backend
+```
+
+Inside this repository the CLI vendors the RFQ SDK source into the generated
+project, so it builds without a host-specific path or prebuilt SDK `dist`.
+Packaged consumers can pass `--sdk <npm|git|file specifier>`. The generator
+refuses to overwrite a directory and emits only `.env.example`, never a real
+secret.

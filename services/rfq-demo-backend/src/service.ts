@@ -4,7 +4,11 @@ import {
   PricingProvider,
   RFQBackendSDK,
   RFQPriceRequest,
-  createRFQService
+  createRFQServiceFromModules,
+  nonceModule,
+  pricingModule,
+  riskModule,
+  signerModule
 } from "../../rfq/src";
 import {JsonRpcProvider} from "ethers";
 
@@ -30,14 +34,23 @@ export async function createDemoQuoteService(
     return block.timestamp;
   });
 
-  return createRFQService({
+  return createRFQServiceFromModules({
     chainId: config.chainId,
     verifyingContract: asAddress(config.artifact.rfqAdapter, "artifact rfqAdapter"),
     maker,
-    signer: new EthersTypedDataSigner(config.makerWallet),
-    pricing,
-    nonceStore: new InMemoryNonceStore(),
-    riskCheck: new NoopInventoryRiskCheck(),
+    modules: {
+      pricing: pricingModule("corner-store.demo-market", pricing, {
+        maturity: "reference",
+        configKeys: ["scenario.execution.pricing"]
+      }),
+      risk: riskModule("corner-store.noop-risk", new NoopInventoryRiskCheck(), {maturity: "reference"}),
+      signer: signerModule("corner-store.ethers-wallet", new EthersTypedDataSigner(config.makerWallet), {
+        maturity: "reference",
+        configKeys: ["RFQ_MAKER_PRIVATE_KEY"],
+        secretConfigKeys: ["RFQ_MAKER_PRIVATE_KEY"]
+      }),
+      nonce: nonceModule("corner-store.in-memory-nonce", new InMemoryNonceStore(), {maturity: "reference"})
+    },
     defaultTtlSeconds: config.defaultTtlSeconds,
     now
   });

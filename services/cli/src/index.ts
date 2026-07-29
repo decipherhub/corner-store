@@ -90,6 +90,15 @@ program
   .description("run the repository-wide deterministic Toolkit and contract verification")
   .action(run(() => cmd.cmdToolkitTest()));
 
+program
+  .command("toolkit-scaffold-rfq")
+  .description("scaffold a reference RFQ service or an adapter for an existing backend")
+  .argument("<target>", "new output directory")
+  .requiredOption("--mode <mode>", "reference-service | existing-backend")
+  .option("--docker", "include optional Dockerfile and Compose reference deployment")
+  .option("--sdk <specifier>", "npm dependency specifier for @corner-store/rfq-service")
+  .action(run((target, opts) => cmd.cmdToolkitScaffoldRFQ(target, opts)));
+
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.
 function run(fn: (...a: any[]) => Promise<void> | void): (...a: any[]) => Promise<void> {

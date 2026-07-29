@@ -15,6 +15,7 @@
 | [`testing.md`](./testing.md)                         | 테스트와 완료 기준            | Current    |
 | [`demo.md`](./demo.md)                               | live Anvil E2E / demo runbook | Current    |
 | [`rfq-demo-guide.md`](./rfq-demo-guide.md)           | RFQ-first MVP presenter guide | Current    |
+| [`sdk-integration.md`](./sdk-integration.md)         | modular SDK·scaffold·conformance | Current |
 | [`operations/incident-response.md`](./operations/incident-response.md) | 사고 대응·복구 runbook | Current |
 | [`security.md`](./security.md)                       | 보안 규칙                     | Current    |
 | [`rfq-threat-model.md`](./rfq-threat-model.md)       | RFQ venue 위협 모델           | Current    |

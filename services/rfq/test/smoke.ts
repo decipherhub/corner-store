@@ -1,11 +1,16 @@
 import {
   createRFQService,
+  assertRFQModuleConformance,
   FixedRatePricingProvider,
   InMemoryNonceStore,
   NoopInventoryRiskCheck,
+  nonceModule,
+  pricingModule,
   RFQ_DOMAIN_NAME,
   RFQ_DOMAIN_VERSION,
-  RFQQuoteService
+  RFQQuoteService,
+  riskModule,
+  signerModule
 } from "../src";
 import {RFQQuoteRequest, RFQTypedData, TypedDataSigner, InventoryRiskCheck, RFQPriceRequest} from "../src/types";
 
@@ -38,6 +43,7 @@ async function main() {
   await lowLevelQuoteServiceSmoke();
   await highLevelSdkSmoke();
   await referenceComponentSmoke();
+  await moduleConformanceSmoke();
   console.log("RFQ service smoke ok");
 }
 
@@ -176,6 +182,54 @@ async function referenceComponentSmoke() {
   assertThrows(() => new FixedRatePricingProvider({numerator: 1n, denominator: 0n}), "zero denominator");
   const pricing = new FixedRatePricingProvider({numerator: 1n, denominator: 3n});
   assertThrows(() => pricing.price({...priceRequest(), amountIn: 1n.toString()}), "zero amountOut rejected");
+}
+
+async function moduleConformanceSmoke() {
+  const signer = new CaptureSigner();
+  const fixture = {
+    chainId: 31337,
+    verifyingContract: ADAPTER,
+    maker: MAKER,
+    taker: TAKER,
+    otherTaker: OTHER_TAKER,
+    tokenIn: TOKEN_IN,
+    tokenOut: TOKEN_OUT,
+    venue: VENUE,
+    amountIn: "100",
+    now: 1_700_000_000,
+    ttlSeconds: 60
+  } as const;
+  const referenceResult = await assertRFQModuleConformance({
+    pricing: pricingModule("corner-store.fixed-rate", new FixedRatePricingProvider({numerator: 1n, denominator: 1n}), {maturity: "reference"}),
+    risk: riskModule("corner-store.noop-risk", new NoopInventoryRiskCheck(), {maturity: "reference"}),
+    signer: signerModule("corner-store.capture-signer", signer, {maturity: "reference"}),
+    nonce: nonceModule("corner-store.in-memory-nonce", new InMemoryNonceStore(), {maturity: "reference"})
+  }, fixture);
+  assert(referenceResult.passed, "reference module conformance");
+
+  const customSigner = new CaptureSigner();
+  const modules = {
+    pricing: pricingModule(
+      "example.custom-pricing",
+      {price: (request: RFQPriceRequest) => ({amountOut: (BigInt(request.amountIn) * 2n).toString()})},
+      {configKeys: ["PRICE_FEED_URL"]}
+    ),
+    risk: riskModule("example.custom-risk", new NoopInventoryRiskCheck()),
+    signer: signerModule("example.custom-signer", customSigner, {
+      configKeys: ["SIGNER_KEY_ID"],
+      secretConfigKeys: ["SIGNER_KEY_ID"]
+    }),
+    nonce: nonceModule("example.custom-nonce", new InMemoryNonceStore(), {
+      configKeys: ["NONCE_DATABASE_URL"],
+      secretConfigKeys: ["NONCE_DATABASE_URL"]
+    })
+  };
+  const result = await assertRFQModuleConformance(modules, fixture);
+  assert(result.checks.some((check) => check.name === "nonce" && check.pass), "custom module conformance");
+  assertThrows(
+    () => pricingModule("Bad Module", new FixedRatePricingProvider({numerator: 1n, denominator: 1n})),
+    "invalid module id"
+  );
 }
 
 function assert(condition: boolean, message: string) {

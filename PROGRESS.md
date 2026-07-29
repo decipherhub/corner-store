@@ -15,6 +15,15 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `SDK-001 — Modular Integration and Deployment Toolkit`: RFQ pricing, risk,
+  signer와 nonce를 versioned capability module로 교체할 수 있게 하고 reference와
+  custom 구현이 같은 conformance suite를 사용하도록 했다. Toolkit/CLI는 reference
+  RFQ service 또는 기존 backend 연결 프로젝트를 secret 없이 생성하며, 기본 생성물은
+  RFQ SDK source를 vendoring해 저장소 밖과 선택형 Docker context에서도 재현 가능하다.
+  RFQ·Toolkit·CLI·demo backend test, pinned Foundry 기준 repository check
+  (Forge 643/643), BUIDL-like RFQ E2E, clean generated-project install/build와
+  독립 code review를 통과했다. Docker daemon이 실행 중이지 않아 실제 image build는
+  수행하지 못했다.
 - `DEMO-012 — Enforcement Case Workflow`: Admin에 단계형 Enforcement Cases
   워크스페이스를 추가했다. Adapter 직접 호출, quote 이후 claim 만료, quote 이후
   Maker 취소를 기준 상태→quote→정책 변경→실행→증거→복구로 분리하며, 실제 실패
@@ -160,8 +169,8 @@ source of truth로 사용한다.
 
 1. 실제 TA provider API/authorization, amount-specific lot allocation과 production
    WORM/indexer를 별도 refinement로 구현한다.
-2. RFQ production policy를 별도 feature로 분리한다: custody, partial fill,
-   production dealer/operator 책임.
+2. RFQ production policy를 별도 feature로 분리한다: production pricing/risk
+   module, durable nonce store, custody, partial fill과 dealer/operator 책임.
 3. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
 4. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
@@ -170,6 +179,13 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- RFQ pricing/risk/signer/nonce 교체 경계와 공통 conformance suite를 추가하고,
+  demo backend를 같은 module contract의 reference consumer로 전환했다.
+- CLI가 독립 실행 가능한 reference RFQ service 또는 기존 backend 연결 scaffold를
+  생성한다. 기본 출력은 local absolute path 없이 SDK source를 포함하며 Docker
+  Compose는 선택적으로만 생성된다.
+- 전체 repository check, BUIDL-like RFQ E2E와 clean generated-project build를
+  통과했다. Docker image build만 local daemon 부재로 미실행 상태다.
 - RFQ 데모의 실행 상태를 schema-v2 scenario로 통합했다. 배포 스크립트가 계정과
   초기 qUSD/RWA 물량을 실제 mint/approval에 사용하고, backend와 CLI는 같은
   scenario의 가격·수량·TTL·signer binding을 사용한다.

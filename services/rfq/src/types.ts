@@ -115,3 +115,40 @@ export interface RFQBackendSDKConfig {
   defaultTtlSeconds?: number;
   now?: () => number | Promise<number>;
 }
+
+export const RFQ_MODULE_SCHEMA_VERSION = 1;
+
+export type RFQModuleKind = "pricing" | "risk" | "signer" | "nonce";
+export type RFQModuleMaturity = "reference" | "custom" | "production";
+
+export interface RFQModuleDescriptor {
+  schemaVersion: typeof RFQ_MODULE_SCHEMA_VERSION;
+  id: string;
+  version: string;
+  kind: RFQModuleKind;
+  capabilities: string[];
+  maturity: RFQModuleMaturity;
+  configKeys: string[];
+  secretConfigKeys: string[];
+}
+
+export interface RFQModule<T> {
+  descriptor: RFQModuleDescriptor;
+  implementation: T;
+}
+
+export interface RFQModuleSet {
+  pricing: RFQModule<PricingProvider>;
+  risk: RFQModule<InventoryRiskCheck>;
+  signer: RFQModule<TypedDataSigner>;
+  nonce: RFQModule<NonceStore>;
+}
+
+export interface RFQModuleRuntimeConfig {
+  chainId: number;
+  verifyingContract: Address;
+  maker: Address;
+  modules: RFQModuleSet;
+  defaultTtlSeconds?: number;
+  now?: () => number | Promise<number>;
+}

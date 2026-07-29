@@ -11,6 +11,8 @@ It is **not** a production RFQ server and Corner Store does not operate a hosted
 - Binds quotes to `chainId`, `verifyingContract`, maker, taker, token pair, venue, nonce and expiry.
 - Rejects unsafe JavaScript `number` inputs for on-chain integer fields.
 - Provides high-level quote flow hooks for pricing, nonce and risk components.
+- Provides versioned pricing/risk/signer/nonce module descriptors and capability validation.
+- Provides a common conformance suite for reference and custom module sets.
 - Provides local reference components for tests and demos.
 
 ## What the SDK does not do
@@ -77,6 +79,19 @@ The reference components are intentionally local/demo-only:
 | `FixedRatePricingProvider` | deterministic demo price | operator pricing engine |
 | `NoopInventoryRiskCheck` | no-op demo risk gate | inventory, exposure and maker risk checks |
 | custom `TypedDataSigner` | signing seam | KMS/HSM/custody signer |
+
+## Versioned modules and conformance
+
+Use `pricingModule`, `riskModule`, `signerModule` and `nonceModule` to describe
+the implementation without storing its config values. Compose the validated set
+with `createRFQServiceFromModules`.
+
+Every custom set should pass `assertRFQModuleConformance(modules, fixture)`.
+Conformance checks SDK compatibility and call ordering; it is not a security or
+legal certification of the implementation.
+
+The Toolkit integration generator and package boundary are documented in
+[`docs/sdk-integration.md`](../../docs/sdk-integration.md).
 
 ## Low-level API
 

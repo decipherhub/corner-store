@@ -688,3 +688,39 @@ pre-trade element의 검증 대상 역할과 post-trade 자산 이동 방향을 
 - `src/compliance/ComplianceEngine.sol`
 - `test/unit/compliance/Engine.t.sol`
 - `docs/architecture/SKELETON_GUIDE.md`
+
+## D014 — RFQ 모듈 의미와 통합·배포 표현을 분리한다
+
+Date: 2026-07-29
+
+### Context
+
+RFQ SDK의 pricing, risk, signer와 nonce seam은 교체 가능했지만 integrator가
+reference demo backend나 저장소 전체 구조를 채택하지 않고 해당 계약을 선택·검증·
+scaffold하는 공통 표면이 없었다.
+
+### Decision
+
+1. `services/rfq`가 versioned module capability와 공통 conformance 의미를 소유한다.
+2. `services/toolkit`은 module ID와 environment variable 이름만 가진 별도
+   integration manifest와 secret-free generator를 소유한다.
+3. `services/cli`는 reference service 또는 existing-backend scaffold를 rendering할
+   뿐 pricing, risk나 compliance 결정을 추가하지 않는다.
+4. `services/rfq-demo-backend`는 같은 module contract를 사용하는 reference
+   consumer로 유지한다.
+5. Docker Compose는 선택형 export이며 Corner Store SDK의 필수 runtime이 아니다.
+
+### Consequences
+
+- integrator는 필요한 RFQ module만 교체하고 기존 backend에 SDK를 삽입할 수 있다.
+- conformance는 인터페이스 호환성을 증명하지만 production pricing, signer custody,
+  nonce durability, risk 또는 법률 적합성을 인증하지 않는다.
+- module config 값과 secret은 manifest나 generated source에 기록하지 않는다.
+
+### Related Files
+
+- `services/rfq/src/modules.ts`
+- `services/rfq/src/conformance.ts`
+- `services/toolkit/src/integration.ts`
+- `services/toolkit/src/scaffold.ts`
+- `docs/sdk-integration.md`

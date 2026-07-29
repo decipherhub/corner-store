@@ -1,4 +1,4 @@
-import {mkdtempSync, readFileSync} from "fs";
+import {existsSync, mkdtempSync, readFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
 import {defaultConfig, enabledEngineSpec, loadConfig, simulateConfig, validateConfig, writeDefaultConfig} from "../src/config";
@@ -8,6 +8,8 @@ import {createCheckpoint, loadCheckpoint, writeCheckpoint} from "../src/checkpoi
 import {createGovernanceProposal} from "../src/proposal";
 import {createDeploymentPlan} from "../src/deploy";
 import {toSafeTransactionDraft} from "../src/multisig";
+import {defaultIntegrationManifest, validateIntegrationManifest} from "../src/integration";
+import {scaffoldRFQIntegration} from "../src/scaffold";
 
 const dir = mkdtempSync(join(tmpdir(), "corner-store-toolkit-"));
 const path = join(dir, "corner-store.config.json");
@@ -66,4 +68,54 @@ if (dryRun.broadcast || !dryRun.command.includes("ASSET_PROFILE=buidl-like") || 
 if (!createDeploymentPlan(config, "http://127.0.0.1:8545", true).command.includes("--broadcast")) throw new Error("deploy broadcast flag regression");
 const safeDraft = toSafeTransactionDraft(proposal, 42161);
 if (safeDraft.origin !== "corner-store-toolkit" || safeDraft.operation !== 0 || safeDraft.chainId !== 42161) throw new Error("Safe draft regression");
+
+const referenceTarget = join(dir, "reference-rfq");
+const reference = scaffoldRFQIntegration(referenceTarget, {
+  mode: "reference-service",
+  dockerCompose: true,
+  sdkSourceRoot: join(process.cwd(), "../rfq")
+});
+if (!reference.files.includes("compose.yaml") ||
+    !reference.files.includes("vendor/rfq-service/src/index.ts") ||
+    !existsSync(join(referenceTarget, "src/index.ts"))) {
+  throw new Error("reference RFQ scaffold regression");
+}
+if (JSON.parse(readFileSync(join(referenceTarget, "package.json"), "utf8")).dependencies["@corner-store/rfq-service"] !== "file:vendor/rfq-service") {
+  throw new Error("reference RFQ scaffold is not self-contained");
+}
+const referenceEnv = readFileSync(join(referenceTarget, ".env.example"), "utf8");
+if (!referenceEnv.includes("RFQ_SIGNER_PRIVATE_KEY=") || /RFQ_SIGNER_PRIVATE_KEY=0x[0-9a-f]+/i.test(referenceEnv)) {
+  throw new Error("scaffold embedded a signer secret");
+}
+validateIntegrationManifest(JSON.parse(readFileSync(join(referenceTarget, "corner-store.integration.json"), "utf8")));
+
+const existingTarget = join(dir, "existing-backend");
+const existing = scaffoldRFQIntegration(existingTarget, {mode: "existing-backend"});
+if (existing.files.includes("compose.yaml") || !readFileSync(join(existingTarget, "src/index.ts"), "utf8").includes("createCornerStoreRFQ")) {
+  throw new Error("existing-backend scaffold regression");
+}
+if (JSON.parse(readFileSync(join(existingTarget, "package.json"), "utf8")).dependencies.ethers) {
+  throw new Error("existing-backend scaffold includes an unused signer dependency");
+}
+try {
+  scaffoldRFQIntegration(existingTarget, {mode: "existing-backend"});
+  throw new Error("scaffold overwrite accepted");
+} catch (err: any) {
+  if (!err.message.includes("already exists")) throw err;
+}
+try {
+  validateIntegrationManifest({
+    ...defaultIntegrationManifest("existing-backend"),
+    modules: {
+      ...defaultIntegrationManifest("existing-backend").modules,
+      signer: {
+        ...defaultIntegrationManifest("existing-backend").modules.signer,
+        env: ["not-a-valid-env"]
+      }
+    }
+  });
+  throw new Error("invalid integration env accepted");
+} catch (err: any) {
+  if (!err.message.includes("environment variable")) throw err;
+}
 console.log("corner-store toolkit smoke ok");
