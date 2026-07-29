@@ -18,6 +18,7 @@ import {AssetClassification} from "../../../src/compliance/elements/AssetClassif
 import {Erc3643Native} from "../../../src/compliance/elements/Erc3643Native.sol";
 import {FormDFiling} from "../../../src/compliance/elements/FormDFiling.sol";
 import {IAcquisitionSource} from "../../../src/interfaces/compliance/IAcquisitionSource.sol";
+import {IComplianceElement, IStatefulElement} from "../../../src/interfaces/compliance/IComplianceElement.sol";
 import {RegD506cRecipe} from "../../../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../../../src/compliance/recipes/Fund3c7Recipe.sol";
 import {
@@ -25,6 +26,14 @@ import {
     ComplianceDecision,
     ManifestCore,
     PolicyStatus,
+    RecipeBinding,
+    RecipeBindingMode,
+    ElementMetadata,
+    ElementCategory,
+    TemporalNature,
+    Decidability,
+    ObligationTiming,
+    Statefulness,
     VenueType,
     FlowType
 } from "../../../src/types/ComplianceTypes.sol";
@@ -142,16 +151,38 @@ contract EngineTest is Test {
 
     function _activeManifest(uint16 fundRecipeId, uint256 factsPacked) internal pure returns (ManifestCore memory m) {
         m.status = PolicyStatus.ACTIVE;
-        m.issuanceRecipeId = 1;
-        m.issuanceRecipeVersion = 1;
-        m.fundRecipeId = fundRecipeId;
         m.supportedEngines = 0x01; // AMM bit
         m.factsPacked = factsPacked;
     }
 
+    function _bindings(uint16 fundRecipeId) internal pure returns (RecipeBinding[] memory bindings) {
+        bindings = new RecipeBinding[](fundRecipeId == 0 ? 1 : 2);
+        bindings[0] = RecipeBinding(1, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        if (fundRecipeId != 0) {
+            bindings[1] = RecipeBinding(fundRecipeId, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
+        }
+    }
+
+    function _singleBinding(uint16 recipeId, uint16 version) internal pure returns (RecipeBinding[] memory bindings) {
+        bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(recipeId, version, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+    }
+
+    function _registerBindings(RecipeBinding[] memory bindings) internal {
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), bindings);
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+    }
+
+    function _registerSingleElementRecipe(uint16 recipeId, bytes32 elementId) internal {
+        bytes32[] memory elements = new bytes32[](1);
+        elements[0] = elementId;
+        recipeReg.registerRecipe(recipeId, 1, address(new UnregisteredElementRecipe(elements)));
+    }
+
     function _registerRWA(uint16 fundRecipeId, uint256 factsPacked) internal {
         // Onboard the legal way: register lands PROPOSED, approve moves it to ACTIVE.
-        policyReg.registerManifest(RWA, _activeManifest(fundRecipeId, factsPacked));
+        policyReg.registerManifest(RWA, _activeManifest(fundRecipeId, factsPacked), _bindings(fundRecipeId));
         policyReg.approveManifest(RWA);
         _registerCashUnregulated();
     }
@@ -249,6 +280,121 @@ contract EngineTest is Test {
         assertTrue(d.allowed);
     }
 
+    function test_pathOption_groupPassesWhenAnyPathPasses() public {
+        _registerSingleElementRecipe(3, bytes32("A-03-v1"));
+        _registerSingleElementRecipe(4, bytes32("A-13-v1"));
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = RecipeBinding(3, 1, RecipeBindingMode.PATH_OPTION, 1, 50);
+        bindings[1] = RecipeBinding(4, 1, RecipeBindingMode.PATH_OPTION, 1, 40);
+        _registerBindings(bindings);
+
+        accredited.setAccredited(BUYER, true);
+        assertTrue(engine.evaluate(_ctxBuy()).allowed, "AI path should satisfy group");
+
+        accredited.setAccredited(BUYER, false);
+        qp.setQp(BUYER, true);
+        assertTrue(engine.evaluate(_ctxBuy()).allowed, "QP path should satisfy group");
+
+        qp.setQp(BUYER, false);
+        assertFalse(engine.evaluate(_ctxBuy()).allowed, "all alternatives failing must reject");
+    }
+
+    function test_pathOption_groupsAreAndedTogether() public {
+        _registerSingleElementRecipe(3, bytes32("A-03-v1"));
+        _registerSingleElementRecipe(4, bytes32("A-13-v1"));
+        _registerSingleElementRecipe(5, bytes32("A-01-v1"));
+        _registerSingleElementRecipe(6, bytes32("A-02-v1"));
+        RecipeBinding[] memory bindings = new RecipeBinding[](4);
+        bindings[0] = RecipeBinding(3, 1, RecipeBindingMode.PATH_OPTION, 1, 50);
+        bindings[1] = RecipeBinding(4, 1, RecipeBindingMode.PATH_OPTION, 1, 40);
+        bindings[2] = RecipeBinding(5, 1, RecipeBindingMode.PATH_OPTION, 2, 30);
+        bindings[3] = RecipeBinding(6, 1, RecipeBindingMode.PATH_OPTION, 2, 20);
+        _registerBindings(bindings);
+
+        accredited.setAccredited(BUYER, true);
+        assertTrue(engine.evaluate(_ctxBuy()).allowed, "one pass in every group should allow");
+
+        sanctions.setBlocked(BUYER, true);
+        assertFalse(engine.evaluate(_ctxBuy()).allowed, "one failed group must reject");
+    }
+
+    function test_requiredBlocking_and_pathGroups_areAnded() public {
+        _registerSingleElementRecipe(3, bytes32("A-01-v1"));
+        _registerSingleElementRecipe(4, bytes32("A-03-v1"));
+        _registerSingleElementRecipe(5, bytes32("A-13-v1"));
+        RecipeBinding[] memory bindings = new RecipeBinding[](3);
+        bindings[0] = RecipeBinding(3, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[1] = RecipeBinding(4, 1, RecipeBindingMode.PATH_OPTION, 1, 50);
+        bindings[2] = RecipeBinding(5, 1, RecipeBindingMode.PATH_OPTION, 1, 40);
+        _registerBindings(bindings);
+
+        accredited.setAccredited(BUYER, true);
+        assertTrue(engine.evaluate(_ctxBuy()).allowed);
+        sanctions.setBlocked(BUYER, true);
+        assertFalse(engine.evaluate(_ctxBuy()).allowed, "path success cannot rescue required failure");
+    }
+
+    function test_flagOnly_failureDoesNotBlock_butSetsStableBindingBit() public {
+        _registerSingleElementRecipe(3, bytes32("A-03-v1"));
+        _registerSingleElementRecipe(4, bytes32("A-13-v1"));
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = RecipeBinding(3, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[1] = RecipeBinding(4, 1, RecipeBindingMode.FLAG_ONLY, 0, 10);
+        _registerBindings(bindings);
+
+        accredited.setAccredited(BUYER, true);
+        ComplianceDecision memory decision = engine.evaluate(_ctxBuy());
+        assertTrue(decision.allowed);
+        assertEq(decision.flagsBitmap, uint256(1) << 1, "flag bit follows binding index");
+
+        qp.setQp(BUYER, true);
+        assertEq(engine.evaluate(_ctxBuy()).flagsBitmap, 0, "passing finding clears bit");
+    }
+
+    function test_flagOnly_statefulHookCannotRollbackSettlement() public {
+        bytes32 elementId = bytes32("F-REVERT");
+        elementReg.registerElement(elementId, address(new RevertingStatefulElement()));
+        _registerSingleElementRecipe(3, bytes32("A-03-v1"));
+        _registerSingleElementRecipe(4, elementId);
+
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = RecipeBinding(3, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[1] = RecipeBinding(4, 1, RecipeBindingMode.FLAG_ONLY, 0, 10);
+        _registerBindings(bindings);
+
+        accredited.setAccredited(BUYER, true);
+        ComplianceDecision memory decision = engine.evaluate(_ctxBuy());
+        assertTrue(decision.allowed);
+        assertEq(decision.flagsBitmap, uint256(1) << 1);
+
+        // The element's onTransfer always reverts. FLAG_ONLY must never invoke
+        // it from the trade-critical commit path.
+        engine.commit(_ctxBuy());
+    }
+
+    function test_recipeVersionMismatch_failsClosed() public {
+        RecipeBinding[] memory bindings = _singleBinding(2, 2);
+        _registerBindings(bindings);
+        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeVersionMismatch.selector, uint16(2), uint16(2), uint16(1)));
+        engine.evaluate(_ctxBuy());
+    }
+
+    function test_oversizedRecipeElementSet_failsClosedWithoutTruncation() public {
+        bytes32[] memory elements = new bytes32[](engine.MAX_ELEMENTS_PER_RECIPE() + 1);
+        for (uint256 i = 0; i < elements.length; i++) {
+            elements[i] = bytes32(i + 1);
+        }
+        recipeReg.registerRecipe(3, 1, address(new UnregisteredElementRecipe(elements)));
+        _registerBindings(_singleBinding(3, 1));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Errors.TooManyRecipeElements.selector, uint16(3), elements.length, engine.MAX_ELEMENTS_PER_RECIPE()
+            )
+        );
+        engine.evaluate(_ctxBuy());
+    }
+
     function test_unknown_token_fails_closed() public {
         // RWA never registered → UNKNOWN on both sides → fail-closed.
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
@@ -270,7 +416,7 @@ contract EngineTest is Test {
     function test_suspended_fails_closed() public {
         // Reach SUSPENDED the legal way: register -> approve -> suspend.
         ManifestCore memory m = _activeManifest(0, 0);
-        policyReg.registerManifest(RWA, m);
+        policyReg.registerManifest(RWA, m, _bindings(0));
         policyReg.approveManifest(RWA);
         policyReg.suspendManifest(RWA, bytes32("HALT"));
         accredited.setAccredited(BUYER, true);
@@ -289,7 +435,7 @@ contract EngineTest is Test {
 
     function test_proposed_against_unregulated_fails_closed() public {
         // RWA registered (PROPOSED) but NOT approved; CASH UNREGULATED.
-        policyReg.registerManifest(RWA, _activeManifest(0, 0));
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _bindings(0));
         _registerCashUnregulated();
         _makeBuyerCompliant();
 
@@ -300,7 +446,7 @@ contract EngineTest is Test {
 
     function test_retired_against_unregulated_fails_closed() public {
         // RWA reaches RETIRED via register -> approve -> retire; CASH UNREGULATED.
-        policyReg.registerManifest(RWA, _activeManifest(0, 0));
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _bindings(0));
         policyReg.approveManifest(RWA);
         policyReg.retireManifest(RWA, bytes32("EOL"));
         _registerCashUnregulated();
@@ -314,8 +460,8 @@ contract EngineTest is Test {
     function test_proposed_against_active_fails_closed() public {
         // tokenIn RWA is only PROPOSED; tokenOut RWA2 is ACTIVE. The ACTIVE side
         // passing its recipes must NOT rescue a PROPOSED counterparty.
-        policyReg.registerManifest(RWA, _activeManifest(0, 0)); // PROPOSED
-        policyReg.registerManifest(RWA2, _activeManifest(0, 0));
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _bindings(0)); // PROPOSED
+        policyReg.registerManifest(RWA2, _activeManifest(0, 0), _bindings(0));
         policyReg.approveManifest(RWA2); // ACTIVE
         _makeBuyerCompliant();
 
@@ -326,10 +472,10 @@ contract EngineTest is Test {
 
     function test_retired_against_active_fails_closed_both_orderings() public {
         // RETIRED as tokenIn (RWA) against ACTIVE tokenOut (RWA2).
-        policyReg.registerManifest(RWA, _activeManifest(0, 0));
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _bindings(0));
         policyReg.approveManifest(RWA);
         policyReg.retireManifest(RWA, bytes32("EOL")); // RWA RETIRED
-        policyReg.registerManifest(RWA2, _activeManifest(0, 0));
+        policyReg.registerManifest(RWA2, _activeManifest(0, 0), _bindings(0));
         policyReg.approveManifest(RWA2); // RWA2 ACTIVE
         _makeBuyerCompliant();
 
@@ -363,8 +509,7 @@ contract EngineTest is Test {
         recipeReg.registerRecipe(3, 1, address(bad));
 
         ManifestCore memory m = _activeManifest(0, 0);
-        m.issuanceRecipeId = 3; // point issuance at the bad recipe
-        policyReg.registerManifest(RWA, m);
+        policyReg.registerManifest(RWA, m, _singleBinding(3, 1));
         policyReg.approveManifest(RWA);
         _registerCashUnregulated();
 
@@ -374,8 +519,7 @@ contract EngineTest is Test {
 
     function test_missing_issuance_recipe_reverts() public {
         ManifestCore memory m = _activeManifest(0, 0);
-        m.issuanceRecipeId = 77; // manifest points at a recipe that was never registered
-        policyReg.registerManifest(RWA, m);
+        policyReg.registerManifest(RWA, m, _singleBinding(77, 1));
         policyReg.approveManifest(RWA);
         _registerCashUnregulated();
 
@@ -387,9 +531,9 @@ contract EngineTest is Test {
         // tokenIn requires RegD + Fund3c7 (QP). tokenOut requires only RegD.
         // Old single-side selection could choose tokenOut and incorrectly allow
         // without QP. The pair-level rule must reject until both sides pass.
-        policyReg.registerManifest(RWA, _activeManifest(2, 1));
+        policyReg.registerManifest(RWA, _activeManifest(2, 1), _bindings(2));
         policyReg.approveManifest(RWA);
-        policyReg.registerManifest(RWA2, _activeManifest(0, 0));
+        policyReg.registerManifest(RWA2, _activeManifest(0, 0), _bindings(0));
         policyReg.approveManifest(RWA2);
         _makeBuyerCompliant();
 
@@ -410,8 +554,7 @@ contract EngineTest is Test {
         recipeReg.registerRecipe(4, 1, address(surveilRecipe));
 
         ManifestCore memory m = _activeManifest(0, 0);
-        m.issuanceRecipeId = 4;
-        policyReg.registerManifest(RWA, m);
+        policyReg.registerManifest(RWA, m, _singleBinding(4, 1));
         policyReg.approveManifest(RWA);
         _registerCashUnregulated();
 
@@ -425,6 +568,40 @@ contract EngineTest is Test {
         );
         engine.commit(_ctxBuy());
         assertEq(surveillance.transferCount(), 1);
+    }
+
+    function test_commit_pathOption_updatesOnlyDeterministicallySelectedPath() public {
+        SurveillanceFlag lowerPriority = new SurveillanceFlag();
+        SurveillanceFlag higherPriority = new SurveillanceFlag();
+        lowerPriority.setEngine(address(engine));
+        higherPriority.setEngine(address(engine));
+        elementReg.registerElement(bytes32("F-PATH-A"), address(lowerPriority));
+        elementReg.registerElement(bytes32("F-PATH-B"), address(higherPriority));
+        _registerSingleElementRecipe(3, bytes32("F-PATH-A"));
+        _registerSingleElementRecipe(4, bytes32("F-PATH-B"));
+
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = RecipeBinding(3, 1, RecipeBindingMode.PATH_OPTION, 1, 10);
+        bindings[1] = RecipeBinding(4, 1, RecipeBindingMode.PATH_OPTION, 1, 20);
+        _registerBindings(bindings);
+
+        assertTrue(engine.evaluate(_ctxBuy()).allowed);
+        engine.commit(_ctxBuy());
+        assertEq(lowerPriority.transferCount(), 0, "unselected path must not commit");
+        assertEq(higherPriority.transferCount(), 1, "highest-priority passing path commits");
+    }
+
+    function test_commit_deduplicatesStatefulElementAcrossBindings() public {
+        _registerSingleElementRecipe(3, bytes32("F-02-v1"));
+        _registerSingleElementRecipe(4, bytes32("F-02-v1"));
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = RecipeBinding(3, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[1] = RecipeBinding(4, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 10);
+        _registerBindings(bindings);
+
+        assertTrue(engine.evaluate(_ctxBuy()).allowed);
+        engine.commit(_ctxBuy());
+        assertEq(surveillance.transferCount(), 1, "same stateful element commits once per asset side");
     }
 
     // Auth: a non-router caller cannot drive the post-trade write path. The
@@ -495,7 +672,7 @@ contract EngineTest is Test {
     // pass merely because its recipes would pass — the UNKNOWN counterparty
     // makes the pair fail-closed before any recipe runs.
     function test_active_against_unknown_cash_fails_closed() public {
-        policyReg.registerManifest(RWA, _activeManifest(0, 0));
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _bindings(0));
         policyReg.approveManifest(RWA);
         // CASH intentionally NOT registered → UNKNOWN.
         accredited.setAccredited(BUYER, true); // would otherwise satisfy RegD506c.
@@ -524,8 +701,7 @@ contract EngineTest is Test {
         recipeReg.registerRecipe(6, 1, address(lockupRecipe));
 
         ManifestCore memory m = _activeManifest(0, 0);
-        m.issuanceRecipeId = 6; // point issuance at the lockup-only recipe
-        policyReg.registerManifest(RWA, m);
+        policyReg.registerManifest(RWA, m, _singleBinding(6, 1));
         policyReg.approveManifest(RWA);
         _registerCashUnregulated();
 
@@ -542,16 +718,49 @@ contract EngineTest is Test {
     }
 }
 
-/// @dev Test-only settable acquisition-time source for the Lockup element seam.
-contract MockAcquisitionSource is IAcquisitionSource {
-    mapping(bytes32 => uint64) internal _acquiredAt;
-
-    function setAcquiredAt(address holder, address asset, uint64 ts) external {
-        _acquiredAt[keccak256(abi.encode(holder, asset))] = ts;
+contract RevertingStatefulElement is IStatefulElement {
+    function check(address, address, address, uint256, bytes calldata)
+        external
+        pure
+        override
+        returns (bool passed, bytes32 reasonCode)
+    {
+        return (false, bytes32("FLAGGED"));
     }
 
-    function acquiredAt(address holder, address asset) external view override returns (uint64) {
-        return _acquiredAt[keccak256(abi.encode(holder, asset))];
+    function elementMetadata() external pure override returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: bytes32("F-REVERT"),
+            category: ElementCategory.CONDUCT_MONITORING,
+            version: "F-REVERT-v1",
+            temporal: TemporalNature.CUMULATIVE,
+            decidability: Decidability.MONITORING_BASED,
+            timing: ObligationTiming.EX_POST_TRIGGER,
+            statefulness: Statefulness.STATEFUL
+        });
+    }
+
+    function onTransfer(address, address, uint256) external pure override {
+        revert("FLAG_ONLY_HOOK_MUST_NOT_RUN");
+    }
+}
+
+/// @dev Test-only settable acquisition-time source for the Lockup element seam.
+contract MockAcquisitionSource is IAcquisitionSource {
+    mapping(bytes32 => AcquisitionSnapshot) internal _snapshots;
+
+    function setAcquiredAt(address holder, address asset, uint64 ts) external {
+        _snapshots[keccak256(abi.encode(holder, asset))] = AcquisitionSnapshot({
+            clockStart: ts,
+            observedAt: uint64(block.timestamp),
+            expiresAt: type(uint64).max,
+            sourceRef: keccak256("engine-fixture"),
+            status: AcquisitionStatus.VALID
+        });
+    }
+
+    function acquisitionOf(address holder, address asset) external view override returns (AcquisitionSnapshot memory) {
+        return _snapshots[keccak256(abi.encode(holder, asset))];
     }
 }
 

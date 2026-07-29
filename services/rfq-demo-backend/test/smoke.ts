@@ -14,12 +14,14 @@ async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "corner-store-rfq-demo-"));
   const artifactPath = join(dir, "anvil-e2e.json");
   const artifact = {
+    deployer: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     investor: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
     maker: await makerWallet.getAddress(),
     quote: "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
     rfqAdapter: "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0",
     rfqVenue: "0x000000000000000000000000000000000000F00D",
-    rwaToken: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+    rwaToken: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+    router: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
   };
   writeFileSync(artifactPath, JSON.stringify(artifact));
 
@@ -27,20 +29,28 @@ async function main(): Promise<void> {
     host: "127.0.0.1",
     port: 0,
     chainId: 31337,
+    rpcUrl: "http://127.0.0.1:8545",
     artifactPath,
     artifact,
     makerWallet,
     defaultTtlSeconds: 3600,
     priceNumerator: "2",
-    priceDenominator: "1"
+    priceDenominator: "1",
+    demoSettlement: {enabled: false, operatorAccount: 0, investorAccount: 1},
+    now: () => 1_700_000_000
   };
   const running = await startDemoServer(config);
 
   try {
-    const health = await requestJson(`${running.baseUrl}/health`, "GET");
+    const health = await requestJson(`${running.baseUrl}/health`, "GET", undefined, {origin: "http://127.0.0.1:8790"});
     assert(health.status === 200, "health returns 200");
+    assert(health.headers["access-control-allow-origin"] === "http://127.0.0.1:8790", "dashboard-only CORS is enabled for the local demo");
     const healthBody = JSON.parse(health.body) as any;
     assert(healthBody.status === "ok", "health reports ok");
+    assert(healthBody.demoSettlementEnabled === false, "settlement is opt-in");
+
+    const disabledTrade = await requestJson(`${running.baseUrl}/demo/trade`, "POST", {amountIn: "100", action: "settle"});
+    assert(disabledTrade.status === 403, "settlement endpoint is unavailable outside the local runner");
 
     const quoteResponse = await requestJson(`${running.baseUrl}/rfq/quote`, "POST", {
       taker: artifact.investor,
@@ -51,6 +61,7 @@ async function main(): Promise<void> {
     const signed = JSON.parse(quoteResponse.body) as any;
     assert(signed.quote.amountIn === "100", "amountIn round-trips");
     assert(signed.quote.amountOut === "200", "fixed-rate pricing is applied");
+    assert(signed.quote.expiry === 1_700_000_120, "expiry uses injected chain clock");
     assert(signed.quote.tokenIn.toLowerCase() === artifact.quote.toLowerCase(), "tokenIn is deployment QUOTE");
     assert(signed.quote.tokenOut.toLowerCase() === artifact.rwaToken.toLowerCase(), "tokenOut is deployment RWA");
     const recovered = verifyTypedData(signed.typedData.domain, RFQ_QUOTE_TYPES, signed.quote, signed.signature);
@@ -79,21 +90,19 @@ function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(`assertion failed: ${message}`);
 }
 
-function requestJson(urlValue: string, method: "GET" | "POST", value?: unknown): Promise<{status: number; body: string}> {
+function requestJson(urlValue: string, method: "GET" | "POST", value?: unknown, extraHeaders?: Record<string, string>): Promise<{status: number; body: string; headers: Record<string, string | string[] | undefined>}> {
   const body = value === undefined ? "" : JSON.stringify(value);
   return new Promise((resolve, reject) => {
     const req = httpRequest(
       urlValue,
       {
         method,
-        headers: body
-          ? {"content-type": "application/json", "content-length": Buffer.byteLength(body)}
-          : undefined
+        headers: {...extraHeaders, ...(body ? {"content-type": "application/json", "content-length": Buffer.byteLength(body)} : {})}
       },
       (res) => {
         const chunks: Buffer[] = [];
         res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-        res.on("end", () => resolve({status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8")}));
+        res.on("end", () => resolve({status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8"), headers: res.headers}));
       }
     );
     req.on("error", reject);

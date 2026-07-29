@@ -169,7 +169,8 @@ Recipe를 선택하는 인상을 주었다. 법률 연구는 한 거래에 발�
 - Manifest: 자산별 Recipe/engine/version/coverage binding
 - Operator: 판단·승인·감시
 
-거래마다 applicable Recipe를 식별하고 Element 합집합을 cumulative AND로 평가한다.
+거래마다 applicable Recipe를 식별한다. Required Recipe의 Element는 cumulative
+AND로 평가하고, ADR-007 이후 명시적 path option과 flag-only binding을 분리한다.
 기존 ExecutionRouter, ComplianceEngine과 Adapter 분리는 유지한다.
 
 ### Alternatives Considered
@@ -486,17 +487,19 @@ custom error `Errors.InvalidManifestTransition`으로 revert한다.
 | UNKNOWN 또는 RETIRED | `registerManifest` | PROPOSED | onlyOwner |
 | PROPOSED | `approveManifest` | ACTIVE | onlyOperator (issuance recipe 필수) |
 | ACTIVE | `suspendManifest(reasonCode)` | SUSPENDED | onlyOperator |
-| SUSPENDED | `resumeManifest` | ACTIVE | onlyOperator |
+| SUSPENDED | `scheduleManifestResume` 후 `resumeManifest` | ACTIVE | owner schedule + timelock + operator execute |
 | ACTIVE 또는 SUSPENDED | `retireManifest(reasonCode)` | RETIRED (terminal) | onlyOperator |
 | UNKNOWN | `setUnregulated` | UNREGULATED | onlyOwner |
 | UNREGULATED | `clearUnregulated` | UNKNOWN | onlyOwner |
 
 `registerManifest`는 caller가 넣은 `m.status`를 무시하고 항상 PROPOSED로 착지하며
 `declaredBy = msg.sender`를 기록한다. `approveManifest`는 `approvedBy = msg.sender`를
-기록하고 `issuanceRecipeId == 0`이면 registry-level completeness floor로 revert한다.
+기록한다. MANIFEST-002 이후 completeness floor는 deprecated issuance field가 아니라
+비어 있지 않고 최소 하나의 blocking/path gate가 있는 validated `RecipeBinding[]`다.
 RETIRED는 terminal이며 재발행은 RETIRED→register→approve 경로로만 가능하다. gating
 model: owner가 자산을 classify/declare(register/setUnregulated/clearUnregulated)하고,
-operator가 기존 manifest의 lifecycle(approve/suspend/resume/retire)을 구동한다.
+operator가 approve/suspend/retire와 예약된 resume 실행을 구동한다. resume 예약과
+semantic update 예약은 D011에 따라 owner governance가 담당한다.
 
 **2. Enum-append storage rationale.** `PolicyStatus`에 PROPOSED(4)와 RETIRED(5)를
 SUSPENDED(3) 뒤에 APPEND한다. 기존 numeric value(UNKNOWN=0, UNREGULATED=1,
@@ -565,3 +568,92 @@ token의 `declaredBy`/`approvedBy`는 factory 주소이며, attribution은 facto
   `test/unit/registry/TokenPolicyRegistry.t.sol`
 - `test/integration/EmergencyPause.t.sol`, `test/integration/IntegrationBase.sol`,
   `test/integration/Surveillance.t.sol`
+
+## D011 — 위험 중단은 즉시, 재개와 Manifest 의미 변경은 timelock으로 분리한다
+
+Date: 2026-07-22
+
+### Context
+
+ADR-007은 모든 Router가 공유하는 central pause state, 즉시 containment, 지연된
+compliance relaxation, Manifest semantic version/history 보존을 요구한다. 기존
+reference stack은 venue suspension과 Manifest status만 있어 global/asset pause가
+없었고, 재개와 core fact 변경을 즉시 수행할 수 있었다. 배포 후
+`TokenPolicyRegistry.owner()`가 Factory가 되므로 owner-only governance 호출을 EOA가
+직접 실행할 수도 없었다.
+
+### Decision
+
+1. `OperatorRegistry`를 global/asset/venue pause의 source of truth로 사용하고 Router는
+   nonce 소비와 compliance evaluation 전에 세 범위를 모두 fail-closed로 검사한다.
+2. operator는 pause와 Manifest suspend처럼 위험을 줄이는 동작을 즉시 수행한다.
+   unpause는 owner가 예약하고 최소 1일 뒤 owner가 실행한다.
+3. Manifest resume와 ACTIVE/SUSPENDED semantic update도 owner 예약과 최소 1일
+   timelock을 요구한다. update activation은 version을 증가시키며 기존 SUSPENDED
+   상태를 해제하지 않는다.
+4. Manifest version, current hash, chained history hash와 pause history hash를
+   보존하고 actor, old/new, reason, effective time을 append-only event로 남긴다.
+5. 배포 후 registry owner인 `CornerStoreFactory`가 resume/update schedule/cancel을
+   forwarding한다. Factory owner는 production에서 외부 Safe-style governance다.
+   registry operator는 delay가 지난 동작의 실행과 즉시 tightening을 담당한다.
+
+### Consequences
+
+- 사고 containment는 timelock 없이 가능하지만 재개는 같은 actor가 즉시 우회할 수
+  없다.
+- Factory ownership wiring을 유지하면서 governance 호출이 실제 배포에서도
+  도달 가능하다.
+- chain별 delay, 실제 Safe provider, issuer-level disable과 RecipeBinding migration은
+  후속 production 설정/feature다.
+
+### Related Files
+
+- `src/registry/OperatorRegistry.sol`
+- `src/registry/TokenPolicyRegistry.sol`
+- `src/execution/ExecutionRouter.sol`
+- `src/factory/CornerStoreFactory.sol`
+- `test/integration/EmergencyPause.t.sol`
+- `scripts/e2e-anvil.sh`
+
+## D012 — 취득 lot와 거절·감시 상태는 provider-neutral off-chain 계층으로 수렴한다
+
+Date: 2026-07-22
+
+### Context
+
+ADR-008은 acquisition source, person-group state, reject logging과 Router 밖 transfer
+감시를 하나의 off-chain compliance data layer로 결정했다. 기존 `Lockup`은 만료나
+lineage 상태 없이 단일 timestamp만 읽었고, 실제 provider 계약이 없다는 이유로
+현재 문서에는 해당 결정을 여전히 open으로 표시한 곳이 남아 있었다.
+
+### Decision
+
+1. Transfer Agent별 API는 `TransferAgentProvider` adapter 뒤에 둔다. Corner Store
+   core는 Securitize 전용 undocumented field를 하드코딩하지 않는다.
+2. per-lot 입력은 acquisition date, payment completion, source type과 lineage를
+   검증한다. 단일 holder×asset 온체인 snapshot은 lot 선택을 과대 추정하지 않도록
+   현재 lot 중 가장 늦은 유효 clock을 사용한다.
+3. 온체인 `AttestedAcquisitionSource`에는 clock, observation/expiry, PII-free
+   source hash와 status만 저장한다. missing, broken lineage, stale과 immature는
+   `Lockup`에서 서로 다른 reason으로 fail-closed한다.
+4. person-group volume/holder state는 execution id로 idempotent하게 commit한다.
+   동일 id+동일 내용은 no-op, 동일 id+다른 내용은 충돌로 거부한다.
+5. rejected attempt와 Router 밖 transfer finding은 off-chain hash-chain audit
+   record로 보존한다. 이 local SDK는 tamper evidence를 제공하지만 production WORM,
+   retention 또는 SAR 시스템이라고 주장하지 않는다.
+
+### Consequences
+
+- mock TA로 전체 경계를 테스트할 수 있으나 실제 Securitize compatibility는 공식
+  API 계약과 provider 인증을 확인하기 전까지 미구현이다.
+- 보수적인 latest-lot clock은 안전하지만 일부 mature lot 매도를 과도하게 막을 수
+  있다. amount-specific lot allocation/FIFO는 provider 계약이 확정될 때 별도
+  versioned adapter로 추가한다.
+- PII, 원본 lot 문서와 감사 원장은 온체인에 저장하지 않는다.
+
+### Related Files
+
+- `docs/decisions/ADR-008-compliance-seam-decisions.md`
+- `services/compliance-data/`
+- `src/registry/AttestedAcquisitionSource.sol`
+- `src/compliance/elements/Lockup.sol`

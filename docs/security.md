@@ -76,6 +76,10 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   변경은 실행 권한과 분리한다.
 - privileged action은 명시적인 owner/role 검사를 가져야 한다.
 - production multisig와 governance는 외부 운영 결정 전 임의로 확정하지 않는다.
+- 위험 중단(global/asset/venue pause, Manifest suspend)은 operator가 즉시 수행한다.
+  unpause, Manifest resume와 semantic update는 owner 예약과 timelock을 거친다.
+- 배포 후 `TokenPolicyRegistry.owner()`가 Factory인 구조에서는 governance가 Factory
+  forwarding API를 사용한다. registry를 EOA가 직접 소유한다고 가정하지 않는다.
 
 ## Input Validation
 
@@ -104,7 +108,8 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 
 - Uniswap-style callback은 등록되었거나 계산으로 검증한 pool에서만 수락한다.
   callback `data`가 payer/token을 포함하더라도 callback origin 검증 없이 신뢰하지
-  않는다.
+  않는다. positive delta, pool의 canonical token0/token1과 요청 token 방향도 서로
+  일치해야 하며 다른 token을 `transferFrom`하도록 바꾼 callback은 거부한다.
 - Pool/venue 등록은 compliance 보장의 일부다. 잘못된 venue 또는 악성 adapter가
   등록되면 Router를 타더라도 settlement 결과가 왜곡될 수 있으므로 governance와
   preflight 검증 대상이다.
@@ -141,7 +146,11 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 - 성공한 regulated evaluation은 Manifest version과 applied Recipe set을 추적할 수
   있어야 한다.
 - revert 시 event가 사라지는 특성을 고려한 reject logging 정책은 별도 설계
-  결정으로 관리한다.
+  결정(ADR-008)에 따라 off-chain hash-chain audit에 기록한다. local hash-chain은
+  tamper evidence일 뿐 production WORM/retention을 대체하지 않는다.
+- acquisition 원본 lot, identity와 provider payload는 온체인에 기록하지 않는다.
+  `AttestedAcquisitionSource`에는 PII-free source hash, conservative clock, freshness와
+  status만 기록하고 stale/missing/broken lineage를 fail-closed한다.
 
 ## Dependency Policy
 

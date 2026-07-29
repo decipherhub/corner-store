@@ -5,6 +5,15 @@ ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
 cd "$ROOT_DIR"
 
+V3_FACTORY_ARTIFACT="tools/deploy-v3/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json"
+if [ ! -f "$V3_FACTORY_ARTIFACT" ]; then
+  echo "==> Installing pinned deploy-v3 dependencies required by canonical pool E2E"
+  (
+    cd tools/deploy-v3
+    yarn install --frozen-lockfile
+  )
+fi
+
 echo "==> Checking Solidity formatting"
 forge fmt --check
 
@@ -56,6 +65,15 @@ echo "==> Running Toolkit config build + smoke test"
 echo "==> Running read-only Operator API smoke test"
 (
   cd services/operator-api
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
+echo "==> Running compliance data SDK smoke test"
+(
+  cd services/compliance-data
   if [ ! -x node_modules/.bin/tsc ]; then
     npm ci
   fi

@@ -10,24 +10,33 @@ export const DEFAULT_PORT = 8787;
 export const DEFAULT_TTL_SECONDS = 3600;
 
 export interface Artifact {
+  deployer: string;
   investor: string;
   maker: string;
   quote: string;
   rfqAdapter: string;
   rfqVenue: string;
   rwaToken: string;
+  router: string;
 }
 
 export interface DemoBackendConfig {
   host: string;
   port: number;
   chainId: number;
+  rpcUrl: string;
   artifactPath: string;
   artifact: Artifact;
   makerWallet: Wallet | HDNodeWallet;
   defaultTtlSeconds: number;
   priceNumerator: string;
   priceDenominator: string;
+  demoSettlement: {
+    enabled: boolean;
+    operatorAccount: number;
+    investorAccount: number;
+  };
+  now?: () => number | Promise<number>;
 }
 
 export function loadConfig(argv = process.argv.slice(2), env = process.env): DemoBackendConfig {
@@ -42,12 +51,18 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env): Dem
     host: args.host ?? env.RFQ_DEMO_HOST ?? "127.0.0.1",
     port: parsePositiveInt(args.port ?? env.RFQ_DEMO_PORT, DEFAULT_PORT, "port"),
     chainId: parsePositiveInt(args.chainId ?? env.RFQ_DEMO_CHAIN_ID, DEFAULT_CHAIN_ID, "chain-id"),
+    rpcUrl: args.rpc ?? env.RFQ_DEMO_RPC_URL ?? "http://127.0.0.1:8545",
     artifactPath,
     artifact,
     makerWallet,
     defaultTtlSeconds,
     priceNumerator: parsePositiveBigIntString(args.priceNumerator ?? env.RFQ_DEMO_PRICE_NUMERATOR, "1", "price-numerator"),
-    priceDenominator: parsePositiveBigIntString(args.priceDenominator ?? env.RFQ_DEMO_PRICE_DENOMINATOR, "1", "price-denominator")
+    priceDenominator: parsePositiveBigIntString(args.priceDenominator ?? env.RFQ_DEMO_PRICE_DENOMINATOR, "1", "price-denominator"),
+    demoSettlement: {
+      enabled: env.RFQ_DEMO_ENABLE_SETTLEMENT === "1",
+      operatorAccount: parseAccountIndex(env.RFQ_DEMO_OPERATOR_ACCOUNT ?? "0"),
+      investorAccount: parseAccountIndex(env.RFQ_DEMO_INVESTOR_ACCOUNT ?? "1")
+    }
   };
 }
 
@@ -60,6 +75,7 @@ export function usage(): string {
     "  --port <port>                 bind port (default: 8787)",
     "  --artifact <path>             deployment artifact (default: deployments/anvil-e2e.json)",
     "  --chain-id <n>                RFQ EIP-712 chain id (default: 31337)",
+    "  --rpc <url>                   chain RPC used for quote expiry time (default: http://127.0.0.1:8545)",
     "  --maker-account <n>           Anvil maker account index (default: 2)",
     "  --maker-key <hex>             explicit maker private key",
     "  --ttl <seconds>               default quote TTL (default: 3600)",

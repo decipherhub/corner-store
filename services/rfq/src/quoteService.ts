@@ -50,7 +50,7 @@ export class RFQQuoteService {
   }
 
   async createSignedQuote(request: RFQQuoteRequest): Promise<SignedRFQQuote> {
-    const quote = this.createQuote(request);
+    const quote = this.createQuoteAt(request, normalizeTimestamp(await this.config.now()));
     const data = typedData(domain(this.config.chainId, this.config.verifyingContract), quote);
     const signature = assertHex(await this.signer.signTypedData(data), "signature");
 
@@ -58,6 +58,14 @@ export class RFQQuoteService {
   }
 
   createQuote(request: RFQQuoteRequest): RFQQuote {
+    const now = this.config.now();
+    if (now instanceof Promise) {
+      throw new Error("async time source requires createSignedQuote()");
+    }
+    return this.createQuoteAt(request, normalizeTimestamp(now));
+  }
+
+  private createQuoteAt(request: RFQQuoteRequest, now: number): RFQQuote {
     const ttlSeconds = normalizeTtlSeconds(request.ttlSeconds ?? this.config.defaultTtlSeconds);
 
     return {
@@ -69,7 +77,7 @@ export class RFQQuoteService {
       amountOut: toPositiveUintString(request.amountOut, "amountOut"),
       venue: normalizeAddress(request.venue, "venue"),
       nonce: toUintString(request.nonce ?? this.config.nextNonce(), "nonce"),
-      expiry: this.config.now() + ttlSeconds
+      expiry: now + ttlSeconds
     };
   }
 }
@@ -79,7 +87,7 @@ export class RFQBackendSDK {
   private readonly verifyingContract: Address;
   private readonly maker: Address;
   private readonly defaultTtlSeconds: number;
-  private readonly now: () => number;
+  private readonly now: () => number | Promise<number>;
   private readonly nonceStore: NonceStore;
   private readonly riskCheck: InventoryRiskCheck;
 
@@ -163,4 +171,9 @@ function createMonotonicNonceGenerator(): () => bigint {
     lastNonce = candidate > lastNonce ? candidate : lastNonce + 1n;
     return lastNonce;
   };
+}
+
+function normalizeTimestamp(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error("time source must return a non-negative safe integer");
+  return value;
 }

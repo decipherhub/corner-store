@@ -66,7 +66,16 @@ async function main() {
     "a deployed BUIDL-like asset cannot be rebound to weaker Reg D policy"
   );
   const buidl = assetProfileBinding("buidl-like");
-  assert(buidl.fundRecipeId === 3 && buidl.factsPacked === 1n, "BUIDL-like Recipe/facts binding");
+  assert(
+    JSON.stringify(buidl.bindings) === JSON.stringify([[1, 2, 0, 0, 100], [3, 1, 0, 0, 90]]) &&
+      buidl.factsPacked === 1n,
+    "BUIDL-like RecipeBinding[]/facts binding"
+  );
+  const regD = assetProfileBinding("reg-d");
+  assert(
+    JSON.stringify(regD.bindings) === JSON.stringify([[1, 2, 0, 0, 100]]) && regD.factsPacked === 0n,
+    "Reg D uses a single RecipeBinding[] without fund mirror behavior"
+  );
   assert(
     buidl.fullManifestHash === "0xdcf411c4cfd970828531bfbaa85d4e6f833b6fb731a32add099081e4eea5b7c9",
     "BUIDL-like Manifest hash matches the Solidity profile"

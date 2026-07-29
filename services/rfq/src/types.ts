@@ -100,7 +100,7 @@ export interface RFQServiceConfig {
   chainId: number;
   verifyingContract: Address;
   defaultTtlSeconds?: number;
-  now?: () => number;
+  now?: () => number | Promise<number>;
   nextNonce?: () => bigint;
 }
 
@@ -113,5 +113,5 @@ export interface RFQBackendSDKConfig {
   nonceStore?: NonceStore;
   riskCheck?: InventoryRiskCheck;
   defaultTtlSeconds?: number;
-  now?: () => number;
+  now?: () => number | Promise<number>;
 }

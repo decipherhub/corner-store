@@ -91,7 +91,7 @@ CLI v2 (CLI-002) adds preflight, the sell direction, and observability:
 corner-store check <buyer> [--venue amm|rfq] [--amount <n>] [--json]   # per-element compliance preflight (no trade) + engine verdict; exit 1 if rejected
 corner-store sell <amountIn> [--min <amountOut>]                        # AMM sell (tokenIn=RWA, tokenOut=QUOTE); defaults to investor account 1
 corner-store balances [addr...] [--json]                               # RWA/QUOTE balances + adapter allowances (default: the 5 well-known roles)
-corner-store watch [--from <block>]                                    # live event tail (Executed/RFQFilled/RFQQuoteCancelled/MakerApprovalSet/Manifest*/SurveillanceFlag); Ctrl-C to stop
+corner-store watch [--from <block>]                                    # live event tail (Executed/RFQFilled/RFQQuoteCancelled/MakerApprovalSet/Manifest*/ComplianceFlags/SurveillanceFlag); Ctrl-C to stop
 corner-store faucet <addr> <amount>                                    # mint QUOTE (MockERC20.mint is permissionless — demo-only)
 corner-store snapshot                                                  # anvil evm_snapshot -> prints id
 corner-store restore <id>                                              # anvil evm_revert (invalidates later snapshots)
@@ -142,7 +142,9 @@ $CS attest jurisdiction $ACCT4 US                  # restore
 # manifest lifecycle
 $CS manifest suspend --reason DEMO-SUSPEND
 $CS --account 4 buy 5000000                        # FAIL: POLICY / SUSPENDED
-$CS manifest resume
+$CS manifest resume                               # first call schedules timelocked resume
+# after the reported delay:
+$CS manifest resume                               # second call executes resume
 $CS --account 4 buy 5000000                        # PASS again
 
 # RFQ venue

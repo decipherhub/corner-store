@@ -19,7 +19,8 @@ reference execution adapters including AMM and RFQ settlement paths.
 - 제3의 DEX가 재사용할 수 있는 compliance interface와 registry 모델을 제공한다.
 - Router를 수정하지 않고 정책과 execution Adapter를 등록·교체한다.
 - 자산 Manifest와 거래 context로 applicable Recipe를 식별한다.
-- 여러 Recipe의 Element를 cumulative AND로 실행 전에 평가한다.
+- Manifest의 `RecipeBinding[]`에 따라 필수 Recipe는 AND, 같은 path group의
+  대안 Recipe는 OR, 비차단 Recipe는 flag로 실행 전에 평가한다.
 - 허용된 venue adapter로 거래를 전달한다.
 - ERC-3643 token transfer enforcement와 Corner Store 거래 정책의 실패를
   원자적으로 처리한다.
@@ -58,7 +59,8 @@ reference execution adapters including AMM and RFQ settlement paths.
 Required tools:
 
 - Foundry stable (`forge`, `anvil`; live E2E verified with v1.7.1)
-- Node.js and npm for `services/rfq`, `services/rfq-demo-backend` and `services/cli`
+- Node.js and npm for the TypeScript services under `services/`, including RFQ,
+  CLI, Toolkit, Operator API and Compliance Data SDK
 - Yarn for `tools/deploy-v3`
 
 Foundry 버전을 바꾼 뒤 script broadcast에서 constructor decoding 오류가 나면
@@ -127,6 +129,15 @@ not a hosted or production RFQ operator service.
 scripts/e2e-anvil.sh --profile buidl-like --keep
 ```
 
+For the short RFQ-first stakeholder walkthrough, omit the AMM scenario suite:
+
+```shell
+scripts/e2e-anvil.sh --profile buidl-like --mode rfq
+```
+
+Add `--keep` for an interactive follow-up; the runner restores the demo maker
+after its rejection check so a new quote can be filled immediately.
+
 `--keep` leaves both Anvil and the RFQ demo backend running. In another terminal,
 request and settle the quote through the protected Router path:
 
@@ -138,6 +149,19 @@ node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
 
 See [`services/rfq-demo-backend/README.md`](./services/rfq-demo-backend/README.md)
 for the complete local flow and production replacement boundaries.
+
+### Compliance Data SDK
+
+`services/compliance-data` implements the provider-neutral ADR-008 foundation:
+TA lot/lineage resolution, conservative acquisition snapshots, person-group
+state and tamper-evident rejection/surveillance records. It does not include or
+claim compatibility with an undocumented production Securitize API.
+
+```shell
+cd services/compliance-data
+npm ci
+npm test
+```
 
 ### Check All
 

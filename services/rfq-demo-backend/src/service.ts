@@ -5,6 +5,7 @@ import {
   RFQBackendSDK,
   createRFQService
 } from "../../rfq/src";
+import {JsonRpcProvider} from "ethers";
 
 import {DemoBackendConfig, asAddress} from "./config";
 import {EthersTypedDataSigner} from "./signer";
@@ -18,6 +19,12 @@ export async function createDemoQuoteService(config: DemoBackendConfig): Promise
   if (maker.toLowerCase() !== artifactMaker.toLowerCase()) {
     throw new Error(`maker wallet ${maker} does not match deployment artifact maker ${artifactMaker}`);
   }
+  const provider = new JsonRpcProvider(config.rpcUrl, config.chainId);
+  const now = config.now ?? (async () => {
+    const block = await provider.getBlock("latest");
+    if (!block) throw new Error("cannot read latest block timestamp from RFQ chain RPC");
+    return block.timestamp;
+  });
 
   return createRFQService({
     chainId: config.chainId,
@@ -30,6 +37,7 @@ export async function createDemoQuoteService(config: DemoBackendConfig): Promise
     }),
     nonceStore: new InMemoryNonceStore(),
     riskCheck: new NoopInventoryRiskCheck(),
-    defaultTtlSeconds: config.defaultTtlSeconds
+    defaultTtlSeconds: config.defaultTtlSeconds,
+    now
   });
 }

@@ -44,6 +44,10 @@ Corner Store 프로필 호출 API는 실제 AMM 통합 배포 소비자가 생�
 9. immutable manifest 확정
 
 owner-only 설정과 검증이 끝나기 전에 ownership을 이전하지 않는다.
+현재 reference wiring은 `TokenPolicyRegistry`와 `VenueRegistry` ownership을
+`CornerStoreFactory`로 이전하고, Factory owner를 외부 governance 경계로 사용한다.
+따라서 Manifest resume/update 예약은 Factory forwarding API를 통해야 하며,
+operator는 timelock 뒤 registry에서 실행만 담당한다.
 
 ## Deployment Manifest Requirements
 

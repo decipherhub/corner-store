@@ -47,6 +47,18 @@ Backend smoke는 ephemeral HTTP server의 health/quote API, fixed-rate pricing,
 maker signature, monotonic nonce와 numeric amount 거부를 검증한다. CLI smoke는
 backend quote request path와 기존 quote-file/서명 검증 경로를 함께 검증한다.
 
+Compliance data SDK smoke test:
+
+```sh
+cd services/compliance-data
+npm ci
+npm test
+```
+
+TA lot lineage/완납 clock, conservative snapshot, broken-lineage fail-closed,
+idempotent person-group commit, rolling volume/holder counts와 hash-chain 변조 탐지를
+검증한다.
+
 Vendored deploy tool 테스트:
 
 ```sh
@@ -59,7 +71,10 @@ yarn test
 Foundry integration tests는 mock/ERC-3643 fixture를 사용해 regulated swap,
 multi-Recipe, surveillance, emergency pause와 invariant path를 검증한다.
 `tools/deploy-v3`의 Corner Store profile은 unit test로 구성과 순서를 검증하며,
-과거 수동 Anvil 배포 검증 기록은 `tools/deploy-v3/CORNER_STORE_PROFILE.md`에 있다.
+canonical Uniswap v3 integration test는 같은 pinned package artifact로 factory와
+pool을 배포해 CREATE2, mint/swap callback과 실제 ERC-3643 transfer를 검증한다.
+따라서 fresh checkout에서는 `tools/deploy-v3`의 `yarn install --frozen-lockfile`이
+먼저 필요하며 `scripts/check.sh`가 이를 자동 bootstrap한다.
 
 자동화된 live Anvil deployment/E2E는 `scripts/e2e-anvil.sh`로 제공된다(아래 E2E
 Tests 및 `docs/demo.md` 참조).
@@ -86,7 +101,7 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패
-- 여러 Recipe의 cumulative AND와 중복 Element 실행 의미
+- RecipeBinding의 REQUIRED/PATH/FLAG truth table과 stateful commit 중복 방지
 - Manifest lifecycle, version과 supported engine binding
 - ERC-3643 transfer 거부의 원자적 실패
 - 지원 Router 경로와 직접 venue 호출의 보장 차이
@@ -106,6 +121,7 @@ scripts/check.sh
 
 이 명령은 현재 저장소에서 지원하는 format, lint, build와 test를 순서대로 실행한다.
 현재 포함 범위는 Foundry fmt/lint/build/test, RFQ SDK·demo backend·CLI·Toolkit,
+Compliance Data SDK,
 Operator API/dashboard smoke, vendored deploy-v3 test와 whitespace check다. GitHub
 Actions도 동일한 스크립트를 실행한다. Node 서비스는 lockfile 기반 `npm ci`를
 사용하고, vendored deploy-v3는 `yarn.lock` 기반 설치 후 테스트한다.

@@ -115,6 +115,19 @@ contract RouterTest is Test {
         router.execute(req);
     }
 
+    function test_execute_emitsNonBlockingComplianceFlags() public {
+        ComplianceDecision memory decision =
+            _decision(true, 1 << uint256(VenueType.AMM), bytes32(0), type(uint256).max, REASON_OK);
+        decision.decisionHash = keccak256("flagged-decision");
+        decision.flagsBitmap = 5;
+        engine.setDecision(decision);
+
+        vm.expectEmit(true, false, false, true);
+        emit Events.ComplianceFlags(decision.decisionHash, decision.flagsBitmap);
+        vm.prank(BUYER);
+        router.execute(_defaultReq());
+    }
+
     // ---- gate reverts ----
 
     function test_revert_complianceRejected() public {
@@ -178,6 +191,31 @@ contract RouterTest is Test {
         vm.prank(BUYER);
         vm.expectRevert(Errors.VenueSuspended.selector);
         router.execute(_defaultReq());
+        assertFalse(router.usedNonce(BUYER, 1));
+    }
+
+    function test_revert_globalPaused_withoutConsumingNonce() public {
+        operatorReg.setGlobalPaused(true, bytes32("kill"));
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.GlobalPaused.selector);
+        router.execute(_defaultReq());
+        assertFalse(router.usedNonce(BUYER, 1));
+    }
+
+    function test_revert_tokenInPaused() public {
+        operatorReg.setAssetSuspended(TOKEN_IN, true, bytes32("kill"));
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.TokenInPaused.selector);
+        router.execute(_defaultReq());
+        assertFalse(router.usedNonce(BUYER, 1));
+    }
+
+    function test_revert_tokenOutPaused() public {
+        operatorReg.setAssetSuspended(TOKEN_OUT, true, bytes32("kill"));
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.TokenOutPaused.selector);
+        router.execute(_defaultReq());
+        assertFalse(router.usedNonce(BUYER, 1));
     }
 
     function test_revert_venueNotAllowed_typeMaskMiss() public {

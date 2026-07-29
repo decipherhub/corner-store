@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {IntegrationBase} from "./IntegrationBase.sol";
 import {BuidlLikeDemoAsset} from "../../src/demo/BuidlLikeDemoAsset.sol";
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
+import {RecipeBinding} from "../../src/types/ComplianceTypes.sol";
 
 /// @notice Local BUIDL-like ERC-3643 demo asset flow.
 ///
@@ -23,16 +24,10 @@ contract BUIDLLikeFlowTest is IntegrationBase {
         assertEq(rwaToken.name(), BuidlLikeDemoAsset.TOKEN_NAME, "demo asset name");
         assertEq(rwaToken.symbol(), BuidlLikeDemoAsset.TOKEN_SYMBOL, "demo asset symbol");
         assertEq(uint8(policyReg.statusOf(address(rwaToken))), 2, "manifest active");
-        assertEq(
-            policyReg.manifestOf(address(rwaToken)).issuanceRecipeId,
-            BuidlLikeDemoAsset.ISSUANCE_RECIPE_ID,
-            "RegD 506c recipe"
-        );
-        assertEq(
-            policyReg.manifestOf(address(rwaToken)).fundRecipeId,
-            BuidlLikeDemoAsset.FUND_RECIPE_ID,
-            "BUIDL-like fund recipe"
-        );
+        RecipeBinding[] memory bindings = policyReg.recipeBindingsOf(address(rwaToken));
+        assertEq(bindings.length, 2, "two recipe bindings");
+        assertEq(bindings[0].recipeId, BuidlLikeDemoAsset.ISSUANCE_RECIPE_ID, "RegD 506c recipe");
+        assertEq(bindings[1].recipeId, BuidlLikeDemoAsset.FUND_RECIPE_ID, "BUIDL-like fund recipe");
         assertEq(
             policyReg.manifestOf(address(rwaToken)).factsPacked & BuidlLikeDemoAsset.FACT_FUND_APPLICABLE,
             BuidlLikeDemoAsset.FACT_FUND_APPLICABLE,

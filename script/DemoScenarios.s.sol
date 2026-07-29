@@ -21,6 +21,8 @@ import {
     ComplianceDecision,
     ManifestCore,
     PolicyStatus,
+    RecipeBinding,
+    RecipeBindingMode,
     VenueType,
     FlowType
 } from "../src/types/ComplianceTypes.sol";
@@ -84,10 +86,13 @@ contract DemoScenarios is Script, DemoConstants {
         _scenario1_onboarding();
         _scenario2_compliantTrade();
         _scenario3_elementRejection();
-        _scenario4_lifecycle();
         _scenario5_rfq();
         _scenario6_surveillance();
         _scenario7_bypass();
+        // Keep the asset suspended with a pending recovery at the end of this
+        // broadcast. scripts/e2e-anvil.sh advances the real Anvil clock, then
+        // executes the delayed resume and proves settlement through the CLI.
+        _scenario4_lifecycle();
 
         _summary();
     }
@@ -104,6 +109,7 @@ contract DemoScenarios is Script, DemoConstants {
         );
 
         ManifestCore memory m = _baseManifest();
+        RecipeBinding[] memory bindings = _baseBindings();
 
         VenueConfig memory ammCfg = VenueConfig({
             venueType: VenueType.AMM,
@@ -115,12 +121,13 @@ contract DemoScenarios is Script, DemoConstants {
         });
 
         vm.broadcast(deployerPk);
-        factory.registerRWAToken(address(rwa), m, pool, ammCfg);
+        factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
 
         ManifestCore memory stored = policyReg.manifestOf(address(rwa));
         ManifestCore memory expected = _baseManifest();
-        bool profileOk = stored.fundRecipeId == expected.fundRecipeId && stored.factsPacked == expected.factsPacked
-            && stored.fullManifestHash == expected.fullManifestHash;
+        RecipeBinding[] memory storedBindings = policyReg.recipeBindingsOf(address(rwa));
+        bool profileOk = keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
+            && stored.factsPacked == expected.factsPacked && stored.fullManifestHash == expected.fullManifestHash;
         bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
             && stored.approvedBy == address(factory) && profileOk;
         console2.log("    evidence: ACTIVE selected asset profile, approved by factory");
@@ -179,7 +186,7 @@ contract DemoScenarios is Script, DemoConstants {
     // Scenario 4 — Lifecycle (suspend blocks, resume settles)
     // ---------------------------------------------------------------------
     function _scenario4_lifecycle() internal {
-        _title(4, "Lifecycle: suspendManifest blocks the trade; resumeManifest settles it again");
+        _title(4, "Lifecycle: suspension blocks trading and governance schedules delayed recovery");
 
         vm.broadcast(deployerPk);
         policyReg.suspendManifest(address(rwa), bytes32("DEMO-SUSPEND"));
@@ -193,16 +200,12 @@ contract DemoScenarios is Script, DemoConstants {
         console2.log("    evidence: while SUSPENDED, trade reverts ComplianceRejected ->", blockedOk);
 
         vm.broadcast(deployerPk);
-        policyReg.resumeManifest(address(rwa));
+        factory.scheduleManifestResume(address(rwa), bytes32("DEMO-RECOVERED"));
+        (uint64 effectiveTime,) = policyReg.pendingManifestResumeOf(address(rwa));
+        bool recoveryScheduled = effectiveTime == block.timestamp + policyReg.MIN_MANIFEST_DELAY();
+        console2.log("    evidence: governance scheduled delayed recovery ->", recoveryScheduled);
 
-        uint256 before = rwa.balanceOf(investor);
-        ExecutionRequest memory okReq = _buyRequest(AMM_TRADE);
-        vm.broadcast(investorPk);
-        router.execute(okReq);
-        uint256 delta = rwa.balanceOf(investor) - before;
-        console2.log("    evidence: after RESUME, trade settles; RWA delta (wei):", delta);
-
-        _record(4, blockedOk && delta == AMM_TRADE);
+        _record(4, blockedOk && recoveryScheduled);
     }
 
     // ---------------------------------------------------------------------
@@ -246,8 +249,7 @@ contract DemoScenarios is Script, DemoConstants {
         policyReg.retireManifest(address(rwa), bytes32("ADD-SURVEILLANCE"));
 
         ManifestCore memory m = _baseManifest();
-        m.issuanceRecipeId = SURVEIL_RECIPE_ID;
-        m.issuanceRecipeVersion = 1;
+        RecipeBinding[] memory bindings = _surveillanceBindings();
         VenueConfig memory ammCfg = VenueConfig({
             venueType: VenueType.AMM,
             adapter: address(ammAdapter),
@@ -257,7 +259,7 @@ contract DemoScenarios is Script, DemoConstants {
             active: true
         });
         vm.broadcast(deployerPk);
-        factory.registerRWAToken(address(rwa), m, pool, ammCfg);
+        factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
 
         uint256 threshold = 2;
         vm.broadcast(deployerPk);
@@ -475,8 +477,27 @@ contract DemoScenarios is Script, DemoConstants {
 
     function _baseManifest() internal view returns (ManifestCore memory m) {
         if (useBuidlLikeProfile) return BuidlLikeDemoAsset.manifest(ENGINES_AMM | ENGINES_RFQ);
-        m.issuanceRecipeId = 1;
-        m.issuanceRecipeVersion = 1;
         m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
+    }
+
+    function _baseBindings() internal view returns (RecipeBinding[] memory bindings) {
+        if (useBuidlLikeProfile) return BuidlLikeDemoAsset.recipeBindings();
+        bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(1, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+    }
+
+    function _surveillanceBindings() internal view returns (RecipeBinding[] memory bindings) {
+        uint256 count = useBuidlLikeProfile ? 2 : 1;
+        bindings = new RecipeBinding[](count);
+        bindings[0] = RecipeBinding(SURVEIL_RECIPE_ID, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        if (useBuidlLikeProfile) {
+            bindings[1] = RecipeBinding(
+                BuidlLikeDemoAsset.FUND_RECIPE_ID,
+                BuidlLikeDemoAsset.FUND_RECIPE_VERSION,
+                RecipeBindingMode.REQUIRED_BLOCKING,
+                0,
+                90
+            );
+        }
     }
 }

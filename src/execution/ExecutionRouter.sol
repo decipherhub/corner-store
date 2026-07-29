@@ -52,7 +52,14 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
             revert Errors.NotAuthorized();
         }
 
-        // 2a. nonce replay protection (per authenticated initiator/caller)
+        // 2a. central production pause gates. These run before nonce consumption
+        //     so a closed control plane does not burn user replay slots.
+        if (operatorReg.isGlobalPaused()) revert Errors.GlobalPaused();
+        if (operatorReg.isAssetSuspended(req.context.tokenIn)) revert Errors.TokenInPaused();
+        if (operatorReg.isAssetSuspended(req.context.tokenOut)) revert Errors.TokenOutPaused();
+        if (operatorReg.isVenueSuspended(req.context.venue)) revert Errors.VenueSuspended();
+
+        // 2b. nonce replay protection (per authenticated initiator/caller)
         if (usedNonce[msg.sender][req.nonce]) revert Errors.NonceUsed();
         usedNonce[msg.sender][req.nonce] = true;
 
@@ -64,6 +71,8 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
         //    a future flow where a signed/pre-computed decision is passed in and
         //    verified here, not the current replay defense.
         ComplianceDecision memory d = engine.evaluate(req.context);
+        emit Events.ComplianceEvaluated(d.decisionHash, d.allowed, d.reasonCode);
+        if (d.flagsBitmap != 0) emit Events.ComplianceFlags(d.decisionHash, d.flagsBitmap);
         if (!d.allowed) revert Errors.ComplianceRejected(d.reasonCode);
 
         // 4. amount bound. NOTE (open decision): this bounds the INPUT (quote-side)
@@ -74,32 +83,29 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
         //    notional — and align this check with that choice.
         if (req.context.amountIn > d.maxAmount) revert Errors.MaxAmountExceeded();
 
-        // 5. operator venue-suspension kill switch
-        if (operatorReg.isVenueSuspended(req.context.venue)) revert Errors.VenueSuspended();
-
-        // 6. venue policy binding (type mask + venues-hash)
+        // 5. venue policy binding (type mask + venues-hash)
         if (!selector.validate(req.context.venue, req.context.venueType, d)) revert Errors.VenueNotAllowed();
 
-        // 7. resolve adapter
+        // 6. resolve adapter
         VenueConfig memory cfg = venueReg.venueOf(req.context.venue);
         if (!cfg.active || cfg.adapter == address(0)) revert Errors.AdapterNotRegistered();
 
-        // 7a. bind the caller-supplied venue type to the registry's stored config.
+        // 6a. bind the caller-supplied venue type to the registry's stored config.
         //     Step 6 validated req.context.venueType against the decision's type mask;
         //     without this check a caller could misreport venueType and route a venue
         //     of a disallowed type through an allowed-type bit.
         if (cfg.venueType != req.context.venueType) revert Errors.VenueTypeMismatch();
 
-        // 8. dispatch to adapter (performs the swap; non-custodial)
+        // 7. dispatch to adapter (performs the swap; non-custodial)
         ExecutionResult memory r = IExecutionAdapter(cfg.adapter).execute(req, d);
 
-        // 8a. slippage bound — the realized output must meet the caller's minimum.
+        // 7a. slippage bound — the realized output must meet the caller's minimum.
         if (r.amountOut < req.amountOutMin) revert Errors.SlippageExceeded();
 
-        // 9. post-trade commit hook (stateful element updates)
+        // 8. post-trade commit hook (stateful element updates)
         engine.commit(req.context);
 
-        // 10. emit + return
+        // 9. emit + return
         emit Events.Executed(r.executionId, req.context.venue, r.amountOut);
         return r;
     }

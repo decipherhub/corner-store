@@ -372,6 +372,12 @@ passing
   기본값은 BUIDL-like metadata + Reg D/QP/minimum-investment Manifest다.
 - live runner가 backend quote → CLI → Router/RFQAdapter 성공과 revoked-maker
   실패를 자동 실행한다.
+- `scripts/e2e-anvil.sh --mode rfq`는 AMM·lifecycle·surveillance 설명을 건너뛰고
+  mock TA profile → Toolkit/CLI → backend-signed quote → protected RFQ settlement
+  → revoked-maker rejection만 보여주는 짧은 MVP 시연 경로를 제공한다.
+- 기존 Operator dashboard는 `Operator view`(read-only snapshot)와 `RFQ demo`
+  (local quote request/download/CLI settlement handoff) 모드를 제공하며, browser에
+  private key나 direct transaction endpoint를 추가하지 않는다.
 - backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
 - production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
 
@@ -382,6 +388,7 @@ passing
 - `scripts/check.sh`
 - `scripts/e2e-anvil.sh --profile buidl-like`
 - `scripts/e2e-anvil.sh --profile reg-d`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
 - `git diff --check`
 
 ### State
@@ -395,6 +402,9 @@ passing
 - CLI smoke가 `--backend` request path를 검증하고 기존 `RFQFlow.t.sol`이 protected Router settlement의 성공/거부 경로를 검증한다.
 - Foundry v1.7.1 clean build에서 `buidl-like`과 `reg-d` 두 profile 모두
   통과: 각각 7/7 scenarios, backend-signed quote settlement, revoked-maker 거부.
+- RFQ-first dashboard/runbook: `services/operator-dashboard`의 두 모드와 local
+  HTTP server smoke, `--mode rfq` live E2E를 검증했다. 시연 순서는
+  `docs/rfq-demo-guide.md`를 기준으로 한다.
 
 ## CLI-001 — corner-store Reference CLI
 
@@ -639,3 +649,142 @@ passing
 
 문서 정합화와 운영 runbook만 추가한다. contract, API 또는 production 운영 정책은
 변경하지 않는다.
+
+## PROD-001 — Production Control Plane
+
+### Behavior
+
+- `OperatorRegistry`가 global, asset, venue pause의 단일 source of truth가 된다.
+- operator는 위험을 즉시 중단할 수 있지만 unpause는 owner가 예약한 뒤 최소
+  timelock이 지난 후에만 실행할 수 있다.
+- `ExecutionRouter`는 compliance evaluation과 venue dispatch 전에 global, 양쪽
+  asset, venue pause를 fail-closed로 검사한다.
+- Manifest lifecycle은 현재 version, pending update, full manifest hash와
+  append-only history hash를 보존한다.
+- ACTIVE/SUSPENDED Manifest의 semantic update는 별도 pending proposal로 저장되고
+  timelock 이후 승인되며, suspended asset을 update만으로 재개할 수 없다.
+- lifecycle/pause 변경은 actor, old/new value, reasonCode/reasonHash와 effective time을
+  event로 남긴다.
+
+### Verification
+
+- `forge fmt --check`
+- `forge lint --severity high --deny warnings src`
+- `forge test --offline --match-path test/unit/registry/OperatorRegistry.t.sol -vv`
+- `forge test --offline --match-path test/unit/registry/TokenPolicyRegistry.t.sol -vv`
+- `forge test --offline --match-path test/unit/execution/Router.t.sol -vv`
+- `forge test --offline --match-path test/integration/EmergencyPause.t.sol -vv`
+- `forge test --offline`
+- `scripts/check.sh`
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획: `docs/exec-plans/completed/PROD-001-production-control-plane.md`
+- governance owner는 외부 Safe-style multisig를 전제로 하며 컨트랙트 내부에
+  n-of-m signer 로직을 구현하지 않는다.
+- issuer disable, production multisig provider와 chain별 timelock 값은 후속 운영
+  설정이며, 현재 manifest에 issuer identity가 없으므로 asset pause로 fail-closed한다.
+
+## DATA-001 — Compliance Data Layer Foundation
+
+### Behavior
+
+- ADR-008의 Transfer Agent 경계를 provider-neutral TypeScript SDK로 제공한다.
+- per-lot acquisition 입력은 lineage, 완납일과 freshness를 검증하고 보수적인
+  holder×asset snapshot으로 컴파일한다.
+- `Lockup`은 operator-attested snapshot의 상태와 만료를 fail-closed로 검사한다.
+- 거절 시도와 router 밖 transfer finding은 PII 없이 hash-chain audit trail에
+  append할 수 있다.
+- person-group 단위 volume/holder state는 execution idempotency를 보장한다.
+- 실제 Securitize API, WORM storage와 production surveillance hosting은 adapter
+  교체 지점으로 남기며 구현되었다고 주장하지 않는다.
+
+### Verification
+
+- `forge fmt --check`
+- `forge test --offline --match-path test/unit/compliance/AcquisitionSource.t.sol -vv`
+- `forge test --offline --match-path test/unit/compliance/Elements.t.sol -vv`
+- `cd services/compliance-data && npm test`
+- `scripts/check.sh`
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획: `docs/exec-plans/completed/DATA-001-compliance-data-layer.md`
+- 실제 Securitize/TA field mapping은 공식 API 계약이 제공될 때 별도 provider
+  adapter로 구현한다.
+- 단일 holder×asset snapshot은 모든 현재 lot 중 가장 늦은 clock을 사용하므로
+  amount-specific lot allocation 전까지 일부 mature lot 매도를 보수적으로 막을 수 있다.
+
+### Related Files
+
+- `services/compliance-data/`
+- `src/registry/AttestedAcquisitionSource.sol`
+- `src/compliance/elements/Lockup.sol`
+- `test/unit/compliance/AcquisitionSource.t.sol`
+
+## MANIFEST-002 — RecipeBinding Manifest Migration
+
+### Behavior
+
+- 자산 Manifest는 고정 `issuanceRecipeId + fundRecipeId` 대신 bounded
+  `RecipeBinding[]`를 registry에 저장한다.
+- `REQUIRED_BLOCKING` Recipe는 AND, 같은 `pathGroupId`의 `PATH_OPTION`은 OR,
+  서로 다른 path group은 AND로 평가한다.
+- `FLAG_ONLY` 실패는 거래를 막지 않고 `ComplianceDecision.flagsBitmap`과 Router
+  event로 노출한다.
+- binding 변경은 full manifest hash 변경과 기존 timelock/version/history를 거친다.
+- binding 수, recipe/version, path group과 duplicate 입력은 등록 시 fail-closed로
+  검증한다.
+
+### Verification
+
+- RecipeBinding registry/lifecycle unit tests
+- REQUIRED/PATH/FLAG engine regression tests
+- pair-side, stateful commit와 Router event integration tests
+- `scripts/check.sh`
+- `buidl-like` / `reg-d` live E2E
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획: `docs/exec-plans/completed/MANIFEST-002-recipe-binding-migration.md`
+- canonical `bytes32 recipeKey` alias와 per-element enforcement override compiler는
+  별도 versioned refinement로 남긴다.
+
+## AMM-001 — Canonical Uniswap v3 Pool E2E
+
+### Behavior
+
+- vendored `@uniswap/v3-core` artifact로 canonical factory/pool을 배포한다.
+- CREATE2 예상 주소와 factory가 생성한 pool 주소가 일치해야 한다.
+- 실제 pool을 verified ERC-3643 holder, venue와 adapter allowlist에 등록한다.
+- 초기화·유동성 공급 후 `ExecutionRouter → UniswapV3Adapter → pool` exact-input
+  swap이 실제 callback과 ERC-3643 transfer를 거쳐 성공한다.
+- 미등록 pool/callback은 계속 fail-closed이고 Router/Adapter는 잔액을 보유하지 않는다.
+
+### Verification
+
+- canonical factory/pool deployment와 CREATE2 preflight integration test
+- protected buy/sell, compliance rejection와 callback authorization tests
+- `scripts/check.sh`
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획: `docs/exec-plans/completed/AMM-001-real-uniswap-v3-e2e.md`
+- vendored Solidity source를 제품 `src/`로 복사하지 않는다.
+- production fee-tier 승인, LP 운영 정책과 unified deploy CLI는 별도 후속 범위다.

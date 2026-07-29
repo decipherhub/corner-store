@@ -4,9 +4,11 @@ import {CliError} from "./util";
 
 export type AssetProfile = "buidl-like" | "reg-d";
 
+export type RecipeBindingTuple = [recipeId: number, recipeVersion: number, mode: number, pathGroupId: number, priority: number];
+
 export interface AssetProfileBinding {
   profile: AssetProfile;
-  fundRecipeId: number;
+  bindings: RecipeBindingTuple[];
   factsPacked: bigint;
   fullManifestHash: string;
 }
@@ -47,10 +49,13 @@ export function assetProfileBinding(value?: string): AssetProfileBinding {
   if (profile === "buidl-like") {
     return {
       profile,
-      fundRecipeId: 3,
+      bindings: [
+        [1, 2, 0, 0, 100],
+        [3, 1, 0, 0, 90]
+      ],
       factsPacked: 1n,
       fullManifestHash: BUIDL_LIKE_MANIFEST_HASH
     };
   }
-  return {profile, fundRecipeId: 0, factsPacked: 0n, fullManifestHash: ZERO32};
+  return {profile, bindings: [[1, 2, 0, 0, 100]], factsPacked: 0n, fullManifestHash: ZERO32};
 }

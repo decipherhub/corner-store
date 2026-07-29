@@ -3,7 +3,7 @@
 ## Responsibility
 
 이 경계는 transaction context와 Asset Manifest를 해석해 적용 Recipe를 식별하고,
-활성 Element를 cumulative AND로 평가해 구조화된 decision을 만든다.
+`RecipeBinding`의 blocking/path/flag 의미로 평가해 구조화된 decision을 만든다.
 
 핵심 질문:
 
@@ -32,8 +32,9 @@ Element 추가 기준:
 3. 거래 전, 거래 시점, 거래 후 중 언제 작동하는가?
 4. 현재 거래만 보는가, 누적 상태를 보는가?
 
-stateful Element의 commit hook은 열린 interface 결정이다. 읽기 검사와 상태 갱신을
-분리해야 하며 실패한 settlement가 누적 상태를 남겨서는 안 된다.
+stateful Element는 읽기 검사와 settlement 후 `commit()`을 분리한다. 온체인 commit은
+Router 성공 경로에서만 호출하고, off-chain person-group state는 execution id에
+동일 내용이면 no-op, 다른 내용이면 reject하는 idempotency를 적용한다.
 
 ## Recipe
 
@@ -43,12 +44,16 @@ Recipe는 하나의 법률효과를 표현하는 Element 집합과 활성화 log
 평가 규칙:
 
 - Manifest와 transaction context로 applicable Recipe를 식별한다.
-- 모든 applicable Recipe의 Element reference를 합집합으로 만든다.
-- 동일 context의 중복 Element는 한 번만 실행할 수 있다.
-- 활성화된 모든 Element를 통과해야 한다.
+- `REQUIRED_BLOCKING`은 모두 통과해야 한다.
+- 같은 `pathGroupId`의 `PATH_OPTION`은 하나 이상 통과해야 하고 group 간에는 AND다.
+- `FLAG_ONLY` 실패는 거래를 막지 않고 stable binding-index bit로 노출한다.
+  해당 binding의 stateful hook도 trade-critical `commit()`에서 실행하지 않으며,
+  비차단 관측은 Router event와 off-chain consumer가 처리한다.
+- post-trade stateful commit은 선택된 path만 반영하고 같은 asset/Element를 중복
+  반영하지 않는다.
 - 어떤 Recipe 또는 Element가 실패했는지 구조화된 reason으로 반환한다.
 
-Recipe 하나를 골라 나머지를 무시하거나 first-success 방식으로 평가하지 않는다.
+Manifest에 선언되지 않은 Recipe를 암묵적으로 선택하지 않는다.
 
 ## Manifest Integration
 
@@ -87,11 +92,11 @@ struct ComplianceDecision {
     uint256 allowedVenueTypes;
     bytes32 allowedVenuesHash;
     bytes32 reasonCode;
+    bytes32 reliedClaims;
+    uint256 flagsBitmap;
     bytes32 decisionHash;
 }
 ```
-
-정확한 ABI는 Foundation feature에서 확정한다.
 
 ## Trust Boundaries
 
@@ -104,7 +109,7 @@ struct ComplianceDecision {
 
 ## Invariants
 
-- applicable Recipe는 cumulative AND로 평가한다.
+- RecipeBinding의 required/path/flag 조합 의미를 fail-closed로 평가한다.
 - `tokenIn`과 `tokenOut` 양쪽의 classification과 Manifest를 평가한다.
 - 양쪽 모두 명시적 `UNREGULATED`일 때만 public pass-through를 허용한다.
 - 하나 이상의 regulated 자산이 있으면 모든 regulated Manifest의 applicable
@@ -121,18 +126,20 @@ struct ComplianceDecision {
 
 - Element/Recipe/Manifest/Operator 이름 기반 4-Layer를 사용한다.
 - Recipe는 법률효과 하나를 표현한다.
-- applicable Recipe는 cumulative AND로 평가한다.
+- registry-backed bounded `RecipeBinding[]`를 사용한다.
 - Asset Manifest가 기존 single Recipe mapping/Token Policy 역할을 확장한다.
 - 온체인은 검증·게이팅·집행, 오프체인은 재량 판단·민감 정보·대량 연산을 맡는다.
 - 발행 측 사실은 coverage delta 방식으로 재사용한다.
+- ADR-008의 acquisition lot, reject logging과 Router 밖 surveillance는
+  provider-neutral off-chain data layer로 연결한다. 온체인에는 expiring snapshot과
+  PII-free hash만 둔다.
 
 ## Open Decisions
 
-- acquisition/lot data source
-- stateful Element commit hook
-- Manifest/Recipe set encoding과 duplicate Element key
+- canonical recipe key alias와 per-element enforcement override compiler
 - issuer coverage encoding
-- reject audit trail
+- production TA API/authorization, amount-specific lot allocation
+- production WORM/retention과 surveillance hosting
 - production Element/Recipe 목록과 법률 승인
 
 ## References

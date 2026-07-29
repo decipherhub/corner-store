@@ -20,14 +20,30 @@ import {Events} from "../../../src/libraries/Events.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 
 contract MockAcquisitionSource is IAcquisitionSource {
-    mapping(bytes32 => uint64) internal _at;
+    mapping(bytes32 => AcquisitionSnapshot) internal _snapshots;
 
     function set(address holder, address asset, uint64 ts) external {
-        _at[keccak256(abi.encode(holder, asset))] = ts;
+        _snapshots[keccak256(abi.encode(holder, asset))] = AcquisitionSnapshot({
+            clockStart: ts,
+            observedAt: uint64(block.timestamp),
+            expiresAt: type(uint64).max,
+            sourceRef: keccak256("mock-lot"),
+            status: AcquisitionStatus.VALID
+        });
     }
 
-    function acquiredAt(address holder, address asset) external view returns (uint64) {
-        return _at[keccak256(abi.encode(holder, asset))];
+    function setBroken(address holder, address asset) external {
+        _snapshots[keccak256(abi.encode(holder, asset))] = AcquisitionSnapshot({
+            clockStart: 0,
+            observedAt: uint64(block.timestamp),
+            expiresAt: type(uint64).max,
+            sourceRef: keccak256("broken-lineage"),
+            status: AcquisitionStatus.LINEAGE_BROKEN
+        });
+    }
+
+    function acquisitionOf(address holder, address asset) external view returns (AcquisitionSnapshot memory) {
+        return _snapshots[keccak256(abi.encode(holder, asset))];
     }
 }
 
@@ -161,6 +177,16 @@ contract ElementsTest is Test {
         assertEq(m.elementId, bytes32("C-01-v1"));
         assertEq(uint256(m.category), uint256(ElementCategory.RESALE_TRANSACTION));
         assertEq(uint256(m.temporal), uint256(TemporalNature.PERIODIC));
+    }
+
+    function test_lockup_failsClosed_onBrokenLineage() public {
+        MockAcquisitionSource src = new MockAcquisitionSource();
+        Lockup l = new Lockup(address(src), 100);
+        src.setBroken(user, asset);
+
+        (bool passed, bytes32 reasonCode) = l.check(user, address(0), asset, 0, "");
+        assertFalse(passed);
+        assertEq(reasonCode, keccak256(abi.encode(uint16(0), bytes32("C-01-v1"), uint32(2))));
     }
 
     function test_surveillance_never_blocks_and_flags_over_threshold() public {

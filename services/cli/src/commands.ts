@@ -55,8 +55,61 @@ const CTX_TUPLE =
   "tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate)";
 
 const VENUE_TYPE_NAMES = ["AMM", "ORDER_BOOK", "RFQ"];
+const RECIPE_BINDING_MODE_NAMES = ["REQUIRED_BLOCKING", "PATH_OPTION", "FLAG_ONLY"];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+function bindingRecipeId(binding: any): number {
+  return Number(binding.recipeId ?? binding[0]);
+}
+
+function bindingRecipeVersion(binding: any): number {
+  return Number(binding.recipeVersion ?? binding[1]);
+}
+
+function bindingMode(binding: any): number {
+  return Number(binding.mode ?? binding[2]);
+}
+
+function bindingPathGroupId(binding: any): number {
+  return Number(binding.pathGroupId ?? binding[3]);
+}
+
+function bindingPriority(binding: any): number {
+  return Number(binding.priority ?? binding[4]);
+}
+
+function bindingRecipeIds(bindings: any[]): number[] {
+  const ids: number[] = [];
+  for (const binding of bindings) {
+    const rid = bindingRecipeId(binding);
+    if (rid !== 0 && !ids.includes(rid)) ids.push(rid);
+  }
+  return ids;
+}
+
+function bindingSummary(binding: any): string {
+  const rid = bindingRecipeId(binding);
+  const version = bindingRecipeVersion(binding);
+  const mode = bindingMode(binding);
+  const group = bindingPathGroupId(binding);
+  const priority = bindingPriority(binding);
+  return `${rid}v${version} (${RECIPE_LABELS[rid] ?? "?"}) mode=${RECIPE_BINDING_MODE_NAMES[mode] ?? mode} group=${group} priority=${priority}`;
+}
+
+function bindingJson(binding: any): Record<string, unknown> {
+  const rid = bindingRecipeId(binding);
+  const mode = bindingMode(binding);
+  return {
+    recipeId: rid,
+    recipeVersion: bindingRecipeVersion(binding),
+    recipeName: RECIPE_LABELS[rid] ?? "?",
+    mode,
+    modeName: RECIPE_BINDING_MODE_NAMES[mode] ?? "?",
+    pathGroupId: bindingPathGroupId(binding),
+    priority: bindingPriority(binding)
+  };
+}
 
 export function cmdToolkitInit(path = "corner-store.config.json"): void {
   const target = resolve(process.cwd(), path);
@@ -192,6 +245,7 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
 
   const policy = policyRegistry(a, provider);
   const manifest = await policy.manifestOf(a.rwaToken);
+  const bindings: any[] = await policy.recipeBindingsOf(a.rwaToken);
   const status = Number(manifest.status);
   const supportedEngines = Number(manifest.supportedEngines);
 
@@ -209,8 +263,25 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
   const ctx = [subject, subject, a.pool, a.quote, a.rwaToken, parseEther("1"), parseEther("1"), 0, a.pool, 0, false];
   const coder = require("ethers").AbiCoder.defaultAbiCoder();
   const elementContext = coder.encode([CTX_TUPLE], [ctx]);
+  const recipeContext = coder.encode(["uint256", CTX_TUPLE], [manifest.factsPacked, ctx]);
+  const recipeIds = bindingRecipeIds(bindings);
+  const recipeReg = recipeRegistry(a, provider);
+  const activeElementIds: string[] = [];
+  for (const rid of recipeIds) {
+    const recipeAddr = await recipeReg.recipeOf(rid);
+    if (recipeAddr === ZERO_ADDR) continue;
+    const recipe = new Contract(recipeAddr, RECIPE_ABI, provider);
+    if (!(await recipe.isApplicable(recipeContext))) continue;
+    const requiredIds: string[] = await recipe.requiredElements();
+    for (const raw of requiredIds) {
+      const id = decodeBytes32String(raw);
+      if (!activeElementIds.includes(id)) activeElementIds.push(id);
+    }
+  }
+
   const elements: Array<{id: string; label: string; passed: boolean}> = [];
-  for (const [id, label] of Object.entries(ELEMENT_LABELS)) {
+  for (const id of activeElementIds) {
+    const label = ELEMENT_LABELS[id] ?? "?";
     const elAddr = await reg.elementOf(encodeBytes32String(id));
     if (elAddr === "0x0000000000000000000000000000000000000000") {
       elements.push({id, label, passed: false});
@@ -236,8 +307,7 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
           manifest: {
             status,
             statusName: POLICY_STATUS[status] ?? "?",
-            issuanceRecipeId: Number(manifest.issuanceRecipeId),
-            recipeName: RECIPE_LABELS[Number(manifest.issuanceRecipeId)] ?? "?",
+            bindings: bindings.map(bindingJson),
             supportedEngines,
             declaredBy: manifest.declaredBy,
             approvedBy: manifest.approvedBy
@@ -261,9 +331,8 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
   console.log("");
   console.log("RWA manifest:");
   console.log(`  status           ${status} (${POLICY_STATUS[status] ?? "?"})`);
-  console.log(
-    `  issuanceRecipe   ${Number(manifest.issuanceRecipeId)} (${RECIPE_LABELS[Number(manifest.issuanceRecipeId)] ?? "?"})`
-  );
+  console.log("  recipeBindings");
+  for (const binding of bindings) console.log(`    - ${bindingSummary(binding)}`);
   console.log(`  supportedEngines 0b${supportedEngines.toString(2).padStart(3, "0")} (AMM=${!!(supportedEngines & 1)}, RFQ=${!!(supportedEngines & 4)})`);
   console.log(`  declaredBy       ${manifest.declaredBy}`);
   console.log(`  approvedBy       ${manifest.approvedBy}`);
@@ -313,9 +382,9 @@ export async function cmdOnboard(opts: GlobalOpts & {engines?: string; profile?:
 
   const m = [
     2,
-    1,
-    1,
-    binding.fundRecipeId,
+    0,
+    0,
+    0,
     0,
     mask,
     0,
@@ -326,7 +395,7 @@ export async function cmdOnboard(opts: GlobalOpts & {engines?: string; profile?:
     ZERO_ADDR
   ];
   const venueCfg = [0, a.ammAdapter, a.pool, ZERO_ADDR, 1, true]; // AMM, custody POOL
-  await logTx(await factory(a, signer).registerRWAToken(a.rwaToken, m, a.pool, venueCfg), "registerRWAToken");
+  await logTx(await factory(a, signer).registerRWAToken(a.rwaToken, m, binding.bindings, a.pool, venueCfg), "registerRWAToken");
   console.log(`Onboarded ${binding.profile} RWA ${a.rwaToken} with supportedEngines 0b${mask.toString(2).padStart(3, "0")} + AMM venue ${a.pool}`);
 }
 
@@ -351,7 +420,21 @@ export async function cmdManifest(action: string, opts: GlobalOpts & {reason?: s
       await logTx(await policy.suspendManifest(a.rwaToken, reason), "suspendManifest");
       break;
     case "resume":
-      await logTx(await policy.resumeManifest(a.rwaToken), "resumeManifest");
+      {
+        const pending = await policy.pendingManifestResumeOf(a.rwaToken);
+        const effectiveTime = Number(pending.effectiveTime);
+        if (effectiveTime === 0) {
+          await logTx(await factory(a, signer).scheduleManifestResume(a.rwaToken, reason), "scheduleManifestResume");
+          const delay = Number(await policy.MIN_MANIFEST_DELAY());
+          console.log(`  resume scheduled; run the same command again after ${delay}s timelock`);
+          return;
+        }
+        const latest = await provider.getBlock("latest");
+        if (!latest || latest.timestamp < effectiveTime) {
+          throw new CliError(`manifest resume timelock not ready; effective at unix ${effectiveTime}`);
+        }
+        await logTx(await policy.resumeManifest(a.rwaToken), "resumeManifest");
+      }
       break;
     case "retire":
       await logTx(await policy.retireManifest(a.rwaToken, reason), "retireManifest");
@@ -415,12 +498,17 @@ export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund
   const san = await elementContract(a, "A-01-v1", signer, reg);
   await logTx(await san.setBlocked(subject, false), `sanctions.setBlocked(${subject}, false)`);
 
-  // C-01 Rule 144 lockup: seed the acquisition-time source at t=1 so the (already
-  // elapsed) lockup window passes, mirroring DeployStack's investor seed.
+  // C-01 Rule 144 lockup: seed a PII-free, expiring mock TA snapshot at t=1 so
+  // the elapsed demo lockup passes. Production uses a verified provider adapter.
   const lockupAddr = await elementRegistry(a, reg).elementOf(encodeBytes32String("C-01-v1"));
   const acqAddr = await new Contract(lockupAddr, LOCKUP_ABI, reg).acquisitionSource();
   const acq = new Contract(acqAddr, ACQ_SOURCE_ABI, signer);
-  await logTx(await acq.setAcquiredAt(subject, a.rwaToken, 1), `lockup.acquisitionSource.setAcquiredAt(${subject}, rwa, 1)`);
+  const latest = await provider.getBlock("latest");
+  if (!latest) throw new CliError("cannot read latest block for acquisition snapshot expiry");
+  await logTx(
+    await acq.setSnapshot(subject, a.rwaToken, 1, latest.timestamp + 30 * 24 * 60 * 60, encodeBytes32String("CLI-DEMO-TA"), 1),
+    `lockup.acquisitionSource.setSnapshot(${subject}, rwa)`
+  );
 
   // fund the buyer with QUOTE so it can trade (MockERC20.mint is permissionless).
   const fund = parseEther(opts.fund ?? (profile === "buidl-like" ? "20000000" : "5000"));
@@ -507,7 +595,9 @@ export async function cmdBuy(
     await logTx(await quoteToken.approve(adapterForApproval, (1n << 256n) - 1n), "approve");
   }
 
-  const req = [ctx, amountOutMin, BigInt(Math.floor(Date.now() / 1000) + 3600), nonce, venueData];
+  const latest = await provider.getBlock("latest");
+  if (!latest) throw new CliError("cannot read latest block for execution deadline");
+  const req = [ctx, amountOutMin, BigInt(latest.timestamp + 3600), nonce, venueData];
   console.log(`Executing ${venue.toUpperCase()} buy: amountIn=${formatEther(amountIn)} as ${buyer}`);
   await logTx(await router(a, signer).execute(req), "execute");
 
@@ -548,7 +638,16 @@ export async function cmdRfqQuote(opts: GlobalOpts & {
     const maker = walletForAccount(Number(opts.makerAccount)).connect(provider);
 
     const service = new RFQQuoteService(
-      {chainId: DEFAULT_CHAIN_ID, verifyingContract: a.rfqAdapter as `0x${string}`, defaultTtlSeconds: ttl},
+      {
+        chainId: DEFAULT_CHAIN_ID,
+        verifyingContract: a.rfqAdapter as `0x${string}`,
+        defaultTtlSeconds: ttl,
+        now: async () => {
+          const latest = await provider.getBlock("latest");
+          if (!latest) throw new CliError("cannot read latest block for RFQ expiry");
+          return latest.timestamp;
+        }
+      },
       new WalletTypedDataSigner(maker)
     );
     signed = await service.createSignedQuote({
@@ -659,12 +758,14 @@ export async function cmdCheck(
   const ctx = [buyer, buyer, seller, a.quote, a.rwaToken, amount, amount, venueType, venueAddr, 0, false];
 
   // Active manifest's recipe ids -> requiredElements -> element addresses.
-  const manifest = await policyRegistry(a, provider).manifestOf(a.rwaToken);
+  const policy = policyRegistry(a, provider);
+  const manifest = await policy.manifestOf(a.rwaToken);
+  const bindings: any[] = await policy.recipeBindingsOf(a.rwaToken);
   const status = Number(manifest.status);
   const recipeIds: number[] = [];
-  for (const rid of [Number(manifest.issuanceRecipeId), Number(manifest.fundRecipeId)]) {
-    if (rid !== 0 && !recipeIds.includes(rid)) recipeIds.push(rid);
-  }
+  const coder = require("ethers").AbiCoder.defaultAbiCoder();
+  const elementContext = coder.encode([CTX_TUPLE], [ctx]);
+  const recipeContext = coder.encode(["uint256", CTX_TUPLE], [manifest.factsPacked, ctx]);
 
   const reg = elementRegistry(a, provider);
   const recipeReg = recipeRegistry(a, provider);
@@ -677,10 +778,18 @@ export async function cmdCheck(
     passed: boolean;
     reason?: string;
   }> = [];
-  for (const rid of recipeIds) {
+  for (const binding of bindings) {
+    const rid = bindingRecipeId(binding);
     const recipeAddr = await recipeReg.recipeOf(rid);
     if (recipeAddr === ZERO_ADDR) throw new CliError(`recipe ${rid} not registered in RecipeRegistry`);
-    const requiredIds: string[] = await new Contract(recipeAddr, RECIPE_ABI, provider).requiredElements();
+    const recipe = new Contract(recipeAddr, RECIPE_ABI, provider);
+    const actualVersion = Number(await recipe.version());
+    if (actualVersion !== bindingRecipeVersion(binding)) {
+      throw new CliError(`recipe ${rid} version mismatch: binding=${bindingRecipeVersion(binding)}, registry=${actualVersion}`);
+    }
+    if (!(await recipe.isApplicable(recipeContext))) continue;
+    recipeIds.push(rid);
+    const requiredIds: string[] = await recipe.requiredElements();
     for (const raw of requiredIds) {
       const idStr = decodeBytes32String(raw);
       if (seen.has(idStr)) continue;
@@ -693,7 +802,13 @@ export async function cmdCheck(
         continue;
       }
       try {
-        const [passed] = await new Contract(elAddr, ELEMENT_ABI, provider).check(buyer, seller, a.rwaToken, amount, "0x");
+        const [passed] = await new Contract(elAddr, ELEMENT_ABI, provider).check(
+          buyer,
+          seller,
+          a.rwaToken,
+          amount,
+          elementContext
+        );
         // The recipe-aware reason the engine would report for THIS element.
         const reason = passed ? undefined : decodeReason(encodeReason(rid, idStr, 1)).label;
         rows.push({id: idStr, label, assetSide, recipeId: rid, passed, reason});
@@ -724,9 +839,15 @@ export async function cmdCheck(
           amount: formatEther(amount),
           seller,
           manifest: {status, statusName: POLICY_STATUS[status] ?? "?"},
+          bindings: bindings.map(bindingJson),
           recipes: recipeIds.map((r) => ({id: r, name: RECIPE_LABELS[r] ?? "?"})),
           elements: rows,
-          verdict: {allowed, reasonCode: String(decision.reasonCode), reason: verdictReason}
+          verdict: {
+            allowed,
+            reasonCode: String(decision.reasonCode),
+            reason: verdictReason,
+            flagsBitmap: decision.flagsBitmap.toString()
+          }
         },
         null,
         2
@@ -739,8 +860,8 @@ export async function cmdCheck(
   console.log(`Preflight for ${buyer}`);
   console.log(`  venue=${venue}  amount=${formatEther(amount)}  seller/counterparty=${seller}`);
   console.log(
-    `  manifest status ${status} (${POLICY_STATUS[status] ?? "?"}); recipes: ${
-      recipeIds.map((r) => `${r} (${RECIPE_LABELS[r] ?? "?"})`).join(", ") || "none"
+    `  manifest status ${status} (${POLICY_STATUS[status] ?? "?"}); bindings: ${
+      bindings.map(bindingSummary).join(", ") || "none"
     }`
   );
   console.log("");
@@ -752,9 +873,9 @@ export async function cmdCheck(
   }
   console.log("");
   if (allowed) {
-    console.log("Engine verdict: ALLOWED");
+    console.log(`Engine verdict: ALLOWED  flagsBitmap=${decision.flagsBitmap.toString()}`);
   } else {
-    console.log(`Engine verdict: REJECTED  ${String(decision.reasonCode)}  -> ${verdictReason}`);
+    console.log(`Engine verdict: REJECTED  ${String(decision.reasonCode)}  -> ${verdictReason}  flagsBitmap=${decision.flagsBitmap.toString()}`);
     process.exitCode = 1;
   }
 }
@@ -790,7 +911,9 @@ export async function cmdSell(amountInArg: string, opts: GlobalOpts & {min?: str
 
   const rwaBefore = await erc20(a.rwaToken, provider).balanceOf(seller);
   const quoteBefore = await erc20(a.quote, provider).balanceOf(seller);
-  const req = [ctx, amountOutMin, BigInt(Math.floor(Date.now() / 1000) + 3600), nonce, venueData];
+  const latest = await provider.getBlock("latest");
+  if (!latest) throw new CliError("cannot read latest block for execution deadline");
+  const req = [ctx, amountOutMin, BigInt(latest.timestamp + 3600), nonce, venueData];
   console.log(`Executing AMM sell: amountIn=${formatEther(amountIn)} RWA as ${seller}`);
   await logTx(await router(a, signer).execute(req), "execute");
 
@@ -893,6 +1016,7 @@ const WATCH_EVENTS = [
   "MakerApprovalSet",
   "ManifestRegistered",
   "ManifestStatusChanged",
+  "ComplianceFlags",
   "SurveillanceFlag"
 ];
 
@@ -941,11 +1065,13 @@ function formatEvent(parsed: {name: string; args: any}): string {
     case "MakerApprovalSet":
       return `MakerApprovalSet  maker=${args.maker} approved=${args.approved}`;
     case "ManifestRegistered":
-      return `ManifestRegistered token=${args.token} issuanceRecipeId=${args.issuanceRecipeId} declaredBy=${args.declaredBy}`;
+      return `ManifestRegistered token=${args.token} bindingsHash=${args.bindingsHash} declaredBy=${args.declaredBy}`;
     case "ManifestStatusChanged": {
       const s = Number(args.status);
       return `ManifestStatusChanged token=${args.token} status=${s} (${POLICY_STATUS[s] ?? "?"}) reason=${describeReasonCode(String(args.reasonCode))}`;
     }
+    case "ComplianceFlags":
+      return `ComplianceFlags    decisionHash=${args.decisionHash} flagsBitmap=${args.flagsBitmap}`;
     case "SurveillanceFlag": {
       const el = bytes32Label(String(args.elementId));
       const elLabel = ELEMENT_LABELS[el] ? ` (${ELEMENT_LABELS[el]})` : "";
@@ -1045,7 +1171,9 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
     recovered = `<recovery failed: ${e?.shortMessage ?? e?.message ?? e}>`;
   }
 
-  const now = Math.floor(Date.now() / 1000);
+  const latest = await provider.getBlock("latest");
+  if (!latest) throw new CliError("cannot read latest block for quote expiry");
+  const now = latest.timestamp;
   const secsLeft = Number(q.expiry) - now;
   const expired = secsLeft <= 0;
 

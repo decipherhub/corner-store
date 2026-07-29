@@ -49,13 +49,32 @@ contract EmergencyPauseTest is IntegrationBase {
         assertEq(quote.balanceOf(alice), 1_000 ether, "no quote spent");
     }
 
+    function test_globalPause_blocksSwapBeforeSettlement() public {
+        operatorReg.setGlobalPaused(true, bytes32("SECURITY_INCIDENT"));
+        ExecutionRequest memory req = buildBuyRequest(alice, 50 ether, 50 ether);
+        vm.prank(alice);
+        vm.expectRevert(Errors.GlobalPaused.selector);
+        router.execute(req);
+        assertEq(rwaToken.balanceOf(alice), 0);
+        assertEq(quote.balanceOf(alice), 1_000 ether);
+    }
+
+    function test_assetPause_blocksEitherPairSide() public {
+        operatorReg.setAssetSuspended(address(rwaToken), true, bytes32("LEGAL_REQUEST"));
+        ExecutionRequest memory req = buildBuyRequest(alice, 50 ether, 50 ether);
+        vm.prank(alice);
+        vm.expectRevert(Errors.TokenOutPaused.selector);
+        router.execute(req);
+        assertEq(rwaToken.balanceOf(alice), 0);
+    }
+
     // A PROPOSED (registered but not yet operator-approved) manifest must be
     // rejected end-to-end: the engine's default-deny gate fails closed before any
     // recipe runs. Drive rwaToken back to PROPOSED via retire -> register
     // (deployStack left it ACTIVE and re-register over ACTIVE is illegal).
     function test_proposedPolicy_failsClosed() public {
         policyReg.retireManifest(address(rwaToken), bytes32("REISSUE"));
-        policyReg.registerManifest(address(rwaToken), _activeManifest(0, 0)); // PROPOSED, not approved
+        policyReg.registerManifest(address(rwaToken), _activeManifest(0, 0), _bindings(0)); // PROPOSED, not approved
 
         ExecutionRequest memory req = buildBuyRequest(alice, 50 ether, 50 ether);
         vm.prank(alice);
@@ -91,7 +110,9 @@ contract EmergencyPauseTest is IntegrationBase {
         router.execute(blocked);
         assertEq(rwaToken.balanceOf(alice), 0, "blocked while suspended");
 
-        // resume → ACTIVE again → trade settles.
+        // delayed resume → ACTIVE again → trade settles.
+        policyReg.scheduleManifestResume(address(rwaToken), bytes32("RECOVERED"));
+        vm.warp(block.timestamp + policyReg.MIN_MANIFEST_DELAY());
         policyReg.resumeManifest(address(rwaToken));
         ExecutionRequest memory ok = buildBuyRequest(alice, 50 ether, 50 ether);
         vm.prank(alice);

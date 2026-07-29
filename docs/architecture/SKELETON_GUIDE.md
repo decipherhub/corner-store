@@ -87,8 +87,9 @@
 **엔진 `evaluate` 내부** (`ComplianceEngine.sol`):
 - 양쪽 토큰 상태를 본다. 한쪽이라도 `UNKNOWN`/`SUSPENDED` → **거부(fail-closed)**.
   양쪽 모두 `UNREGULATED`여야만 passthrough. 한쪽이 `ACTIVE`면 그 토큰의 Manifest로 평가.
-- Manifest에서 적용 Recipe들(발행 + 조건부 fund)을 모은다 → 각 `isApplicable`로 거른다
-  → 필요한 Element id들을 **합집합 + 중복제거** → 각 Element `check()` → **전부 통과(AND)**.
+- Manifest의 bounded `RecipeBinding[]`를 읽고 각 `isApplicable`을 평가한다.
+  `REQUIRED_BLOCKING`은 AND, 같은 group의 `PATH_OPTION`은 OR, group 간에는 AND이며
+  `FLAG_ONLY` 실패는 `flagsBitmap`으로만 노출한다.
 - 실패 시 `reasonCode = ReasonCodes.encode(recipeId, elementId, code)`로 어떤 규제·부품이
   막았는지 인코딩.
 
@@ -97,12 +98,12 @@
 | 부분 | 상태 |
 | --- | --- |
 | 라우팅·게이트·nonce·재진입 가드 | **진짜 동작** |
-| 다중 Recipe 누적 AND, 조건부 활성화, fail-closed, union/dedup | **진짜 동작** |
+| 다중 Recipe required/path/flag 조합, 조건부 활성화, fail-closed, commit dedup | **진짜 동작** |
 | Registry 저장/조회, 권한 분리(owner/operator) | **진짜 동작** |
-| AMM adapter ↔ pool 콜백, non-custodial(잔액 0) | **진짜 동작** (MockPool 대상) |
+| AMM adapter ↔ pool 콜백, token-direction binding, non-custodial(잔액 0) | **진짜 동작** (MockPool + canonical v3 pool) |
 | ERC-3643 `isVerified`/`canTransfer`, OnchainID claim | **진짜 동작** (테스트에서 실제 T-REX 배포) |
 | Element의 법률 판정(적격투자자·제재·QP·lockup 등) | **mock** (설정 가능한 bool/주입값) |
-| Uniswap v3 실제 pool 수학 | **mock** (MockPool 1:1) |
+| Uniswap v3 실제 pool 수학 | **canonical artifact integration test** (interactive demo는 MockPool 1:1) |
 | RFQ adapter | **v1 reference 동작** (Router-only, exact-taker full-fill EIP-712 quote settlement) |
 | OrderBook adapter | **스텁** (revert) |
 | `computePoolAddress` | **스텁** (결정론적 keccak, 실제 init-code-hash 아님) |
@@ -126,10 +127,13 @@
    호출 가능(operator가 카운터 직접 못 씀 = §6 불변식). 감사 로거
    (`ComplianceLogger`/`ExecutionLogger`)는 아직 비인증 emit — production 연결 시
    `onlyOperator` 게이트 필요(주석 표시).
-4. **취득시점(Rule 144)** — `Lockup`은 `IAcquisitionSource` 주입형으로만 존재(CR-3).
-   실제 acquisition registry 미구현. 통합 스택엔 미등록(단위 테스트에서만 검증).
-5. **`coverageScope`(발행측 중복검사 skip), `reliedClaims`(의존 claim 기록),
-   `policyId`(fundRecipe 무시)** 는 구조체 필드/주석으로 자리만 있고 동작은 placeholder.
+4. **취득시점(Rule 144)** — `Lockup`은 provider-neutral `IAcquisitionSource`의
+   expiring snapshot을 읽고 missing/stale/broken lineage를 fail-closed한다.
+   `AttestedAcquisitionSource`와 mock TA fixture는 구현됐지만 실제 Securitize API,
+   amount-specific lot allocation과 production WORM은 미구현이다.
+5. **`coverageScope`(발행측 중복검사 skip), `reliedClaims`(의존 claim 기록)** 는
+   구조체 필드/주석으로 자리만 있고 동작은 placeholder. `policyId`는 현재 양쪽
+   Manifest core와 `RecipeBinding[]` hash를 포함한다.
 6. **엔진은 거래 방향(buy/sell)을 구분하지 않는다.** 항상 `ctx.buyer`를 검사한다.
    `ctx.buyer`/`ctx.seller`는 거래 방향이 아니라 **엔진 역할 라벨**(검증 대상/상대방)이다.
 7. **`VenueType` enum 순서는 load-bearing.** `ManifestCore.supportedEngines` 비트마스크가
@@ -143,8 +147,8 @@
   `ElementRegistry.registerElement(id, addr)`.
 - **새 규제(Recipe):** Element id들을 조합한 `IRecipe` 배포 →
   `RecipeRegistry.registerRecipe(id, ver, addr)`.
-- **토큰에 규제 적용:** `TokenPolicyRegistry.registerManifest(token, manifest)`로
-  Manifest에 issuance/fund recipe id, 허용 engine, facts 등을 등록.
+- **토큰에 규제 적용:** `TokenPolicyRegistry.registerManifest(token, manifest, bindings)`로
+  Manifest와 bounded RecipeBinding plan, 허용 engine, facts 등을 등록.
 - **새 venue:** `IExecutionAdapter` 구현 → `VenueRegistry.registerVenue(...)`.
 
 엔진은 전부 `elementOf`/`recipeOf`/`manifestOf`로 동적 조회하므로 하드코딩된 규칙

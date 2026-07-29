@@ -9,7 +9,13 @@ import {TokenPolicyRegistry} from "../../../src/registry/TokenPolicyRegistry.sol
 import {VenueRegistry} from "../../../src/execution/VenueRegistry.sol";
 import {ITokenPolicyRegistry} from "../../../src/interfaces/compliance/ITokenPolicyRegistry.sol";
 import {IVenueRegistry} from "../../../src/interfaces/execution/IVenueRegistry.sol";
-import {ManifestCore, PolicyStatus, VenueType} from "../../../src/types/ComplianceTypes.sol";
+import {
+    ManifestCore,
+    PolicyStatus,
+    RecipeBinding,
+    RecipeBindingMode,
+    VenueType
+} from "../../../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../../../src/types/VenueTypes.sol";
 
 contract FactoryTest is Test {
@@ -27,15 +33,19 @@ contract FactoryTest is Test {
         factory = new CornerStoreFactory(ITokenPolicyRegistry(address(tpr)), IVenueRegistry(address(vr)));
 
         // factory must own both registries to write to them
+        tpr.setOperator(address(this), true);
         tpr.transferOwnership(address(factory));
         vr.transferOwnership(address(factory));
     }
 
     function _manifest() internal view returns (ManifestCore memory m) {
         m.status = PolicyStatus.ACTIVE;
-        m.issuanceRecipeId = 506;
-        m.issuanceRecipeVersion = 1;
         m.declaredBy = address(this);
+    }
+
+    function _bindings() internal pure returns (RecipeBinding[] memory bindings) {
+        bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(506, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
     }
 
     function _venueCfg() internal view returns (VenueConfig memory c) {
@@ -47,17 +57,17 @@ contract FactoryTest is Test {
     }
 
     function test_registerRWAToken_registersManifest() public {
-        factory.registerRWAToken(rwa, _manifest(), venue, _venueCfg());
+        factory.registerRWAToken(rwa, _manifest(), _bindings(), venue, _venueCfg());
 
         ManifestCore memory stored = tpr.manifestOf(rwa);
         assertEq(uint8(stored.status), uint8(PolicyStatus.ACTIVE));
-        assertEq(stored.issuanceRecipeId, 506);
+        assertEq(tpr.recipeBindingsOf(rwa)[0].recipeId, 506);
         // registerManifest records the caller (the factory) as declaredBy.
         assertEq(stored.declaredBy, address(factory));
     }
 
     function test_registerRWAToken_registersVenue() public {
-        factory.registerRWAToken(rwa, _manifest(), venue, _venueCfg());
+        factory.registerRWAToken(rwa, _manifest(), _bindings(), venue, _venueCfg());
 
         VenueConfig memory stored = vr.venueOf(venue);
         assertEq(uint8(stored.venueType), uint8(VenueType.AMM));
@@ -69,7 +79,61 @@ contract FactoryTest is Test {
     function test_registerRWAToken_onlyOperator() public {
         vm.prank(address(0xBEEF));
         vm.expectRevert();
-        factory.registerRWAToken(rwa, _manifest(), venue, _venueCfg());
+        factory.registerRWAToken(rwa, _manifest(), _bindings(), venue, _venueCfg());
+    }
+
+    function test_scheduleManifestResume_forwardsRegistryOwnerCall() public {
+        factory.registerRWAToken(rwa, _manifest(), _bindings(), venue, _venueCfg());
+        tpr.suspendManifest(rwa, bytes32("SUSPENDED"));
+
+        factory.scheduleManifestResume(rwa, bytes32("RECOVERED"));
+
+        (uint64 effectiveTime, bytes32 reasonCode) = tpr.pendingManifestResumeOf(rwa);
+        assertEq(effectiveTime, block.timestamp + tpr.MIN_MANIFEST_DELAY());
+        assertEq(reasonCode, bytes32("RECOVERED"));
+    }
+
+    function test_scheduleManifestResume_onlyFactoryOwner() public {
+        factory.registerRWAToken(rwa, _manifest(), _bindings(), venue, _venueCfg());
+        tpr.suspendManifest(rwa, bytes32("SUSPENDED"));
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("Ownable: caller is not the owner");
+        factory.scheduleManifestResume(rwa, bytes32("RECOVERED"));
+    }
+
+    function test_scheduleManifestUpdate_forwardsRegistryOwnerCall() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        factory.registerRWAToken(rwa, initial, _bindings(), venue, _venueCfg());
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        factory.scheduleManifestUpdate(rwa, next, _bindings(), bytes32("LEGAL-UPDATE"));
+
+        (ManifestCore memory pending,, uint64 effectiveTime, bytes32 reasonCode) = tpr.pendingManifestUpdateOf(rwa);
+        assertEq(pending.fullManifestHash, next.fullManifestHash);
+        assertEq(effectiveTime, block.timestamp + tpr.MIN_MANIFEST_DELAY());
+        assertEq(reasonCode, bytes32("LEGAL-UPDATE"));
+    }
+
+    function test_cancelManifestActions_forwardsRegistryOwnerCalls() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        factory.registerRWAToken(rwa, initial, _bindings(), venue, _venueCfg());
+        tpr.suspendManifest(rwa, bytes32("SUSPENDED"));
+
+        factory.scheduleManifestResume(rwa, bytes32("RECOVERED"));
+        factory.cancelManifestResume(rwa);
+        (uint64 resumeTime,) = tpr.pendingManifestResumeOf(rwa);
+        assertEq(resumeTime, 0);
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        factory.scheduleManifestUpdate(rwa, next, _bindings(), bytes32("LEGAL-UPDATE"));
+        factory.cancelManifestUpdate(rwa);
+        (,, uint64 updateTime,) = tpr.pendingManifestUpdateOf(rwa);
+        assertEq(updateTime, 0);
     }
 
     function test_computePoolAddress_isDeterministic() public view {

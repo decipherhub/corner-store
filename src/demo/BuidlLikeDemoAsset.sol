@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.17;
 
-import {ManifestCore, PolicyStatus} from "../types/ComplianceTypes.sol";
+import {ManifestCore, PolicyStatus, RecipeBinding, RecipeBindingMode} from "../types/ComplianceTypes.sol";
 
 /// @title BuidlLikeDemoAsset
 /// @notice Giwa MVP demo profile for a local BUIDL-like ERC-3643 asset.
@@ -18,7 +18,7 @@ library BuidlLikeDemoAsset {
     string internal constant TOKEN_SYMBOL = "bBUIDL";
 
     uint16 internal constant ISSUANCE_RECIPE_ID = 1; // Reg D 506(c)
-    uint16 internal constant ISSUANCE_RECIPE_VERSION = 1;
+    uint16 internal constant ISSUANCE_RECIPE_VERSION = 2;
     uint16 internal constant FUND_RECIPE_ID = 3; // BUIDL-like ICA 3(c)(7) + minimum investment
     uint16 internal constant FUND_RECIPE_VERSION = 1;
 
@@ -33,9 +33,6 @@ library BuidlLikeDemoAsset {
 
     function manifest(uint8 supportedEngines) internal pure returns (ManifestCore memory m) {
         m.status = PolicyStatus.ACTIVE;
-        m.issuanceRecipeId = ISSUANCE_RECIPE_ID;
-        m.issuanceRecipeVersion = ISSUANCE_RECIPE_VERSION;
-        m.fundRecipeId = FUND_RECIPE_ID;
         m.supportedEngines = supportedEngines;
         m.factsPacked = FACT_FUND_APPLICABLE;
         m.fullManifestHash = keccak256(
@@ -47,5 +44,12 @@ library BuidlLikeDemoAsset {
                 MINIMUM_INVESTMENT_AMOUNT
             )
         );
+    }
+
+    function recipeBindings() internal pure returns (RecipeBinding[] memory bindings) {
+        bindings = new RecipeBinding[](2);
+        bindings[0] =
+            RecipeBinding(ISSUANCE_RECIPE_ID, ISSUANCE_RECIPE_VERSION, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[1] = RecipeBinding(FUND_RECIPE_ID, FUND_RECIPE_VERSION, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
     }
 }
