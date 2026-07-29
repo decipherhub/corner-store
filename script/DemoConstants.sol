@@ -32,7 +32,9 @@ abstract contract DemoConstants {
     // The default live profile is BUIDL-like and enforces a 5M-token minimum.
     // Keep enough fixture liquidity for all AMM/RFQ/surveillance scenarios.
     uint256 internal constant INVESTOR_QUOTE = 50_000_000 ether;
-    uint256 internal constant MAKER_RWA = 10_000_000 ether;
+    // The full runner performs one reference RFQ fill, one dashboard fill and
+    // one CLI fill; keep enough maker inventory for all three demonstrations.
+    uint256 internal constant MAKER_RWA = 20_000_000 ether;
     uint256 internal constant POOL_RWA = 50_000_000 ether;
     uint256 internal constant AMM_TRADE = 5_000_000 ether; // QUOTE in == RWA out (1:1 pool)
     uint256 internal constant RFQ_QUOTE_IN = 5_000_000 ether;
@@ -40,4 +42,5 @@ abstract contract DemoConstants {
 
     // Deployment artifact shared between the two scripts.
     string internal constant ARTIFACT_PATH = "deployments/anvil-e2e.json";
+    string internal constant MANIFEST_SNAPSHOT_PATH = "deployments/operator-manifest.json";
 }

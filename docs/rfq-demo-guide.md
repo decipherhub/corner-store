@@ -13,7 +13,9 @@ scripts/demo.sh --profile buidl-like
 
 The launcher starts Anvil, deploys the selected profile, starts the RFQ backend,
 starts the read-only Operator API and serves the dashboard. Open the printed URL
-and press Ctrl-C to stop all local services.
+and press Ctrl-C to stop all local services. The same presenter sequence and a
+button-to-endpoint map are available from the **?** button in the dashboard
+header.
 
 The command exits non-zero on failure. A successful run proves, in order:
 
@@ -39,14 +41,23 @@ Then start the existing operator dashboard in a second terminal and open
 npm run start --prefix services/operator-dashboard
 ```
 
-Select **RFQ demo**, click **Check backend**, then click **Run compliant RFQ
-trade**. The four visible stages show the mock TA profile, EIP-712 quote,
-Router policy decision and on-chain ERC-3643 balance change. Click **Revoke
-maker & retry** to show the same flow being rejected. The browser never holds
-a private key.
+Select **Trader · RFQ** and click **Check & prepare demo**. Then request a firm
+quote, select it for review, and execute the selected quote. The four visible
+stages show the mock TA profile, EIP-712 quote, Router policy decision and
+on-chain ERC-3643 balance change. The price-context panel marks the live firm
+rate returned by the backend. Its comparison curves, spread statistics and
+additional makers are presentation fixtures and are labeled accordingly; they
+are not executable quotes or an external market-data feed.
 
-If you prefer the terminal instead of the dashboard, request and settle a new
-quote with:
+Open **Security demo**, create a fresh test quote, then click **Revoke maker &
+execute**. The maker approval is changed on chain and the stored quote is
+rejected at fill time. The maker deliberately stays revoked so the UI and
+Operator event log show the real state transition. Click **Restore maker**
+before returning to normal trading. The browser never holds a private key.
+
+The dashboard performs the quote request and Router settlement itself; no CLI
+copy/paste is needed for the normal demo. If you prefer the terminal instead,
+request and settle a new quote with:
 
 ```sh
 node services/cli/dist/cli/src/index.js \

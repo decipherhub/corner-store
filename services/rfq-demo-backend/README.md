@@ -53,11 +53,25 @@ scripts/e2e-anvil.sh --profile buidl-like --mode rfq --keep
 npm run start --prefix services/operator-dashboard
 ```
 
-Open `http://127.0.0.1:8790`, select **RFQ demo**, and click **Run compliant
-RFQ trade**. The runner enables `/demo/trade` only for this local Anvil setup:
-it uses the selected local demo profile, submits through `ExecutionRouter`, and
-never sends a private key to the browser. **Revoke maker & retry** proves that
-current policy still rejects a previously signable quote.
+Open `http://127.0.0.1:8790`. **Check & prepare demo** verifies the deployment
+and restores the on-chain demo maker if a previous security run left it revoked.
+In **Trader · RFQ**, request, review and execute the exact signed quote through
+`ExecutionRouter`. In **Security demo**, create a quote while the maker is
+approved, revoke the maker, observe the Router rejection, then explicitly
+restore the maker. The private keys remain in the local backend.
+
+The local-only dashboard control endpoints are:
+
+- `GET /demo/state`: read chain id and current maker approval.
+- `POST /demo/setup`: prepare the reusable demo state and return its status.
+- `POST /demo/restore`: explicitly re-approve the demo maker.
+- `POST /demo/quote`: issue a signed quote for the canonical demo taker.
+- `POST /demo/trade`: settle or run the revoked-maker rejection scenario.
+
+The state/setup/restore/trade controls are disabled unless
+`RFQ_DEMO_ENABLE_SETTLEMENT=1` is set by the local runner. `/demo/quote` remains
+a quote-only convenience alias and cannot execute a transaction. These are
+reference-demo controls, not a production operator API.
 
 ## Configuration
 
@@ -91,6 +105,7 @@ npm test
 ```
 
 The smoke test starts an ephemeral local server, requests two quotes, verifies
-the maker signature and monotonic nonce, and rejects numeric on-chain amounts.
-The repository live runner additionally proves backend quote → CLI → protected
-Router fill and revoked-maker rejection against the selected asset profile.
+the maker signature and monotonic nonce, rejects numeric on-chain amounts, and
+confirms demo controls remain disabled outside the local runner. The live runner
+additionally proves setup → protected Router fill → persistent revoke state →
+explicit restore against the selected asset profile.

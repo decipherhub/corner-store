@@ -375,9 +375,17 @@ passing
 - `scripts/e2e-anvil.sh --mode rfq`는 AMM·lifecycle·surveillance 설명을 건너뛰고
   mock TA profile → Toolkit/CLI → backend-signed quote → protected RFQ settlement
   → revoked-maker rejection만 보여주는 짧은 MVP 시연 경로를 제공한다.
-- 기존 Operator dashboard는 `Operator view`(read-only snapshot)와 `RFQ demo`
-  (local quote request/download/CLI settlement handoff) 모드를 제공하며, browser에
-  private key나 direct transaction endpoint를 추가하지 않는다.
+- Operator dashboard는 Trader, Security demo와 read-only Operator view를
+  제공한다. Trader는 local backend에서 exact signed quote를 요청·검토한 뒤 protected
+  Router settlement를 실행하고, Security demo는 on-chain maker revoke 상태를
+  명시적 restore 전까지 유지해 현재 정책 enforcement를 가시화한다. 브라우저에는
+  private key가 전달되지 않는다.
+- Trader의 live firm rate는 `/demo/quote` 금액에서 계산한다. 비교 maker, 가격 곡선,
+  spread와 활동 통계는 multi-maker/market-data API가 생기기 전까지 명시적으로
+  `Demo fixture data`와 `Preview only`로 표시해 실제 실행 가능 quote와 구분한다.
+- 헤더의 **?** presenter guide가 정상 거래, maker-revocation 보안 시나리오,
+  live/fixture 경계와 각 버튼의 실제 backend/Operator API 연결을 대시보드 안에서
+  설명한다.
 - backend는 pricing, signing과 nonce 발급만 담당하며 compliance 최종 판단을 하지 않는다.
 - production pricing, signer custody, persistent nonce, inventory/risk control과 hosted operation은 명시적으로 범위 밖이다.
 
@@ -788,3 +796,30 @@ passing
 - 완료 계획: `docs/exec-plans/completed/AMM-001-real-uniswap-v3-e2e.md`
 - vendored Solidity source를 제품 `src/`로 복사하지 않는다.
 - production fee-tier 승인, LP 운영 정책과 unified deploy CLI는 별도 후속 범위다.
+
+## OPS-003 — Operator Deployment and Manifest Snapshot
+
+### Behavior
+
+- read-only Operator Dashboard가 배포 artifact의 execution/control-plane 주소를 표시한다.
+- Demo onboarding 직후 Manifest status, version과 RecipeBinding 수를 snapshot으로 저장한다.
+- Operator API가 snapshot을 `/api/v1/manifest`로 제공하고 Dashboard가 이를 표시한다.
+- Dashboard, CLI와 RFQ backend가 연결된 local BUIDL-like walkthrough를 한 번에 실행할 수 있다.
+
+### Verification
+
+- `npm test --prefix services/operator-api`
+- `npm test --prefix services/operator-dashboard`
+- `npm test --prefix services/cli`
+- `forge build --offline --jobs 1`
+- `scripts/e2e-anvil.sh --profile buidl-like`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- snapshot은 demo/reference checkpoint이며 production indexer나 live RPC provider가 아니다.
+- production Manifest lifecycle mutation과 governance action은 별도 범위다.

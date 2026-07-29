@@ -130,9 +130,22 @@ contract DemoScenarios is Script, DemoConstants {
             && stored.factsPacked == expected.factsPacked && stored.fullManifestHash == expected.fullManifestHash;
         bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
             && stored.approvedBy == address(factory) && profileOk;
+        _writeManifestSnapshot(stored, storedBindings);
         console2.log("    evidence: ACTIVE selected asset profile, approved by factory");
         console2.log("      status(2=ACTIVE) :", uint256(stored.status));
         _record(1, ok);
+    }
+
+    function _writeManifestSnapshot(ManifestCore memory manifest, RecipeBinding[] memory bindings) internal {
+        string memory k = "corner-store-manifest";
+        vm.serializeAddress(k, "token", address(rwa));
+        vm.serializeUint(k, "status", uint8(manifest.status));
+        vm.serializeUint(k, "version", policyReg.manifestVersionOf(address(rwa)));
+        vm.serializeBytes32(k, "fullManifestHash", manifest.fullManifestHash);
+        vm.serializeBytes32(k, "historyHash", policyReg.manifestHistoryHashOf(address(rwa)));
+        vm.serializeUint(k, "recipeBindingCount", bindings.length);
+        string memory json = vm.serializeUint(k, "supportedEngines", manifest.supportedEngines);
+        vm.writeJson(json, MANIFEST_SNAPSHOT_PATH);
     }
 
     // ---------------------------------------------------------------------
