@@ -54,6 +54,15 @@ echo "==> Running RFQ demo backend build + smoke test"
   npm test
 )
 
+echo "==> Running public-testnet RFQ demo build + smoke test"
+(
+  cd services/testnet-rfq-demo
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
 echo "==> Running Toolkit config build + smoke test"
 (
   cd services/toolkit

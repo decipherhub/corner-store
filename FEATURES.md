@@ -157,6 +157,44 @@ passing
 - public-testnet artifact를 소비하는 interactive RFQ demo runtime은 기존
   Anvil backend의 chain-31337 경계를 완화하지 않고 별도 feature로 구현한다.
 
+## DEMO-016 — Artifact-bound Public Testnet RFQ Demo
+
+### Behavior
+
+- 기존 Anvil showcase/backend를 변경하지 않고 검증된
+  `deployments/public/*.json`만 source of truth로 사용하는 별도 runtime을
+  제공한다.
+- 시작 시 artifact chain, contract bytecode, Manifest, Maker와 inventory를
+  검증하고 다른 RPC나 Maker key를 fail-closed로 거부한다.
+- backend는 RFQ SDK를 사용해 artifact Maker의 firm quote만 서명하며 investor
+  private key나 operator 권한을 보유하지 않는다.
+- 사용자는 브라우저 지갑으로 input token allowance와 최종 Router transaction을
+  직접 서명한다. quote 검토값과 Router `venueData`는 동일 payload를 사용하고,
+  체결 시 ComplianceEngine이 최신 상태를 다시 평가한다.
+- UI는 deployment lineage/주소, network, token metadata, Manifest/Maker readiness,
+  지갑 balance/allowance/QP 상태, pre-check, quote, transaction hash와 block을
+  표시한다. host, port, RPC, explorer, artifact, rate와 signer는 runtime input이다.
+
+### Verification
+
+- `npm test --prefix services/testnet-rfq-demo`
+- `bash -n scripts/run-testnet-rfq-demo.sh`
+- isolated Anvil에서 public artifact deployment + Maker/investor approvals
+- `/api/state`, `/api/wallet`, `/api/precheck`, `/api/quote`
+- external investor signer의 Router static call + broadcast settlement
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- public testnet Maker key는 disposable fixture key이며 production custody나 HSM
+  signer가 아니다.
+- local Anvil security showcase는 계속 `scripts/showcase.sh`를 사용한다.
+
 ## DEPLOY-001 — Production Deployment Workflow
 
 ### Behavior

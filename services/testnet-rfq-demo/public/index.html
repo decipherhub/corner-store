@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Corner Store · Public Testnet RFQ</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header>
+      <div>
+        <span class="eyebrow">CORNER STORE</span>
+        <h1>Public Testnet RFQ</h1>
+      </div>
+      <button id="connect">Connect wallet</button>
+    </header>
+
+    <div class="notice">
+      <strong>Reference environment</strong>
+      Mock TA claims and test assets are used. Your wallet signs approvals and Router settlement; the server only signs the Maker quote.
+    </div>
+
+    <main>
+      <section class="hero-grid">
+        <article>
+          <span class="label">Verified deployment</span>
+          <h2 id="deployment">Loading…</h2>
+          <div id="network" class="muted"></div>
+        </article>
+        <article>
+          <span class="label">Runtime readiness</span>
+          <div id="readiness" class="status-list"></div>
+        </article>
+        <article>
+          <span class="label">Connected wallet</span>
+          <h2 id="wallet">Not connected</h2>
+          <div id="wallet-state" class="muted">Connect one of the deployed test participants.</div>
+        </article>
+      </section>
+
+      <section class="trade-layout">
+        <article class="trade-card">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">01 · INTENT</span>
+              <h2>Create RFQ</h2>
+            </div>
+            <span id="rate" class="pill">—</span>
+          </div>
+
+          <div class="segmented">
+            <button class="side active" data-side="buy">Buy RWA</button>
+            <button class="side" data-side="sell">Sell RWA</button>
+          </div>
+
+          <label>Amount to pay
+            <div class="amount-field">
+              <input id="amount" type="number" min="0" step="any" placeholder="5000000">
+              <span id="input-symbol">—</span>
+            </div>
+          </label>
+          <div class="receive">Estimated receive <strong id="estimated">—</strong></div>
+
+          <button id="precheck" class="secondary" disabled>Run compliance pre-check</button>
+          <div id="precheck-result" class="result neutral">Connect wallet to begin.</div>
+          <button id="request" disabled>Request signed quote</button>
+        </article>
+
+        <article class="trade-card">
+          <div class="section-title">
+            <div>
+              <span class="eyebrow">02 · REVIEW</span>
+              <h2>Firm quote</h2>
+            </div>
+            <span id="quote-status" class="pill">None</span>
+          </div>
+          <dl id="quote-details" class="details">
+            <div><dt>Maker</dt><dd>—</dd></div>
+            <div><dt>Pay</dt><dd>—</dd></div>
+            <div><dt>Receive</dt><dd>—</dd></div>
+            <div><dt>Expiry</dt><dd>—</dd></div>
+            <div><dt>Nonce</dt><dd>—</dd></div>
+          </dl>
+          <p class="muted">The exact reviewed quote is encoded into Router venueData. Compliance is evaluated again at settlement time.</p>
+          <button id="approve" class="secondary" disabled>Approve input token</button>
+          <button id="execute" disabled>Execute through Router</button>
+        </article>
+      </section>
+
+      <section class="evidence">
+        <div class="section-title">
+          <div>
+            <span class="eyebrow">03 · EVIDENCE</span>
+            <h2>Execution trace</h2>
+          </div>
+          <button id="refresh" class="ghost">Refresh state</button>
+        </div>
+        <ol id="trace">
+          <li><span>Deployment artifact</span><strong>Loading</strong></li>
+        </ol>
+      </section>
+
+      <details>
+        <summary>Deployment contracts and participant wallets</summary>
+        <div id="contracts" class="address-grid"></div>
+      </details>
+    </main>
+
+    <script src="/vendor/ethers.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
