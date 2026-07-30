@@ -142,6 +142,14 @@ Operator API/dashboard smoke, vendored deploy-v3 test와 whitespace check다. Gi
 Actions도 동일한 스크립트를 실행한다. Node 서비스는 lockfile 기반 `npm ci`를
 사용하고, vendored deploy-v3는 `yarn.lock` 기반 설치 후 테스트한다.
 
+RFQ SDK smoke는 reference와 custom pricing/risk/signer/nonce 세트에 동일
+conformance contract를 적용한다. 이 suite는 capability, base-unit quote,
+typed-data binding, expiry, module 호출 순서, risk fail-closed, signature shape와
+maker-scoped monotonic nonce를 검사한다. Toolkit smoke는 두 scaffold mode,
+overwrite 거부, environment-name-only manifest와 secret-free `.env.example`을
+검증한다. Fresh directory integration check는 vendored SDK에 prebuilt `dist`가
+없는 상태에서 두 scaffold의 `npm install && npm test`를 실행한다.
+
 ## Manual Verification
 
 문서-only 변경은 다음을 추가 확인한다.

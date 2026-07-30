@@ -10,6 +10,7 @@ import {createCheckpoint, writeCheckpoint} from "../../toolkit/src/checkpoint";
 import {createGovernanceProposal} from "../../toolkit/src/proposal";
 import {createDeploymentPlan} from "../../toolkit/src/deploy";
 import {toSafeTransactionDraft} from "../../toolkit/src/multisig";
+import {scaffoldRFQIntegration} from "../../toolkit/src/scaffold";
 
 import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
 import {
@@ -221,6 +222,27 @@ export function cmdToolkitTest(): void {
   const repoRoot = findRepoRoot(process.cwd());
   if (!repoRoot) throw new CliError("repository root not found; run Toolkit test from the Corner Store repository");
   execFileSync("scripts/check.sh", [], {cwd: repoRoot, stdio: "inherit"});
+}
+
+export function cmdToolkitScaffoldRFQ(
+  target: string,
+  opts: {mode: string; docker?: boolean; sdk?: string}
+): void {
+  if (opts.mode !== "reference-service" && opts.mode !== "existing-backend") {
+    throw new CliError('--mode must be "reference-service" or "existing-backend"');
+  }
+  try {
+    const repoRoot = findRepoRoot(process.cwd()) ?? findRepoRoot(__dirname);
+    const result = scaffoldRFQIntegration(target, {
+      mode: opts.mode,
+      dockerCompose: opts.docker === true,
+      sdkDependency: opts.sdk,
+      sdkSourceRoot: opts.sdk ? undefined : repoRoot ? resolve(repoRoot, "services/rfq") : undefined
+    });
+    console.log(JSON.stringify(result, null, 2));
+  } catch (err: any) {
+    throw new CliError(`cannot scaffold RFQ integration: ${err.message}`);
+  }
 }
 
 function subjectAddress(opts: GlobalOpts, positional: string | undefined, fallbackAccount: number): string {

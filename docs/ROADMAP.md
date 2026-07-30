@@ -27,6 +27,8 @@
 - versioned Toolkit config, validation/simulation, deploy/test/onboard/checkpoint와
   multisig proposal handoff
 - Element/Recipe/Adapter/provider template metadata와 required-input validation
+- versioned RFQ pricing/risk/signer/nonce capability contract, shared conformance
+  suite와 reference/existing-backend scaffold
 - read-only Operator API, finality-aware/file-backed event index와 safe
   multisig-oriented dashboard
 - central global/asset/venue pause enforcement와 delayed unpause, versioned
@@ -320,6 +322,10 @@ SDK와 reference DEX를 반복 배포하고 Manifest/권한 상태를 검증 가
 Status: reference/demo Toolkit, checkpoint/proposal handoff, Operator API/indexer,
 dashboard, metrics와 incident runbook은 구현됨. production hosting, key custody,
 실제 multisig provider와 chain별 recovery 정책은 후속 작업이다.
+
+RFQ integration Toolkit은 core SDK와 reference app을 분리하고 선택형 Compose
+export를 제공한다. production module의 운영 품질과 secret custody는 integrator
+책임이며 conformance 통과만으로 인증되지 않는다.
 
 ### Deliverables
 

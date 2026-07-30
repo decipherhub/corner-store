@@ -20,9 +20,9 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `src/` | 제품 Solidity 컨트랙트: Compliance Core, Execution Integration Kit, reference adapters |
 | `test/` | Foundry 단위·통합 테스트 |
 | `docs/` | 제품 명세, 아키텍처, 로드맵과 Harness 문서 |
-| `services/rfq/` | RFQ v1 quote signer reference service |
+| `services/rfq/` | RFQ quote/signing SDK, versioned module contracts와 conformance suite |
 | `services/rfq-demo-backend/` | RFQ SDK를 사용하는 local Anvil 전용 demo application |
-| `services/toolkit/` | versioned Toolkit config schema와 공통 validation primitives |
+| `services/toolkit/` | versioned deployment/integration schema, validation과 scaffold generator |
 | `services/operator-api/` | private-key 없는 read-only operator snapshot/event API |
 | `services/operator-dashboard/` | Operator API를 소비하는 read-only snapshot/proposal review 화면 |
 | `services/compliance-data/` | provider-neutral TA lot, person-group state와 reject/surveillance audit SDK |
@@ -128,6 +128,8 @@ Adapter/configuration의 의존 방향이 드러나게 구성한다.
 - Router/venue registry/selector와 공통 adapter interface는 `src/execution`에 둔다.
 - 구체 reference venue adapter는 `src/execution/adapters/<venue>/`에 둔다.
 - RFQ offchain quote signer reference는 `services/rfq`에 둔다.
+- RFQ module 의미와 conformance는 `services/rfq`, integrator가 선택한 module
+  binding/scaffold는 `services/toolkit`, 명령 rendering은 `services/cli`에 둔다.
 - 사용자 관점의 local RFQ demo API는 `services/rfq-demo-backend`에 두고 SDK와 분리한다.
 - production dealer, custody, matching, pricing engine은 별도 decision/feature 없이
   reference adapter 내부에 섞지 않는다.

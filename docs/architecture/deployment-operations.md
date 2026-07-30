@@ -140,6 +140,13 @@ orchestrator다. 기본 실행은 dry-run이며 `--broadcast`가 없으면 RPC m
 하지 않는다. 이 경계는 production signer custody, confirmation/finality 정책과
 ownership handoff를 reference demo와 분리한다.
 
+RFQ backend 통합은 별도 schema-v1 integration manifest로 관리한다. manifest는
+reference service 또는 existing-backend mode와 pricing/risk/signer/nonce module
+ID, 필요한 environment variable **이름**만 기록한다. secret 값은 기록하지 않는다.
+`toolkit-scaffold-rfq`는 이 계약에서 source/config와 선택형 Docker Compose를
+생성하며 기존 디렉터리를 덮어쓰지 않는다. Docker는 reference export일 뿐 core
+SDK나 RFQ runtime의 필수 경계가 아니다.
+
 Wave-2 illustrative elements는 기본 demo 배포의 컴파일 그래프와 실행 범위를
 불필요하게 키우지 않도록 `tools/deploy-wave2/DeployWave2Elements.s.sol`에서 opt-in으로 배포한다.
 이 script는 `ELEMENT_REGISTRY`, `COMPLIANCE_ENGINE`, `IDENTITY_ELEMENT`,

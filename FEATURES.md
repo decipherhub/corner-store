@@ -1121,3 +1121,35 @@ passing
 
 - case와 evidence는 local Anvil 운영 워크스페이스다. production의 영속 case store,
   인증, 감사 로그 서명과 외부 indexer를 대신하지 않는다.
+
+## SDK-001 — Modular Integration and Deployment Toolkit
+
+### Behavior
+
+- integrator가 Corner Store core, RFQ SDK, reference application을 구분해 필요한
+  모듈만 선택할 수 있다.
+- RFQ pricing, inventory/risk, signer와 nonce persistence는 versioned capability
+  contract 뒤에서 교체할 수 있다.
+- CLI가 reference RFQ service 또는 기존 backend 연결 예제를 secret 없이
+  scaffold한다.
+- Docker Compose는 필수 runtime이 아니라 선택 가능한 reference deployment
+  output으로만 생성한다.
+- reference 및 custom module이 같은 conformance suite를 통과한다.
+
+### Verification
+
+- `cd services/rfq && npm test`
+- `cd services/toolkit && npm test`
+- `cd services/cli && npm test`
+- generated scaffold build/smoke
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- completed plan: `docs/exec-plans/completed/SDK-001-modular-integration-toolkit.md`
+- hosted dealer, custody, production pricing/inventory와 Kubernetes는 범위 밖이다.

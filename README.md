@@ -171,6 +171,22 @@ node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
 See [`services/rfq-demo-backend/README.md`](./services/rfq-demo-backend/README.md)
 for the complete local flow and production replacement boundaries.
 
+### Modular Integration Scaffold
+
+The Toolkit can generate either a minimal RFQ reference service or a thin
+composition function for an existing backend. Pricing, risk, signer and nonce
+storage remain replaceable modules, and Docker Compose is optional.
+
+```shell
+cd services/cli
+npm test
+node dist/cli/src/index.js toolkit-scaffold-rfq ../../my-rfq \
+  --mode existing-backend
+```
+
+See [`docs/sdk-integration.md`](./docs/sdk-integration.md) for package boundaries,
+module capabilities, generated files and the common conformance suite.
+
 ### Compliance Data SDK
 
 `services/compliance-data` implements the provider-neutral ADR-008 foundation:
