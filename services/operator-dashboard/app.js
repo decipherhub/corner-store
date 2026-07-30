@@ -684,7 +684,7 @@ async function saveClaim(button) {
     const updated = await post("/demo/admin/claim", {walletId: button.dataset.wallet, claim});
     setStatus(
       "adminUserStatus",
-      `${updated.label}: 입력 claim을 기록했고 ICA 투자자 판정은 ${updated.qualifiedPurchaser ? "거래 허용" : `차단 (${updated.eligibilityReason})`}입니다.`,
+      `${updated.label}: 입력 claim을 온체인에 기록했습니다 · Block ${updated.transaction.blockNumber} · ${shortAddress(updated.transaction.hash)} · ICA 판정 ${updated.qualifiedPurchaser ? "거래 허용" : `차단 (${updated.eligibilityReason})`}`,
       updated.qualifiedPurchaser ? "good" : "bad"
     );
     await refreshAdmin();

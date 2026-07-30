@@ -42,7 +42,8 @@ for (const marker of [
   "defaultQuoteTtlSeconds", "formatInputBaseUnits", "coveredCompanyMatchesFund"
   , "beginNewRfq", '$("executeQuote").disabled = false', "formatRatio", "marketPrice",
   "session.rfqs.unshift", "selectRfqRecord", "activeRfqCount",
-  "qpBasisHelp", "개인 투자자", "Rule 3c-5의 KE 예외 경로", "renderMarketChart",
+  "qpBasisHelp", "개인 투자자", "Rule 3c-5의 KE 예외 경로", "updated.transaction.blockNumber",
+  "updated.transaction.hash", "renderMarketChart",
   "marketHistory.fills", "suggestedTradeAmounts", "applySuggestedAmount", "visibleRfqRecords",
   "lastImpactBps", "fill-point", "<title>",
   "fill-ticket", "displayOrder", "amountRwa", "renderRfqEstimate", "result.amountOut"

@@ -398,7 +398,7 @@ if [[ "$ASSET_PROFILE" == "buidl-like" ]]; then
   ADMIN_ELIGIBLE=$(curl -fsS -X POST "${BACKEND_BASE}/demo/admin/claim" \
     -H "content-type: application/json" \
     -d "{\"walletId\":\"${INELIGIBLE_ID}\",\"claim\":{\"basis\":\"NATURAL\",\"signatureValid\":true,\"issuerTrusted\":true,\"lookThroughStatus\":\"NONE\",\"coveredCompanyMatchesFund\":false}}")
-  node -e 'const value=JSON.parse(process.argv[1]); if (!value.qualifiedPurchaser) { console.error(value); process.exit(1); }' "$ADMIN_ELIGIBLE"
+  node -e 'const value=JSON.parse(process.argv[1]); if (!value.qualifiedPurchaser || !value.transaction?.hash || value.transaction.status !== 1 || !Number.isSafeInteger(value.transaction.blockNumber) || value.transaction.blockNumber <= 0) { console.error(value); process.exit(1); } console.log(`    PASS: Admin claim update mined in block ${value.transaction.blockNumber}`);' "$ADMIN_ELIGIBLE"
   ADMIN_RESTORED=$(curl -fsS -X POST "${BACKEND_BASE}/demo/admin/claim" \
     -H "content-type: application/json" \
     -d "{\"walletId\":\"${INELIGIBLE_ID}\",\"claim\":{\"basis\":\"NONE\",\"signatureValid\":false,\"issuerTrusted\":false,\"lookThroughStatus\":\"NONE\",\"coveredCompanyMatchesFund\":false}}")

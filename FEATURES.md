@@ -26,6 +26,8 @@
   만료되고 다른 적격 투자자는 계속 거래할 수 있어야 한다.
 - Maker 화면은 다중 Maker 관리 기능으로 오해되지 않도록, 현재 주입된 단일
   Maker의 승인 철회 후 기존 서명 quote가 거부되는 보안 시연으로 표시한다.
+- Admin의 QP 근거·look-through 기록은 operator 트랜잭션 receipt를 기다린 뒤
+  block number와 transaction hash를 화면에 표시한다.
 - mock pricing impact는 fill 횟수 고정값이 아니라 실제 체결 RWA 수량에
   비례하고 scenario cap을 적용한다.
 - 사용자 차트는 전체 기간 하나만 제공하며, fill point의 방향·정확한 체결가·

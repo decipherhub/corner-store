@@ -98,6 +98,12 @@ export interface DemoWalletState {
   qpClaim: QpClaimState;
 }
 
+export interface DemoTransactionEvidence {
+  hash: string;
+  blockNumber: number;
+  status: 1;
+}
+
 export interface DemoPrecheckResult {
   allowed: boolean;
   wallet: DemoWalletState;
@@ -357,11 +363,14 @@ export class DemoSettlementService {
     });
   }
 
-  async setUserClaim(walletId: DemoWalletId, claim: QpClaimInput): Promise<DemoWalletState> {
+  async setUserClaim(
+    walletId: DemoWalletId,
+    claim: QpClaimInput
+  ): Promise<DemoWalletState & {transaction: DemoTransactionEvidence}> {
     return this.enqueue(async () => {
       const entry = this.walletById(walletId);
-      await this.setWalletClaim(entry, claim);
-      return this.walletState(entry);
+      const transaction = await this.setWalletClaim(entry, claim);
+      return {...await this.walletState(entry), transaction};
     });
   }
 
@@ -859,7 +868,11 @@ export class DemoSettlementService {
     });
   }
 
-  private async setWalletClaim(entry: WalletEntry, claim: QpClaimInput, verifiedAt?: number): Promise<void> {
+  private async setWalletClaim(
+    entry: WalletEntry,
+    claim: QpClaimInput,
+    verifiedAt?: number
+  ): Promise<DemoTransactionEvidence> {
     const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.operator);
     const latest = await this.latestBlock();
     const encoded = [
@@ -887,6 +900,7 @@ export class DemoSettlementService {
         verifiedAt: String(claim.basis === "NONE" ? 0 : (verifiedAt ?? latest.timestamp))
       }
     });
+    return {...tx, status: 1};
   }
 
   private fundKey(): string {
