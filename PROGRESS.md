@@ -15,6 +15,11 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DEMO-014 — RFQ Counter-Amount Preview`: RFQ 생성 화면에서 매수·매도 방향별
+  지불 자산, backend pre-check가 계산한 반대 페어 예상 수령량과 현재 단가를
+  함께 표시한다. 입력이 바뀌면 이전 값을 지우고 최신 `amountOut` 응답으로만
+  갱신하므로 고정 가격이나 임의 UI 계산을 사용하지 않는다. Operator Dashboard
+  smoke와 `git diff --check`를 통과했다.
 - `DEMO-013 — Deployment-to-DEX Showcase Handoff`: production script와 local
   reference stack이 온체인 helper를 별도로 배포하지 않는
   `ProductionCoreDeployer.deployCore()` 구현을 공유한다. versioned showcase
