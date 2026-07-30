@@ -98,6 +98,18 @@ function quoteRate(quote) {
     : BigInt(quote.amountIn) * (10n ** BigInt(settlement.decimals));
   return `${formatRatio(numerator, denominator)} ${settlement.symbol} / ${asset.symbol}`;
 }
+function renderRfqEstimate(result) {
+  if (!chainState) return;
+  const input = tradeSide === "buy" ? chainState.presentation.quoteAsset : chainState.presentation.asset;
+  const output = tradeSide === "buy" ? chainState.presentation.asset : chainState.presentation.quoteAsset;
+  $("estimatePay").textContent = result
+    ? `${formatBaseUnits(result.amountIn, input.decimals)} ${input.symbol}`
+    : "—";
+  $("estimateReceive").textContent = result
+    ? `${formatBaseUnits(result.amountOut, output.decimals)} ${output.symbol}`
+    : "—";
+  $("referencePrice").textContent = result ? quoteRate(result) : referencePrice();
+}
 function setStatus(id, text, kind = "") { $(id).textContent = text; $(id).className = `inline-status ${kind}`; }
 function addActivity(title, detail) {
   session.activities.unshift({title, detail, time: new Date()});
@@ -156,7 +168,7 @@ function configurePresentation() {
   $("assetName").textContent = asset.name; $("assetSymbol").textContent = asset.symbol;
   $("portfolioAssetName").textContent = asset.name;
   $("portfolioQuoteName").textContent = chainState.presentation.quoteAsset.name;
-  $("referencePrice").textContent = referencePrice();
+  renderRfqEstimate(null);
   $("assetReferencePrice").textContent = `${referencePrice()} · ${chainState.presentation.execution.pricing.provider}`;
   $("portfolioReferencePrice").textContent = `${referencePrice()} · ${chainState.presentation.execution.pricing.provider}`;
   $("minimumHelp").textContent = `최소 ${minimum} ${asset.symbol} · 현재 가격 기준 ${chainState.suggestedTradeAmounts.bufferBps} bps 여유분 자동 반영`;
@@ -270,9 +282,11 @@ function updateSidePresentation() {
   $("amountLabel").textContent = tradeSide === "buy" ? "결제 금액" : "매도 수량";
   $("amountUnit").textContent = tradeSide === "buy" ? quote.symbol : asset.symbol;
   $("requestQuote").textContent = tradeSide === "buy" ? "매수 Quote 요청" : "매도 Quote 요청";
+  renderRfqEstimate(null);
 }
 async function setTradeSide(side) {
   tradeSide = side;
+  precheck = null;
   live = null;
   quoteConsumed = false;
   session.rfqId = null;
@@ -338,6 +352,7 @@ async function runPrecheck() {
   try {
     const amountIn = baseAmount($("amount").value.trim());
     precheck = await post("/demo/precheck", {taker: currentProfile.address, amountIn, side: tradeSide});
+    renderRfqEstimate(precheck);
     $("precheckRows").innerHTML = precheckHtml(precheck);
     $("precheckVerdict").textContent = precheck.allowed ? "예상 결과: 체결 가능" : `예상 결과: 체결 불가 · ${precheck.verdict.reason || "policy rejected"}`;
     $("precheckCard").classList.toggle("blocked", !precheck.allowed);
@@ -352,7 +367,7 @@ async function runPrecheck() {
     $("complianceStatus").classList.toggle("blocked", !precheck.allowed);
     return precheck;
   } catch (error) {
-    precheck = null; $("requestQuote").disabled = true;
+    precheck = null; $("requestQuote").disabled = true; renderRfqEstimate(null);
     $("precheckRows").innerHTML = `<div class="fail"><span>✕ 검사 실패</span><strong>${escapeHtml(error.message)}</strong></div>`;
     return {allowed: false, verdict: {reason: error.message}};
   }
@@ -875,7 +890,7 @@ $("rangeAll").onclick = () => setMarketRange("all");
 $("newRfq").onclick = beginNewRfq; $("newRfqFromList").onclick = beginNewRfq; $("portfolioRfq").onclick = beginNewRfq;
 $("setupDemo").onclick = setupDemo; $("connect").onclick = check; $("rfqForm").onsubmit = requestQuote; $("proveCompliance").onclick = proveCompliance;
 $("buySide").onclick = () => setTradeSide("buy"); $("sellSide").onclick = () => setTradeSide("sell");
-$("amount").oninput = () => { clearTimeout(window.precheckTimer); window.precheckTimer = setTimeout(runPrecheck, 250); };
+$("amount").oninput = () => { renderRfqEstimate(null); clearTimeout(window.precheckTimer); window.precheckTimer = setTimeout(runPrecheck, 250); };
 $("executeQuote").onclick = execute; $("closeConfirm").onclick = $("cancelConfirm").onclick = () => $("confirmBackdrop").classList.add("hidden");
 $("adminRefresh").onclick = refreshAdmin; $("refresh").onclick = refreshHistory; $("revokeMaker").onclick = () => setMaker(false); $("restoreMaker").onclick = () => setMaker(true);
 $("prepareTemporal").onclick = prepareTemporal; $("advanceTemporal").onclick = advanceTemporal;

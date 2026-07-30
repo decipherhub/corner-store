@@ -89,7 +89,11 @@
               <label id="amountLabel" for="amount">결제 금액</label><div class="amount-field"><span id="amountUnit">qUSD</span><input id="amount" value="" inputmode="decimal"></div>
               <p id="minimumHelp" class="field-help">주입된 자산 정책을 불러오는 중…</p>
               <label for="ttl">견적 유효시간</label><select id="ttl"><option value="">scenario 기본값 불러오는 중…</option></select>
-              <div class="estimate"><span>참고가격 <i>mock pricing</i></span><strong id="referencePrice">—</strong></div>
+              <div class="estimate" aria-label="RFQ 예상 교환 수량">
+                <div><span>지불 수량</span><strong id="estimatePay">—</strong></div>
+                <div><span>예상 수령량 <i>firm quote 전 indicative</i></span><strong id="estimateReceive">—</strong></div>
+                <div><span>예상 단가 <i>현재 mock pricing</i></span><strong id="referencePrice">—</strong></div>
+              </div>
               <div id="precheckCard" class="precheck-card"><strong>Compliance Pre-check</strong><div id="precheckRows">검사 중…</div><b id="precheckVerdict">예상 결과 확인 중</b></div>
               <button id="requestQuote" type="submit" class="primary full large" disabled>Request Quote</button>
               <button id="proveCompliance" type="button" class="danger full hidden">최종 온체인 거부 시연</button>

@@ -9,6 +9,28 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DEMO-014 — RFQ Counter-Amount Preview
+
+### Behavior
+
+- RFQ 생성 화면이 사용자가 입력한 지불 수량과 backend pre-check가 계산한
+  반대 페어의 예상 수령량을 함께 표시한다.
+- 매수는 qUSD 지불 → BUIDL-like 수령, 매도는 BUIDL-like 지불 → qUSD 수령으로
+  현재 선택 방향에 맞춰 단위와 자산을 전환한다.
+- 예상 단가는 하드코딩하지 않고 현재 mock pricing과 pre-check의
+  `amountIn`/`amountOut`으로 계산한다.
+- 입력 변경 중에는 이전 예상치를 즉시 지우고 최신 pre-check 응답 이후에만
+  다시 표시한다.
+
+### Verification
+
+- `npm test --prefix services/operator-dashboard`
+- `git diff --check`
+
+### State
+
+passing
+
 ## DEMO-013 — Deployment-to-DEX Showcase Handoff
 
 ### Behavior

@@ -17,7 +17,7 @@ for (const marker of [
   'id="adminEnforcementView"', 'id="caseType"', 'id="caseWallet"', 'id="caseCreate"',
   'id="casePrepare"', 'id="caseQuote"', 'id="caseMutate"', 'id="caseExecute"', 'id="caseRestore"',
   'id="caseTimeline"', 'id="caseResult"', "Element", "ExecutionRouter", "Adapter 직접 호출",
-  "Compliance Pre-check", "참고가격", "최종 온체인 거부 시연", 'id="prepareTemporal"', 'id="advanceTemporal"',
+  "Compliance Pre-check", 'id="estimatePay"', 'id="estimateReceive"', "예상 단가", "최종 온체인 거부 시연", 'id="prepareTemporal"', 'id="advanceTemporal"',
   'id="buySide"', 'id="sellSide"', 'id="quoteHolding"',
   'id="ttl"', "scenario 기본값",
   'id="marketChart"', 'id="marketCurrent"', 'id="marketVolume"', "Indicative RFQ mid",
@@ -43,7 +43,7 @@ for (const marker of [
   , "beginNewRfq", '$("executeQuote").disabled = false', "formatRatio", "marketPrice",
   "qpBasisHelp", "개인 투자자", "Rule 3c-5의 KE 예외 경로", "renderMarketChart",
   "marketHistory.fills", "suggestedTradeAmounts", "applySuggestedAmount", "setMarketRange",
-  "fill-ticket", "displayOrder", "amountRwa"
+  "fill-ticket", "displayOrder", "amountRwa", "renderRfqEstimate", "result.amountOut"
   , "createEnforcementCase", "prepareEnforcementCase", "issueEnforcementQuote",
   "mutateEnforcementPolicy", "executeEnforcementCase", "restoreEnforcementCase",
   "attemptedTransaction", "balanceEvidence", "Asset movement prevented"
