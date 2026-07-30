@@ -288,7 +288,7 @@ ADAPTER_BOUNDARY=$(curl -fsS -X POST "${BACKEND_BASE}/demo/enforcement/adapter-b
 node -e 'const value=JSON.parse(process.argv[1]); if (value.outcome !== "BLOCKED" || value.rejection !== "NotAuthorized" || !value.attemptedTransaction?.hash || value.attemptedTransaction.status !== 0 || !value.balanceEvidence?.unchanged) { console.error(value); process.exit(1); } console.log(`    PASS: direct Adapter call failed in block ${value.attemptedTransaction.blockNumber} and balances remained unchanged`);' "$ADAPTER_BOUNDARY"
 DEMO_AMOUNT=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.suggestedTradeAmounts.buyAmountIn);' "$DEMO_READY")
 DEMO_SELL_AMOUNT=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.suggestedTradeAmounts.sellAmountIn);' "$DEMO_READY")
-DEMO_AMOUNT_DISPLAY="$SCENARIO_BUY_DISPLAY"
+DEMO_AMOUNT_DISPLAY=$(node -e 'const value=JSON.parse(process.argv[1]); const amount=BigInt(value.suggestedTradeAmounts.buyAmountIn), decimals=BigInt(value.presentation.quoteAsset.decimals), scale=10n**decimals; process.stdout.write(`${amount/scale}${amount%scale ? `.${(amount%scale).toString().padStart(Number(decimals),"0").replace(/0+$/,"")}` : ""}`);' "$DEMO_READY")
 DEMO_MAKER=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.maker);' "$DEMO_READY")
 DEMO_INVESTOR=$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.investor);' "$DEMO_READY")
 DEMO_QUOTE=$(curl -fsS -X POST "${BACKEND_BASE}/demo/quote" \
@@ -413,6 +413,10 @@ if [[ "$ASSET_PROFILE" == "buidl-like" ]]; then
     -d "{\"walletId\":\"${TEMPORAL_ID}\"}")
   TEMPORAL_WALLET=$(node -e 'const value=JSON.parse(process.argv[1]); const id=process.argv[2]; process.stdout.write(value.wallets.find((wallet) => wallet.id === id).address);' "$TEMPORAL_PREPARED" "$TEMPORAL_ID")
   TEMPORAL_CONTROL_WALLET=$(node -e 'const value=JSON.parse(process.argv[1]); const id=process.argv[2]; const wallet=value.wallets.find((candidate) => candidate.id !== id && candidate.qualifiedPurchaser); if (!wallet) process.exit(1); process.stdout.write(wallet.address);' "$TEMPORAL_PREPARED" "$TEMPORAL_ID")
+  TEMPORAL_BASELINE_PRECHECK=$(curl -fsS -X POST "${BACKEND_BASE}/demo/precheck" \
+    -H "content-type: application/json" \
+    -d "{\"taker\":\"${TEMPORAL_WALLET}\",\"amountIn\":\"${DEMO_AMOUNT}\"}")
+  node -e 'const value=JSON.parse(process.argv[1]); if (!value.allowed || !value.wallet.qualifiedPurchaser) { console.error(value); process.exit(1); } console.log("    PASS: target claim remains valid immediately after expiry-case preparation");' "$TEMPORAL_BASELINE_PRECHECK"
   TEMPORAL_QUOTE=$(curl -fsS -X POST "${BACKEND_BASE}/demo/quote" \
     -H "content-type: application/json" \
     -d "{\"taker\":\"${TEMPORAL_WALLET}\",\"amountIn\":\"${DEMO_AMOUNT}\",\"ttlSeconds\":${TEMPORAL_TTL}}")

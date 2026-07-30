@@ -22,7 +22,9 @@
       "provider": "trade-impact-mock",
       "numerator": "1",
       "denominator": "1",
-      "impactBpsPerFill": 10
+      "impactBpsPerReferenceAmount": 12,
+      "referenceAmountRwaBaseUnits": "5000000000000000000000000",
+      "maxImpactBps": 75
     },
     "defaultBuyAmountBaseUnits": "5000000000000000000000000",
     "defaultSellAmountBaseUnits": "5000000000000000000000000",
@@ -104,8 +106,8 @@
   "temporalEligibility": {
     "walletId": "eligible-b",
     "baselineFreshnessSeconds": 31536000,
-    "freshnessSeconds": 60,
-    "advanceSeconds": 61,
-    "quoteTtlSeconds": 900
+    "freshnessSeconds": 600,
+    "advanceSeconds": 900,
+    "quoteTtlSeconds": 3600
   }
 }

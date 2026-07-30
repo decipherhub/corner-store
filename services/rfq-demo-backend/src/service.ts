@@ -60,7 +60,10 @@ export interface DemoMarketPriceState {
   provider: "trade-impact-mock";
   numerator: string;
   denominator: string;
-  impactBpsPerFill: number;
+  impactBpsPerReferenceAmount: number;
+  referenceAmountRwaBaseUnits: string;
+  maxImpactBps: number;
+  lastImpactBps: number;
   lastMove: "initial" | "buy-up" | "sell-down";
 }
 
@@ -103,6 +106,7 @@ export class DemoMarketPricing implements PricingProvider {
   private readonly initialDenominator: bigint;
   private numerator: bigint;
   private denominator: bigint;
+  private lastImpactBps = 0;
   private lastMove: DemoMarketPriceState["lastMove"] = "initial";
   private oracleHistory: DemoMarketPoint[] = [];
   private indicativeHistory: DemoMarketPoint[] = [];
@@ -132,9 +136,14 @@ export class DemoMarketPricing implements PricingProvider {
   }
 
   amountOut(amountIn: bigint, side: "buy" | "sell"): bigint {
-    const amountOut = side === "buy"
+    const midAmountOut = side === "buy"
       ? amountIn * this.denominator * this.assetScale / (this.numerator * this.quoteScale)
       : amountIn * this.numerator * this.quoteScale / (this.denominator * this.assetScale);
+    const rwaAmount = side === "buy" ? midAmountOut : amountIn;
+    const impactBps = this.impactBps(rwaAmount);
+    const amountOut = side === "buy"
+      ? midAmountOut * 10_000n / (10_000n + impactBps)
+      : midAmountOut * (10_000n - impactBps) / 10_000n;
     if (amountOut <= 0n) throw new Error("pricing provider returned zero amountOut");
     return amountOut;
   }
@@ -176,10 +185,12 @@ export class DemoMarketPricing implements PricingProvider {
         transactionHash: details.transactionHash
       });
     }
-    const bps = BigInt(this.config.scenario.execution.pricing.impactBpsPerFill);
+    const referenceAmount = BigInt(this.config.scenario.execution.pricing.referenceAmountRwaBaseUnits);
+    const bps = this.impactBps(details ? BigInt(details.amountRwa) : referenceAmount);
     this.numerator *= side === "buy" ? 10_000n + bps : 10_000n - bps;
     this.denominator *= 10_000n;
     [this.numerator, this.denominator] = normalizeRatio(this.numerator, this.denominator);
+    this.lastImpactBps = Number(bps);
     this.lastMove = side === "buy" ? "buy-up" : "sell-down";
     if (details) {
       this.indicativeHistory.push({
@@ -194,6 +205,7 @@ export class DemoMarketPricing implements PricingProvider {
     this.numerator = this.initialNumerator;
     this.denominator = this.initialDenominator;
     this.lastMove = "initial";
+    this.lastImpactBps = 0;
     this.fills = [];
     const history = this.config.scenario.marketHistory;
     const start = timestamp - (history.oraclePrices.length - 1) * history.intervalSeconds;
@@ -216,7 +228,10 @@ export class DemoMarketPricing implements PricingProvider {
       provider: "trade-impact-mock",
       numerator: this.numerator.toString(),
       denominator: this.denominator.toString(),
-      impactBpsPerFill: this.config.scenario.execution.pricing.impactBpsPerFill,
+      impactBpsPerReferenceAmount: this.config.scenario.execution.pricing.impactBpsPerReferenceAmount,
+      referenceAmountRwaBaseUnits: this.config.scenario.execution.pricing.referenceAmountRwaBaseUnits,
+      maxImpactBps: this.config.scenario.execution.pricing.maxImpactBps,
+      lastImpactBps: this.lastImpactBps,
       lastMove: this.lastMove
     };
   }
@@ -233,6 +248,16 @@ export class DemoMarketPricing implements PricingProvider {
       fills: [...this.fills],
       current: this.state()
     };
+  }
+
+  private impactBps(amountRwa: bigint): bigint {
+    const pricing = this.config.scenario.execution.pricing;
+    const reference = BigInt(pricing.referenceAmountRwaBaseUnits);
+    const proportional = divideRoundingUp(
+      amountRwa * BigInt(pricing.impactBpsPerReferenceAmount),
+      reference
+    );
+    return minimum(maximum(proportional, 1n), BigInt(pricing.maxImpactBps));
   }
 }
 
@@ -253,6 +278,10 @@ function divideRoundingUp(numerator: bigint, denominator: bigint): bigint {
 
 function maximum(left: bigint, right: bigint): bigint {
   return left > right ? left : right;
+}
+
+function minimum(left: bigint, right: bigint): bigint {
+  return left < right ? left : right;
 }
 
 function normalizeRatio(numerator: bigint, denominator: bigint): [bigint, bigint] {

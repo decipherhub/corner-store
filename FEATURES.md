@@ -16,13 +16,20 @@
 - My RFQs는 브라우저 세션에서 요청한 firm quote를 덮어쓰지 않고 누적하며,
   taker, 매수/매도 방향, quote payload와 `quoted | accepted | rejected |
   expired` 상태를 개별 RFQ에 유지한다.
+- 사용자 화면은 현재 선택한 지갑이 taker인 RFQ만 표시하고, Admin만 현재
+  브라우저 세션의 전체 RFQ를 조회한다.
 - 과거 RFQ를 다시 선택하면 해당 quote의 방향과 정확한 `amountIn`으로
   Pre-check와 payload review를 다시 수행한다.
 - temporal demo는 전역 freshness cap을 줄이지 않고 지정된 투자자 claim의
-  `verifiedAt`만 조정한다. 시간 전진 후 대상 claim만 만료되고 다른 적격
-  투자자는 계속 거래할 수 있어야 한다.
+  `verifiedAt`만 조정한다. Enforcement Case 준비 직후에는 대상도 적격이어야
+  하며, 1시간 유효 quote 발급 후 Anvil 시간을 15분 전진했을 때 대상 claim만
+  만료되고 다른 적격 투자자는 계속 거래할 수 있어야 한다.
 - Maker 화면은 다중 Maker 관리 기능으로 오해되지 않도록, 현재 주입된 단일
   Maker의 승인 철회 후 기존 서명 quote가 거부되는 보안 시연으로 표시한다.
+- mock pricing impact는 fill 횟수 고정값이 아니라 실제 체결 RWA 수량에
+  비례하고 scenario cap을 적용한다.
+- 사용자 차트는 전체 기간 하나만 제공하며, fill point의 방향·정확한 체결가·
+  수량·시각은 상시 label 대신 hover/focus tooltip으로 표시한다.
 
 ### Verification
 
@@ -1221,13 +1228,14 @@ passing
 
 passing
 
-## DEMO-010 — RFQ Chart Range and Fill Evidence
+## DEMO-010 — RFQ Chart Fill Evidence
 
 ### Behavior
 
-- 사용자 차트는 1분, 5분, 1시간, 전체 표시 구간을 전환할 수 있다.
-- 실제 Router fill은 매수/매도 marker와 체결 단가를 차트 위에 표시한다.
-- 선택 구간의 최근 체결은 단가, RWA 수량, 실제 timestamp와 transaction hash를
+- 사용자 차트는 왜곡되거나 중복되는 짧은 구간 선택 없이 전체 기간을 표시한다.
+- 실제 Router fill은 매수/매도 marker로 표시하고, 체결 단가·RWA 수량·
+  실제 timestamp는 hover/focus tooltip에서 확인한다.
+- 최근 체결은 단가, RWA 수량, 실제 timestamp와 transaction hash를
   별도 fill tape로 제공하고 fixture line과 구분한다.
 - RFQ가 sparse하거나 같은 초에 체결되어도 marker는 실행 순서로 분리한다.
 
@@ -1241,12 +1249,12 @@ passing
 
 passing
 
-## DEMO-011 — Multi-resolution History and Repeat Liquidity
+## DEMO-011 — Interpolated History and Repeat Liquidity
 
 ### Behavior
 
-- scenario의 가격 anchor를 주입된 sample interval로 보간해 1분·5분·1시간·
-  전체 차트가 서로 다른 관측 구간과 데이터 밀도를 표시한다.
+- scenario의 가격 anchor를 주입된 sample interval로 보간해 전체 기간의
+  NAV와 indicative history를 안정적으로 표시한다.
 - 원본 가격 경로와 sample interval은 scenario에 남아 있고 Dashboard에
   별도 가격 fixture를 하드코딩하지 않는다.
 - demo investor와 maker의 양방향 재고는 최소수량 RFQ를 연속으로 시연할 수

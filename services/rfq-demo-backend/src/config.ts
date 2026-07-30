@@ -58,7 +58,9 @@ export interface DemoScenario {
       provider: "trade-impact-mock";
       numerator: string;
       denominator: string;
-      impactBpsPerFill: number;
+      impactBpsPerReferenceAmount: number;
+      referenceAmountRwaBaseUnits: string;
+      maxImpactBps: number;
     };
     defaultBuyAmountBaseUnits: string;
     defaultSellAmountBaseUnits: string;
@@ -299,8 +301,13 @@ function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]
     execution.pricing.provider !== "trade-impact-mock" ||
     typeof execution.pricing.numerator !== "string" ||
     typeof execution.pricing.denominator !== "string" ||
-    !isPositiveSafeInteger(execution.pricing.impactBpsPerFill) ||
-    Number(execution.pricing.impactBpsPerFill) >= 10_000
+    !isPositiveSafeInteger(execution.pricing.impactBpsPerReferenceAmount) ||
+    !isPositiveSafeInteger(execution.pricing.maxImpactBps) ||
+    Number(execution.pricing.maxImpactBps) >= 10_000 ||
+    Number(execution.pricing.impactBpsPerReferenceAmount) > Number(execution.pricing.maxImpactBps) ||
+    typeof execution.pricing.referenceAmountRwaBaseUnits !== "string" ||
+    !/^\d+$/.test(execution.pricing.referenceAmountRwaBaseUnits) ||
+    BigInt(execution.pricing.referenceAmountRwaBaseUnits) <= 0n
   ) throw new Error("demo scenario execution pricing provider is invalid");
   const pricingNumerator = parsePositiveBigIntString(execution.pricing.numerator, "1", "scenario price numerator");
   const pricingDenominator = parsePositiveBigIntString(execution.pricing.denominator, "1", "scenario price denominator");
@@ -451,7 +458,9 @@ function validateScenario(value: unknown, assetProfile: Artifact["assetProfile"]
         provider: "trade-impact-mock",
         numerator: pricingNumerator,
         denominator: pricingDenominator,
-        impactBpsPerFill: Number(execution.pricing.impactBpsPerFill)
+        impactBpsPerReferenceAmount: Number(execution.pricing.impactBpsPerReferenceAmount),
+        referenceAmountRwaBaseUnits: execution.pricing.referenceAmountRwaBaseUnits,
+        maxImpactBps: Number(execution.pricing.maxImpactBps)
       },
       defaultBuyAmountBaseUnits: execution.defaultBuyAmountBaseUnits,
       defaultSellAmountBaseUnits: execution.defaultSellAmountBaseUnits,

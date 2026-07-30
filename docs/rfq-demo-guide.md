@@ -36,7 +36,7 @@ scripts/demo.sh --profile buidl-like --scenario /path/to/scenario.json
 ```
 
 The schema-v2 scenario supplies deployment account bindings, initial
-investor/maker/pool balances, an initial mock price plus per-fill price impact,
+investor/maker/pool balances, an initial mock price plus size-sensitive price impact,
 buy/sell defaults and TTL,
 plus labels, reference values, minimum base units, wallet personas, initial QP
 states, preview quotes and temporal-expiry values. Contract addresses still come
@@ -44,8 +44,10 @@ from the fresh deployment artifact and wallet mappings are verified against
 deterministic funded Anvil signers. The deployment artifact binds the exact
 scenario hash, so the backend cannot silently use different test data.
 Each successful buy moves the mock reference price up and each successful sell
-moves it down by the scenario's `impactBpsPerFill`. Rejected trades do not move
-the market. A new `/demo/setup` resets the price to the injected initial ratio.
+moves it down. The impact scales with settled RWA size relative to
+`referenceAmountRwaBaseUnits`, using `impactBpsPerReferenceAmount` and the
+`maxImpactBps` cap. Rejected trades do not move the market. A new `/demo/setup`
+resets the price to the injected initial ratio.
 The user Dashboard plots the scenario's mock NAV/oracle and indicative-mid
 history, an indicative spread band, and actual Router fills as separate layers.
 Only successful fills contribute to the displayed live volume.
@@ -54,13 +56,12 @@ price, the asset minimum and `minimumTradeBufferBps`. A new RFQ or buy/sell
 switch uses that suggestion, while a manually entered smaller amount still
 demonstrates the minimum-investment rejection. Rapid fills keep their actual
 timestamps in tooltips but are spaced by execution order, and the chart keeps a
-stable minimum price range to avoid exaggerating small mock movements.
-Use the `1분`, `5분`, `1시간`, and `전체` controls to change the visible window.
-Each successful Router fill is annotated with its buy/sell side and execution
-price. The fill tape below the chart shows the exact RWA amount, chain timestamp,
-and transaction hash; fixture NAV and indicative lines never appear in that tape.
-The default fixture retains hourly price anchors but samples the path every minute,
-so each visible window contains a genuinely different number of observations.
+stable minimum price range to avoid exaggerating small mock movements. The chart
+uses one full-history view. Hover or focus a successful Router fill point to see
+its side, exact execution price, RWA amount and time without permanently covering
+the graph with labels. The fill tape below the chart also shows the exact RWA
+amount, chain timestamp and transaction hash; fixture NAV and indicative lines
+never appear in that tape.
 The injected investor and maker balances are intentionally sized for repeated
 minimum-size buys and sells during a single presentation.
 

@@ -63,7 +63,9 @@ async function main(): Promise<void> {
         provider: "trade-impact-mock" as const,
         numerator: "3",
         denominator: "2",
-        impactBpsPerFill: 100
+        impactBpsPerReferenceAmount: 100,
+        referenceAmountRwaBaseUnits: "100",
+        maxImpactBps: 500
       },
       defaultBuyAmountBaseUnits: "100",
       defaultSellAmountBaseUnits: "80",
@@ -116,9 +118,9 @@ async function main(): Promise<void> {
     temporalEligibility: {
       walletId: "investor-b",
       baselineFreshnessSeconds: 31_536_000,
-      freshnessSeconds: 60,
-      advanceSeconds: 61,
-      quoteTtlSeconds: 900
+      freshnessSeconds: 600,
+      advanceSeconds: 900,
+      quoteTtlSeconds: 3600
     }
   };
   const scenarioPath = join(dir, "scenario.json");
@@ -161,7 +163,7 @@ async function main(): Promise<void> {
     now: () => 1_700_000_000
   };
   const market = createDemoPricing(config);
-  assert(market.amountOut(100n, "sell") === 150n, "initial market price applies the injected ratio");
+  assert(market.amountOut(100n, "sell") === 148n, "sell quote applies size-sensitive impact to the injected mid");
   assert(
     market.suggestedTradeAmounts().buyAmountIn === "101",
     "suggested buy amount rounds up the current-price minimum with the injected buffer"
@@ -172,11 +174,18 @@ async function main(): Promise<void> {
     market.suggestedTradeAmounts().buyAmountIn === "102",
     "suggested buy amount follows the raised runtime price"
   );
-  assert(market.amountOut(100n, "sell") === 151n, "next sell quote uses the raised market price");
+  assert(market.amountOut(100n, "sell") === 149n, "next sell quote uses the raised market price and size impact");
   market.recordFill("sell");
   assert(market.state().lastMove === "sell-down", "successful sell lowers the mock market price");
   market.reset();
   assert(market.state().numerator === "3" && market.state().denominator === "2", "demo setup resets market price");
+  market.recordFill("buy", {
+    timestamp: 1_700_000_001,
+    amountRwa: "50",
+    amountQuote: "75",
+    transactionHash: `0x${"1".repeat(64)}`
+  });
+  assert(market.state().lastImpactBps === 50, "half-reference fill applies half of the configured impact");
   assert(
     market.history(1_700_000_000).oracle.length === 37,
     "history interpolates injected anchors at the configured sample interval"
@@ -215,7 +224,7 @@ async function main(): Promise<void> {
     assert(quoteResponse.status === 200, "quote returns 200");
     const signed = JSON.parse(quoteResponse.body) as any;
     assert(signed.quote.amountIn === "100", "amountIn round-trips");
-    assert(signed.quote.amountOut === "66", "buy quote inverts the injected qUSD-per-RWA price");
+    assert(signed.quote.amountOut === "65", "buy quote applies size-sensitive impact to the injected mid");
     assert(signed.quote.expiry === 1_700_000_120, "expiry uses injected chain clock");
     assert(signed.quote.tokenIn.toLowerCase() === artifact.quote.toLowerCase(), "tokenIn is deployment QUOTE");
     assert(signed.quote.tokenOut.toLowerCase() === artifact.rwaToken.toLowerCase(), "tokenOut is deployment RWA");
@@ -236,7 +245,7 @@ async function main(): Promise<void> {
     const sellQuote = JSON.parse(sellQuoteResponse.body) as any;
     assert(sellQuote.quote.tokenIn.toLowerCase() === artifact.rwaToken.toLowerCase(), "sell tokenIn is deployment RWA");
     assert(sellQuote.quote.tokenOut.toLowerCase() === artifact.quote.toLowerCase(), "sell tokenOut is deployment QUOTE");
-    assert(sellQuote.quote.amountOut === "150", "sell quote applies the injected qUSD-per-RWA price");
+    assert(sellQuote.quote.amountOut === "148", "sell quote applies size-sensitive impact to the injected mid");
 
     const secondResponse = await requestJson(`${running.baseUrl}/quote`, "POST", {
       taker: artifact.investor,

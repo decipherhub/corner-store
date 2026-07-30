@@ -126,11 +126,13 @@ configuration remains reproducible.
 
 `execution.pricing.numerator / denominator` is the initial settlement-asset price of
 one whole RWA (`qUSD per RWA`). Buy quotes invert that price to calculate RWA
-output, while sell quotes apply it directly. After a successful fill,
-`impactBpsPerFill` moves the in-memory demo market up for a buy and down for a
-sell. The next quote and dashboard reference price use that updated value.
-Rejected trades do not move it, and `/demo/setup` restores the injected initial
-price. There is no separate display-only price.
+output, while sell quotes apply it directly. `impactBpsPerReferenceAmount`
+defines the impact for `referenceAmountRwaBaseUnits`. Smaller and larger fills
+scale that impact proportionally up to `maxImpactBps`; buys move the in-memory
+demo market up and sells move it down. The next quote and dashboard reference
+price use that updated value. Rejected trades do not move it, and `/demo/setup`
+restores the injected initial price. This remains an injected deterministic demo
+provider, not external market data or a production dealer pricing engine.
 
 `minimumTradeBufferBps` controls the safety margin used by
 `suggestedTradeAmounts`. The backend recalculates these suggested buy/sell inputs
@@ -144,9 +146,8 @@ sparse RFQ trading as continuous exchange candles.
 
 `marketHistory.intervalSeconds` is the spacing between injected price anchors.
 `sampleIntervalSeconds` deterministically interpolates those anchors for the
-dashboard's visible windows. The default keeps hourly anchors and emits one-minute
-samples, making the 1-minute, 5-minute, 1-hour and full-history controls materially
-different without embedding display-only prices in the frontend.
+dashboard's single full-history chart without embedding display-only prices in
+the frontend.
 
 The tracked default is:
 

@@ -16,13 +16,15 @@ source of truth로 사용한다.
 ## Completed
 
 - `DEMO-015 — RFQ Session History and Targeted Claim Expiry`: My RFQs가 세션의
-  firm quote를 누적하고 각 taker/방향/payload 및 quoted/accepted/rejected/
-  expired 상태를 다시 선택할 수 있게 했다. 과거 RFQ 선택 시 해당 quote의
-  방향과 정확한 입력 금액으로 Pre-check를 다시 수행한다. temporal demo는
-  전역 freshness cap을 유지한 채 적격투자자 B의 claim 발급시각만 조정하므로
-  시간 전진 후 B만 만료되고 적격투자자 A는 계속 허용된다. `Maker 관리`는
-  다중 Maker 기능이 아니라 현재 주입된 단일 Maker의 승인 철회 보안 시연으로
-  명확히 바꿨다. Dashboard/backend smoke, BUIDL-like RFQ live E2E와
+  firm quote를 누적하되 사용자에게는 현재 지갑이 taker인 기록만 표시하고,
+  Admin만 세션 전체를 조회한다. mock market은 fill 횟수마다 같은 tick을 쓰지
+  않고 실제 RWA 체결수량에 비례한 scenario impact/cap으로 다음 가격을
+  계산한다. 차트는 전체 기간만 표시하고 체결점의 방향·가격·수량·시간은
+  hover/focus에서 확인한다. Claim 만료는 Enforcement Cases로 통합했으며 준비
+  직후 B는 10분간 계속 적격이고, 1시간 quote 발급 후 Anvil을 15분 전진해야
+  B만 만료되고 A는 계속 허용된다. `Maker 관리`는 다중 Maker 기능이 아니라
+  현재 단일 Maker의 승인 철회 보안 시연으로 명확히 했다. Node 20 전체
+  `scripts/check.sh`(Forge 669/669 포함), BUIDL-like RFQ live E2E와
   `git diff --check`를 통과했다.
 - `DEMO-014 — RFQ Counter-Amount Preview`: RFQ 생성 화면에서 매수·매도 방향별
   지불 자산, backend pre-check가 계산한 반대 페어 예상 수령량과 현재 단가를
