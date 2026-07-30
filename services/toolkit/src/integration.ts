@@ -1,5 +1,5 @@
 export const INTEGRATION_SCHEMA_VERSION = 1;
-export type RFQIntegrationMode = "reference-service" | "existing-backend";
+export type RFQIntegrationMode = "library-only" | "reference-service" | "existing-backend";
 export type RFQIntegrationModuleKind = "pricing" | "risk" | "signer" | "nonce";
 
 export interface IntegrationModuleBinding {
@@ -50,8 +50,12 @@ export function validateIntegrationManifest(value: unknown): RFQIntegrationManif
   if (manifest.schemaVersion !== INTEGRATION_SCHEMA_VERSION) {
     throw new Error(`integration schemaVersion must be ${INTEGRATION_SCHEMA_VERSION}`);
   }
-  if (manifest.mode !== "reference-service" && manifest.mode !== "existing-backend") {
-    throw new Error('integration mode must be "reference-service" or "existing-backend"');
+  if (
+    manifest.mode !== "library-only" &&
+    manifest.mode !== "reference-service" &&
+    manifest.mode !== "existing-backend"
+  ) {
+    throw new Error('integration mode must be "library-only", "reference-service", or "existing-backend"');
   }
   if (manifest.sdk?.package !== "@corner-store/rfq-service" || !/^\d+\.\d+\.\d+$/.test(manifest.sdk.version ?? "")) {
     throw new Error("integration sdk package/version is invalid");

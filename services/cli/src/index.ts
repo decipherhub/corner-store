@@ -14,8 +14,50 @@ program
   .option("--rpc <url>", "JSON-RPC endpoint", "http://127.0.0.1:8545")
   .option("--artifact <path>", "deployment artifact JSON (defaults to <repo>/deployments/anvil-e2e.json)")
   .option("--config <path>", "versioned Toolkit config JSON")
+  .option("--contracts <path>", "Corner Store contract source/bundle override")
   .option("--account <n>", "Anvil mnemonic account index 0-9")
   .option("--key <hex>", "explicit private key (overrides --account)");
+
+program
+  .command("create")
+  .description("create a standalone Corner Store integration project")
+  .argument("<target>", "new output directory")
+  .option("--mode <mode>", "library-only | reference-service | existing-backend", "library-only")
+  .option("--docker", "include optional Dockerfile and Compose reference deployment")
+  .option("--sdk <specifier>", "npm dependency specifier for @corner-store/rfq-service")
+  .option("--cli <specifier>", "npm dependency specifier for @corner-store/cli")
+  .action(run((target, opts) => cmd.cmdCreate(target, opts)));
+
+program
+  .command("init")
+  .description("create a versioned Corner Store config")
+  .argument("[path]", "output JSON path", "corner-store.config.json")
+  .action(run((path) => cmd.cmdToolkitInit(path)));
+
+program
+  .command("doctor")
+  .description("diagnose Node, Foundry, config, contract bundle, artifact, and optional Docker")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, _opts, command) => cmd.cmdDoctor(path, command.optsWithGlobals())));
+
+program
+  .command("deploy")
+  .description("plan or execute a standalone deployment; Docker is not required")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .option("--broadcast", "submit deployment transactions (otherwise dry-run)")
+  .action(run((path, opts, command) => cmd.cmdToolkitDeploy(path, {...command.optsWithGlobals(), broadcast: opts.broadcast})));
+
+program
+  .command("verify")
+  .description("verify config and deployment artifact bindings")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, _opts, command) => cmd.cmdVerify(path, command.optsWithGlobals())));
+
+program
+  .command("test-module")
+  .description("run the public RFQ module conformance gate")
+  .argument("<path>", "built CommonJS file exporting modules and fixture")
+  .action(run((path) => cmd.cmdTestModule(path)));
 
 program
   .command("toolkit-init")
@@ -97,6 +139,7 @@ program
   .requiredOption("--mode <mode>", "reference-service | existing-backend")
   .option("--docker", "include optional Dockerfile and Compose reference deployment")
   .option("--sdk <specifier>", "npm dependency specifier for @corner-store/rfq-service")
+  .option("--cli <specifier>", "npm dependency specifier for @corner-store/cli")
   .action(run((target, opts) => cmd.cmdToolkitScaffoldRFQ(target, opts)));
 
 // Wrap an async command so any revert/error prints a decoded, human reason and

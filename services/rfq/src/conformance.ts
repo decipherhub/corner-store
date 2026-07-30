@@ -1,3 +1,5 @@
+import {verifyTypedData} from "ethers";
+
 import {createRFQServiceFromModules, validateRFQModuleSet} from "./modules";
 import {Address, RFQModuleSet, SignedRFQQuote} from "./types";
 
@@ -109,6 +111,9 @@ export async function runRFQModuleConformance(
     checks.push(isHexSignature(first.signature)
       ? pass("signer", "signer returned a 65-byte hex signature")
       : fail("signer", "signature must be 65-byte hex"));
+    checks.push(signatureMatchesMaker(first, fixture.maker)
+      ? pass("signer-recovery", "signature recovers the configured maker")
+      : fail("signer-recovery", "signature does not recover the configured maker"));
     checks.push(BigInt(second.quote.nonce) > BigInt(first.quote.nonce)
       ? pass("nonce", "maker nonce increases across takers")
       : fail("nonce", "nonce must be maker-scoped and monotonic"));
@@ -201,6 +206,21 @@ function intent(fixture: RFQConformanceFixture, taker: Address) {
 
 function isHexSignature(value: string): boolean {
   return /^0x[a-fA-F0-9]{130}$/.test(value);
+}
+
+function signatureMatchesMaker(signed: SignedRFQQuote, maker: Address): boolean {
+  if (!isHexSignature(signed.signature)) return false;
+  try {
+    const recovered = verifyTypedData(
+      signed.typedData.domain,
+      signed.typedData.types,
+      signed.typedData.message,
+      signed.signature
+    );
+    return recovered.toLowerCase() === maker.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 function pass(name: string, detail: string): RFQConformanceCheck {

@@ -1,4 +1,4 @@
-import {mkdtempSync} from "fs";
+import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
 import {createServer} from "http";
 import {tmpdir} from "os";
 import {join} from "path";
@@ -11,6 +11,13 @@ import {
   resolveAssetProfileForArtifact
 } from "../src/assetProfiles";
 import {decodeReason, encodeReason, tableSize} from "../src/reason";
+import {
+  copyDeploymentArtifact,
+  doctor,
+  isNodeVersionSupported,
+  prepareDeploymentRuntime,
+  resolveContractSource
+} from "../src/product";
 import {
   RFQ_QUOTE_TYPES,
   RFQQuoteService,
@@ -49,6 +56,53 @@ const A01_DIRECT_CODE4 = "0x8bb6a77feb777933299995cf60c2f3d5a4804be0f6077feab1f7
 const D01_DIRECT_CODE3 = "0x944f96138687357570c74d60495e55251602230e456018945bdf8e15bc1241ba";
 
 async function main() {
+  assert(isNodeVersionSupported("18.0.0"), "Node 18 is supported");
+  assert(isNodeVersionSupported("v24.4.1"), "newer Node releases are supported");
+  assert(!isNodeVersionSupported("16.20.1"), "Node 16 is rejected");
+  assert(!isNodeVersionSupported("invalid"), "invalid Node versions are rejected");
+
+  const productRoot = mkdtempSync(join(tmpdir(), "corner-store-product-"));
+  const contractSource = join(productRoot, "contracts");
+  const consumerRoot = join(productRoot, "consumer");
+  for (const path of [
+    "src",
+    "script",
+    "test/fixtures",
+    "test/mocks",
+    "lib/openzeppelin-contracts/contracts",
+    "lib/openzeppelin-contracts-upgradeable/contracts",
+    "lib/solidity/contracts",
+    "lib/ERC-3643/contracts",
+    "lib/forge-std/src"
+  ]) {
+    mkdirSync(join(contractSource, path), {recursive: true});
+    writeFileSync(join(contractSource, path, ".fixture"), path);
+  }
+  writeFileSync(join(contractSource, "foundry.toml"), "[profile.default]\n");
+  writeFileSync(join(contractSource, "remappings.txt"), "");
+  writeFileSync(join(contractSource, "script/DeployStack.s.sol"), "contract DeployStack {}\n");
+  writeFileSync(join(contractSource, "secret.txt"), "must not be copied");
+  mkdirSync(consumerRoot);
+  writeFileSync(join(consumerRoot, "corner-store.scenario.json"), '{"schemaVersion":2}\n');
+  assert(resolveContractSource(undefined, contractSource) === contractSource, "explicit contract source resolves");
+  const invalidDoctor = doctor("missing-config.json", undefined, contractSource);
+  assert(!invalidDoctor.ready, "doctor fails readiness for a missing config");
+  assert(
+    invalidDoctor.checks.some((check) => check.name === "node") &&
+      invalidDoctor.checks.some((check) => check.name === "config" && !check.pass),
+    "doctor reports all prerequisites alongside config failure"
+  );
+  const runtime = prepareDeploymentRuntime(consumerRoot, contractSource);
+  assert(existsSync(join(runtime, "src/.fixture")), "runtime copies required product sources");
+  assert(!existsSync(join(runtime, "secret.txt")), "runtime excludes unrelated source-root files");
+  assert(
+    readFileSync(join(runtime, "deployments/anvil-e2e-scenario.json"), "utf8").includes('"schemaVersion":2'),
+    "runtime installs the consumer scenario"
+  );
+  writeFileSync(join(runtime, "deployments/anvil-e2e.json"), '{"router":"0x1"}\n');
+  const copiedArtifact = copyDeploymentArtifact(runtime, consumerRoot, "deployments/result.json");
+  assert(existsSync(copiedArtifact), "deployment artifact is copied back to the consumer project");
+
   // --- asset profile selection -------------------------------------------
   assert(resolveAssetProfile() === "buidl-like", "BUIDL-like is the default asset profile");
   assert(resolveAssetProfile("reg-d") === "reg-d", "Reg D asset profile is selectable");

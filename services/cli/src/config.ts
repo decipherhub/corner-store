@@ -55,6 +55,7 @@ export interface GlobalOpts {
   config?: string;
   account?: string;
   key?: string;
+  contracts?: string;
 }
 
 // Walk up from `start` looking for a foundry.toml (the repo root marker).

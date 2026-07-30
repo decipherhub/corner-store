@@ -171,21 +171,44 @@ node services/cli/dist/cli/src/index.js buy 0 --venue rfq --quote quote.json
 See [`services/rfq-demo-backend/README.md`](./services/rfq-demo-backend/README.md)
 for the complete local flow and production replacement boundaries.
 
-### Modular Integration Scaffold
+### Standalone SDK Integration
 
-The Toolkit can generate either a minimal RFQ reference service or a thin
-composition function for an existing backend. Pricing, risk, signer and nonce
-storage remain replaceable modules, and Docker Compose is optional.
+The CLI exposes a unified external workflow for clean consumer projects:
+`create`, `init`, `doctor`, `deploy`, `verify` and `test-module`. A consumer can
+start with only the RFQ library, a minimal reference RFQ service, or a wrapper
+for an existing backend. Docker is optional and is generated only for the
+reference-service mode.
 
 ```shell
 cd services/cli
 npm test
-node dist/cli/src/index.js toolkit-scaffold-rfq ../../my-rfq \
+
+node dist/cli/src/index.js create ../../my-corner-store \
+  --mode library-only
+node dist/cli/src/index.js create ../../my-rfq-service \
+  --mode reference-service --docker
+node dist/cli/src/index.js create ../../my-existing-backend \
   --mode existing-backend
+
+cd ../../my-corner-store
+npm install
+npm run doctor
+npm run deploy              # dry-run; add -- --broadcast only for local/demo submission
+npm run verify              # after a deployment artifact exists
+npm test                         # builds, then runs corner-store test-module
 ```
 
-See [`docs/sdk-integration.md`](./docs/sdk-integration.md) for package boundaries,
-module capabilities, generated files and the common conformance suite.
+When generated from this repository, the scaffold vendors the RFQ SDK source and
+a local CLI tarball, so the default `npm install` path does not depend on
+unpublished registry packages. Packaged consumers can use a published package,
+Git URL or explicit local package with `--sdk <specifier>` and
+`--cli <specifier>`.
+Packaged CLI deployments use the bundled contract source, or an explicit
+`--contracts <path>` / `CORNER_STORE_CONTRACTS_ROOT` override.
+
+See [`docs/sdk-integration.md`](./docs/sdk-integration.md) for package
+boundaries, the three integration modes, generated files, deployment checks and
+the common conformance suite.
 
 ### Compliance Data SDK
 

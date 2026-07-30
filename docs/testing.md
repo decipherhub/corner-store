@@ -48,6 +48,33 @@ API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
 거부를 검증한다. CLI smoke는 backend quote request path와 기존
 quote-file/서명 검증 경로를 함께 검증한다.
 
+Standalone SDK integration smoke:
+
+```sh
+cd services/toolkit
+npm test
+```
+
+Toolkit smoke는 unified `create`가 생성하는 `library-only`,
+`reference-service`, `existing-backend` 세 mode의 manifest, `.env.example`,
+vendored `vendor/rfq-service`, optional Docker files, overwrite refusal과
+standalone package scripts(`doctor`, `deploy`, `verify`, `test:module`)를
+검증한다. SDK-002 문서 또는 packaging 변경에서는 CLI help, `doctor`, dry-run
+`deploy`, `verify`/preflight와 `test-module` command path도 별도로 확인한다.
+
+Generated consumer projects should keep this local gate:
+
+```sh
+npm test
+```
+
+생성된 프로젝트의 `npm test`는 TypeScript build 후
+`corner-store test-module dist/module-conformance.js`를 실행한다. 이 conformance
+gate는 custom RFQ pricing/risk/signer/nonce module set이 SDK contract를 만족하는지
+검사한다. Signer는 65-byte 형식뿐 아니라 EIP-712 payload에서 configured maker로
+복구되어야 한다. 이 gate는 production pricing 품질이나 signer custody를 인증하지
+않는다.
+
 Compliance data SDK smoke test:
 
 ```sh
@@ -137,7 +164,7 @@ scripts/check.sh
 
 이 명령은 현재 저장소에서 지원하는 format, lint, build와 test를 순서대로 실행한다.
 현재 포함 범위는 Foundry fmt/lint/build/test, RFQ SDK·demo backend·CLI·Toolkit,
-Compliance Data SDK,
+generated standalone consumer smoke, Compliance Data SDK,
 Operator API/dashboard smoke, vendored deploy-v3 test와 whitespace check다. GitHub
 Actions도 동일한 스크립트를 실행한다. Node 서비스는 lockfile 기반 `npm ci`를
 사용하고, vendored deploy-v3는 `yarn.lock` 기반 설치 후 테스트한다.

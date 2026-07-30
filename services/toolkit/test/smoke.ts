@@ -86,24 +86,56 @@ if (JSON.parse(readFileSync(join(referenceTarget, "package.json"), "utf8")).depe
   throw new Error("reference RFQ scaffold is not self-contained");
 }
 const referenceEnv = readFileSync(join(referenceTarget, ".env.example"), "utf8");
-if (!referenceEnv.includes("RFQ_SIGNER_PRIVATE_KEY=") || /RFQ_SIGNER_PRIVATE_KEY=0x[0-9a-f]+/i.test(referenceEnv)) {
+if (
+  !referenceEnv.includes("RFQ_SIGNER_PRIVATE_KEY=") ||
+  /RFQ_SIGNER_PRIVATE_KEY=0x[0-9a-f]+/i.test(referenceEnv) ||
+  /RFQ_(ADAPTER|MAKER)_ADDRESS=0x/i.test(referenceEnv)
+) {
   throw new Error("scaffold embedded a signer secret");
 }
 validateIntegrationManifest(JSON.parse(readFileSync(join(referenceTarget, "corner-store.integration.json"), "utf8")));
+
+const libraryTarget = join(dir, "library-only");
+const library = scaffoldRFQIntegration(libraryTarget, {
+  mode: "library-only",
+  standalone: true,
+  sdkDependency: "file:../corner-store-rfq-service.tgz",
+  cliDependency: "file:../corner-store-cli.tgz",
+  scenario: `${JSON.stringify({schemaVersion: 2, deployment: {accounts: {}}}, null, 2)}\n`
+});
+if (
+  library.files.includes("compose.yaml") ||
+  !library.files.includes("corner-store.config.json") ||
+  !library.files.includes("corner-store.scenario.json") ||
+  !readFileSync(join(libraryTarget, "src/index.ts"), "utf8").includes('export * from "@corner-store/rfq-service"')
+) {
+  throw new Error("standalone library-only scaffold regression");
+}
+const libraryPackage = JSON.parse(readFileSync(join(libraryTarget, "package.json"), "utf8"));
+if (!libraryPackage.scripts.doctor || libraryPackage.scripts.start || !libraryPackage.scripts["test:module"]) {
+  throw new Error("standalone package scripts regression");
+}
+validateIntegrationManifest(JSON.parse(readFileSync(join(libraryTarget, "corner-store.integration.json"), "utf8")));
 
 const existingTarget = join(dir, "existing-backend");
 const existing = scaffoldRFQIntegration(existingTarget, {mode: "existing-backend"});
 if (existing.files.includes("compose.yaml") || !readFileSync(join(existingTarget, "src/index.ts"), "utf8").includes("createCornerStoreRFQ")) {
   throw new Error("existing-backend scaffold regression");
 }
-if (JSON.parse(readFileSync(join(existingTarget, "package.json"), "utf8")).dependencies.ethers) {
-  throw new Error("existing-backend scaffold includes an unused signer dependency");
+if (!JSON.parse(readFileSync(join(existingTarget, "package.json"), "utf8")).dependencies.ethers) {
+  throw new Error("existing-backend scaffold is missing conformance signer support");
 }
 try {
   scaffoldRFQIntegration(existingTarget, {mode: "existing-backend"});
   throw new Error("scaffold overwrite accepted");
 } catch (err: any) {
   if (!err.message.includes("already exists")) throw err;
+}
+try {
+  scaffoldRFQIntegration(join(dir, "invalid-docker"), {mode: "library-only", dockerCompose: true});
+  throw new Error("Docker accepted for library-only mode");
+} catch (err: any) {
+  if (!err.message.includes("reference-service")) throw err;
 }
 try {
   validateIntegrationManifest({
