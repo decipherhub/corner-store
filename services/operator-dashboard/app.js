@@ -139,6 +139,18 @@ function configurePresentation() {
   presentationInitialized = true;
   const asset = chainState.presentation.asset;
   const minimum = formatBaseUnits(asset.minimumAmountBaseUnits);
+  const deployment = chainState.deployment || {};
+  $("ribbonCore").textContent = deployment.coreImplementation === "DeployProductionCore.deployCore"
+    ? "Production core seam"
+    : "Legacy core";
+  $("ribbonActivation").textContent = deployment.productionDeployment
+    ? "Production activation"
+    : "Demo fixtures";
+  $("deploymentCore").textContent = deployment.coreImplementation || "unknown";
+  $("deploymentActivation").textContent = deployment.productionDeployment
+    ? "Production"
+    : deployment.activationMode || "Local demo fixtures";
+  $("deploymentRouter").textContent = shortAddress(deployment.router);
   $("ribbonAsset").textContent = `${asset.name} · ERC-3643`;
   $("asset").innerHTML = `<option>${escapeHtml(asset.name)} · ${escapeHtml(asset.symbol)}</option>`;
   $("assetName").textContent = asset.name; $("assetSymbol").textContent = asset.symbol;

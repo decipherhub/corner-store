@@ -17,6 +17,42 @@ import {
   StudioCommandRunner,
   createStudioServer
 } from "../src/api";
+import {DexRuntimeManager, DexRuntimeRequest, DexRuntimeStatus} from "../src/runtime";
+
+class FakeDexRuntime implements DexRuntimeManager {
+  starts: DexRuntimeRequest[] = [];
+  private current: DexRuntimeStatus = this.stopped();
+
+  status(): DexRuntimeStatus {
+    return {...this.current};
+  }
+
+  async start(input: DexRuntimeRequest): Promise<DexRuntimeStatus> {
+    this.starts.push(input);
+    this.current = {
+      ...this.stopped(),
+      state: "running",
+      project: input.project,
+      artifactPath: input.artifactPath,
+      rpcUrl: input.rpcUrl
+    };
+    return this.status();
+  }
+
+  async stop(): Promise<DexRuntimeStatus> {
+    this.current = this.stopped();
+    return this.status();
+  }
+
+  private stopped(): DexRuntimeStatus {
+    return {
+      state: "stopped",
+      dashboardUrl: "http://dex.test",
+      rfqBackendUrl: "http://rfq.test",
+      operatorApiUrl: "http://operator.test"
+    };
+  }
+}
 
 class FakeRunner implements StudioCommandRunner {
   readonly calls: CommandRequest[] = [];
@@ -85,6 +121,10 @@ class FakeRunner implements StudioCommandRunner {
     if (input.action === "verify") {
       return {code: 0, stdout: JSON.stringify({ready: true, checks: [{name: "artifact-router", pass: true, detail: "ok"}]}), stderr: ""};
     }
+    if (input.action === "onboard") {
+      onLine?.("manifest ACTIVE");
+      return {code: 0, stdout: "manifest ACTIVE", stderr: ""};
+    }
     return {code: 1, stdout: "", stderr: "unsupported"};
   }
 }
@@ -94,6 +134,7 @@ async function main(): Promise<void> {
   const runner = new FakeRunner();
   const webRoot = resolve(__dirname, "../../web");
   const sessionToken = "studio-smoke-session-token";
+  const runtime = new FakeDexRuntime();
   const server = createStudioServer({
     workspaceRoot: workspace,
     runner,
@@ -102,6 +143,7 @@ async function main(): Promise<void> {
     defaultRpcUrl: "http://127.0.0.1:18545",
     broadcastNetwork: "anvil",
     allowedRpcHosts: ["127.0.0.1"],
+    runtimeManager: runtime,
     sessionToken
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
@@ -259,6 +301,44 @@ async function main(): Promise<void> {
   if (handoff.status !== 200 || !handoff.body.enabled || handoff.body.url !== "http://operations.test") {
     throw new Error("operations handoff regression");
   }
+  const wrongRuntimeRpc = await call("POST", "/api/v1/projects/treasury-dex/runtime/start", {
+    rpcUrl: "http://127.0.0.1:9999"
+  });
+  if (wrongRuntimeRpc.status !== 409 || wrongRuntimeRpc.body.error !== "rpc_mismatch") {
+    throw new Error("DEX handoff accepted an RPC other than the deployment RPC");
+  }
+  const startedRuntime = await call("POST", "/api/v1/projects/treasury-dex/runtime/start", {
+    rpcUrl: "http://127.0.0.1:8545"
+  });
+  if (
+    startedRuntime.status !== 200 ||
+    startedRuntime.body.state !== "running" ||
+    runtime.starts[0]?.artifactPath !== join(workspace, "treasury-dex/deployments/anvil-e2e.json") ||
+    runtime.starts[0]?.scenarioPath !== join(workspace, "treasury-dex/corner-store.scenario.json")
+  ) {
+    throw new Error("verified artifact was not handed to the DEX runtime");
+  }
+  const onboardingCalls = runner.calls.filter((entry) => entry.action === "onboard");
+  if (
+    onboardingCalls.length !== 1 ||
+    onboardingCalls[0].rpcUrl !== "http://127.0.0.1:8545" ||
+    onboardingCalls[0].artifactPath !== join(workspace, "treasury-dex/deployments/anvil-e2e.json")
+  ) {
+    throw new Error("DEX runtime did not activate the selected profile on the verified deployment");
+  }
+  const runningHandoff = await call("GET", "/api/v1/projects/treasury-dex/handoff");
+  if (!runningHandoff.body.running || runningHandoff.body.url !== "http://dex.test") {
+    throw new Error("running DEX handoff was not exposed");
+  }
+  const stoppedRuntime = await call("POST", "/api/v1/projects/treasury-dex/runtime/stop", {});
+  if (stoppedRuntime.body.state !== "stopped") throw new Error("DEX runtime stop regression");
+  const restartedRuntime = await call("POST", "/api/v1/projects/treasury-dex/runtime/start", {
+    rpcUrl: "http://127.0.0.1:8545"
+  });
+  if (restartedRuntime.status !== 200 || runner.calls.filter((entry) => entry.action === "onboard").length !== 1) {
+    throw new Error("DEX restart repeated the already-completed demo onboarding");
+  }
+  await call("POST", "/api/v1/projects/treasury-dex/runtime/stop", {});
   server.close();
   await new Promise<void>((done) => server.once("close", done));
 
@@ -272,6 +352,7 @@ async function main(): Promise<void> {
     defaultRpcUrl: "http://rpc.test",
     broadcastNetwork: "anvil",
     allowedRpcHosts: ["rpc.test"],
+    runtimeManager: new FakeDexRuntime(),
     sessionToken
   });
   await new Promise<void>((done) => restarted.listen(0, "127.0.0.1", done));
@@ -309,6 +390,7 @@ async function main(): Promise<void> {
     'id="projectMode"', 'id="network"', 'id="assetProfile"', 'id="venueRfq"',
     'id="runDoctor"', 'id="reviewPlan"', 'id="deployDemo"', 'id="verifyArtifact"',
     'id="artifactViewer"', 'id="activationChecklist"', 'id="openOperations"',
+    'id="startDexDemo"', 'id="stopDexDemo"',
     'id="networkPreset"', 'id="contextDialog"', 'id="pricingModuleCustom"',
     'name="deploymentTarget"', 'id="productionTargetPanel"', 'id="productionNetworkName"',
     'id="productionApprovedRpcHosts"', 'id="productionSourceCommit"', 'id="productionContractsHash"',
@@ -328,6 +410,7 @@ async function main(): Promise<void> {
   for (const marker of [
     "/api/v1/projects", "saveConfig", "runDoctor", "reviewPlan", "deployDemo",
     "verifyArtifact", "renderArtifact", "refreshHandoff", "EventSource",
+    "startDexDemo", "stopDexDemo", "/runtime/start", "/runtime/stop",
     "HELP_CONTENT", "DEMO_BROADCAST_NETWORKS", "selectedNetwork", "selectedModule",
     "openContextHelp", "buildProductionConfig", "runProductionPreflight",
     "generateProductionPlan", "exportProductionPlan"
@@ -338,6 +421,7 @@ async function main(): Promise<void> {
     "--ink:", "--signal:", ".studio-shell", ".rail", ".workflow-map", ".status-led",
     ".artifact-grid", ".boundary-banner", ".help-trigger", ".context-dialog",
     ".target-switch", ".production-ledger", ".production-actions",
+    ".handoff-actions",
     "@media (max-width: 820px)"
   ]) {
     if (!css.includes(marker)) throw new Error(`studio visual token missing: ${marker}`);

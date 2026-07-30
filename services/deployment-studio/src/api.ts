@@ -23,6 +23,7 @@ import {
   validateIntegrationManifest,
   validateProductionConfig as validateToolkitProductionConfig
 } from "@corner-store/toolkit";
+import {DexRuntimeManager} from "./runtime";
 
 export type CommandAction =
   | "create"
@@ -30,6 +31,7 @@ export type CommandAction =
   | "plan"
   | "deploy"
   | "verify"
+  | "onboard"
   | "production-preflight"
   | "production-plan";
 
@@ -40,6 +42,7 @@ export interface CommandRequest {
   mode?: RFQIntegrationMode;
   docker?: boolean;
   productionConfigPath?: string;
+  artifactPath?: string;
 }
 
 export interface CommandResult {
@@ -60,6 +63,7 @@ export interface StudioServerOptions {
   defaultRpcUrl: string;
   broadcastNetwork: string;
   allowedRpcHosts: string[];
+  runtimeManager?: DexRuntimeManager;
   sessionToken?: string;
 }
 
@@ -86,6 +90,12 @@ interface DeployJob {
 interface ProjectEvidence {
   doctorFingerprint?: string;
   plan?: {fingerprint: string; rpcUrl: string};
+}
+
+interface DeploymentBinding {
+  projectFingerprint: string;
+  rpcUrl: string;
+  demoActivated?: boolean;
 }
 
 const PROJECT_NAME = /^[a-z0-9][a-z0-9._-]{1,63}$/;
@@ -148,6 +158,17 @@ export class NodeCliRunner implements StudioCommandRunner {
     }
     if (input.action === "doctor") return ["doctor"];
     if (input.action === "verify") return ["verify"];
+    if (input.action === "onboard") {
+      if (!input.artifactPath) throw new Error("Onboarding requires an explicit deployment artifact.");
+      return [
+        "--rpc",
+        input.rpcUrl ?? this.defaultRpcUrl,
+        "--artifact",
+        input.artifactPath,
+        "toolkit-onboard",
+        "corner-store.config.json"
+      ];
+    }
     if (input.action === "production-preflight") {
       return ["production-preflight", input.productionConfigPath ?? PRODUCTION_CONFIG_FILE];
     }
@@ -223,6 +244,20 @@ class ProjectStore {
     const target = resolve(root, "corner-store.config.json");
     this.assertSafePath(root, target);
     return loadConfig(target);
+  }
+
+  configPath(name: string): string {
+    const root = this.root(name);
+    const target = resolve(root, "corner-store.config.json");
+    this.assertSafePath(root, target);
+    return target;
+  }
+
+  scenarioPath(name: string): string {
+    const root = this.root(name);
+    const target = resolve(root, "corner-store.scenario.json");
+    this.assertSafePath(root, target);
+    return target;
   }
 
   saveConfig(name: string, value: unknown): ToolkitConfig {
@@ -364,6 +399,37 @@ class ProjectStore {
     ]);
   }
 
+  recordDeployment(name: string, rpcUrl: string): void {
+    const root = this.root(name);
+    const binding: DeploymentBinding = {
+      projectFingerprint: this.projectFingerprint(name),
+      rpcUrl,
+      demoActivated: false
+    };
+    this.writeJson(root, resolve(root, ".corner-store/deployment.json"), binding);
+  }
+
+  deploymentBinding(name: string): DeploymentBinding {
+    const root = this.root(name);
+    const target = resolve(root, ".corner-store/deployment.json");
+    const value = this.readJson(root, target) as Partial<DeploymentBinding> | undefined;
+    if (
+      !value ||
+      value.projectFingerprint !== this.projectFingerprint(name) ||
+      typeof value.rpcUrl !== "string"
+    ) {
+      throw new StudioError(409, "deployment_binding_missing", "Deploy the current project files before starting the DEX demo.");
+    }
+    return value as DeploymentBinding;
+  }
+
+  markDemoActivated(name: string): DeploymentBinding {
+    const root = this.root(name);
+    const binding = {...this.deploymentBinding(name), demoActivated: true};
+    this.writeJson(root, resolve(root, ".corner-store/deployment.json"), binding);
+    return binding;
+  }
+
   private readJson(root: string, path: string): unknown {
     this.assertSafePath(root, path);
     if (!existsSync(path)) return undefined;
@@ -449,7 +515,7 @@ export function createStudioServer(options: StudioServerOptions): Server {
   const sessionToken = options.sessionToken ?? randomBytes(32).toString("hex");
   let nextJob = 1;
 
-  return createServer(async (req, res) => {
+  const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", "http://studio.invalid");
       const path = url.pathname;
@@ -493,18 +559,21 @@ export function createStudioServer(options: StudioServerOptions): Server {
         const {name, action} = project;
         if (req.method === "GET" && action === "") return sendJson(res, 200, store.snapshot(name));
         if (req.method === "PUT" && action === "config") {
+          await stopProjectRuntime(options.runtimeManager, name);
           const output = store.saveConfig(name, await readBody(req));
           invalidateVerification(store, name);
           evidence.delete(name);
           return sendJson(res, 200, output);
         }
         if (req.method === "PUT" && action === "integration") {
+          await stopProjectRuntime(options.runtimeManager, name);
           const output = store.saveIntegration(name, await readBody(req));
           invalidateVerification(store, name);
           evidence.delete(name);
           return sendJson(res, 200, output);
         }
         if (req.method === "PUT" && action === "scenario") {
+          await stopProjectRuntime(options.runtimeManager, name);
           const output = store.saveScenario(name, await readBody(req));
           invalidateVerification(store, name);
           evidence.delete(name);
@@ -628,6 +697,7 @@ export function createStudioServer(options: StudioServerOptions): Server {
               "Run doctor and review a dry-run for the current project files and exact RPC before broadcast."
             );
           }
+          await stopProjectRuntime(options.runtimeManager, name);
           const id = `deploy-${Date.now()}-${nextJob++}`;
           const job: DeployJob = {id, project: name, status: "queued", logs: [], emitter: new EventEmitter()};
           jobs.set(id, job);
@@ -639,6 +709,7 @@ export function createStudioServer(options: StudioServerOptions): Server {
               (line) => emitJob(job, line)
             );
             if (result.code === 0) {
+              store.recordDeployment(name, rpcUrl);
               job.status = "succeeded";
               job.result = parseOutput(result.stdout);
               emitJob(job, "Reference deployment completed");
@@ -661,11 +732,85 @@ export function createStudioServer(options: StudioServerOptions): Server {
         }
         if (req.method === "GET" && action === "handoff") {
           const activation = store.activation(name);
+          if (!activation.artifactVerified) await stopProjectRuntime(options.runtimeManager, name);
+          const runtime = options.runtimeManager?.status();
+          const runningForProject = runtime?.state === "running" && runtime.project === name;
           return sendJson(res, 200, {
             enabled: activation.artifactVerified,
-            url: options.operationsUrl,
-            reason: activation.artifactVerified ? "artifact verified" : "verify the deployment artifact first"
+            running: runningForProject,
+            url: runningForProject ? runtime.dashboardUrl : options.operationsUrl,
+            runtime,
+            reason: activation.artifactVerified
+              ? runningForProject
+                ? "verified artifact is running in the DEX demo"
+                : "artifact verified; start the DEX demo with this deployment"
+              : "verify the deployment artifact first"
           });
+        }
+        if (req.method === "GET" && action === "runtime") {
+          return sendJson(res, 200, options.runtimeManager?.status() ?? {
+            state: "stopped",
+            dashboardUrl: options.operationsUrl,
+            unavailable: true
+          });
+        }
+        if (req.method === "POST" && action === "runtime/start") {
+          if (!options.runtimeManager) {
+            throw new StudioError(503, "runtime_unavailable", "Studio DEX runtime is not configured.");
+          }
+          const activation = store.activation(name);
+          if (!activation.artifactVerified) {
+            throw new StudioError(409, "verify_required", "Verify the exact deployment artifact before starting the DEX demo.");
+          }
+          const config = store.config(name);
+          if (!DEMO_BROADCAST_NETWORKS.has(config.deployment.network)) {
+            throw new StudioError(403, "demo_runtime_only", "The integrated DEX runtime is available only for the local Anvil demo deployment.");
+          }
+          if (!config.venues.rfq) {
+            throw new StudioError(409, "rfq_not_enabled", "Enable the RFQ venue in this project before starting the RFQ DEX demo.");
+          }
+          const body = await readBody(req);
+          const rpcUrl = parseRpc(body.rpcUrl);
+          if (!isAllowedRpc(rpcUrl, options.allowedRpcHosts)) {
+            throw new StudioError(403, "rpc_not_allowed", "DEX runtime RPC must use an operator-allowed host.");
+          }
+          const deployment = store.deploymentBinding(name);
+          if (deployment.rpcUrl !== rpcUrl) {
+            throw new StudioError(409, "rpc_mismatch", "Start the DEX demo with the exact RPC used for this deployment.");
+          }
+          if (deployment.demoActivated !== true) {
+            const onboarding = await options.runner.run({
+              action: "onboard",
+              projectRoot: store.root(name),
+              rpcUrl,
+              artifactPath: store.artifactPath(name)
+            });
+            assertCommand(onboarding, "Demo asset onboarding failed");
+            store.markDemoActivated(name);
+          }
+          try {
+            const runtime = await options.runtimeManager.start({
+              project: name,
+              projectRoot: store.root(name),
+              artifactPath: store.artifactPath(name),
+              configPath: store.configPath(name),
+              scenarioPath: store.scenarioPath(name),
+              rpcUrl
+            });
+            return sendJson(res, 200, runtime);
+          } catch (error: any) {
+            throw new StudioError(409, "runtime_start_failed", error.message ?? String(error));
+          }
+        }
+        if (req.method === "POST" && action === "runtime/stop") {
+          if (!options.runtimeManager) {
+            throw new StudioError(503, "runtime_unavailable", "Studio DEX runtime is not configured.");
+          }
+          try {
+            return sendJson(res, 200, await options.runtimeManager.stop(name));
+          } catch (error: any) {
+            throw new StudioError(409, "runtime_stop_failed", error.message ?? String(error));
+          }
         }
       }
 
@@ -687,6 +832,10 @@ export function createStudioServer(options: StudioServerOptions): Server {
       return sendJson(res, known.status, {error: known.code, message: known.message});
     }
   });
+  server.on("close", () => {
+    void options.runtimeManager?.stop();
+  });
+  return server;
 }
 
 function assertMutationRequest(req: IncomingMessage, sessionToken: string): void {
@@ -719,6 +868,12 @@ function cookieValue(req: IncomingMessage, name: string): string | undefined {
     if (key === name) return decodeURIComponent(parts.join("="));
   }
   return undefined;
+}
+
+async function stopProjectRuntime(runtime: DexRuntimeManager | undefined, project: string): Promise<void> {
+  if (!runtime) return;
+  const current = runtime.status();
+  if (current.project === project && current.state !== "stopped") await runtime.stop(project);
 }
 
 function safeTokenEqual(left: string, right: string): boolean {

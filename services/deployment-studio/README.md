@@ -13,7 +13,8 @@ browser (same origin)
   -> Deployment Studio Local Control API
   -> @corner-store/cli
   -> Toolkit config / DeployStack or production-plan / deployment artifact
-  -> existing Operations Dashboard
+  -> verified artifact + exact deployment RPC
+  -> RFQ backend + Operator API + DEX Dashboard
 ```
 
 All environment-specific locations and endpoints are runtime configuration:
@@ -28,6 +29,12 @@ All environment-specific locations and endpoints are runtime configuration:
 | `CORNER_STORE_BROADCAST_NETWORK` | `anvil` | only config network eligible for direct broadcast |
 | `CORNER_STORE_ALLOWED_RPC_HOSTS` | `127.0.0.1,localhost,::1` | comma-separated direct-broadcast RPC hosts |
 | `CORNER_STORE_OPERATIONS_URL` | `http://127.0.0.1:8790` | verified deployment handoff URL |
+| `CORNER_STORE_DEX_BIND_HOST` | `127.0.0.1` | integrated DEX service bind host |
+| `CORNER_STORE_DEX_PUBLIC_HOST` | `127.0.0.1` | browser-visible DEX service host |
+| `CORNER_STORE_RFQ_BACKEND_PORT` | `8787` | integrated RFQ backend port |
+| `CORNER_STORE_OPERATOR_API_PORT` | `8788` | integrated Operator API port |
+| `CORNER_STORE_DASHBOARD_PORT` | `8790` | integrated Dashboard port |
+| `CORNER_STORE_DEX_CHAIN_ID` | `31337` | local EIP-712 chain ID |
 
 Defaults are local examples, not product constants. Production operators should
 inject explicit values through their process manager. Direct Studio broadcast is
@@ -52,6 +59,9 @@ The server issues an HttpOnly `SameSite=Strict` local session cookie. Every
 state-changing API request must present that session, use same-origin semantics
 and send JSON. Doctor and dry-run evidence are held server-side and must match
 the current project-file fingerprint and exact RPC before a broadcast starts.
+After verification, `Start DEX demo` launches all three DEX services with that
+project's artifact, scenario and deployment RPC. A different RPC, mutated
+artifact or unverified project is rejected; no second stack is deployed.
 
 Use `scripts/studio.sh --help` for the complete host, port, CLI entry,
 broadcast-network and RPC-host allowlist options. Environment variables and CLI
@@ -66,7 +76,8 @@ editing repository files.
   `{schemaVersion, network:{name,chainId,rpcUrl,approvedRpcHosts}, release:{sourceCommit,contractsHash}, deploymentId, deployer, operator, venues:{amm,rfq}, safe:{address,expectedOwners,threshold,expectedSingleton,proxyCodeHash}, deployment:{artifact,evidence}, erc3643?:{token?}}`
 - production-preflight execution and production-plan preview/export
 - deployment job event stream, artifact viewer and activation checklist
-- handoff to the existing runtime dashboard after verification
+- first-start CLI onboarding of the selected demo Manifest/venues on the verified
+  deployment, followed by start/open/stop of its artifact-bound local RFQ DEX runtime
 - persisted handoff verification bound to config/integration/scenario/artifact hashes
 
 Existing production ERC-3643 onboarding, mainnet broadcast, multisig/HSM

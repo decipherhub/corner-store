@@ -10,6 +10,9 @@ export const DEFAULT_PORT = 8787;
 
 export interface Artifact {
   assetProfile: "buidl-like" | "reg-d";
+  coreDeployment?: string;
+  activationMode?: string;
+  productionDeployment?: boolean;
   scenarioSchemaVersion: number;
   scenarioHash: string;
   deployer: string;

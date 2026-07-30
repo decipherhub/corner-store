@@ -11,10 +11,27 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. 다음 feature는 별도 issue/plan에서 활성화한다.
+없음.
 
 ## Completed
 
+- `DEMO-013 — Deployment-to-DEX Showcase Handoff`: production script와 local
+  reference stack이 온체인 helper를 별도로 배포하지 않는
+  `ProductionCoreDeployer.deployCore()` 구현을 공유한다. versioned showcase
+  config와 plan/run entry point가 profile, scenario, loopback host와 네 개의
+  runtime port를 검증하고 core 배포 → demo-only ERC-3643/Mock TA/policy/venue/
+  inventory activation → artifact → RFQ backend → Operator API/Dashboard 순서를
+  재현한다. Studio의 Deploy/Verify 이후에도 같은 project artifact, scenario와
+  배포 RPC를 세 서비스에 직접 넘기는 Start/Open/Stop DEX handoff를 추가했다.
+  Studio 최초 Start는 기존 CLI `toolkit-onboard`를 재사용해 선택한 demo
+  Manifest/venue를 동일 배포물에서 활성화하고 완료 상태를 기록하므로 재시작 때
+  불필요한 retire/re-onboard를 반복하지 않는다.
+  다른 RPC나 변경된 artifact를 거부하며 실제 integration에서 Studio artifact의
+  Router와 backend가 사용하는 Router가 같음을 검증했다. artifact lineage는
+  backend와 Dashboard에 표시되며 local fixture가 production evidence가 아님을
+  명시한다. Node 20 + Foundry v1.7.1 전체
+  check(Forge 669/669, deploy-v3 10/10), target service smoke, showcase plan,
+  별도 포트 BUIDL-like RFQ E2E와 `git diff --check`를 통과했다.
 - `DEPLOY-001 — Production Deployment Workflow`: fixture/token/policy activation이
   없는 core-only Foundry script, external Ledger/Foundry account signer CLI,
   Safe proxy/singleton/code hash + exact owner `M`/threshold `N` preflight,

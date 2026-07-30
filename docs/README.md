@@ -15,6 +15,7 @@
 | [`testing.md`](./testing.md)                         | 테스트와 완료 기준            | Current    |
 | [`demo.md`](./demo.md)                               | live Anvil E2E / demo runbook | Current    |
 | [`rfq-demo-guide.md`](./rfq-demo-guide.md)           | RFQ-first MVP presenter guide | Current    |
+| [`showcase-runbook.md`](./showcase-runbook.md)       | production-core → local DEX handoff | Current |
 | [`sdk-integration.md`](./sdk-integration.md)         | modular SDK·scaffold·conformance | Current |
 | [`deployment-studio.md`](./deployment-studio.md)     | local reference execution + production preflight/plan Studio | Current |
 | [`deployment-production.md`](./deployment-production.md) | production deployment runbook | Current |

@@ -8,15 +8,24 @@ Router settlement path.
 ## One-command demo
 
 ```sh
-scripts/demo.sh --profile buidl-like
+scripts/showcase.sh --plan
+scripts/showcase.sh
 ```
 
-The launcher starts Anvil, deploys the selected profile, starts the RFQ backend,
+The versioned showcase configuration injects the selected profile, scenario and
+runtime endpoints. Plan mode prints the exact order without starting services or
+submitting transactions. The launcher starts Anvil, deploys the same production
+core implementation used by `DeployProductionCore`, explicitly activates local
+demo fixtures, starts the RFQ backend,
 starts the read-only Operator API and serves the dashboard. Open the printed URL
 and press Ctrl-C to stop all local services. The same presenter sequence and a
 button-to-endpoint map are available from the **?** button in the dashboard
 header. Non-default ports are supported because the browser uses the dashboard's
 same-origin RFQ proxy rather than a hardcoded backend origin.
+
+See [`showcase-runbook.md`](./showcase-runbook.md) for the deployment-to-DEX
+handoff, injected values and production boundary. `scripts/demo.sh` remains the
+lower-level runner when individual command-line overrides are needed.
 
 The default presenter data is injected from
 `services/rfq-demo-backend/config/demo-scenario.json`. To use another local test

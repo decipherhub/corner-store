@@ -3,6 +3,7 @@ const {readFileSync} = require("fs");
 const {join} = require("path");
 
 const port = Number(process.env.PORT || 8790);
+const host = process.env.HOST || "127.0.0.1";
 const operatorApiUrl = new URL(process.env.CORNER_STORE_OPERATOR_API || "http://127.0.0.1:8788");
 const rfqBackendUrl = new URL(process.env.CORNER_STORE_RFQ_BACKEND || "http://127.0.0.1:8787");
 const operatorApiToken = process.env.CORNER_STORE_API_TOKEN;
@@ -32,7 +33,7 @@ createServer((req, res) => {
   }
   res.writeHead(404, {"content-type": "application/json; charset=utf-8"});
   res.end('{"error":"not_found"}\n');
-}).listen(port, "127.0.0.1", () => console.log(`Corner Store dashboard listening at http://127.0.0.1:${port}`));
+}).listen(port, host, () => console.log(`Corner Store dashboard listening at http://${host}:${port}`));
 
 function proxyOperatorApi(req, res) {
   const upstream = requestUpstream({

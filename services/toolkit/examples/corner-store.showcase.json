@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "showcaseId": "buidl-like-rfq-local",
+  "profile": "buidl-like",
+  "mode": "rfq",
+  "scenario": "services/rfq-demo-backend/config/demo-scenario.json",
+  "runtime": {
+    "bindHost": "127.0.0.1",
+    "publicHost": "127.0.0.1",
+    "anvilPort": 8545,
+    "backendPort": 8787,
+    "operatorApiPort": 8788,
+    "dashboardPort": 8790
+  }
+}

@@ -240,9 +240,14 @@
 
       <section id="activationSection" class="surface reference-only">
         <div class="section-heading">
-          <div><p class="step-label">07 / Activation</p><h2>Hand a verified stack to day-to-day operations</h2></div>
-          <button id="openOperations" class="button primary" disabled>Open Operations Console</button>
+          <div><p class="step-label">07 / Activation</p><h2>Run the DEX demo on this exact deployment</h2></div>
+          <div class="handoff-actions">
+            <button id="startDexDemo" class="button primary" disabled>Start DEX demo</button>
+            <button id="openOperations" class="button primary" disabled>Open DEX</button>
+            <button id="stopDexDemo" class="button secondary" disabled>Stop DEX</button>
+          </div>
         </div>
+        <div class="notice activation-boundary"><strong>Artifact-bound runtime</strong><p>On the first start after deployment, Studio activates the selected demo Manifest and venues through the CLI, then launches the RFQ backend, Operator API and Dashboard against this project’s verified artifact, scenario and current RPC. It does not deploy a second stack.</p></div>
         <div class="notice activation-boundary"><strong>Manual evidence checklist</strong><p>Checking an item records that an operator reviewed the step. It does not approve a Maker, authorize a signer, transfer tokens or create a multisig transaction.</p></div>
         <div id="activationChecklist" class="activation-list">
           <label><input data-activation="makerApproved" type="checkbox"><span><b>Maker approval reviewed</b><small>Confirm MakerAuthorizer already reports the dealer as approved.</small></span></label>
@@ -251,7 +256,7 @@
           <label><input data-activation="smokeSettlement" type="checkbox"><span><b>Router smoke settlement observed</b><small>Record that final compliance and token movement were proved.</small></span></label>
           <label><input data-activation="governanceHandoff" type="checkbox"><span><b>Governance handoff reviewed</b><small>Record the external ownership or multisig handoff review.</small></span></label>
         </div>
-        <div id="handoffMessage" class="handoff-card"><strong>Operations handoff locked</strong><span>Verify the artifact before opening the existing runtime dashboard.</span></div>
+        <div id="handoffMessage" class="handoff-card"><strong>DEX handoff locked</strong><span>Verify the artifact before starting services with this deployment.</span></div>
       </section>
     </main>
   </div>

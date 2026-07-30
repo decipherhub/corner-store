@@ -49,12 +49,12 @@ import {MockPool} from "../test/mocks/MockPool.sol";
 import {VenueType} from "../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../src/types/VenueTypes.sol";
 import {DemoConstants} from "./DemoConstants.sol";
+import {ProductionCoreDeployer} from "./ProductionCoreDeployer.sol";
 
 /// @title DeployStack
-/// @notice Deploys the FULL Corner Store stack onto a live node (Anvil) from a
-///         single forge script, then persists all addresses to a JSON artifact
-///         that {DemoScenarios} reads. This is deliverable (1) of the live-Anvil
-///         E2E / demo runner.
+/// @notice Deploys the production core contract set plus an explicit local-only
+///         showcase activation onto Anvil, then persists all addresses to a JSON
+///         artifact that {DemoScenarios} and the dashboard read.
 ///
 /// @dev Reuses {TREXCore} (shared with the test fixture) for the REAL ERC-3643 +
 /// OnchainID deployment. Everything is broadcast by the deployer (Anvil account
@@ -71,7 +71,7 @@ import {DemoConstants} from "./DemoConstants.sol";
 /// the deployer (operator) retains suspend/resume/retire/approve rights. The RFQ
 /// venue and the surveillance-enabled recipe (id 7, for scenario 6) are set up
 /// here, before ownership moves.
-contract DeployStack is Script, TREXCore, DemoConstants {
+contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer {
     // --- Corner Store stack ----------------------------------------------
     ElementRegistry internal elementReg;
     RecipeRegistry internal recipeReg;
@@ -153,11 +153,21 @@ contract DeployStack is Script, TREXCore, DemoConstants {
             deployTREX(deployer);
         }
 
-        // 2. compliance registries + engine.
-        elementReg = new ElementRegistry();
-        recipeReg = new RecipeRegistry();
-        policyReg = new TokenPolicyRegistry();
-        operatorReg = new OperatorRegistry();
+        // 2. Deploy the exact production core implementation seam. Governance
+        //    and operator are the deterministic local deployer only for this
+        //    Anvil rehearsal. The remaining steps are explicitly demo-only.
+        Deployment memory core = deployCore(deployer, deployer, true, true);
+        elementReg = ElementRegistry(core.elementReg);
+        recipeReg = RecipeRegistry(core.recipeReg);
+        policyReg = TokenPolicyRegistry(core.policyReg);
+        operatorReg = OperatorRegistry(core.operatorReg);
+        engine = ComplianceEngine(core.engine);
+        venueReg = VenueRegistry(core.venueReg);
+        selector = VenueSelector(core.selector);
+        router = ExecutionRouter(core.router);
+        ammAdapter = UniswapV3Adapter(core.ammAdapter);
+        makerAuthorizer = MakerAuthorizer(core.makerAuthorizer);
+        rfqAdapter = RFQAdapter(core.rfqAdapter);
 
         // 3. the full 9-element Reg D 506(c) reference set + surveillance.
         _deployAndRegisterElements();
@@ -170,21 +180,11 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         recipeReg.registerRecipe(3, 1, address(new BuidlLikeFundRecipe()));
         recipeReg.registerRecipe(SURVEIL_RECIPE_ID, 1, address(new DemoSurveillanceRecipe()));
 
-        engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
-
-        // 5. execution stack + factory.
-        venueReg = new VenueRegistry();
-        selector = new VenueSelector();
-        ammAdapter = new UniswapV3Adapter();
-        makerAuthorizer = new MakerAuthorizer();
-        rfqAdapter = new RFQAdapter(makerAuthorizer);
-        router = new ExecutionRouter(engine, venueReg, selector, operatorReg);
+        // 5. Demo-only onboarding helper. The core registries, engine, router
+        //    and adapters above came from DeployProductionCore.
         factory = new CornerStoreFactory(ITokenPolicyRegistry(address(policyReg)), IVenueRegistry(address(venueReg)));
 
-        // authenticate the post-trade write path (spec §6).
-        engine.setRouter(address(router));
-        ammAdapter.setRouter(address(router));
-        rfqAdapter.setRouter(address(router));
+        // Demo-only stateful surveillance element uses the production engine.
         surveillance.setEngine(address(engine));
 
         // 6. tokens + AMM pool (token0=QUOTE, token1=RWA).
@@ -408,6 +408,9 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         vm.serializeAddress(k, "maker", maker);
         vm.serializeAddress(k, "unapprovedMaker", unapprovedMaker);
         vm.serializeString(k, "assetProfile", assetProfile);
+        vm.serializeString(k, "coreDeployment", "DeployProductionCore.deployCore");
+        vm.serializeString(k, "activationMode", "local-demo-fixtures");
+        vm.serializeBool(k, "productionDeployment", false);
         vm.serializeUint(k, "scenarioSchemaVersion", 2);
         vm.serializeBytes32(k, "scenarioHash", scenarioHash);
         vm.serializeAddress(k, "rwaToken", address(rwaToken));
