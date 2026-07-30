@@ -15,6 +15,20 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DEPLOY-002 — Public Testnet RFQ Reference Deployment`: 기존 Anvil 데모를
+  변경하지 않고 외부 RPC·chain ID·actor 주소와 Foundry keystore/Ledger signer를
+  사용하는 RFQ-only public-testnet deployment를 추가했다. 실제 T-REX
+  ERC-3643/ONCHAINID fixture, illustrative BUIDL-like Manifest, Engine/Router/RFQ,
+  mock quote token, claim과 inventory를 배포하며 participant allowance는 각
+  wallet이 별도 승인한다. read-only verifier는 chain/artifact, code, ownership,
+  operator, Manifest/venue/maker/inventory/allowance를 fail-closed로 확인한다.
+  검증된 배포만 append-only public artifact로 승격하며 모든 named 주소와
+  deployment transaction/CREATE index를 보존해 후속 runtime에서 재사용한다.
+  전체 `scripts/check.sh`(Forge 669/669, 모든 service smoke, deploy-v3 10/10),
+  별도 Anvil external-keystore broadcast, governance/operator handoff, artifact
+  승격·조회와 maker/investor approval 이후 readiness 검증을 통과했다. 실제
+  공개 테스트넷 broadcast와 explorer verification은 네트워크 입력·faucet·
+  credential 주입 후 수행한다.
 - `DEMO-015 — RFQ Session History and Targeted Claim Expiry`: My RFQs가 세션의
   firm quote를 누적하되 사용자에게는 현재 지갑이 taker인 기록만 표시하고,
   Admin만 세션 전체를 조회한다. mock market은 fill 횟수마다 같은 tick을 쓰지

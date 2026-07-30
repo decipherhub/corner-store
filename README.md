@@ -241,6 +241,30 @@ Element/Recipe/Manifest packages, staged venue/maker/signer/inventory
 activation, dry-run/fork checks, multisig review and monitoring evidence.
 Browser-triggered mainnet broadcast is out of scope.
 
+### Public Testnet RFQ Deployment
+
+Hackathon reviewers can inspect a working RFQ-only reference stack on a public
+EVM testnet without changing the local Anvil demo. The testnet path accepts all
+actors and network values at runtime, signs deployment transactions through a
+Foundry keystore or Ledger, writes a non-secret artifact, and provides separate
+participant approval and read-only verification scripts.
+
+```shell
+cp .env.testnet.example .env.testnet
+# Fill and source the local file, then simulate first.
+scripts/deploy-testnet-rfq.sh \
+  --rpc-url "$RPC_URL" \
+  --chain-id "$CHAIN_ID" \
+  --account corner-store-testnet
+
+# Repeat with --broadcast after reviewing the simulation.
+```
+
+This path deploys a mock-TA BUIDL-like ERC-3643 fixture plus the real Corner
+Store Router/Engine/RFQ contracts. It is a public testnet reference deployment,
+not production legal onboarding. See
+[`docs/testnet-deployment.md`](./docs/testnet-deployment.md).
+
 From this repository:
 
 ```shell

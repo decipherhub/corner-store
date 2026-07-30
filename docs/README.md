@@ -19,6 +19,7 @@
 | [`sdk-integration.md`](./sdk-integration.md)         | modular SDK·scaffold·conformance | Current |
 | [`deployment-studio.md`](./deployment-studio.md)     | local reference execution + production preflight/plan Studio | Current |
 | [`deployment-production.md`](./deployment-production.md) | production deployment runbook | Current |
+| [`testnet-deployment.md`](./testnet-deployment.md)       | public testnet RFQ reference deployment | Current |
 | [`product-specs/production-rfq-policy.md`](./product-specs/production-rfq-policy.md) | production RFQ 운영·구현 계약 | Current |
 | [`operations/incident-response.md`](./operations/incident-response.md) | 사고 대응·복구 runbook | Current |
 | [`security.md`](./security.md)                       | 보안 규칙                     | Current    |
