@@ -769,3 +769,66 @@ fill 책임은 열려 있었다. 현재 Adapter는 maker inventory account와 EC
 - `src/execution/adapters/rfq/RFQAdapter.sol`
 - `src/execution/ExecutionRouter.sol`
 - `services/rfq/`
+
+## D016 — Production deployment uses external signer and staged activation
+
+Date: 2026-07-31
+
+### Context
+
+Deployment Studio and `toolkit-deploy` provide local/demo configuration,
+dry-run and Anvil broadcast paths. Treating that browser-controlled path as
+production deployment would blur demo fixtures, production ERC-3643 onboarding,
+legal approval, signer custody and Safe governance.
+
+### Decision
+
+Production deployment is a separate operations workflow:
+
+1. ERC-3643 token and ONCHAINID onboarding evidence is verified as an external
+   issuer trust boundary before Corner Store activation.
+2. Governance authority is verified by Safe proxy address, runtime code hash,
+   expected singleton/mastercopy, owner count `M`, threshold `N`, owner list,
+   chain ID, payload target addresses and calldata before signing.
+3. Production signing uses an external signer or Safe-style multisig boundary.
+   Browser applications do not hold production keys and do not broadcast
+   mainnet/production transactions.
+4. Element, Recipe and Asset Compliance Manifest activation requires a
+   legal-approved package. Demo profiles, fixture identities and illustrative
+   recipes are not production approval evidence.
+5. Venue, maker, signer and inventory activation happens only after dry-run,
+   fork simulation, multisig review, bytecode/role/Manifest verification and
+   monitoring readiness.
+6. CLI production broadcast requires a frozen evidence file bound to the
+   current config hash, source commit, successful dry-run and target-chain fork
+   simulation.
+
+### Alternatives Considered
+
+- Extend Deployment Studio into a production broadcaster: rejected because it
+  would put key custody and mainnet mutation behind a browser/local demo control
+  surface.
+- Treat demo scenario and illustrative recipe data as production activation
+  evidence: rejected because legal approval, issuer onboarding and production
+  data-source contracts are separate trust boundaries.
+- Skip Safe owner/threshold verification and rely on an address label: rejected
+  because governance authority depends on the exact owner set, threshold,
+  chain and payload.
+
+### Consequences
+
+- Production deployment docs are separate from local/demo runbooks.
+- Browser UI may support review and evidence display, but not production
+  broadcast.
+- Repository tooling may pass without claiming any deployment transaction or
+  Safe proposal succeeded on a production network.
+- Actual Safe provider, custody vendor, RPC/finality policy and legal approval
+  references remain deployment-specific inputs.
+
+### Related Files
+
+- `docs/deployment-production.md`
+- `docs/architecture/deployment-operations.md`
+- `docs/deployment-studio.md`
+- `FEATURES.md`
+- `PROGRESS.md`

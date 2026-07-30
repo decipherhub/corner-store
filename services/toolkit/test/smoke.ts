@@ -1,4 +1,4 @@
-import {existsSync, mkdtempSync, readFileSync} from "fs";
+import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
 import {defaultConfig, enabledEngineSpec, loadConfig, simulateConfig, validateConfig, writeDefaultConfig} from "../src/config";
@@ -7,6 +7,14 @@ import {preflightConfig} from "../src/preflight";
 import {createCheckpoint, loadCheckpoint, writeCheckpoint} from "../src/checkpoint";
 import {createGovernanceProposal} from "../src/proposal";
 import {createDeploymentPlan} from "../src/deploy";
+import {
+  PRODUCTION_DEPLOY_SCRIPT,
+  createProductionDeploymentPlan,
+  loadProductionConfig,
+  productionConfigHash,
+  validateProductionConfig,
+  validateProductionDeploymentEvidence
+} from "../src/production";
 import {toSafeTransactionDraft} from "../src/multisig";
 import {defaultIntegrationManifest, validateIntegrationManifest} from "../src/integration";
 import {scaffoldRFQIntegration} from "../src/scaffold";
@@ -70,6 +78,103 @@ if (dryRun.broadcast || !dryRun.command.includes("ASSET_PROFILE=buidl-like") || 
 if (!createDeploymentPlan(config, "http://127.0.0.1:8545", true).command.includes("--broadcast")) throw new Error("deploy broadcast flag regression");
 const safeDraft = toSafeTransactionDraft(proposal, 42161);
 if (safeDraft.origin !== "corner-store-toolkit" || safeDraft.operation !== 0 || safeDraft.chainId !== 42161) throw new Error("Safe draft regression");
+
+const productionConfig = validateProductionConfig({
+  schemaVersion: 1,
+  network: {name: "mainnet", chainId: 1, rpcUrl: "https://rpc.example", approvedRpcHosts: ["rpc.example"]},
+  release: {sourceCommit: "a".repeat(40), contractsHash: `sha256:${"b".repeat(64)}`},
+  deploymentId: "mainnet-core-1",
+  deployer: "0x4444444444444444444444444444444444444444",
+  operator: "0x5555555555555555555555555555555555555555",
+  venues: {amm: true, rfq: false},
+  safe: {
+    address: "0x8888888888888888888888888888888888888888",
+    expectedOwners: [
+      "0x1111111111111111111111111111111111111111",
+      "0x2222222222222222222222222222222222222222",
+      "0x3333333333333333333333333333333333333333"
+    ],
+    threshold: 2,
+    expectedSingleton: "0x7777777777777777777777777777777777777777",
+    proxyCodeHash: `0x${"aa".repeat(32)}`
+  },
+  deployment: {
+    artifact: "deployments/production-core.json",
+    evidence: "deployments/production-evidence.json"
+  },
+  erc3643: {token: "0x9999999999999999999999999999999999999999"}
+});
+const productionPlan = createProductionDeploymentPlan(productionConfig);
+if (
+  productionPlan.script !== PRODUCTION_DEPLOY_SCRIPT ||
+  !productionPlan.command.startsWith("CORNER_STORE_DEPLOYER=0x4444444444444444444444444444444444444444") ||
+  !productionPlan.command.includes("CORNER_STORE_GOVERNANCE=0x8888888888888888888888888888888888888888") ||
+  !productionPlan.command.includes("CORNER_STORE_OPERATOR=0x5555555555555555555555555555555555555555") ||
+  !productionPlan.command.includes("CORNER_STORE_ENABLE_AMM=1") ||
+  !productionPlan.command.includes("CORNER_STORE_ENABLE_RFQ=0") ||
+  !productionPlan.command.includes("CORNER_STORE_DEPLOYMENT_ID=mainnet-core-1") ||
+  !productionPlan.command.includes("CORNER_STORE_ARTIFACT=deployments/production-core.json") ||
+  !productionPlan.command.includes("script/DeployProductionCore.s.sol:DeployProductionCore") ||
+  !productionPlan.command.includes("--sender 0x4444444444444444444444444444444444444444") ||
+  productionPlan.command.includes("--ledger") ||
+  productionPlan.command.includes("--account")
+) {
+  throw new Error("production signer-free plan regression");
+}
+const productionPath = join(dir, "corner-store.production.json");
+writeFileSync(productionPath, `${JSON.stringify(productionConfig, null, 2)}\n`);
+if (loadProductionConfig(productionPath).deploymentId !== "mainnet-core-1") throw new Error("production config file helper regression");
+validateProductionDeploymentEvidence({
+  schemaVersion: 1,
+  configHash: productionConfigHash(productionConfig),
+  sourceCommit: "a".repeat(40),
+  contractsHash: `sha256:${"b".repeat(64)}`,
+  dryRun: {passed: true, chainId: 1},
+  forkSimulation: {passed: true, chainId: 1, blockNumber: 20_000_000},
+  reviewedAt: "2026-07-31T00:00:00.000Z"
+}, productionConfig);
+if (!createProductionDeploymentPlan(productionConfig, {kind: "ledger"}, true).command.includes("--ledger")) {
+  throw new Error("production ledger deploy plan regression");
+}
+if (!createProductionDeploymentPlan(productionConfig, {kind: "account", name: "prod-safe-deployer"}, true).command.includes("--account prod-safe-deployer")) {
+  throw new Error("production account deploy plan regression");
+}
+try {
+  validateProductionConfig({...productionConfig, safe: {...productionConfig.safe, threshold: 4}});
+  throw new Error("invalid Safe threshold accepted");
+} catch (err: any) {
+  if (!err.message.includes("safe.threshold")) throw err;
+}
+try {
+  validateProductionConfig({...productionConfig, venues: {amm: false, rfq: false}});
+  throw new Error("empty production venues accepted");
+} catch (err: any) {
+  if (!err.message.includes("at least one production venue")) throw err;
+}
+try {
+  validateProductionConfig({...productionConfig, deploymentId: "bad/id"});
+  throw new Error("unsafe production deploymentId accepted");
+} catch (err: any) {
+  if (!err.message.includes("deploymentId")) throw err;
+}
+try {
+  validateProductionConfig({...productionConfig, deployment: {artifact: "../production-core.json"}});
+  throw new Error("unsafe production artifact path accepted");
+} catch (err: any) {
+  if (!err.message.includes("deployment.artifact")) throw err;
+}
+try {
+  validateProductionConfig({...productionConfig, deployment: {artifact: "deployments/releases/production-core.json"}});
+  throw new Error("unsupported nested production artifact path accepted");
+} catch (err: any) {
+  if (!err.message.includes("deployment.artifact")) throw err;
+}
+try {
+  validateProductionConfig({...productionConfig, signerSecret: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"});
+  throw new Error("production signer secret accepted");
+} catch (err: any) {
+  if (!err.message.includes("signer secrets")) throw err;
+}
 
 const referenceTarget = join(dir, "reference-rfq");
 const reference = scaffoldRFQIntegration(referenceTarget, {
