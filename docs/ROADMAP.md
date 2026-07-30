@@ -44,7 +44,9 @@
 - production legal Element 기준과 승인된 operator 입력 모델
 - 실제 Securitize/TA provider adapter, production WORM/indexer와 amount-specific
   lot allocation 정책
-- RFQ production signer custody, persistent nonce, pricing/inventory와 partial-fill 정책
+- ADR-009 기준 RFQ maker authorizer, durable nonce/idempotency, production
+  pricing/inventory-risk와 endpoint hardening 구현
+- partial fill은 새 quote/adapter version 설계 이후 구현
 - production Uniswap v3 pool/LP onboarding과 unified deployment orchestration
 - Order Book matching/custody/surveillance 모델
 - production TLS, secret rotation, 실제 multisig provider와 live RPC
@@ -270,7 +272,8 @@ Blockers:
 ### 4B. RFQ
 
 Status: v1 reference settlement, backend SDK and local MVP demo backend
-implemented; production dealer and custody decisions remain open.
+implemented. ADR-009 accepted the production dealer/settlement baseline;
+implementation prerequisites remain.
 
 Deliverables:
 
@@ -288,10 +291,12 @@ Completion:
 - Manifest/Recipe 또는 operator 변경이 fill에 반영된다.
 - signed quote와 request amount가 정확히 일치한다.
 
-Blockers:
+Production implementation prerequisites:
 
-- custody와 partial fill 모델
-- production signer custody, persistent nonce와 pricing/inventory policy
+- ADR-009 maker-authorizer와 regulated-quantity cap migration
+- durable nonce/idempotency와 external signer integration
+- production pricing/inventory-risk, auth/audit/monitoring implementation
+- partial fill은 새 quote/adapter version의 별도 설계·검토
 
 ### 4C. Order Book
 
@@ -365,15 +370,16 @@ Reference/demo evidence:
 
 가까운 후속 이슈:
 
-1. `design(rfq): remaining production RFQ policy` — custody, partial fill, signer,
-   nonce, pricing/inventory와 operator 책임.
-2. `feat(compliance): RecipeBinding 기반 production Asset Compliance Manifest schema/migration`
-3. `feat(compliance): verified TA provider adapter와 amount-specific lot allocation`
-4. `feat(amm): production pool/LP onboarding과 unified deployment 연결`
-5. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
-6. `ops(production): TLS, secret rotation, 실제 multisig provider와 live RPC
+1. `#65 feat(rfq): add versioned maker authorizer and regulated-amount cap`
+2. `#66 feat(rfq): add durable nonce/idempotency reference adapter`
+3. `#67 feat(rfq): add production module audit envelope and service hardening`
+4. `feat(compliance): RecipeBinding 기반 production Asset Compliance Manifest schema/migration`
+5. `feat(compliance): verified TA provider adapter와 amount-specific lot allocation`
+6. `feat(amm): production pool/LP onboarding과 unified deployment 연결`
+7. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
+8. `ops(production): TLS, secret rotation, 실제 multisig provider와 live RPC
    finality/recovery 구현`
-7. `security: medium warning budget, independent analysis와 production review`
+9. `security: medium warning budget, independent analysis와 production review`
 
 ## Decision Backlog
 

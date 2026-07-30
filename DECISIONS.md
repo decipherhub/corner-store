@@ -724,3 +724,48 @@ scaffold하는 공통 표면이 없었다.
 - `services/toolkit/src/integration.ts`
 - `services/toolkit/src/scaffold.ts`
 - `docs/sdk-integration.md`
+
+## D015 — Production RFQ v1은 non-custodial exact full-fill로 유지한다
+
+Date: 2026-07-30
+
+### Context
+
+RFQ v1과 SDK-001은 protected settlement와 교체 가능한 backend module을 제공하지만
+production custody, signer rotation, durable nonce, pricing/inventory risk와 partial
+fill 책임은 열려 있었다. 현재 Adapter는 maker inventory account와 ECDSA signer를
+동일 주소로 결합하고 Router의 finite `maxAmount`도 결제자산 `amountIn` 축만
+검사하므로 그대로 production 경계로 간주할 수 없다.
+
+### Decision
+
+1. production RFQ v1은 protocol non-custodial, atomic exact full-fill을 유지한다.
+   잔량은 새 quote로 처리하고 partial fill은 새 quote/adapter version으로 분리한다.
+2. maker settlement account와 quote signer를 분리한다. production Adapter는
+   ECDSA delegate/ERC-1271을 수용하는 versioned maker-authorizer를 fill 시점에
+   검사한다. signer 추가는 governed/delayed, revoke는 즉시 가능하다.
+3. production nonce는 `(chainId, adapter, maker)` scope에서 atomic monotonic하게
+   할당하고 idempotency key와 request hash를 durable하게 저장한다. 예약한 nonce는
+   장애가 나도 재사용하지 않는다.
+4. pricing/inventory risk는 operator-owned off-chain module이며 stale/missing
+   dependency에서 fail-closed한다. Router의 최신 compliance가 최종 gate다.
+5. compliance `maxAmount`는 regulated asset quantity에 적용한다. finite cap 활성화
+   전에 buy/sell 방향에 맞게 Router를 수정한다.
+6. production endpoint는 auth, TLS, rate limit, PII-free audit와 incident
+   reconciliation을 요구한다. Corner Store conformance는 운영·법률 인증이 아니다.
+
+### Consequences
+
+- current exact full-fill quote schema와 non-custodial transfer 원자성은 유지된다.
+- signer authorization, regulated amount cap, durable nonce와 production middleware는
+  독립 구현 feature로 분리된다.
+- 특정 dealer/custodian/KMS/database vendor와 인허가 적합성은 operator 선택 및
+  별도 검토로 남는다.
+
+### Related Files
+
+- `docs/decisions/ADR-009-production-rfq-policy.md`
+- `docs/product-specs/production-rfq-policy.md`
+- `src/execution/adapters/rfq/RFQAdapter.sol`
+- `src/execution/ExecutionRouter.sol`
+- `services/rfq/`
