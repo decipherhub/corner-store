@@ -28,6 +28,7 @@ import {
   rfqDomain,
   writeQuoteFile
 } from "../src/rfq";
+import {cmdProductionDeploy, cmdProductionPlan} from "../src/commands";
 
 const CHAIN_ID = 31337;
 const RFQ_VERIFYING_CONTRACT = "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0";
@@ -102,6 +103,65 @@ async function main() {
   writeFileSync(join(runtime, "deployments/anvil-e2e.json"), '{"router":"0x1"}\n');
   const copiedArtifact = copyDeploymentArtifact(runtime, consumerRoot, "deployments/result.json");
   assert(existsSync(copiedArtifact), "deployment artifact is copied back to the consumer project");
+
+  const productionConfigPath = join(consumerRoot, "corner-store.production.json");
+  writeFileSync(productionConfigPath, `${JSON.stringify({
+    schemaVersion: 1,
+    network: {
+      name: "mainnet",
+      chainId: 1,
+      rpcUrl: "https://rpc.example",
+      approvedRpcHosts: ["rpc.example", "secure-rpc.example"]
+    },
+    release: {sourceCommit: "a".repeat(40), contractsHash: `sha256:${"b".repeat(64)}`},
+    deploymentId: "mainnet-core-1",
+    deployer: "0x4444444444444444444444444444444444444444",
+    operator: "0x5555555555555555555555555555555555555555",
+    venues: {amm: true, rfq: true},
+    safe: {
+      address: "0x8888888888888888888888888888888888888888",
+      expectedOwners: [
+        "0x1111111111111111111111111111111111111111",
+        "0x2222222222222222222222222222222222222222"
+      ],
+      threshold: 2,
+      expectedSingleton: "0x7777777777777777777777777777777777777777",
+      proxyCodeHash: `0x${"aa".repeat(32)}`
+    },
+    deployment: {
+      artifact: "deployments/production-core.json",
+      evidence: "deployments/production-evidence.json"
+    }
+  }, null, 2)}\n`);
+  const previousCwd = process.cwd();
+  process.chdir(consumerRoot);
+  try {
+    const previousLog = console.log;
+    let planOutput = "";
+    console.log = (value?: any) => { planOutput += String(value); };
+    try {
+      cmdProductionPlan("corner-store.production.json", {rpcUrl: "https://secure-rpc.example"});
+    } finally {
+      console.log = previousLog;
+    }
+    assert(planOutput.includes("CORNER_STORE_DEPLOYER=0x4444444444444444444444444444444444444444"), "production-plan includes deployer env");
+    assert(planOutput.includes("CORNER_STORE_GOVERNANCE=0x8888888888888888888888888888888888888888"), "production-plan includes Safe env");
+    assert(planOutput.includes("CORNER_STORE_ENABLE_AMM=1") && planOutput.includes("CORNER_STORE_ENABLE_RFQ=1"), "production-plan includes venue env");
+    assert(planOutput.includes("--sender 0x4444444444444444444444444444444444444444"), "production-plan includes explicit sender");
+    assert(planOutput.includes("https://secure-rpc.example"), "production-plan supports explicit RPC runtime override");
+    assert(!planOutput.includes("--ledger") && !planOutput.includes("--account"), "production-plan is signer-free");
+    assertThrows(() => cmdProductionPlan("corner-store.production.json", {key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"}), "production-plan rejects raw key");
+    await assertRejects(
+      () => cmdProductionDeploy("corner-store.production.json", {ledger: true, confirm: "wrong"}),
+      "production-deploy requires explicit confirmation before RPC preflight"
+    );
+    await assertRejects(
+      () => cmdProductionDeploy("corner-store.production.json", {ledger: true, confirm: "production-deploy"}),
+      "production-deploy requires frozen dry-run/fork evidence before RPC preflight"
+    );
+  } finally {
+    process.chdir(previousCwd);
+  }
 
   // --- asset profile selection -------------------------------------------
   assert(resolveAssetProfile() === "buidl-like", "BUIDL-like is the default asset profile");
@@ -254,6 +314,15 @@ function assert(cond: boolean, msg: string) {
 function assertThrows(fn: () => unknown, msg: string) {
   try {
     fn();
+  } catch {
+    return;
+  }
+  throw new Error(`assertion failed: ${msg}`);
+}
+
+async function assertRejects(fn: () => Promise<unknown>, msg: string) {
+  try {
+    await fn();
   } catch {
     return;
   }

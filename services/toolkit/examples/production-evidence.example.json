@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "configHash": "sha256:cf0cc7d642bdb929ab70593a9211fb749dec3a8864881979b28a3a81b22e51c1",
+  "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "contractsHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "dryRun": {
+    "passed": true,
+    "chainId": 1
+  },
+  "forkSimulation": {
+    "passed": true,
+    "chainId": 1,
+    "blockNumber": 20000000
+  },
+  "reviewedAt": "2026-07-31T00:00:00.000Z"
+}

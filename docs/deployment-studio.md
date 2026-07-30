@@ -92,6 +92,18 @@ bind address or reverse-proxy route does not require rebuilding frontend assets.
 
 ## Production boundary
 
-The bundled `DeployStack.s.sol` is a reference/demo deployment. Mainnet
-deployment, production ERC-3643 token onboarding, multisig execution, HSM/secret
-custody and general policy mutation require separate production components.
+The bundled `DeployStack.s.sol` remains a reference/demo deployment. Studio now
+also includes a **Production core** planning target that saves
+`corner-store.production.json`, validates an existing Safe proxy/singleton/code
+hash plus owner `M`/threshold `N`, runs technical ERC-3643 wiring preflight and
+exports a signer-free plan.
+
+The production config also freezes an approved RPC hostname list and a reviewed
+release `{sourceCommit, contractsHash}`. Runtime RPC overrides outside that
+list are rejected, and the CLI recomputes the contract source bundle hash
+before any external signer is invoked.
+
+Studio does not sign or broadcast production transactions. Full production
+onboarding, Safe proposal execution, HSM/secret custody, legal-approved policy
+activation and monitoring require the CLI/external operations workflow in
+[`deployment-production.md`](./deployment-production.md).

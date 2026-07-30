@@ -16,9 +16,9 @@
       <div class="boundary-chip"><span></span>Local control surface</div>
       <nav class="workflow-map" aria-label="Deployment workflow">
         <button class="workflow-step is-current" data-stage="project" data-target="projectSection"><b>01</b><span>Project mode<small>Create the integration shell</small></span></button>
-        <button class="workflow-step is-blocked" data-stage="config" data-target="configSection"><b>02</b><span>Configuration<small>Network, asset, venues</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="config" data-target="configSection"><b>02</b><span>Target & config<small>Reference or production core</small></span></button>
         <button class="workflow-step is-blocked" data-stage="doctor" data-target="doctorSection"><b>03</b><span>Doctor<small>Required environment checks</small></span></button>
-        <button class="workflow-step is-blocked" data-stage="plan" data-target="planSection"><b>04</b><span>Deployment plan<small>Read-only dry-run</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="plan" data-target="planSection"><b>04</b><span>Deployment plan<small>Dry-run or production export</small></span></button>
         <button class="workflow-step is-blocked" data-stage="deploy" data-target="deploySection"><b>05</b><span>Demo deploy<small>Operator-allowed target only</small></span></button>
         <button class="workflow-step is-blocked" data-stage="artifact" data-target="artifactSection"><b>06</b><span>Artifact & verify<small>Address source of truth</small></span></button>
         <button class="workflow-step is-blocked" data-stage="activation" data-target="activationSection"><b>07</b><span>Activation<small>Operations handoff</small></span></button>
@@ -44,7 +44,7 @@
         <div><strong>Runtime constraints</strong><span>Operator policy is injected when the local control service starts.</span></div>
         <div class="boundary-rules">
           <span><b>Direct deploy</b> Demo allowlist only</span>
-          <span><b>Other networks</b> Plan and review only</span>
+          <span><b>Production core</b> Preflight and plan export only</span>
           <span><b>Secrets</b> Browser prohibited</span>
         </div>
       </section>
@@ -78,10 +78,20 @@
 
       <section id="configSection" class="surface">
         <div class="section-heading">
-          <div><p class="step-label">02 / Configuration</p><h2>Bind the JSON contracts the CLI actually consumes</h2></div>
-          <button id="saveConfiguration" class="button secondary" disabled>Save configuration</button>
+          <div><p class="step-label">02 / Target & configuration</p><h2>Bind the JSON contracts the CLI actually consumes</h2></div>
+          <button id="saveConfiguration" class="button secondary reference-only" disabled>Save reference configuration</button>
         </div>
-        <div class="schema-trace">
+        <div class="target-switch" role="radiogroup" aria-label="Deployment target">
+          <label class="target-card is-selected">
+            <input type="radio" name="deploymentTarget" value="reference" checked>
+            <span><b>Reference deploy</b><small>Local/demo stack, guarded Anvil broadcast remains available after doctor and dry-run.</small></span>
+          </label>
+          <label class="target-card">
+            <input type="radio" name="deploymentTarget" value="production">
+            <span><b>Production core</b><small>Save config, run production-preflight, preview and export production-plan. No browser broadcast or signing.</small></span>
+          </label>
+        </div>
+        <div id="referenceTargetPanel" class="schema-trace target-panel">
           <article>
             <div class="file-label"><span>CONFIG</span><code>corner-store.config.json</code></div>
             <div class="form-grid">
@@ -140,10 +150,55 @@
             </details>
           </article>
         </div>
+        <div id="productionTargetPanel" class="target-panel production-panel" hidden>
+          <article>
+            <div class="file-label"><span>PRODUCTION</span><code>corner-store.production.json</code></div>
+            <div class="production-ledger">
+              <div><span>Browser broadcast</span><strong>Disabled</strong></div>
+              <div><span>Browser signing</span><strong>Disabled</strong></div>
+              <div><span>Secret fields</span><strong>Rejected</strong></div>
+              <div><span>CLI path</span><strong>preflight → plan</strong></div>
+            </div>
+            <div class="form-grid">
+              <label><span class="label-line">Network name<button type="button" class="help-trigger compact" data-help-topic="production-network" aria-label="Production network 설명">?</button></span><input id="productionNetworkName" placeholder="e.g. arbitrum-one"><small class="field-note">Persists to network.name for Toolkit production preflight.</small></label>
+              <label><span class="label-line">Actual chainId<button type="button" class="help-trigger compact" data-help-topic="production-chain" aria-label="Production chainId 설명">?</button></span><input id="productionChainId" type="number" min="1" step="1" placeholder="e.g. 42161"><small class="field-note">Persists to network.chainId.</small></label>
+              <label><span class="label-line">Runtime RPC<button type="button" class="help-trigger compact" data-help-topic="production-rpc" aria-label="Production RPC 설명">?</button></span><input id="productionRpcUrl" placeholder="https://provider.example/network"><small class="field-note">Persists to network.rpcUrl; credentials should be injected by runtime.</small></label>
+              <label class="wide"><span class="label-line">Approved RPC hosts<button type="button" class="help-trigger compact" data-help-topic="production-rpc-hosts" aria-label="Approved RPC hosts 설명">?</button></span><textarea id="productionApprovedRpcHosts" rows="2" spellcheck="false" placeholder="provider.example&#10;backup-provider.example"></textarea><small class="field-note">One hostname per line. Runtime RPC overrides must use an approved host.</small></label>
+              <label><span class="label-line">Release source commit<button type="button" class="help-trigger compact" data-help-topic="production-release" aria-label="Release source commit 설명">?</button></span><input id="productionSourceCommit" placeholder="40-character lowercase git commit"><small class="field-note">Reviewed source revision recorded in config, evidence and artifact.</small></label>
+              <label><span class="label-line">Contract bundle SHA-256<button type="button" class="help-trigger compact" data-help-topic="production-release" aria-label="Contract bundle hash 설명">?</button></span><input id="productionContractsHash" placeholder="sha256:..."><small class="field-note">Generate with corner-store production-source-hash.</small></label>
+              <label><span class="label-line">Deployment ID<button type="button" class="help-trigger compact" data-help-topic="production-deployment-id" aria-label="Deployment ID 설명">?</button></span><input id="productionDeploymentId" placeholder="issuer-mainnet-2026-07"><small class="field-note">Stable label passed to production-plan; letters, numbers, _, ., and - only.</small></label>
+              <label><span class="label-line">Deployer address<button type="button" class="help-trigger compact" data-help-topic="production-addresses" aria-label="Deployer address 설명">?</button></span><input id="productionDeployer" placeholder="0x..."><small class="field-note">External sender address used by the generated Foundry command.</small></label>
+              <label><span class="label-line">Operator address<button type="button" class="help-trigger compact" data-help-topic="production-addresses" aria-label="Operator address 설명">?</button></span><input id="productionOperator" placeholder="0x..."><small class="field-note">Expected operational authority after deployment.</small></label>
+              <label><span class="label-line">Artifact path<button type="button" class="help-trigger compact" data-help-topic="production-artifact" aria-label="Production artifact 설명">?</button></span><input id="productionArtifactPath" value="deployments/production-core.json"><small class="field-note">Persists to deployment.artifact for exported production plans.</small></label>
+              <label><span class="label-line">Evidence path<button type="button" class="help-trigger compact" data-help-topic="production-evidence" aria-label="Production evidence 설명">?</button></span><input id="productionEvidencePath" value="deployments/production-evidence.json"><small class="field-note">Frozen dry-run/fork evidence required by CLI production-deploy.</small></label>
+              <label><span class="label-line">Existing Safe<button type="button" class="help-trigger compact" data-help-topic="production-safe" aria-label="Existing Safe 설명">?</button></span><input id="productionSafe" placeholder="0x..."><small class="field-note">Studio records an already-created governance Safe; it does not create one.</small></label>
+              <label><span class="label-line">Expected Safe singleton<button type="button" class="help-trigger compact" data-help-topic="production-safe-implementation" aria-label="Safe singleton 설명">?</button></span><input id="productionSafeSingleton" placeholder="0x..."><small class="field-note">Expected implementation/mastercopy from the approved Safe release.</small></label>
+              <label class="wide"><span class="label-line">Safe proxy code hash<button type="button" class="help-trigger compact" data-help-topic="production-safe-implementation" aria-label="Safe code hash 설명">?</button></span><input id="productionSafeCodeHash" placeholder="0x... 32-byte keccak256"><small class="field-note">Exact runtime bytecode hash for the approved Safe proxy.</small></label>
+              <label><span class="label-line">Threshold N<button type="button" class="help-trigger compact" data-help-topic="production-threshold" aria-label="Threshold 설명">?</button></span><input id="productionThreshold" type="number" min="1" step="1" placeholder="e.g. 2"><small id="productionOwnerNote" class="field-note">N must be between 1 and owner list size M.</small></label>
+              <fieldset class="production-venues wide">
+                <legend>Production venues</legend>
+                <label class="check-field"><input id="productionVenueRfq" type="checkbox" checked><span>RFQ Adapter</span></label>
+                <label class="check-field"><input id="productionVenueAmm" type="checkbox"><span>AMM Adapter</span></label>
+                <button type="button" class="help-trigger compact" data-help-topic="production-venues" aria-label="Production venues 설명">?</button>
+              </fieldset>
+              <label class="wide"><span class="label-line">Expected owner list M<button type="button" class="help-trigger compact" data-help-topic="production-owners" aria-label="Owner list 설명">?</button></span><textarea id="productionOwners" rows="4" spellcheck="false" placeholder="0x1111111111111111111111111111111111111111&#10;0x2222222222222222222222222222222222222222"></textarea><small class="field-note">One Safe owner address per line. Duplicate owners are rejected.</small></label>
+              <label class="wide"><span class="label-line">Existing ERC-3643 token<button type="button" class="help-trigger compact" data-help-topic="production-token" aria-label="Existing token 설명">?</button></span><input id="productionToken" placeholder="Optional 0x..."><small class="field-note">Leave blank to skip existing asset preflight. Production core does not deploy a token.</small></label>
+            </div>
+            <div class="production-actions">
+              <button id="saveProductionConfig" class="button secondary" disabled>Save production config</button>
+              <button id="runProductionPreflight" class="button primary" disabled>Run production preflight</button>
+              <button id="generateProductionPlan" class="button primary" disabled>Generate production plan</button>
+              <button id="exportProductionPlan" class="button secondary" disabled>Export plan JSON</button>
+            </div>
+            <div id="productionMessage" class="inline-message" aria-live="polite"></div>
+            <div id="productionPreflight" class="check-list empty-state">Save the production core config, then run production-preflight.</div>
+            <div id="productionPlanReview" class="plan-review empty-state">Production-plan output will appear here for review and export.</div>
+          </article>
+        </div>
         <div id="configMessage" class="inline-message" aria-live="polite"></div>
       </section>
 
-      <section id="doctorSection" class="surface">
+      <section id="doctorSection" class="surface reference-only">
         <div class="section-heading">
           <div><p class="step-label">03 / Doctor</p><h2>Prove the local toolchain before planning a deployment</h2></div>
           <button id="runDoctor" class="button primary" disabled>Run doctor</button>
@@ -151,7 +206,7 @@
         <div id="doctorChecks" class="check-list empty-state">Create a project, then run the required environment checks.</div>
       </section>
 
-      <section id="planSection" class="surface">
+      <section id="planSection" class="surface reference-only">
         <div class="section-heading">
           <div><p class="step-label">04 / Deployment plan</p><h2>Review the exact read-only Foundry command</h2></div>
           <button id="reviewPlan" class="button primary" disabled>Generate dry-run</button>
@@ -159,7 +214,7 @@
         <div id="planReview" class="plan-review empty-state">The plan combines CLI output with the saved configuration.</div>
       </section>
 
-      <section id="deploySection" class="surface deploy-surface">
+      <section id="deploySection" class="surface deploy-surface reference-only">
         <div class="section-heading">
           <div><p class="step-label">05 / Demo deployment</p><h2>Broadcast only when the operator policy allows the target</h2></div>
           <button id="deployDemo" class="button danger" disabled>Deploy reference stack</button>
@@ -174,7 +229,7 @@
         <pre id="deployLog" class="terminal"><code>$ Waiting for a guarded local deployment.</code></pre>
       </section>
 
-      <section id="artifactSection" class="surface">
+      <section id="artifactSection" class="surface reference-only">
         <div class="section-heading">
           <div><p class="step-label">06 / Artifact & verify</p><h2>Turn deployment output into operational evidence</h2></div>
           <button id="verifyArtifact" class="button primary" disabled>Verify artifact</button>
@@ -183,7 +238,7 @@
         <div id="artifactViewer" class="artifact-grid empty-state">The deployment artifact will appear here as the address source of truth.</div>
       </section>
 
-      <section id="activationSection" class="surface">
+      <section id="activationSection" class="surface reference-only">
         <div class="section-heading">
           <div><p class="step-label">07 / Activation</p><h2>Hand a verified stack to day-to-day operations</h2></div>
           <button id="openOperations" class="button primary" disabled>Open Operations Console</button>

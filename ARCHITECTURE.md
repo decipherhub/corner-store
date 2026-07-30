@@ -20,10 +20,11 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `src/` | 제품 Solidity 컨트랙트: Compliance Core, Execution Integration Kit, reference adapters |
 | `test/` | Foundry 단위·통합 테스트 |
 | `docs/` | 제품 명세, 아키텍처, 로드맵과 Harness 문서 |
+| `docs/deployment-production.md` | production deployment runbook: ERC-3643 onboarding, Safe/external signer, legal policy package, activation and monitoring evidence |
 | `services/rfq/` | RFQ quote/signing SDK, versioned module contracts와 conformance suite |
 | `services/rfq-demo-backend/` | RFQ SDK를 사용하는 local Anvil 전용 demo application |
 | `services/toolkit/` | versioned deployment/integration schema, validation과 scaffold generator |
-| `services/deployment-studio/` | local/demo 전용 project configuration, CLI execution과 deployment artifact handoff UI |
+| `services/deployment-studio/` | local reference deployment 실행과 production core config/preflight/plan export를 분리한 control UI |
 | `services/operator-api/` | private-key 없는 read-only operator snapshot/event API |
 | `services/operator-dashboard/` | Operator API를 소비하는 read-only snapshot/proposal review 화면 |
 | `services/compliance-data/` | provider-neutral TA lot, person-group state와 reject/surveillance audit SDK |
@@ -64,6 +65,7 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - [`docs/architecture/execution-routing.md`](./docs/architecture/execution-routing.md)
 - [`docs/architecture/venues/README.md`](./docs/architecture/venues/README.md)
 - [`docs/architecture/deployment-operations.md`](./docs/architecture/deployment-operations.md)
+- [`docs/deployment-production.md`](./docs/deployment-production.md)
 
 ## Data Flow
 
@@ -71,6 +73,8 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 
 - 전체 실행 흐름: [`docs/MVP-v2-multi-venue.md`](./docs/MVP-v2-multi-venue.md)
 - phase별 구현 흐름: [`docs/ROADMAP.md`](./docs/ROADMAP.md)
+- production deployment workflow:
+  [`docs/deployment-production.md`](./docs/deployment-production.md)
 
 SDK와 reference DEX의 전체 실행 흐름은 제품 명세에, 세부 책임과 불변성은
 `docs/architecture/`에 둔다.

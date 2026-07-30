@@ -1,8 +1,10 @@
 # Corner Store Deployment Studio
 
-The Deployment Studio is a local/demo-only web control surface over the existing
-Corner Store JSON and CLI contracts. It does not implement a production
-deployment orchestrator and never accepts browser-managed signing secrets.
+The Deployment Studio is a local control surface over the existing Corner Store
+JSON and CLI contracts. Its reference target can execute an allowlisted local
+demo deployment. Its production-core target saves Toolkit production config,
+runs Safe/ERC-3643 preflight and exports a signer-free plan. It never accepts
+browser-managed signing secrets or broadcasts production transactions.
 
 ## Runtime topology
 
@@ -10,7 +12,7 @@ deployment orchestrator and never accepts browser-managed signing secrets.
 browser (same origin)
   -> Deployment Studio Local Control API
   -> @corner-store/cli
-  -> Toolkit config / DeployStack / deployment artifact
+  -> Toolkit config / DeployStack or production-plan / deployment artifact
   -> existing Operations Dashboard
 ```
 
@@ -30,6 +32,7 @@ All environment-specific locations and endpoints are runtime configuration:
 Defaults are local examples, not product constants. Production operators should
 inject explicit values through their process manager. Direct Studio broadcast is
 still limited to the configured demo network and allowlisted RPC hosts.
+Production-core target controls never broadcast, sign or collect private keys.
 
 ## Run
 
@@ -59,9 +62,13 @@ editing repository files.
 
 - project create, config/integration/demo scenario editing
 - doctor, read-only deployment plan, guarded Anvil broadcast and verify
+- production-core config editing in Toolkit shape:
+  `{schemaVersion, network:{name,chainId,rpcUrl,approvedRpcHosts}, release:{sourceCommit,contractsHash}, deploymentId, deployer, operator, venues:{amm,rfq}, safe:{address,expectedOwners,threshold,expectedSingleton,proxyCodeHash}, deployment:{artifact,evidence}, erc3643?:{token?}}`
+- production-preflight execution and production-plan preview/export
 - deployment job event stream, artifact viewer and activation checklist
 - handoff to the existing runtime dashboard after verification
 - persisted handoff verification bound to config/integration/scenario/artifact hashes
 
 Existing production ERC-3643 onboarding, mainnet broadcast, multisig/HSM
-execution, policy mutation and secret custody are intentionally not provided.
+execution, policy mutation and secret custody are intentionally not provided by
+the browser Studio.

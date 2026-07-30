@@ -16,13 +16,22 @@ import {extname, relative, resolve, sep} from "path";
 
 import {
   RFQIntegrationMode,
+  ProductionConfig,
   ToolkitConfig,
   loadConfig,
   validateConfig,
-  validateIntegrationManifest
+  validateIntegrationManifest,
+  validateProductionConfig as validateToolkitProductionConfig
 } from "@corner-store/toolkit";
 
-export type CommandAction = "create" | "doctor" | "plan" | "deploy" | "verify";
+export type CommandAction =
+  | "create"
+  | "doctor"
+  | "plan"
+  | "deploy"
+  | "verify"
+  | "production-preflight"
+  | "production-plan";
 
 export interface CommandRequest {
   action: CommandAction;
@@ -30,6 +39,7 @@ export interface CommandRequest {
   rpcUrl?: string;
   mode?: RFQIntegrationMode;
   docker?: boolean;
+  productionConfigPath?: string;
 }
 
 export interface CommandResult {
@@ -61,6 +71,7 @@ export interface ProjectSummary {
 }
 
 const DEMO_BROADCAST_NETWORKS = new Set(["anvil"]);
+const PRODUCTION_CONFIG_FILE = "corner-store.production.json";
 
 interface DeployJob {
   id: string;
@@ -137,6 +148,12 @@ export class NodeCliRunner implements StudioCommandRunner {
     }
     if (input.action === "doctor") return ["doctor"];
     if (input.action === "verify") return ["verify"];
+    if (input.action === "production-preflight") {
+      return ["production-preflight", input.productionConfigPath ?? PRODUCTION_CONFIG_FILE];
+    }
+    if (input.action === "production-plan") {
+      return ["production-plan", input.productionConfigPath ?? PRODUCTION_CONFIG_FILE];
+    }
     const args = ["--rpc", input.rpcUrl ?? this.defaultRpcUrl, "deploy"];
     if (input.action === "deploy") args.push("--broadcast");
     return args;
@@ -196,6 +213,7 @@ class ProjectStore {
       config: this.readJson(root, resolve(root, "corner-store.config.json")),
       integration: this.readJson(root, resolve(root, "corner-store.integration.json")),
       scenario: this.readJson(root, resolve(root, "corner-store.scenario.json")),
+      production: this.readJson(root, resolve(root, PRODUCTION_CONFIG_FILE)),
       activation: this.activation(name)
     };
   }
@@ -241,6 +259,43 @@ class ProjectStore {
     const root = this.root(name);
     this.writeJson(root, resolve(root, "corner-store.scenario.json"), value);
     return value;
+  }
+
+  productionConfigPath(name: string): string {
+    const root = this.root(name);
+    const target = resolve(root, PRODUCTION_CONFIG_FILE);
+    this.assertSafePath(root, target);
+    return target;
+  }
+
+  productionConfig(name: string): ProductionConfig {
+    const root = this.root(name);
+    const target = this.productionConfigPath(name);
+    if (!existsSync(target)) {
+      throw new StudioError(404, "production_config_missing", "Save the production core config before running preflight.");
+    }
+    try {
+      return validateToolkitProductionConfig(this.readJson(root, target));
+    } catch (error: any) {
+      throw new StudioError(400, "invalid_production_config", error.message);
+    }
+  }
+
+  saveProductionConfig(name: string, value: unknown): ProductionConfig {
+    let config: ProductionConfig;
+    try {
+      config = validateToolkitProductionConfig(value);
+    } catch (error: any) {
+      throw new StudioError(400, "invalid_production_config", error.message);
+    }
+    const root = this.root(name);
+    this.writeJson(root, this.productionConfigPath(name), config);
+    return config;
+  }
+
+  productionFingerprint(name: string): string {
+    const root = this.root(name);
+    return this.hashFiles(root, [this.productionConfigPath(name)]);
   }
 
   artifactPath(name: string): string {
@@ -454,6 +509,56 @@ export function createStudioServer(options: StudioServerOptions): Server {
           invalidateVerification(store, name);
           evidence.delete(name);
           return sendJson(res, 200, output);
+        }
+        if (req.method === "PUT" && action === "production-config") {
+          const output = store.saveProductionConfig(name, await readBody(req));
+          evidence.delete(`production:${name}`);
+          return sendJson(res, 200, output);
+        }
+        if (req.method === "POST" && action === "production-preflight") {
+          const config = store.productionConfig(name);
+          const result = await options.runner.run({
+            action: "production-preflight",
+            projectRoot: store.root(name),
+            productionConfigPath: PRODUCTION_CONFIG_FILE
+          });
+          assertCommand(result, "Production preflight failed");
+          const output = asObject(parseOutput(result.stdout));
+          if (output.ready !== true) {
+            evidence.delete(`production:${name}`);
+            throw new StudioError(
+              409,
+              "production_preflight_failed",
+              "Production preflight did not return ready=true."
+            );
+          }
+          evidence.set(`production:${name}`, {doctorFingerprint: store.productionFingerprint(name)});
+          return sendJson(res, 200, {
+            ...output,
+            ready: true,
+            config,
+            boundary: productionBoundary()
+          });
+        }
+        if (req.method === "POST" && action === "production-plan") {
+          const fingerprint = store.productionFingerprint(name);
+          const current = evidence.get(`production:${name}`);
+          if (current?.doctorFingerprint !== fingerprint) {
+            throw new StudioError(409, "production_preflight_required", "Run production preflight against the current production config before generating a plan.");
+          }
+          const config = store.productionConfig(name);
+          const result = await options.runner.run({
+            action: "production-plan",
+            projectRoot: store.root(name),
+            productionConfigPath: PRODUCTION_CONFIG_FILE
+          });
+          assertCommand(result, "Production plan failed");
+          return sendJson(res, 200, {
+            ...asObject(parseOutput(result.stdout)),
+            config,
+            boundary: productionBoundary(),
+            exportName: `${name}-production-plan.json`
+          });
         }
         if (req.method === "GET" && action === "artifact") return sendJson(res, 200, store.artifact(name));
         if (req.method === "GET" && action === "activation") return sendJson(res, 200, store.activation(name));
@@ -677,6 +782,15 @@ function parseOutput(value: string): unknown {
 
 function asObject(value: unknown): Record<string, any> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {output: value};
+}
+
+function productionBoundary(): Record<string, unknown> {
+  return {
+    browserBroadcast: false,
+    browserSigning: false,
+    privateKeyFields: false,
+    commands: ["production-preflight", "production-plan"]
+  };
 }
 
 function containsSensitiveKey(value: unknown): boolean {

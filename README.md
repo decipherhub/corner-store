@@ -228,6 +228,35 @@ demo network and RPC allowlist. Mainnet deployment, signing secrets and
 production ERC-3643 onboarding are outside this control surface. See
 [`docs/deployment-studio.md`](./docs/deployment-studio.md).
 
+### Production Deployment
+
+Production core deployment is implemented separately from the local/demo
+Studio path. It requires ERC-3643/ONCHAINID issuer onboarding evidence, Safe
+proxy/singleton/code-hash and owner/threshold verification, external signing,
+legal-approved
+Element/Recipe/Manifest packages, staged venue/maker/signer/inventory
+activation, dry-run/fork checks, multisig review and monitoring evidence.
+Browser-triggered mainnet broadcast is out of scope.
+
+From this repository:
+
+```shell
+npm run build --prefix services/cli
+cp services/toolkit/examples/corner-store.production.json corner-store.production.json
+node services/cli/dist/cli/src/index.js production-source-hash
+node services/cli/dist/cli/src/index.js production-plan corner-store.production.json
+node services/cli/dist/cli/src/index.js production-preflight corner-store.production.json
+```
+
+Copy the printed source commit/contract hash into `release`, then freeze the
+approved RPC hosts, existing Safe address, full owner list `M`, threshold `N`
+and optional existing ERC-3643 token address. The plan prints the config hash used by
+`deployment.evidence`. After dry-run and target-chain fork review, an external
+operator can execute `production-deploy` with a Foundry Ledger or named
+keystore account. The browser Studio cannot sign or broadcast this path.
+
+See [`docs/deployment-production.md`](./docs/deployment-production.md).
+
 ### Compliance Data SDK
 
 `services/compliance-data` implements the provider-neutral ADR-008 foundation:

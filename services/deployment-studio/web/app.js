@@ -38,6 +38,66 @@ const HELP_CONTENT = {
       <ul><li><b>Anvil</b>: 로컬 reference stack 직접 배포 가능</li><li><b>Arbitrum/GIWA/기타 EVM</b>: 현재 Studio에서는 dry-run과 검토만 가능</li></ul>
       <div class="dialog-boundary">Production network는 브라우저에서 바로 broadcast하지 않습니다. 향후 multisig proposal, HSM signer와 contract verification을 갖춘 production adapter가 실행해야 합니다.</div>`
   },
+  "production-network": {
+    title: "Production network.name",
+    body: `<p>Toolkit production config의 <code>network.name</code>입니다. 사람이 검토하는 target label이며 chainId와 RPC가 실제 실행 대상을 고정합니다.</p><div class="dialog-example">arbitrum-one\nsepolia\nissuer-private-evm</div>`
+  },
+  "production-chain": {
+    title: "Production network.chainId",
+    body: `<p>실제 runtime RPC가 보고해야 하는 EVM chain id입니다. production-preflight가 이 값과 RPC 응답의 일치를 검사합니다.</p><div class="dialog-boundary">Studio는 chainId를 저장하고 검토 명령을 실행할 뿐, 브라우저에서 transaction을 만들지 않습니다.</div>`
+  },
+  "production-rpc": {
+    title: "Production network.rpcUrl",
+    body: `<p>Toolkit production config의 runtime RPC endpoint입니다. 브라우저에 private key나 signer secret을 입력하지 않으며, RPC credential은 운영 환경에서 주입하는 구성을 권장합니다.</p>`
+  },
+  "production-rpc-hosts": {
+    title: "Approved RPC hosts",
+    body: `<p>배포 검토에서 승인한 RPC provider hostname 목록입니다. 실행 시 URL을 환경변수로 바꿔도 이 목록 밖의 provider로는 production command가 진행되지 않습니다.</p><div class="dialog-example">arb-mainnet.example\narb-backup.example</div>`
+  },
+  "production-release": {
+    title: "Reviewed contract release",
+    body: `<p>Source commit은 사람이 승인한 Git revision이고, Contract bundle SHA-256은 실제 Foundry 입력 파일 묶음의 결정적 hash입니다. production-deploy는 현재 파일 hash가 config 및 dry-run evidence와 정확히 같은 경우에만 실행됩니다.</p><div class="dialog-example">corner-store production-source-hash</div>`
+  },
+  "production-deployment-id": {
+    title: "Production deploymentId",
+    body: `<p>production-plan command와 artifact lineage에 들어가는 stable deployment label입니다. Toolkit validator는 letters, numbers, underscore, dot, dash만 허용합니다.</p><div class="dialog-example">issuer-mainnet-2026-07\nfund-a-arbitrum-one</div>`
+  },
+  "production-addresses": {
+    title: "Production deployer and operator",
+    body: `<p>Deployer는 외부 signer가 Foundry command에서 사용할 sender address이고, Operator는 production core가 운영 권한으로 받을 address입니다. Studio는 둘 다 주소로만 저장합니다.</p><div class="dialog-boundary">이 필드들은 private key, account password 또는 signer session이 아닙니다.</div>`
+  },
+  "production-artifact": {
+    title: "Production deployment.artifact",
+    body: `<p>production-plan이 배포 결과를 기록해야 하는 artifact 위치입니다. downstream 운영 도구가 주소 source of truth로 읽을 경로를 명확히 고정합니다.</p><div class="dialog-example">deployments/issuer-mainnet-core.json</div><div class="dialog-boundary">현재 실행기는 안전한 단일 파일 경로 <code>deployments/&lt;filename&gt;.json</code>만 허용합니다.</div>`
+  },
+  "production-safe": {
+    title: "Existing Safe",
+    body: `<p>이미 만들어진 Safe proxy 주소입니다. Studio는 Safe를 생성하거나 owner transaction을 서명하지 않습니다. preflight는 proxy code hash, singleton, owner set과 threshold를 모두 대조합니다.</p>`
+  },
+  "production-safe-implementation": {
+    title: "Safe singleton and proxy code",
+    body: `<p>선택한 Safe release/provider가 공표한 singleton 주소와 실제 Safe proxy runtime bytecode의 keccak256 hash를 입력합니다. ABI가 같은 가짜 governance contract를 차단하기 위한 필수 검증값입니다.</p><div class="dialog-boundary">Explorer 화면에서 임의 복사하지 말고 사용하는 Safe 배포 문서·release evidence와 대조하십시오.</div>`
+  },
+  "production-evidence": {
+    title: "Frozen deployment evidence",
+    body: `<p>현재 production config hash에 묶인 dry-run 및 target-chain fork simulation 결과 파일입니다. CLI production-deploy는 configHash, chainId, sourceCommit과 pass 상태가 유효하지 않으면 broadcast하지 않습니다.</p><div class="dialog-example">deployments/production-evidence.json</div>`
+  },
+  "production-owners": {
+    title: "Expected owner list M",
+    body: `<p>Safe에 있어야 하는 owner address 목록입니다. 한 줄에 하나씩 입력하며 duplicate와 zero address는 Toolkit validation에서 거부됩니다.</p>`
+  },
+  "production-threshold": {
+    title: "Threshold N",
+    body: `<p>Safe 실행에 필요한 승인 수입니다. N은 1 이상이고 owner list size M 이하이어야 합니다.</p><div class="dialog-example">M = 3 owners\nN = 2 threshold</div>`
+  },
+  "production-token": {
+    title: "Existing ERC-3643 token",
+    body: `<p>이미 배포된 ERC-3643 token을 production preflight에 포함할 때만 입력합니다. 비워 두면 existing asset preflight를 하지 않습니다.</p><div class="dialog-boundary">Production core plan은 token을 배포하지 않습니다.</div>`
+  },
+  "production-venues": {
+    title: "Production venues",
+    body: `<p>Toolkit production config의 <code>venues</code> flags입니다. RFQ 또는 AMM 중 최소 하나가 켜져야 preflight와 plan이 통과합니다.</p>`
+  },
   rpc: {
     title: "RPC URL은 무엇인가요?",
     body: `<p>Studio와 CLI가 선택한 블록체인 노드에 접속할 주소입니다. 로컬 Anvil, 사내 노드 또는 RPC provider가 발급한 endpoint를 입력합니다.</p><div class="dialog-example">Local: http://127.0.0.1:8545\nHosted: https://&lt;provider-endpoint&gt;</div><div class="dialog-boundary">API key가 포함된 RPC는 project JSON에 저장하지 않고 실행 환경에서 주입하는 것이 안전합니다.</div>`
@@ -93,6 +153,8 @@ const state = {
   doctorReady: false,
   planReady: false,
   verified: false,
+  productionPreflightReady: false,
+  productionPlan: null,
   plan: null,
   artifact: null,
   operationsUrl: "",
@@ -103,6 +165,7 @@ document.addEventListener("DOMContentLoaded", boot);
 
 async function boot() {
   bindControls();
+  setDeploymentTarget(document.querySelector('input[name="deploymentTarget"]:checked').value);
   try {
     const health = await api("/api/v1/health");
     $("apiLed").classList.add("is-pass");
@@ -136,6 +199,9 @@ function bindControls() {
       if (state.project) invalidatePlan();
     };
   });
+  document.querySelectorAll('input[name="deploymentTarget"]').forEach((input) => {
+    input.onchange = () => setDeploymentTarget(input.value);
+  });
   document.querySelectorAll("[data-help-topic]").forEach((button) => {
     button.onclick = (event) => {
       event.preventDefault();
@@ -167,6 +233,12 @@ function bindControls() {
   $("projectSelector").onchange = () => selectProject($("projectSelector").value);
   $("createProject").onclick = createProject;
   $("saveConfiguration").onclick = saveConfig;
+  $("saveProductionConfig").onclick = saveProductionConfig;
+  $("runProductionPreflight").onclick = runProductionPreflight;
+  $("generateProductionPlan").onclick = generateProductionPlan;
+  $("exportProductionPlan").onclick = exportProductionPlan;
+  $("productionOwners").addEventListener("input", updateProductionOwnerNote);
+  $("productionThreshold").addEventListener("input", updateProductionOwnerNote);
   $("runDoctor").onclick = runDoctor;
   $("reviewPlan").onclick = reviewPlan;
   $("deployDemo").onclick = deployDemo;
@@ -277,14 +349,61 @@ function hydrate(snapshot) {
     setModuleValue("nonceModule", integration.modules.nonce.moduleId);
   }
   if (snapshot.scenario) $("scenarioJson").value = JSON.stringify(snapshot.scenario, null, 2);
+  hydrateProduction(snapshot.production);
   Object.entries(snapshot.activation ?? {}).forEach(([key, value]) => {
     const input = document.querySelector(`[data-activation="${key}"]`);
     if (input) input.checked = value === true;
   });
 }
 
+function hydrateProduction(config) {
+  if (config) {
+    $("productionNetworkName").value = config.network?.name ?? "";
+    $("productionChainId").value = config.network?.chainId ?? "";
+    $("productionRpcUrl").value = config.network?.rpcUrl ?? "";
+    $("productionApprovedRpcHosts").value = Array.isArray(config.network?.approvedRpcHosts)
+      ? config.network.approvedRpcHosts.join("\n")
+      : "";
+    $("productionSourceCommit").value = config.release?.sourceCommit ?? "";
+    $("productionContractsHash").value = config.release?.contractsHash ?? "";
+    $("productionDeploymentId").value = config.deploymentId ?? "";
+    $("productionDeployer").value = config.deployer ?? "";
+    $("productionOperator").value = config.operator ?? "";
+    $("productionVenueRfq").checked = config.venues?.rfq !== false;
+    $("productionVenueAmm").checked = config.venues?.amm === true;
+    $("productionArtifactPath").value = config.deployment?.artifact ?? "deployments/production-core.json";
+    $("productionEvidencePath").value = config.deployment?.evidence ?? "deployments/production-evidence.json";
+    $("productionSafe").value = config.safe?.address ?? "";
+    $("productionSafeSingleton").value = config.safe?.expectedSingleton ?? "";
+    $("productionSafeCodeHash").value = config.safe?.proxyCodeHash ?? "";
+    $("productionOwners").value = Array.isArray(config.safe?.expectedOwners)
+      ? config.safe.expectedOwners.join("\n")
+      : "";
+    $("productionThreshold").value = config.safe?.threshold ?? "";
+    $("productionToken").value = config.erc3643?.token ?? "";
+  }
+  updateProductionOwnerNote();
+}
+
 function setProjectControls(enabled) {
   for (const id of ["saveConfiguration", "runDoctor", "reviewPlan"]) $(id).disabled = !enabled;
+  for (const id of ["saveProductionConfig", "runProductionPreflight"]) $(id).disabled = !enabled;
+  $("generateProductionPlan").disabled = !enabled || !state.productionPreflightReady;
+  $("exportProductionPlan").disabled = !state.productionPlan;
+}
+
+function setDeploymentTarget(value) {
+  const production = value === "production";
+  document.querySelectorAll(".target-card").forEach((card) => {
+    const input = card.querySelector('input[name="deploymentTarget"]');
+    card.classList.toggle("is-selected", input?.value === value);
+  });
+  $("referenceTargetPanel").hidden = production;
+  $("productionTargetPanel").hidden = !production;
+  document.querySelectorAll(".reference-only").forEach((node) => {
+    node.hidden = production;
+  });
+  updateWorkflowState();
 }
 
 async function saveConfig() {
@@ -319,6 +438,167 @@ async function saveConfig() {
   } catch (error) {
     message("configMessage", error.message, true);
   }
+}
+
+async function saveProductionConfig() {
+  setBusy($("saveProductionConfig"), true, "Saving…");
+  try {
+    const config = buildProductionConfig();
+    const saved = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/production-config`, {
+      method: "PUT",
+      body: config
+    });
+    state.productionPreflightReady = false;
+    state.productionPlan = null;
+    hydrateProduction(saved);
+    $("productionPreflight").className = "check-list empty-state";
+    $("productionPreflight").textContent = "Production config saved. Run production-preflight before generating a plan.";
+    $("productionPlanReview").className = "plan-review empty-state";
+    $("productionPlanReview").textContent = "Production-plan output will appear here for review and export.";
+    message("productionMessage", "Saved corner-store.production.json using the Toolkit ProductionConfig schema.", false);
+    setProjectControls(Boolean(state.project));
+  } catch (error) {
+    message("productionMessage", error.message, true);
+  } finally {
+    setBusy($("saveProductionConfig"), false, "Save production config");
+  }
+}
+
+function buildProductionConfig() {
+  const owners = $("productionOwners").value
+    .split(/\r?\n|,/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const token = $("productionToken").value.trim();
+  const approvedRpcHosts = $("productionApprovedRpcHosts").value
+    .split(/\r?\n|,/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return {
+    schemaVersion: 1,
+    network: {
+      name: $("productionNetworkName").value.trim(),
+      chainId: Number($("productionChainId").value),
+      rpcUrl: $("productionRpcUrl").value.trim(),
+      approvedRpcHosts
+    },
+    release: {
+      sourceCommit: $("productionSourceCommit").value.trim(),
+      contractsHash: $("productionContractsHash").value.trim()
+    },
+    deploymentId: $("productionDeploymentId").value.trim(),
+    deployer: $("productionDeployer").value.trim(),
+    operator: $("productionOperator").value.trim(),
+    venues: {
+      amm: $("productionVenueAmm").checked,
+      rfq: $("productionVenueRfq").checked
+    },
+    safe: {
+      address: $("productionSafe").value.trim(),
+      expectedOwners: owners,
+      threshold: Number($("productionThreshold").value),
+      expectedSingleton: $("productionSafeSingleton").value.trim(),
+      proxyCodeHash: $("productionSafeCodeHash").value.trim()
+    },
+    deployment: {
+      artifact: $("productionArtifactPath").value.trim(),
+      evidence: $("productionEvidencePath").value.trim()
+    },
+    ...(token ? {erc3643: {token}} : {})
+  };
+}
+
+function updateProductionOwnerNote() {
+  if (!$("productionOwnerNote")) return;
+  const owners = $("productionOwners").value.split(/\r?\n|,/).map((value) => value.trim()).filter(Boolean);
+  const threshold = Number($("productionThreshold").value || 0);
+  $("productionOwnerNote").textContent = owners.length > 0
+    ? `M = ${owners.length} expected owners; N = ${threshold || "unset"} threshold.`
+    : "N must be between 1 and owner list size M.";
+}
+
+async function runProductionPreflight() {
+  setBusy($("runProductionPreflight"), true, "Checking…");
+  try {
+    const result = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/production-preflight`, {method: "POST"});
+    state.productionPreflightReady = result.ready === true;
+    renderProductionPreflight(result);
+    $("generateProductionPlan").disabled = !state.productionPreflightReady;
+    message("productionMessage", state.productionPreflightReady ? "Production preflight passed." : "Production preflight returned a non-ready result.", !state.productionPreflightReady);
+  } catch (error) {
+    state.productionPreflightReady = false;
+    $("productionPreflight").className = "check-list empty-state";
+    $("productionPreflight").textContent = error.message;
+    message("productionMessage", error.message, true);
+  } finally {
+    setBusy($("runProductionPreflight"), false, "Run production preflight");
+  }
+}
+
+function renderProductionPreflight(result) {
+  const checks = Array.isArray(result.checks) ? result.checks : [
+    {name: "production-preflight", pass: result.ready !== false, detail: result.output ?? "CLI preflight completed", required: true},
+    {name: "browser-safety", pass: true, detail: "No browser signing, broadcast or private-key field is exposed", required: true}
+  ];
+  $("productionPreflight").className = "check-list";
+  $("productionPreflight").innerHTML = checks.map((check) => `
+    <div class="check-row">
+      <span class="status-led ${check.pass ? "is-pass" : ""}"></span>
+      <b>${escapeHtml(check.name)}</b>
+      <span>${escapeHtml(check.detail ?? "")}</span>
+      <em>${check.required === false ? "optional" : "required"}</em>
+    </div>`).join("");
+}
+
+async function generateProductionPlan() {
+  setBusy($("generateProductionPlan"), true, "Planning…");
+  try {
+    const result = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/production-plan`, {method: "POST"});
+    state.productionPlan = result;
+    renderProductionPlan(result);
+    $("exportProductionPlan").disabled = false;
+    message("productionMessage", "Production plan generated for review and export.", false);
+  } catch (error) {
+    state.productionPlan = null;
+    $("productionPlanReview").className = "plan-review empty-state";
+    $("productionPlanReview").textContent = error.message;
+    $("exportProductionPlan").disabled = true;
+    message("productionMessage", error.message, true);
+  } finally {
+    setBusy($("generateProductionPlan"), false, "Generate production plan");
+  }
+}
+
+function renderProductionPlan(plan) {
+  $("productionPlanReview").className = "plan-review";
+  $("productionPlanReview").innerHTML = `
+    <div class="plan-grid">
+      <div><span>Schema</span><strong>${escapeHtml(plan.schema ?? "corner-store-production")}</strong></div>
+      <div><span>Network</span><strong>${escapeHtml(plan.config.network.name)}</strong></div>
+      <div><span>ChainId</span><strong>${escapeHtml(plan.config.network.chainId)}</strong></div>
+      <div><span>Deployment ID</span><strong>${escapeHtml(plan.config.deploymentId)}</strong></div>
+      <div><span>Deployer</span><strong>${escapeHtml(plan.config.deployer)}</strong></div>
+      <div><span>Operator</span><strong>${escapeHtml(plan.config.operator)}</strong></div>
+      <div><span>RPC</span><strong>${escapeHtml(plan.config.network.rpcUrl)}</strong></div>
+      <div><span>Safe</span><strong>${escapeHtml(plan.config.safe.address)}</strong></div>
+      <div><span>M of N</span><strong>${escapeHtml(`${plan.config.safe.threshold} of ${plan.config.safe.expectedOwners.length}`)}</strong></div>
+      <div><span>Venues</span><strong>${escapeHtml(`${plan.config.venues.rfq ? "RFQ" : ""}${plan.config.venues.rfq && plan.config.venues.amm ? " + " : ""}${plan.config.venues.amm ? "AMM" : ""}`)}</strong></div>
+      <div><span>Token</span><strong>${escapeHtml(plan.config.erc3643?.token ?? "no existing asset preflight")}</strong></div>
+      <div><span>Mutation</span><strong>export only</strong></div>
+    </div>
+    <div class="command-block">${escapeHtml(plan.command ?? plan.output ?? "No command returned")}</div>`;
+}
+
+function exportProductionPlan() {
+  if (!state.productionPlan) return;
+  const name = state.productionPlan.exportName ?? `${state.project}-production-plan.json`;
+  const blob = new Blob([`${JSON.stringify(state.productionPlan, null, 2)}\n`], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function buildIntegration(mode) {

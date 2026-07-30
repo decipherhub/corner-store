@@ -45,6 +45,29 @@ class FakeRunner implements StudioCommandRunner {
     if (input.action === "plan") {
       return {code: 0, stdout: JSON.stringify({profile: "buidl-like", rpcUrl: input.rpcUrl, broadcast: false, command: "forge script", warnings: []}), stderr: ""};
     }
+    if (input.action === "production-preflight") {
+      const config = JSON.parse(readFileSync(join(input.projectRoot, "corner-store.production.json"), "utf8"));
+      return {
+        code: 0,
+        stdout: JSON.stringify({
+          ready: config.network.chainId === 42161,
+          checks: [{name: "production-config", required: true, pass: config.network.chainId === 42161, detail: config.network.name}]
+        }),
+        stderr: ""
+      };
+    }
+    if (input.action === "production-plan") {
+      return {
+        code: 0,
+        stdout: JSON.stringify({
+          schema: "corner-store-production",
+          command: "forge script script/DeployProductionCore.s.sol:DeployProductionCore --rpc-url https://rpc.example --chain-id 42161",
+          broadcast: false,
+          warnings: ["plan only: no transaction will be submitted"]
+        }),
+        stderr: ""
+      };
+    }
     if (input.action === "deploy") {
       const artifact = {
         assetProfile: "buidl-like",
@@ -140,6 +163,57 @@ async function main(): Promise<void> {
   if (mainnet.status !== 200) throw new Error("mainnet config save regression");
   const forbidden = await call("POST", "/api/v1/projects/treasury-dex/deploy", {rpcUrl: "https://rpc.example"});
   if (forbidden.status !== 403) throw new Error("non-Anvil broadcast was not rejected");
+  const productionSecret = await call("PUT", "/api/v1/projects/treasury-dex/production-config", {
+    ...baseProductionConfig(),
+    signerSecret: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  });
+  if (productionSecret.status !== 400) throw new Error("production config accepted signer-shaped secrets");
+  const productionConfig = await call("PUT", "/api/v1/projects/treasury-dex/production-config", baseProductionConfig());
+  if (
+    productionConfig.status !== 200 ||
+    productionConfig.body.network.chainId !== 42161 ||
+    productionConfig.body.safe.threshold !== 2
+  ) {
+    throw new Error("production config save regression");
+  }
+  const prematureProductionPlan = await call("POST", "/api/v1/projects/treasury-dex/production-plan");
+  if (prematureProductionPlan.status !== 409 || prematureProductionPlan.body.error !== "production_preflight_required") {
+    throw new Error("production plan bypassed production-preflight evidence");
+  }
+  await call("PUT", "/api/v1/projects/treasury-dex/production-config", {
+    ...baseProductionConfig(),
+    network: {...baseProductionConfig().network, chainId: 1}
+  });
+  const failedProductionPreflight = await call("POST", "/api/v1/projects/treasury-dex/production-preflight");
+  if (failedProductionPreflight.status !== 409 || failedProductionPreflight.body.error !== "production_preflight_failed") {
+    throw new Error("production preflight accepted ready=false output");
+  }
+  await call("PUT", "/api/v1/projects/treasury-dex/production-config", baseProductionConfig());
+  const productionPreflight = await call("POST", "/api/v1/projects/treasury-dex/production-preflight");
+  if (productionPreflight.status !== 200 || !productionPreflight.body.ready || productionPreflight.body.boundary.browserBroadcast !== false) {
+    throw new Error("production preflight regression");
+  }
+  const productionPlan = await call("POST", "/api/v1/projects/treasury-dex/production-plan");
+  if (
+    productionPlan.status !== 200 ||
+    productionPlan.body.config.network.name !== "arbitrum-one" ||
+    productionPlan.body.config.deploymentId !== "issuer-mainnet-2026-07" ||
+    productionPlan.body.config.venues.rfq !== true ||
+    productionPlan.body.broadcast !== false ||
+    !productionPlan.body.exportName.endsWith("-production-plan.json")
+  ) {
+    throw new Error("production plan preview/export regression");
+  }
+  const productionPreflightCall = runner.calls.find((entry) => entry.action === "production-preflight");
+  const productionPlanCall = runner.calls.find((entry) => entry.action === "production-plan");
+  if (
+    productionPreflightCall?.productionConfigPath !== "corner-store.production.json" ||
+    productionPlanCall?.productionConfigPath !== "corner-store.production.json"
+  ) {
+    throw new Error("production commands did not receive the positional config filename");
+  }
+  const productionDeployCall = runner.calls.find((entry) => entry.action === "deploy" && entry.projectRoot.endsWith("treasury-dex"));
+  if (productionDeployCall) throw new Error("production workflow triggered the reference deploy action");
 
   await call("PUT", "/api/v1/projects/treasury-dex/config", baseConfig("anvil"));
   const prematureDeploy = await call("POST", "/api/v1/projects/treasury-dex/deploy", {rpcUrl: "http://127.0.0.1:8545"});
@@ -236,8 +310,18 @@ async function main(): Promise<void> {
     'id="runDoctor"', 'id="reviewPlan"', 'id="deployDemo"', 'id="verifyArtifact"',
     'id="artifactViewer"', 'id="activationChecklist"', 'id="openOperations"',
     'id="networkPreset"', 'id="contextDialog"', 'id="pricingModuleCustom"',
+    'name="deploymentTarget"', 'id="productionTargetPanel"', 'id="productionNetworkName"',
+    'id="productionApprovedRpcHosts"', 'id="productionSourceCommit"', 'id="productionContractsHash"',
+    'id="productionChainId"', 'id="productionRpcUrl"', 'id="productionSafe"',
+    'id="productionSafeSingleton"', 'id="productionSafeCodeHash"',
+    'id="productionOwners"', 'id="productionThreshold"', 'id="productionArtifactPath"',
+    'id="productionEvidencePath"',
+    'id="productionDeploymentId"', 'id="productionDeployer"', 'id="productionOperator"',
+    'id="productionVenueRfq"', 'id="productionVenueAmm"',
+    'id="runProductionPreflight"', 'id="generateProductionPlan"', 'id="exportProductionPlan"',
     "Runtime constraints", "Demo fixtures", "Manual evidence checklist",
-    "Arbitrum One · production plan only", "GIWA / organization EVM · plan only"
+    "Arbitrum One · production plan only", "GIWA / organization EVM · plan only",
+    "Production core", "preflight → plan"
   ]) {
     if (!html.includes(marker)) throw new Error(`studio UI marker missing: ${marker}`);
   }
@@ -245,13 +329,15 @@ async function main(): Promise<void> {
     "/api/v1/projects", "saveConfig", "runDoctor", "reviewPlan", "deployDemo",
     "verifyArtifact", "renderArtifact", "refreshHandoff", "EventSource",
     "HELP_CONTENT", "DEMO_BROADCAST_NETWORKS", "selectedNetwork", "selectedModule",
-    "openContextHelp"
+    "openContextHelp", "buildProductionConfig", "runProductionPreflight",
+    "generateProductionPlan", "exportProductionPlan"
   ]) {
     if (!app.includes(marker)) throw new Error(`studio UI wiring missing: ${marker}`);
   }
   for (const marker of [
     "--ink:", "--signal:", ".studio-shell", ".rail", ".workflow-map", ".status-led",
     ".artifact-grid", ".boundary-banner", ".help-trigger", ".context-dialog",
+    ".target-switch", ".production-ledger", ".production-actions",
     "@media (max-width: 820px)"
   ]) {
     if (!css.includes(marker)) throw new Error(`studio visual token missing: ${marker}`);
@@ -327,6 +413,39 @@ function baseIntegration(mode: string): any {
       env: []
     }])),
     deployment: {dockerCompose: false}
+  };
+}
+
+function baseProductionConfig(): any {
+  return {
+    schemaVersion: 1,
+    network: {
+      name: "arbitrum-one",
+      chainId: 42161,
+      rpcUrl: "https://rpc.example",
+      approvedRpcHosts: ["rpc.example"]
+    },
+    release: {sourceCommit: "a".repeat(40), contractsHash: `sha256:${"b".repeat(64)}`},
+    deploymentId: "issuer-mainnet-2026-07",
+    deployer: "0x6666666666666666666666666666666666666666",
+    operator: "0x7777777777777777777777777777777777777777",
+    venues: {amm: false, rfq: true},
+    safe: {
+      address: "0x1111111111111111111111111111111111111111",
+      expectedOwners: [
+        "0x2222222222222222222222222222222222222222",
+        "0x3333333333333333333333333333333333333333",
+        "0x4444444444444444444444444444444444444444"
+      ],
+      threshold: 2,
+      expectedSingleton: "0x9999999999999999999999999999999999999999",
+      proxyCodeHash: `0x${"aa".repeat(32)}`
+    },
+    deployment: {
+      artifact: "deployments/production-core.json",
+      evidence: "deployments/production-evidence.json"
+    },
+    erc3643: {token: "0x5555555555555555555555555555555555555555"}
   };
 }
 

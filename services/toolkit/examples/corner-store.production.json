@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "network": {
+    "name": "mainnet",
+    "chainId": 1,
+    "rpcUrl": "https://rpc.example",
+    "approvedRpcHosts": [
+      "rpc.example"
+    ]
+  },
+  "release": {
+    "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "contractsHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "deploymentId": "mainnet-core-1",
+  "deployer": "0x4444444444444444444444444444444444444444",
+  "operator": "0x5555555555555555555555555555555555555555",
+  "venues": {
+    "amm": true,
+    "rfq": true
+  },
+  "safe": {
+    "address": "0x8888888888888888888888888888888888888888",
+    "expectedOwners": [
+      "0x1111111111111111111111111111111111111111",
+      "0x2222222222222222222222222222222222222222",
+      "0x3333333333333333333333333333333333333333"
+    ],
+    "threshold": 2,
+    "expectedSingleton": "0x7777777777777777777777777777777777777777",
+    "proxyCodeHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "deployment": {
+    "artifact": "deployments/production-core.json",
+    "evidence": "deployments/production-evidence.json"
+  },
+  "erc3643": {
+    "token": "0x9999999999999999999999999999999999999999"
+  }
+}

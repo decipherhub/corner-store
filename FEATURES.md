@@ -9,6 +9,56 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DEPLOY-001 — Production Deployment Workflow
+
+### Behavior
+
+- production deployment workflow를 local/demo Deployment Studio와 분리하고,
+  core-only Foundry script와 Toolkit/CLI operational path로 구현한다.
+- ERC-3643 token과 ONCHAINID onboarding을 외부 issuer trust boundary로 다루고,
+  Corner Store Manifest activation 전에 token, identity registry, trusted issuer와
+  pilot identity evidence를 확인한다.
+- Safe address, expected owner count `M`, threshold `N`, owner list, chain ID와
+  payload target/calldata를 signing 전에 검증한다.
+- production signing은 external signer 또는 Safe-style multisig 경계에서 수행하며
+  browser mainnet broadcast와 browser private key 입력은 범위 밖으로 둔다.
+- legal-approved Element/Recipe/Asset Compliance Manifest package만 production
+  activation 후보가 되며 illustrative demo recipe나 fixture는 production approval로
+  취급하지 않는다.
+- venue, maker, signer와 inventory activation은 bytecode/role/Manifest/registry
+  검증 이후 단계적으로 수행한다.
+- dry-run, fork simulation, multisig proposal review와 monitoring/finality evidence를
+  production readiness 기록으로 요구한다.
+- Deployment Studio는 production config, Safe/ERC-3643 preflight와 signer-free
+  plan export까지만 제공하고 production signing/broadcast는 외부 CLI signer
+  경계에서 수행한다.
+- core deployment artifact는 schema, chain, role, venue flag와 배포 주소를
+  기록하며 post-deployment verify가 exact runtime code hash, release provenance,
+  ownership, operator와 Router/Engine binding을 fail-closed로 확인한다.
+- production config는 approved RPC host, reviewed source commit과 deterministic
+  contract bundle hash를 고정하고 deploy 직전에 실제 입력과 재대조한다.
+
+### Verification
+
+- `docs/deployment-production.md` required-content 수동 검토
+- README, ARCHITECTURE, docs index, deployment operations, decision, feature,
+  progress 문서 간 링크와 용어 교차 검토
+- `forge test --offline --match-path test/unit/deployment/DeployProductionCore.t.sol`
+- Toolkit, CLI와 Deployment Studio smoke tests
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획: `docs/exec-plans/completed/DEPLOY-001-production-deployment-workflow.md`
+- 이 feature는 production deployment tooling과 runbook을 구현한다. 실제 production
+  transaction, Safe proposal execution, legal approval 또는 monitoring live 상태를
+  passing으로 주장하지 않는다.
+
 ## HE-001 — Harness Baseline
 
 ### Behavior

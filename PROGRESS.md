@@ -11,10 +11,21 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음
+없음. 다음 feature는 별도 issue/plan에서 활성화한다.
 
 ## Completed
 
+- `DEPLOY-001 — Production Deployment Workflow`: fixture/token/policy activation이
+  없는 core-only Foundry script, external Ledger/Foundry account signer CLI,
+  Safe proxy/singleton/code hash + exact owner `M`/threshold `N` preflight,
+  existing ERC-3643 technical wiring preflight와 Studio signer-free planning
+  target을 구현했다. approved RPC host, reviewed commit, deterministic contract
+  bundle hash, dry-run/fork evidence를 deploy 전에 재검증하고, 배포 후에는 exact
+  runtime bytecode hash, Safe ownership/operator와 Router/Engine binding을
+  fail-closed로 검증한다. 실제 ERC-3643 claim/trusted issuer/legal policy
+  onboarding과 production transaction은 별도 issuer/Safe evidence가 필요하다.
+  Node 20 + Foundry v1.7.1 전체 check(Forge 669/669, deploy-v3 10/10), targeted
+  service/Foundry tests, `git diff --check`와 독립 code review를 통과했다.
 - `STUDIO-001 — Local Deployment Studio`: 실제 Toolkit JSON과 CLI를 사용하는
   local/demo control surface를 추가했다. 운영자가 주입한 host/port, workspace,
   CLI entry, RPC, broadcast network/host allowlist와 Operations URL을 기준으로
@@ -204,14 +215,18 @@ source of truth로 사용한다.
 
 ## Next
 
-1. 실제 TA provider API/authorization, amount-specific lot allocation과 production
+1. DEPLOY-001 구현 검증을 완료하고 passing 전환 여부는 targeted Forge/service
+   tests, 전체 `scripts/check.sh`, diff/review evidence로 판단한다. 실제 production
+   network deployment success는 별도 deployment evidence가 생기기 전까지
+   주장하지 않는다.
+2. 실제 TA provider API/authorization, amount-specific lot allocation과 production
    WORM/indexer를 별도 refinement로 구현한다.
-2. ADR-009 순서에 따라 durable nonce와 production pricing/risk·endpoint
+3. ADR-009 순서에 따라 durable nonce와 production pricing/risk·endpoint
    hardening을 독립 feature로 구현한다.
-3. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
+4. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
-4. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
-5. production 환경의 TLS, secret rotation, 실제 multisig provider와 live RPC
+5. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
+6. production 환경의 TLS, secret rotation, 실제 multisig provider와 live RPC
    finality/recovery 정책을 별도 운영 feature로 구체화한다.
 
 ## Last Session Summary

@@ -2,7 +2,7 @@
   "name": "@corner-store/deployment-studio",
   "version": "0.1.0",
   "private": true,
-  "description": "Local/demo-only deployment studio and CLI control surface for Corner Store.",
+  "description": "Local deployment control surface for Corner Store reference execution and production planning.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node dist/test/smoke.js",
