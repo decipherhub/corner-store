@@ -111,6 +111,52 @@ passing
   deterministic account, fixture policy/inventory activation은 production
   evidence로 취급하지 않는다.
 
+## DEPLOY-002 — Public Testnet RFQ Reference Deployment
+
+### Behavior
+
+- 기존 Anvil `DeployStack`과 showcase 경로를 변경하지 않고 공개 EVM
+  테스트넷용 RFQ-only reference deployment를 별도 제공한다.
+- RPC, chain ID, deployer, governance, operator, maker와 세 investor 주소를
+  runtime input으로 받고 deterministic Anvil account를 사용하지 않는다.
+- Foundry keystore 또는 Ledger가 deployment transaction을 서명하며 repository
+  config와 artifact에는 private key나 credential-bearing RPC를 기록하지 않는다.
+- 실제 T-REX ERC-3643/ONCHAINID fixture, BUIDL-like illustrative policy,
+  Corner Store Engine/Router/RFQ adapter, mock quote token, actor claim과
+  양방향 inventory를 배포·활성화한다.
+- maker와 investor allowance는 각 외부 participant signer가 별도 approval
+  script로 제출하며 deployer가 대신 승인하지 않는다.
+- read-only verifier가 chain/artifact, runtime code, governance ownership,
+  operator authorization, Manifest, RFQ venue, maker approval, inventory와
+  선택적 allowance를 fail-closed로 검증한다.
+- 검증이 끝난 결과만 `deployments/public/`의 append-only artifact로 승격하고,
+  named protocol/identity 주소, 전체 transaction receipt 요약과 CREATE contract
+  index를 기록해 CLI나 후속 demo가 언제든 동일 배포물을 조회할 수 있게 한다.
+- artifact는 credential을 포함하지 않으며 이 배포가 production issuer
+  onboarding이나 실제 BUIDL/Securitize 연동이 아니라는 경계를 명시한다.
+
+### Verification
+
+- `forge fmt --check`
+- `forge build --offline`
+- `forge test --offline --match-path test/unit/deployment/DeployProductionCore.t.sol`
+- isolated Anvil에서 external-address deployment broadcast
+- participant별 approval broadcast 후 `VerifyTestnetRFQ` readiness 검증
+- `scripts/check.sh`
+- `bash -n scripts/deploy-testnet-rfq.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- 공개 테스트넷의 실제 RPC broadcast와 explorer verification은 대상 네트워크,
+  faucet 자금과 explorer credential이 주입될 때 수행한다.
+- public-testnet artifact를 소비하는 interactive RFQ demo runtime은 기존
+  Anvil backend의 chain-31337 경계를 완화하지 않고 별도 feature로 구현한다.
+
 ## DEPLOY-001 — Production Deployment Workflow
 
 ### Behavior

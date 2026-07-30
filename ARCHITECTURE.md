@@ -21,6 +21,7 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `test/` | Foundry 단위·통합 테스트 |
 | `docs/` | 제품 명세, 아키텍처, 로드맵과 Harness 문서 |
 | `docs/deployment-production.md` | production deployment runbook: ERC-3643 onboarding, Safe/external signer, legal policy package, activation and monitoring evidence |
+| `docs/testnet-deployment.md` | public-testnet RFQ reference deployment, participant approvals and artifact verification |
 | `services/rfq/` | RFQ quote/signing SDK, versioned module contracts와 conformance suite |
 | `services/rfq-demo-backend/` | RFQ SDK를 사용하는 local Anvil 전용 demo application |
 | `services/toolkit/` | versioned deployment/integration schema, validation과 scaffold generator |
