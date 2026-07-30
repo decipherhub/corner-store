@@ -15,6 +15,15 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `STUDIO-001 — Local Deployment Studio`: 실제 Toolkit JSON과 CLI를 사용하는
+  local/demo control surface를 추가했다. 운영자가 주입한 host/port, workspace,
+  CLI entry, RPC, broadcast network/host allowlist와 Operations URL을 기준으로
+  project create → doctor → dry-run → guarded reference deploy → artifact verify →
+  handoff를 수행한다. 브라우저 secret 입력과 production broadcast는 제공하지
+  않으며, config/integration/scenario 변경 시 verify evidence를 무효화한다.
+  API/UI smoke, Node 20 + Foundry v1.7.1 전체 check(Forge 665/665), 실제 별도
+  Anvil 포트 배포·verify, Chrome interaction smoke와 visual verdict 91/100을
+  통과했다.
 - `SDK-002 — Standalone Integration and Deployment Workflow`: 단일 CLI로
   library-only, reference-service, existing-backend 프로젝트를 생성하고
   doctor, deploy, verify와 RFQ module conformance를 실행할 수 있게 했다.

@@ -1214,6 +1214,40 @@ passing
 - completed plan: `docs/exec-plans/completed/SDK-002-standalone-integration-workflow.md`
 - production durable nonce와 service hardening은 #66/#67 module로 유지한다.
 
+## STUDIO-001 — Local Deployment Studio
+
+### Behavior
+
+- 로컬 운영자가 브라우저에서 integration mode를 선택하고 실제
+  `corner-store.config.json`, `corner-store.integration.json`과 demo-only
+  `corner-store.scenario.json`을 생성·검토한다.
+- Local Control API가 허용된 workspace 내부에서만 CLI를 실행하고 `doctor`,
+  deployment dry-run, Anvil demo broadcast와 `verify` 결과를 구조화해 반환한다.
+- required doctor failure는 배포를 차단하고, 배포 artifact는 주소의 source of
+  truth로 표시하며 verify 이후 기존 Operations Dashboard로 handoff한다.
+- UI는 demo fixture와 production configuration을 명확히 분리하고 private key,
+  production secret 또는 mainnet broadcast 입력을 제공하지 않는다.
+
+### Verification
+
+- Local Control API path confinement와 command guard unit/smoke
+- config/integration validation과 JSON persistence smoke
+- doctor → dry-run → artifact/verify state transition smoke
+- Deployment Studio static UI/control wiring smoke
+- 로컬 Anvil deployment walkthrough
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Completed plan: `docs/exec-plans/completed/STUDIO-001-local-deployment-studio.md`
+- production ERC-3643 onboarding, mainnet deploy/multisig execution과 secret custody는
+  범위 밖이다.
+
 ## RFQ-POLICY-001 — Production RFQ Policy
 
 ### Behavior

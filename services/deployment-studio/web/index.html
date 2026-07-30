@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corner Store Deployment Studio</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="studio-shell">
+    <aside class="rail">
+      <a class="brand" href="/">
+        <span class="brand-mark">CS</span>
+        <span><strong>Corner Store</strong><small>Deployment Studio</small></span>
+      </a>
+      <div class="boundary-chip"><span></span>Local control surface</div>
+      <nav class="workflow-map" aria-label="Deployment workflow">
+        <button class="workflow-step is-current" data-stage="project" data-target="projectSection"><b>01</b><span>Project mode<small>Create the integration shell</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="config" data-target="configSection"><b>02</b><span>Configuration<small>Network, asset, venues</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="doctor" data-target="doctorSection"><b>03</b><span>Doctor<small>Required environment checks</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="plan" data-target="planSection"><b>04</b><span>Deployment plan<small>Read-only dry-run</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="deploy" data-target="deploySection"><b>05</b><span>Demo deploy<small>Operator-allowed target only</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="artifact" data-target="artifactSection"><b>06</b><span>Artifact & verify<small>Address source of truth</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="activation" data-target="activationSection"><b>07</b><span>Activation<small>Operations handoff</small></span></button>
+      </nav>
+      <div class="rail-footer">
+        <span class="status-led" id="apiLed"></span>
+        <span><strong id="apiStatus">Connecting</strong><small id="workspacePath">Local workspace</small></span>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Configuration → evidence → operation</p>
+          <h1>Build a regulated DEX from the real Corner Store workflow.</h1>
+        </div>
+        <label class="project-switcher">Current project
+          <select id="projectSelector"><option value="">No project</option></select>
+        </label>
+      </header>
+
+      <section class="boundary-banner">
+        <div><strong>Runtime constraints</strong><span>Operator policy is injected when the local control service starts.</span></div>
+        <div class="boundary-rules">
+          <span><b>Target</b> Demo allowlist only</span>
+          <span><b>Secrets</b> Browser prohibited</span>
+          <span><b>Authority</b> Verified artifact</span>
+        </div>
+      </section>
+
+      <section id="projectSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">01 / Project mode</p><h2>Choose how Corner Store enters your stack</h2></div>
+          <span class="section-state" id="projectState">Not created</span>
+        </div>
+        <div class="mode-grid" id="projectMode">
+          <label class="mode-card is-selected"><input type="radio" name="mode" value="library-only" checked><b>Library only</b><span>Use SDK types and helpers inside your own service boundary.</span><small>No generated HTTP server</small></label>
+          <label class="mode-card"><input type="radio" name="mode" value="reference-service"><b>Reference service</b><span>Start from the minimal quote HTTP service and replace modules.</span><small>Optional Docker export</small></label>
+          <label class="mode-card"><input type="radio" name="mode" value="existing-backend"><b>Existing backend</b><span>Bind pricing, risk, signer and nonce modules to your stack.</span><small>Keep your current API boundary</small></label>
+        </div>
+        <div class="form-row project-create">
+          <label>Project name<input id="projectName" placeholder="e.g. treasury-rfq — not created yet" pattern="[a-z0-9._-]+"></label>
+          <label class="check-field"><input id="dockerCompose" type="checkbox"><span>Include optional Docker reference</span></label>
+          <button id="createProject" class="button primary">Create integration project</button>
+        </div>
+        <div id="projectMessage" class="inline-message" aria-live="polite"></div>
+      </section>
+
+      <section id="configSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">02 / Configuration</p><h2>Bind the JSON contracts the CLI actually consumes</h2></div>
+          <button id="saveConfiguration" class="button secondary" disabled>Save configuration</button>
+        </div>
+        <div class="schema-trace">
+          <article>
+            <div class="file-label"><span>CONFIG</span><code>corner-store.config.json</code></div>
+            <div class="form-grid">
+              <label>Network
+                <input id="network" list="networkOptions" placeholder="Injected demo network or plan-only target">
+                <datalist id="networkOptions"><option value="anvil"><option value="sepolia"><option value="arbitrum-sepolia"><option value="mainnet"></datalist>
+              </label>
+              <label>RPC URL<input id="rpcUrl" placeholder="Configured by the local operator"></label>
+              <label>Asset profile
+                <select id="assetProfile"><option value="buidl-like">BUIDL-like reference</option><option value="reg-d">Reg D reference</option></select>
+              </label>
+              <label>Artifact path<input id="artifactPath" value="deployments/anvil-e2e.json"></label>
+            </div>
+            <fieldset>
+              <legend>Execution venues</legend>
+              <label class="check-field"><input id="venueRfq" type="checkbox" checked><span>RFQ Adapter</span></label>
+              <label class="check-field"><input id="venueAmm" type="checkbox"><span>AMM Adapter</span></label>
+              <label class="check-field is-disabled"><input id="venueOrderBook" type="checkbox" disabled><span>Order Book · not implemented</span></label>
+            </fieldset>
+            <div class="form-grid three">
+              <label>Operator<input id="operatorAccount" value="operator"></label>
+              <label>Investor fixture<input id="investorAccount" value="investor"></label>
+              <label>Maker<input id="makerAccount" value="maker"></label>
+              <label>Governance / multisig<input id="multisig" value="governance-multisig"></label>
+              <label>Required approvals<input id="requiredApprovals" type="number" min="1" value="2"></label>
+            </div>
+          </article>
+
+          <article>
+            <div class="file-label"><span>INTEGRATION</span><code>corner-store.integration.json</code></div>
+            <div id="moduleGrid" class="module-grid">
+              <label>Pricing module<input id="pricingModule" value="corner-store.fixed-rate"><small>rfq.price.v1</small></label>
+              <label>Risk module<input id="riskModule" value="corner-store.noop-risk"><small>rfq.risk.pre-sign.v1</small></label>
+              <label>Signer module<input id="signerModule" value="integrator.signer"><small>rfq.sign.eip712.v1</small></label>
+              <label>Nonce module<input id="nonceModule" value="corner-store.in-memory-nonce"><small>rfq.nonce.maker-scoped.v1</small></label>
+            </div>
+            <div class="notice"><strong>Configuration boundary</strong><p>This manifest stores module IDs, versions, capabilities and environment variable names only. Runtime credentials stay outside project JSON.</p></div>
+          </article>
+
+          <article class="demo-fixtures">
+            <div class="file-label"><span>DEMO ONLY</span><code>corner-store.scenario.json</code></div>
+            <h3>Demo fixtures</h3>
+            <p>Initial balances, fixture wallets, quote TTL and mock pricing are deployment test inputs—not production policy.</p>
+            <details>
+              <summary>Inspect demo JSON</summary>
+              <textarea id="scenarioJson" spellcheck="false" rows="12">{"schemaVersion":2,"note":"Demo fixture loaded after project creation."}</textarea>
+            </details>
+          </article>
+        </div>
+        <div id="configMessage" class="inline-message" aria-live="polite"></div>
+      </section>
+
+      <section id="doctorSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">03 / Doctor</p><h2>Prove the local toolchain before planning a deployment</h2></div>
+          <button id="runDoctor" class="button primary" disabled>Run doctor</button>
+        </div>
+        <div id="doctorChecks" class="check-list empty-state">Create a project, then run the required environment checks.</div>
+      </section>
+
+      <section id="planSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">04 / Deployment plan</p><h2>Review the exact read-only Foundry command</h2></div>
+          <button id="reviewPlan" class="button primary" disabled>Generate dry-run</button>
+        </div>
+        <div id="planReview" class="plan-review empty-state">The plan combines CLI output with the saved configuration.</div>
+      </section>
+
+      <section id="deploySection" class="surface deploy-surface">
+        <div class="section-heading">
+          <div><p class="step-label">05 / Demo deployment</p><h2>Broadcast only when the operator policy allows the target</h2></div>
+          <button id="deployDemo" class="button danger" disabled>Deploy reference stack</button>
+        </div>
+        <div class="deploy-gate">
+          <div><span id="gateDoctor" class="gate-dot"></span>Doctor ready</div>
+          <div><span id="gatePlan" class="gate-dot"></span>Dry-run reviewed</div>
+          <div><span id="gateNetwork" class="gate-dot"></span><span id="gateNetworkLabel">Operator-allowed demo RPC</span></div>
+          <div><span class="gate-dot is-pass"></span>No browser secrets</div>
+        </div>
+        <p class="runtime-policy">Runtime policy: <code id="broadcastPolicy">Loading injected settings…</code></p>
+        <pre id="deployLog" class="terminal"><code>$ Waiting for a guarded local deployment.</code></pre>
+      </section>
+
+      <section id="artifactSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">06 / Artifact & verify</p><h2>Turn deployment output into operational evidence</h2></div>
+          <button id="verifyArtifact" class="button primary" disabled>Verify artifact</button>
+        </div>
+        <div id="verifySummary" class="verify-summary">Verification has not run.</div>
+        <div id="artifactViewer" class="artifact-grid empty-state">The deployment artifact will appear here as the address source of truth.</div>
+      </section>
+
+      <section id="activationSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">07 / Activation</p><h2>Hand a verified stack to day-to-day operations</h2></div>
+          <button id="openOperations" class="button primary" disabled>Open Operations Console</button>
+        </div>
+        <div id="activationChecklist" class="activation-list">
+          <label><input data-activation="makerApproved" type="checkbox"><span><b>Maker approved</b><small>Authorizer state reviewed</small></span></label>
+          <label><input data-activation="signerAuthorized" type="checkbox"><span><b>Signer authorized</b><small>Signing authority matches the Maker</small></span></label>
+          <label><input data-activation="inventoryReady" type="checkbox"><span><b>Inventory and allowances ready</b><small>Both RFQ directions can settle</small></span></label>
+          <label><input data-activation="smokeSettlement" type="checkbox"><span><b>Router smoke settlement</b><small>Final compliance and token movement proved</small></span></label>
+          <label><input data-activation="governanceHandoff" type="checkbox"><span><b>Governance handoff reviewed</b><small>Optional for the local reference deployment</small></span></label>
+        </div>
+        <div id="handoffMessage" class="handoff-card"><strong>Operations handoff locked</strong><span>Verify the artifact before opening the existing runtime dashboard.</span></div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

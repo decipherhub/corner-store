@@ -210,6 +210,24 @@ See [`docs/sdk-integration.md`](./docs/sdk-integration.md) for package
 boundaries, the three integration modes, generated files, deployment checks and
 the common conformance suite.
 
+### Local Deployment Studio
+
+`services/deployment-studio` presents the same standalone SDK workflow as a
+local web control surface: project mode, validated JSON configuration, doctor,
+dry-run, guarded reference deployment, artifact verification and Operations
+Dashboard handoff. Server bind values, workspace, CLI entry, RPC endpoint,
+broadcast network/allowlist and handoff URL are runtime inputs rather than
+frontend constants.
+
+```shell
+scripts/studio.sh --rpc http://127.0.0.1:8545
+```
+
+Direct browser-triggered broadcast remains restricted to the operator-injected
+demo network and RPC allowlist. Mainnet deployment, signing secrets and
+production ERC-3643 onboarding are outside this control surface. See
+[`docs/deployment-studio.md`](./docs/deployment-studio.md).
+
 ### Compliance Data SDK
 
 `services/compliance-data` implements the provider-neutral ADR-008 foundation:

@@ -13,6 +13,9 @@ services/toolkit/dist/
 services/toolkit/node_modules/
 services/operator-api/dist/
 services/operator-api/node_modules/
+services/deployment-studio/dist/
+services/deployment-studio/node_modules/
 services/compliance-data/dist/
 services/compliance-data/node_modules/
+.corner-store/
 deployments/
