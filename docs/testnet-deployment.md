@@ -234,3 +234,36 @@ Publish:
 The public-testnet demo runtime that consumes this artifact is maintained as a
 separate integration surface. The local Anvil demo does not silently switch to
 public networks.
+
+## 9. Run the Artifact-bound Browser Demo
+
+After the public artifact is committed and participant allowances are ready,
+load the same `.env.testnet` and set:
+
+```sh
+export CORNER_STORE_TESTNET_ARTIFACT=deployments/public/<deployment-id>-<chain-id>.json
+export CORNER_STORE_TESTNET_RPC_URL=https://...
+export CORNER_STORE_TESTNET_EXPLORER_URL=https://...
+export CORNER_STORE_TESTNET_MAKER_KEY=... # disposable testnet Maker only
+```
+
+Then run:
+
+```sh
+scripts/run-testnet-rfq-demo.sh
+```
+
+Open the printed URL and connect an artifact-listed investor wallet. The
+runtime verifies the artifact and chain before serving. The backend signs a
+Maker quote using the existing RFQ SDK; it does **not** sign for the investor.
+The browser wallet submits its own token approval and final Router transaction.
+The page exposes the exact artifact addresses, current Manifest/Maker
+readiness, balances, QP pre-check, signed quote, transaction hash and block.
+
+This is separate from the feature-rich local Anvil demo:
+
+- `scripts/showcase.sh` remains the deterministic presenter/security demo;
+- `scripts/run-testnet-rfq-demo.sh` proves that a committed public deployment
+  can be consumed without deploying a second stack;
+- no local account derivation, operator mutation or private investor key is
+  available to the public-testnet service.

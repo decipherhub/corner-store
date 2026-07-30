@@ -17,6 +17,8 @@ services/deployment-studio/dist/
 services/deployment-studio/node_modules/
 services/compliance-data/dist/
 services/compliance-data/node_modules/
+services/testnet-rfq-demo/dist/
+services/testnet-rfq-demo/node_modules/
 tools/deploy-v3/node_modules
 .corner-store/
 deployments/*

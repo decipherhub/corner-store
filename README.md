@@ -265,6 +265,16 @@ Store Router/Engine/RFQ contracts. It is a public testnet reference deployment,
 not production legal onboarding. See
 [`docs/testnet-deployment.md`](./docs/testnet-deployment.md).
 
+After broadcast, participant approvals and artifact verification, the separate
+wallet-signed browser demo consumes the committed artifact without redeploying:
+
+```shell
+scripts/run-testnet-rfq-demo.sh
+```
+
+The local Anvil showcase remains unchanged and does not share its deterministic
+account facilitator with this public-network runtime.
+
 From this repository:
 
 ```shell

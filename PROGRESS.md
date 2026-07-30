@@ -15,6 +15,17 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DEMO-016 — Artifact-bound Public Testnet RFQ Demo`: 기존 local Anvil
+  facilitator를 변경하지 않고 committed public deployment artifact를 읽는 별도
+  browser demo를 추가했다. runtime은 RPC chain/bytecode와 artifact Maker를
+  검증하고 RFQ SDK로 Maker quote만 서명한다. investor는 브라우저 지갑으로
+  allowance와 Router settlement를 직접 제출하며 deployment lineage, contract
+  주소, token/Manifest/Maker 상태, balance/QP pre-check, quote와 receipt를
+  확인할 수 있다. isolated Anvil에서 149-transaction artifact를 배포·승격하고
+  Maker/investor approvals 후 API state/pre-check/quote, external investor
+  Router static call과 block 154 settlement를 통과했다. 전체
+  `scripts/check.sh`(Forge 669/669, 모든 service smoke, deploy-v3 10/10)도
+  통과했다.
 - `DEPLOY-002 — Public Testnet RFQ Reference Deployment`: 기존 Anvil 데모를
   변경하지 않고 외부 RPC·chain ID·actor 주소와 Foundry keystore/Ledger signer를
   사용하는 RFQ-only public-testnet deployment를 추가했다. 실제 T-REX
