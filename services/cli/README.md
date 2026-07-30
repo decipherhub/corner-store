@@ -1,4 +1,4 @@
-# corner-store CLI (CLI-001, CLI-002)
+# corner-store CLI
 
 An interactive TypeScript reference client for driving the whole Corner Store
 compliance-gated DEX stack against a live node from the terminal — onboarding,
@@ -24,6 +24,69 @@ Without `npm link`, invoke it as `node dist/cli/src/index.js <command>` from
 `node_modules/` and `dist/` are gitignored. Chain interaction uses `ethers`;
 EIP-712 RFQ quotes REUSE the sibling `services/rfq` signer library.
 
+## Standalone SDK workflow
+
+External consumers should start with the unified SDK commands:
+
+```sh
+corner-store create ./my-corner-store --mode library-only
+corner-store create ./my-rfq-service --mode reference-service --docker
+corner-store create ./my-existing-backend --mode existing-backend
+```
+
+Generated projects include `corner-store.config.json`,
+`corner-store.integration.json`, `corner-store.scenario.json`, `.env.example`,
+`src/index.ts`, `src/module-conformance.ts`, `package.json`, `tsconfig.json` and
+the RFQ SDK source in `vendor/rfq-service` when generated from this repository.
+`create` refuses to overwrite an existing target directory.
+For an unpublished source checkout, `create` also writes
+`vendor/corner-store-cli.tgz`, so the generated project does not depend on a
+registry-published CLI.
+
+Inside a generated project:
+
+```sh
+npm install
+npm test
+npm run doctor
+npm run deploy
+npm run verify   # after a deployment artifact exists
+```
+
+`npm test` builds the generated TypeScript and runs
+`corner-store test-module dist/module-conformance.js`. `npm run deploy` is a
+dry-run by default; pass `-- --broadcast` only for a local/demo transaction
+submission. `npm run verify` requires the configured deployment artifact.
+
+### Integration modes
+
+| mode | purpose | notes |
+| --- | --- | --- |
+| `library-only` | import RFQ SDK helpers without generating a service | no HTTP server, no Docker |
+| `reference-service` | run a minimal local `POST /rfq/quote` service | fixed-rate pricing, noop risk and in-memory nonce are reference modules |
+| `existing-backend` | add Corner Store RFQ quote creation to an existing backend | exposes `createCornerStoreRFQ(...)` for caller-owned HTTP/RPC/queue handling |
+
+Docker Compose is optional and only valid for `reference-service`. Compose reads
+`.env`; generated files include empty secret slots only.
+
+### Unified commands
+
+```
+corner-store create <target> [--mode library-only|reference-service|existing-backend] [--docker] [--sdk <specifier>] [--cli <specifier>]
+corner-store init [path]
+corner-store doctor [path]
+corner-store deploy [path] [--broadcast]
+corner-store verify [path]
+corner-store test-module <built-commonjs-module>
+```
+
+`doctor` checks Node, npm, Foundry, config, contract bundle, optional deployment
+artifact and optional Docker. `verify` preflights the config against the
+deployment artifact. `deploy` uses `DeployStack.s.sol`; Docker is not required.
+Packaged deployments resolve contract sources from `--contracts`, then
+`CORNER_STORE_CONTRACTS_ROOT`, then `.corner-store/contracts`, then the packaged
+`bundle/contracts`.
+
 ## Global options
 
 | flag | default | meaning |
@@ -33,8 +96,9 @@ EIP-712 RFQ quotes REUSE the sibling `services/rfq` signer library.
 | `--account <0-9>` | command-specific (operator=0, buyer=1) | Anvil mnemonic account index |
 | `--key <hex>` | — | explicit private key (overrides `--account`) |
 
-Toolkit workflows use the versioned config file rather than repeating profile and
-venue flags:
+Toolkit workflows use the same versioned config file rather than repeating
+profile and venue flags. The `toolkit-*` commands remain available for source
+checkout and compatibility workflows:
 
 ```sh
 corner-store toolkit-init corner-store.config.json
@@ -46,7 +110,7 @@ corner-store --artifact deployments/anvil-e2e.json toolkit-checkpoint corner-sto
 corner-store toolkit-proposal --target 0x... --calldata 0x... --reason "policy review" --artifact-hash sha256:... --output proposal.json
 corner-store toolkit-safe-proposal --target 0x... --calldata 0x... --reason "policy review" --artifact-hash sha256:... --chain-id 42161
 corner-store toolkit-deploy corner-store.config.json                         # dry-run only
-corner-store --rpc http://127.0.0.1:8545 toolkit-deploy --broadcast          # explicit local/demo deployment
+corner-store --rpc http://127.0.0.1:8545 toolkit-deploy corner-store.config.json --broadcast # explicit local/demo deployment
 corner-store toolkit-test                                                   # full deterministic repository check
 ```
 
@@ -172,6 +236,15 @@ maker. Use account 4+ for a fresh investor walkthrough.
 Generate an RFQ integration without copying the demo backend:
 
 ```sh
+corner-store create ./my-rfq-lib \
+  --mode library-only
+
+corner-store create ./my-rfq \
+  --mode reference-service --docker
+
+corner-store create ./my-backend-rfq \
+  --mode existing-backend
+
 corner-store toolkit-scaffold-rfq ./my-rfq \
   --mode reference-service --docker
 

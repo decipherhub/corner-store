@@ -1,9 +1,9 @@
 import {execFileSync} from "child_process";
-import {writeFileSync} from "fs";
+import {copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync} from "fs";
+import {tmpdir} from "os";
 import {formatEther, NonceManager, parseEther} from "ethers";
 
-import {relative} from "path";
-import {resolve} from "path";
+import {relative, resolve} from "path";
 import {enabledEngineSpec, loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
 import {preflightConfig} from "../../toolkit/src/preflight";
 import {createCheckpoint, writeCheckpoint} from "../../toolkit/src/checkpoint";
@@ -68,6 +68,14 @@ import {
   writeQuoteFile
 } from "./rfq";
 import {CliError} from "./util";
+import {
+  copyDeploymentArtifact,
+  doctor,
+  prepareDeploymentRuntime,
+  readScenario,
+  resolveContractSource,
+  testModule
+} from "./product";
 
 const CTX_TUPLE =
   "tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate)";
@@ -221,18 +229,27 @@ export function cmdToolkitSafeProposal(opts: {target: string; calldata: string; 
 export function cmdToolkitDeploy(path = "corner-store.config.json", opts: GlobalOpts & {broadcast?: boolean}): void {
   const config = loadConfig(resolve(process.cwd(), path));
   const plan = createDeploymentPlan(config, opts.rpc ?? DEFAULT_RPC, opts.broadcast === true);
+  const repoRoot = findRepoRoot(process.cwd());
+  const contractSource = resolveContractSource(repoRoot, opts.contracts);
+  if (!contractSource) throw new CliError("Corner Store contract bundle not found; reinstall the CLI or set CORNER_STORE_CONTRACTS_ROOT");
   if (!opts.broadcast) {
-    console.log(JSON.stringify(plan, null, 2));
+    console.log(JSON.stringify({...plan, contractSource, dockerRequired: false}, null, 2));
     return;
   }
-  const repoRoot = findRepoRoot(process.cwd());
-  if (!repoRoot) throw new CliError("repository root not found; run Toolkit deploy from the Corner Store repository");
-  console.log(JSON.stringify(plan, null, 2));
+  const projectRoot = process.cwd();
+  const deploymentRoot = repoRoot === projectRoot
+    ? repoRoot
+    : prepareDeploymentRuntime(projectRoot, contractSource);
+  console.log(JSON.stringify({...plan, contractSource, deploymentRoot, dockerRequired: false}, null, 2));
   execFileSync("forge", ["script", "script/DeployStack.s.sol:DeployStack", "--rpc-url", opts.rpc ?? DEFAULT_RPC, "--broadcast", "--offline"], {
-    cwd: repoRoot,
+    cwd: deploymentRoot,
     env: {...process.env, ASSET_PROFILE: config.asset.profile},
     stdio: "inherit"
   });
+  if (deploymentRoot !== projectRoot) {
+    const artifact = copyDeploymentArtifact(deploymentRoot, projectRoot, config.deployment.artifact);
+    console.log(`deployment artifact copied to ${artifact}`);
+  }
 }
 
 export function cmdToolkitTest(): void {
@@ -243,7 +260,7 @@ export function cmdToolkitTest(): void {
 
 export function cmdToolkitScaffoldRFQ(
   target: string,
-  opts: {mode: string; docker?: boolean; sdk?: string}
+  opts: {mode: string; docker?: boolean; sdk?: string; cli?: string}
 ): void {
   if (opts.mode !== "reference-service" && opts.mode !== "existing-backend") {
     throw new CliError('--mode must be "reference-service" or "existing-backend"');
@@ -254,11 +271,97 @@ export function cmdToolkitScaffoldRFQ(
       mode: opts.mode,
       dockerCompose: opts.docker === true,
       sdkDependency: opts.sdk,
+      cliDependency: opts.cli,
       sdkSourceRoot: opts.sdk ? undefined : repoRoot ? resolve(repoRoot, "services/rfq") : undefined
     });
     console.log(JSON.stringify(result, null, 2));
   } catch (err: any) {
     throw new CliError(`cannot scaffold RFQ integration: ${err.message}`);
+  }
+}
+
+export function cmdCreate(
+  target: string,
+  opts: {mode: string; docker?: boolean; sdk?: string; cli?: string}
+): void {
+  if (opts.mode !== "library-only" && opts.mode !== "reference-service" && opts.mode !== "existing-backend") {
+    throw new CliError('--mode must be "library-only", "reference-service", or "existing-backend"');
+  }
+  const repoRoot = findRepoRoot(process.cwd()) ?? findRepoRoot(__dirname);
+  const localCliPackage = !opts.cli && repoRoot ? packLocalCli(repoRoot) : undefined;
+  try {
+    const contractSource = resolveContractSource(repoRoot);
+    if (!contractSource) throw new Error("contract bundle not found");
+    const scenarioPath = repoRoot
+      ? resolve(repoRoot, "services/rfq-demo-backend/config/demo-scenario.json")
+      : resolve(contractSource, "deployments/anvil-e2e-scenario.json");
+    const result = scaffoldRFQIntegration(target, {
+      mode: opts.mode,
+      dockerCompose: opts.docker === true,
+      sdkDependency: opts.sdk,
+      cliDependency: opts.cli ?? localCliPackage?.dependency,
+      sdkSourceRoot: opts.sdk ? undefined : repoRoot ? resolve(repoRoot, "services/rfq") : undefined,
+      standalone: true,
+      scenario: readScenario(scenarioPath)
+    });
+    if (localCliPackage) {
+      const vendorDirectory = resolve(result.root, "vendor");
+      mkdirSync(vendorDirectory, {recursive: true});
+      copyFileSync(localCliPackage.tarball, resolve(vendorDirectory, "corner-store-cli.tgz"));
+      result.files.push("vendor/corner-store-cli.tgz");
+      result.files.sort();
+    }
+    console.log(JSON.stringify({...result, dockerRequired: false}, null, 2));
+  } catch (err: any) {
+    throw new CliError(`cannot create Corner Store project: ${err.message}`);
+  } finally {
+    if (localCliPackage) rmSync(localCliPackage.directory, {recursive: true, force: true});
+  }
+}
+
+function packLocalCli(repoRoot: string): {directory: string; tarball: string; dependency: string} {
+  const directory = mkdtempSync(resolve(tmpdir(), "corner-store-cli-package-"));
+  try {
+    execFileSync(
+      "npm",
+      ["pack", resolve(repoRoot, "services/cli"), "--pack-destination", directory, "--silent"],
+      {
+        env: {
+          ...process.env,
+          npm_config_cache: process.env.npm_config_cache ?? resolve(tmpdir(), "corner-store-npm-cache")
+        },
+        stdio: "pipe"
+      }
+    );
+    const name = readdirSync(directory).find((entry) => entry.endsWith(".tgz"));
+    if (!name) throw new Error("npm pack did not produce a CLI tarball");
+    return {
+      directory,
+      tarball: resolve(directory, name),
+      dependency: "file:vendor/corner-store-cli.tgz"
+    };
+  } catch (error) {
+    rmSync(directory, {recursive: true, force: true});
+    throw error;
+  }
+}
+
+export function cmdDoctor(path = "corner-store.config.json", opts: GlobalOpts): void {
+  const result = doctor(path, opts.artifact, findRepoRoot(process.cwd()), opts.contracts);
+  console.log(JSON.stringify(result, null, 2));
+  if (!result.ready) process.exitCode = 1;
+}
+
+export function cmdVerify(path = "corner-store.config.json", opts: GlobalOpts): void {
+  const config = loadConfig(resolve(process.cwd(), path));
+  cmdToolkitPreflight(path, opts.artifact ?? config.deployment.artifact);
+}
+
+export async function cmdTestModule(path: string): Promise<void> {
+  try {
+    console.log(JSON.stringify(await testModule(path), null, 2));
+  } catch (err: any) {
+    throw new CliError(`RFQ module conformance failed: ${err.message}`);
   }
 }
 

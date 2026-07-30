@@ -15,6 +15,14 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `SDK-002 — Standalone Integration and Deployment Workflow`: 단일 CLI로
+  library-only, reference-service, existing-backend 프로젝트를 생성하고
+  doctor, deploy, verify와 RFQ module conformance를 실행할 수 있게 했다.
+  source checkout은 미배포 npm package에 의존하지 않도록 CLI와 RFQ SDK를
+  자동 vendoring하며, package artifact는 필요한 contract source만 포함한다.
+  실제 maker를 복구하는 EIP-712 conformance, clean external install/build,
+  독립 Anvil broadcast/verify와 전체 repository check(Forge 665/665,
+  deploy-v3 10/10)를 통과했다.
 - `RFQ-003 — Maker Authorizer and Regulated Amount Cap`: maker settlement
   account와 quote signer를 immutable versioned authorizer로 분리했다. maker
   직접 ECDSA, delayed governed delegate, immediate revoke와 ERC-1271을 fill

@@ -1183,6 +1183,37 @@ passing
 - completed plan: `docs/exec-plans/completed/SDK-001-modular-integration-toolkit.md`
 - hosted dealer, custody, production pricing/inventory와 Kubernetes는 범위 밖이다.
 
+## SDK-002 — Standalone Integration and Deployment Workflow
+
+### Behavior
+
+- 외부 사용자가 단일 CLI 흐름으로 프로젝트 생성, 진단, 배포 계획, 검증과 RFQ
+  module conformance를 실행한다.
+- library-only, reference-service와 existing-backend 모드를 지원하고 Docker는
+  명시적으로 선택한 경우에만 생성한다.
+- contracts, Toolkit, RFQ SDK와 CLI를 repository 내부 전용이 아닌 package-ready
+  artifact로 검증한다.
+- 생성 프로젝트는 주소나 secret을 하드코딩하지 않고 versioned config와
+  deployment artifact를 source of truth로 사용한다.
+- 기존 `toolkit-*` 명령은 compatibility alias로 유지한다.
+
+### Verification
+
+- clean generated-project install/build/doctor
+- custom RFQ module conformance CLI
+- package dry-run
+- repository check
+- Docker-independent deployment dry-run
+
+### State
+
+passing
+
+### Notes
+
+- completed plan: `docs/exec-plans/completed/SDK-002-standalone-integration-workflow.md`
+- production durable nonce와 service hardening은 #66/#67 module로 유지한다.
+
 ## RFQ-POLICY-001 — Production RFQ Policy
 
 ### Behavior

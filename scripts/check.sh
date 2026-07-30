@@ -2,6 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+export npm_config_cache=${npm_config_cache:-"${TMPDIR:-/tmp}/corner-store-npm-cache"}
 
 cd "$ROOT_DIR"
 
@@ -61,6 +62,9 @@ echo "==> Running Toolkit config build + smoke test"
   fi
   npm test
 )
+
+echo "==> Running standalone SDK package consumer smoke test"
+scripts/sdk-product-smoke.sh
 
 echo "==> Running read-only Operator API smoke test"
 (

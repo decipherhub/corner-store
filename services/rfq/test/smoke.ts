@@ -1,3 +1,5 @@
+import {Wallet} from "ethers";
+
 import {
   createRFQService,
   assertRFQModuleConformance,
@@ -10,6 +12,7 @@ import {
   RFQ_DOMAIN_VERSION,
   RFQQuoteService,
   riskModule,
+  runRFQModuleConformance,
   signerModule
 } from "../src";
 import {RFQQuoteRequest, RFQTypedData, TypedDataSigner, InventoryRiskCheck, RFQPriceRequest} from "../src/types";
@@ -185,11 +188,15 @@ async function referenceComponentSmoke() {
 }
 
 async function moduleConformanceSmoke() {
-  const signer = new CaptureSigner();
+  const wallet = new Wallet("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
+  const signer = {
+    signTypedData: async (typedData: RFQTypedData) =>
+      wallet.signTypedData(typedData.domain, typedData.types, typedData.message) as Promise<`0x${string}`>
+  };
   const fixture = {
     chainId: 31337,
     verifyingContract: ADAPTER,
-    maker: MAKER,
+    maker: wallet.address as `0x${string}`,
     taker: TAKER,
     otherTaker: OTHER_TAKER,
     tokenIn: TOKEN_IN,
@@ -207,7 +214,6 @@ async function moduleConformanceSmoke() {
   }, fixture);
   assert(referenceResult.passed, "reference module conformance");
 
-  const customSigner = new CaptureSigner();
   const modules = {
     pricing: pricingModule(
       "example.custom-pricing",
@@ -215,7 +221,7 @@ async function moduleConformanceSmoke() {
       {configKeys: ["PRICE_FEED_URL"]}
     ),
     risk: riskModule("example.custom-risk", new NoopInventoryRiskCheck()),
-    signer: signerModule("example.custom-signer", customSigner, {
+    signer: signerModule("example.custom-signer", signer, {
       configKeys: ["SIGNER_KEY_ID"],
       secretConfigKeys: ["SIGNER_KEY_ID"]
     }),
@@ -226,6 +232,15 @@ async function moduleConformanceSmoke() {
   };
   const result = await assertRFQModuleConformance(modules, fixture);
   assert(result.checks.some((check) => check.name === "nonce" && check.pass), "custom module conformance");
+  const fakeSignatureResult = await runRFQModuleConformance({
+    ...modules,
+    signer: signerModule("example.fake-signer", new CaptureSigner()),
+    nonce: nonceModule("example.fake-nonce", new InMemoryNonceStore())
+  }, fixture);
+  assert(
+    fakeSignatureResult.checks.some((check) => check.name === "signer-recovery" && !check.pass),
+    "conformance rejects a shape-only signature"
+  );
   assertThrows(
     () => pricingModule("Bad Module", new FixedRatePricingProvider({numerator: 1n, denominator: 1n})),
     "invalid module id"
