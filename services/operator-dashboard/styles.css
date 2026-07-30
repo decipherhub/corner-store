@@ -154,6 +154,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .stat-card strong { margin: 9px 0 5px; font: 600 29px Georgia, serif; }
 .stat-card small { color: #91a0af; }
 .dashboard-grid, .advanced-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; }
+.deployment-lineage {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px;
+  margin: 14px 0 18px; padding: 12px; background: var(--ground); font-size: 11px;
+}
+.deployment-lineage span { color: var(--muted); }
+.deployment-lineage strong, .deployment-lineage code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .surface { border: 1px solid var(--line); background: var(--panel); padding: 22px; box-shadow: 0 4px 18px rgba(16,35,61,.025); }
 .section-head { display: flex; align-items: start; justify-content: space-between; gap: 18px; }
 .section-head h2, .page-intro h2, .surface h3 { margin: 6px 0; font: 500 22px Georgia, serif; }

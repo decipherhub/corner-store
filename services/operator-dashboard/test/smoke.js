@@ -10,7 +10,8 @@ const server = fs.readFileSync(path.join(root, "server.js"), "utf8");
 new Function(app);
 
 for (const marker of [
-  'id="walletSelector"', "Admin", 'id="ribbonAsset"', 'id="dashboardHolding"',
+  'id="walletSelector"', "Admin", 'id="ribbonCore"', 'id="ribbonAsset"', 'id="ribbonActivation"', 'id="dashboardHolding"',
+  'id="deploymentCore"', 'id="deploymentActivation"', 'id="deploymentRouter"',
   'id="userNav"', 'id="adminNav"', 'id="dashboardView"', 'id="createView"', 'id="rfqsView"',
   'id="portfolioView"', 'id="adminDashboardView"', 'id="adminUsersView"', 'id="adminMakerView"',
   'id="adminEnforcementView"', 'id="caseType"', 'id="caseWallet"', 'id="caseCreate"',
@@ -34,6 +35,7 @@ for (const marker of [
   "/demo/enforcement/adapter-boundary", "/demo/enforcement/restore",
   "selectedWallet", "runPrecheck", "switchProfile", "requiresQualifiedPurchaser", "quoteConsumed",
   "configurePresentation", "chainNow", "quote.taker", "Router가 체결을 거부했습니다",
+  "DeployProductionCore.deployCore", "deployment.coreImplementation", "deployment.activationMode",
   "Scenario fixture", "Live · executable", "refreshAdmin", "saveClaim", "setMaker",
   "prepareTemporal", "advanceTemporal"
   , 'side: tradeSide', 'setTradeSide("sell")', "transaction.quoteDelta",
@@ -70,7 +72,7 @@ for (const [control, handler] of [
 
 for (const marker of [
   "--blue:", ".app-shell", ".sidebar", ".hero-balance", ".quote-grid", ".precheck-card", ".market-chart",
-  ".range-switcher", ".fill-label", ".market-fill-tape", ".fill-ticket",
+  ".range-switcher", ".fill-label", ".market-fill-tape", ".fill-ticket", ".deployment-lineage",
   ".architecture-strip", ".coverage-table", ".enforcement-layout", ".case-timeline", ".evidence-result",
   ".role-banner", ".modal-backdrop", "@media (max-width: 720px)", "@media (prefers-reduced-motion: reduce)"
 ]) {

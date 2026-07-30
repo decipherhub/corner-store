@@ -3,6 +3,7 @@ pragma solidity 0.8.17;
 
 import {Test} from "forge-std/Test.sol";
 import {DeployProductionCore} from "../../../script/DeployProductionCore.s.sol";
+import {ProductionCoreDeployer} from "../../../script/ProductionCoreDeployer.sol";
 import {Governed} from "../../../src/auth/Governed.sol";
 import {ComplianceEngine} from "../../../src/compliance/ComplianceEngine.sol";
 import {ExecutionRouter} from "../../../src/execution/ExecutionRouter.sol";
@@ -67,13 +68,13 @@ contract DeployProductionCoreTest is Test {
     }
 
     function testRejectsUnsafeDeploymentInputs() external {
-        vm.expectRevert(DeployProductionCore.InvalidGovernance.selector);
+        vm.expectRevert(ProductionCoreDeployer.InvalidGovernance.selector);
         script.deployCore(address(0), operator, false, true);
 
-        vm.expectRevert(DeployProductionCore.InvalidOperator.selector);
+        vm.expectRevert(ProductionCoreDeployer.InvalidOperator.selector);
         script.deployCore(governance, address(0), false, true);
 
-        vm.expectRevert(DeployProductionCore.NoVenueEnabled.selector);
+        vm.expectRevert(ProductionCoreDeployer.NoVenueEnabled.selector);
         script.deployCore(governance, operator, false, false);
     }
 

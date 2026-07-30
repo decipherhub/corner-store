@@ -142,12 +142,15 @@ can replace account bindings, initial balances, fixed mock pricing, default
 buy/sell amounts, wallet/QP facts and presentation values:
 
 ```shell
-scripts/demo.sh --profile buidl-like \
-  --scenario services/rfq-demo-backend/config/demo-scenario.json
+scripts/showcase.sh --plan
+scripts/showcase.sh
 ```
 
-Add `--keep` for an interactive follow-up; the runner restores the demo maker
-after its rejection check so a new quote can be filled immediately.
+The showcase config injects the profile, scenario, mode and all local runtime
+ports. It deploys the core through the same `DeployProductionCore.deployCore()`
+implementation used by the production workflow, then visibly separates the
+local ERC-3643, Mock TA, policy, venue and inventory activation. See
+[`docs/showcase-runbook.md`](./docs/showcase-runbook.md).
 
 The selected scenario is copied into the deployment runtime input and its hash is
 written to the deployment artifact. The backend refuses a mismatched scenario,

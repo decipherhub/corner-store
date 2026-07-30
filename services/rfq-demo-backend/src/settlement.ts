@@ -193,6 +193,13 @@ export class DemoSettlementService {
   async state(): Promise<{
     ready: boolean;
     assetProfile: "buidl-like" | "reg-d";
+    deployment: {
+      coreImplementation: string;
+      activationMode: string;
+      productionDeployment: boolean;
+      router: string;
+      rfqAdapter: string;
+    };
     requiresQualifiedPurchaser: boolean;
     makerApproved: boolean;
     chainTimestamp: number;
@@ -216,6 +223,13 @@ export class DemoSettlementService {
     return {
       ready: makerApproved && Number(network.chainId) === this.config.chainId,
       assetProfile: this.config.artifact.assetProfile,
+      deployment: {
+        coreImplementation: this.config.artifact.coreDeployment ?? "legacy-demo-stack",
+        activationMode: this.config.artifact.activationMode ?? "unspecified",
+        productionDeployment: this.config.artifact.productionDeployment === true,
+        router: this.config.artifact.router,
+        rfqAdapter: this.config.artifact.rfqAdapter
+      },
       requiresQualifiedPurchaser: this.config.artifact.assetProfile === "buidl-like",
       makerApproved,
       chainTimestamp: latest.timestamp,

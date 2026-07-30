@@ -9,6 +9,44 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DEMO-013 — Deployment-to-DEX Showcase Handoff
+
+### Behavior
+
+- reference DEX demo가 production과 별개의 core 구현을 다시 만들지 않고
+  `DeployProductionCore.deployCore()`에서 같은 registry/engine/router/adapter
+  stack을 배포한다.
+- production core 배포와 demo-only ERC-3643 fixture, mock TA, inventory,
+  policy/venue activation을 명시적으로 구분한다.
+- versioned showcase config가 profile, scenario, mode와 runtime port를 주입하고,
+  plan mode가 사전 준비값과 실행 순서를 transaction 없이 출력한다.
+- showcase runner가 core deployment → demo activation → artifact verification →
+  asset onboarding → RFQ backend → Operator API/Dashboard 순서로 기존 demo를
+  재현한다.
+- artifact와 UI 문서는 local rehearsal이 production deployment 또는 legal
+  onboarding evidence가 아님을 명시한다.
+
+### Verification
+
+- showcase config/plan smoke test
+- `forge test --offline --match-path test/unit/deployment/DeployProductionCore.t.sol`
+- BUIDL-like RFQ showcase E2E
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- 완료 계획:
+  `docs/exec-plans/completed/DEMO-013-deployment-to-dex-showcase-handoff.md`
+- production deployment script와 reference demo는
+  `ProductionCoreDeployer.deployCore()` 구현을 공유하지만, local Mock TA,
+  deterministic account, fixture policy/inventory activation은 production
+  evidence로 취급하지 않는다.
+
 ## DEPLOY-001 — Production Deployment Workflow
 
 ### Behavior

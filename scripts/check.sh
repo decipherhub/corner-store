@@ -99,6 +99,17 @@ echo "==> Running read-only Operator dashboard smoke test"
   npm test
 )
 
+echo "==> Validating deployment-to-DEX showcase plan"
+SHOWCASE_PLAN=$(scripts/showcase.sh --plan)
+node -e '
+const value = JSON.parse(process.argv[1]);
+if (
+  value.plan?.boundary?.coreImplementation !== "DeployProductionCore.deployCore" ||
+  value.plan?.boundary?.productionEvidence !== false ||
+  value.plan?.sequence?.length !== 8
+) process.exit(1);
+' "$SHOWCASE_PLAN"
+
 echo "==> Running vendored deploy-v3 tests"
 (
   cd tools/deploy-v3

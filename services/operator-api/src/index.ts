@@ -6,5 +6,6 @@ const manifestPath = process.env.CORNER_STORE_MANIFEST;
 const eventsPath = process.env.CORNER_STORE_EVENTS;
 const authToken = process.env.CORNER_STORE_API_TOKEN;
 const port = Number(process.env.PORT ?? 8787);
+const host = process.env.HOST ?? "127.0.0.1";
 const server = createOperatorApi({configPath, artifactPath, manifestPath, eventsPath, authToken});
-server.listen(port, "127.0.0.1", () => console.log(`Corner Store operator API listening on 127.0.0.1:${port}`));
+server.listen(port, host, () => console.log(`Corner Store operator API listening on ${host}:${port}`));
