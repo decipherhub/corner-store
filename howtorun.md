@@ -183,6 +183,10 @@ Integration Mode의 의미:
 4. **Verify artifact**
    - 생성된 artifact의 필수 주소와 설정 일치 여부를 검사합니다.
 
+배포 전에 실행한 Doctor에서는 선택적 `artifact` 항목이
+`not created yet`으로 표시될 수 있습니다. 이는 정상입니다. 배포가 성공하면
+Studio가 Doctor를 다시 실행해 생성된 artifact 경로로 표시를 갱신합니다.
+
 설정이나 RPC를 변경하면 기존 Doctor/Dry-run/Verify 결과는 무효가 됩니다.
 변경 후에는 위 단계를 다시 실행합니다.
 

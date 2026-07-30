@@ -814,6 +814,7 @@ async function deployDemo() {
       if (job.status === "succeeded") {
         $("deployLog").textContent += "Artifact ready for verification.\n";
         await refreshArtifact();
+        await runDoctor();
         $("verifyArtifact").disabled = false;
       } else {
         $("deployLog").textContent += `FAILED: ${job.error}\n`;
