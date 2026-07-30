@@ -169,7 +169,12 @@ scripts/showcase.sh --config corner-store.showcase.json
 ## Deployment Studio 개별 테스트
 
 Deployment Studio는 로컬/demo 환경에서 Corner Store 프로젝트를 생성하고,
-설정 검증부터 배포 artifact 확인까지 진행하는 화면입니다.
+설정 검증부터 배포하고, **그 배포 artifact와 동일한 컨트랙트 주소로 DEX
+데모를 시작하는 화면**입니다.
+
+이 흐름을 테스트할 때는 `scripts/showcase.sh`를 따로 실행하지 않습니다.
+Studio의 `Start DEX demo` 버튼이 RFQ backend, Operator API와 Dashboard를
+직접 시작합니다. 따라서 두 번째 stack을 다시 배포하지 않습니다.
 
 > 현재 Studio의 직접 배포 기능은 Anvil 같은 허용된 demo 네트워크만 지원합니다.
 > Mainnet 배포와 private key 입력은 지원하지 않습니다.
@@ -307,7 +312,24 @@ scripts/studio.sh --help
 8. 진행 로그가 완료되고 deployment artifact가 생성되는지 확인합니다.
 9. **Verify Artifact**를 실행합니다.
 10. Artifact Viewer에서 Router, RFQ Adapter 등 배포 주소를 확인합니다.
-11. Activation Checklist와 Operations handoff 상태를 확인합니다.
+11. **Start DEX demo**를 누릅니다.
+12. 상태가 `DEX running on verified deployment`로 바뀌는지 확인합니다.
+13. **Open DEX**를 눌러 Dashboard를 엽니다.
+14. Dashboard Environment의 Router 주소와 Studio Artifact Viewer의 Router
+    주소가 같은지 확인합니다.
+15. 정상 RFQ와 거부 시나리오를 시연합니다.
+16. 종료할 때 Studio에서 **Stop DEX**를 누릅니다.
+
+`Start DEX demo`는 다음 값을 자동으로 전달합니다.
+
+| 대상 | 전달되는 값 |
+| --- | --- |
+| RFQ backend | Studio가 생성한 artifact, project scenario, 실제 배포 RPC |
+| Operator API | project config, 동일 artifact, runtime event 파일 |
+| Dashboard | 방금 시작한 RFQ backend와 Operator API URL |
+
+다른 RPC를 입력하거나 artifact/config/scenario가 Verify 이후 변경되면 DEX
+시작이 차단됩니다. Studio에서 다시 배포하고 Verify해야 합니다.
 
 Module 항목은 임의 문자열을 입력하는 기본 form이 아닙니다. 제공되는 reference
 또는 integrator adapter를 선택하고, 직접 구현한 모듈이 있을 때만
@@ -316,7 +338,8 @@ Module 항목은 임의 문자열을 입력하는 기본 form이 아닙니다. �
 
 Activation Checklist는 실제 Maker 승인, signer 권한 부여 또는 token allowance
 트랜잭션을 실행하지 않습니다. 운영자가 해당 온체인 작업과 smoke settlement를
-확인했다는 사실만 기록합니다.
+확인했다는 사실만 기록합니다. 로컬 reference stack의 데모 초기 상태는
+`DeployStack`이 주입하며, Dashboard 거래는 그 상태와 동일 artifact를 사용합니다.
 
 설정이나 RPC를 변경하면 기존 Doctor/Dry-run 증거가 무효화됩니다.
 이 경우 Doctor와 Dry-run을 다시 실행해야 배포할 수 있습니다.

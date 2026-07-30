@@ -52,6 +52,9 @@ production activation.
   complete preparation order.
 - the deployment artifact supplies core lineage and exact addresses to the RFQ
   backend and Dashboard.
+- Deployment Studio can start, open and stop the DEX services after verification;
+  those services consume the same project artifact, scenario and deployment RPC
+  rather than deploying a second stack.
 - the local BUIDL-like RFQ E2E proved successful buy/sell settlement, repeated
   liquidity and the ineligible-investor, expired-claim, maker-revocation and
   direct-adapter rejection paths.

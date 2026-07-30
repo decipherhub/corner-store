@@ -158,7 +158,8 @@ const state = {
   plan: null,
   artifact: null,
   operationsUrl: "",
-  runtime: null
+  runtime: null,
+  dexRuntime: null
 };
 
 document.addEventListener("DOMContentLoaded", boot);
@@ -243,8 +244,12 @@ function bindControls() {
   $("reviewPlan").onclick = reviewPlan;
   $("deployDemo").onclick = deployDemo;
   $("verifyArtifact").onclick = verifyArtifact;
+  $("startDexDemo").onclick = startDexDemo;
+  $("stopDexDemo").onclick = stopDexDemo;
   $("openOperations").onclick = () => {
-    if (state.operationsUrl) window.open(state.operationsUrl, "_blank", "noopener");
+    if (state.dexRuntime?.state === "running" && state.operationsUrl) {
+      window.open(state.operationsUrl, "_blank", "noopener");
+    }
   };
   $("configSection").querySelectorAll("input, select, textarea").forEach((input) => {
     input.addEventListener("input", invalidatePlan);
@@ -883,12 +888,54 @@ async function refreshHandoff() {
   if (!state.project) return;
   const handoff = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/handoff`);
   state.operationsUrl = handoff.url;
-  $("openOperations").disabled = !handoff.enabled;
-  $("handoffMessage").className = `handoff-card ${handoff.enabled ? "is-ready" : ""}`;
-  $("handoffMessage").innerHTML = handoff.enabled
-    ? "<strong>Verified deployment ready</strong><span>Open the existing runtime dashboard with this artifact as its source of truth.</span>"
-    : `<strong>Operations handoff locked</strong><span>${escapeHtml(handoff.reason)}</span>`;
+  state.dexRuntime = handoff.runtime ?? {state: "stopped"};
+  const running = handoff.running === true;
+  $("startDexDemo").disabled = !handoff.enabled || running;
+  $("openOperations").disabled = !running;
+  $("stopDexDemo").disabled = !running;
+  $("handoffMessage").className = `handoff-card ${running ? "is-ready" : ""}`;
+  $("handoffMessage").innerHTML = running
+    ? `<strong>DEX running on verified deployment</strong><span>${escapeHtml(handoff.url)} · ${escapeHtml(state.artifact?.router ?? "Router from artifact")}</span>`
+    : handoff.enabled
+      ? "<strong>Verified deployment ready</strong><span>Start the DEX demo to launch all services with this exact artifact and RPC. No redeployment occurs.</span>"
+      : `<strong>DEX handoff locked</strong><span>${escapeHtml(handoff.reason)}</span>`;
   updateWorkflowState();
+}
+
+async function startDexDemo() {
+  setBusy($("startDexDemo"), true, "Starting DEX…");
+  let started = false;
+  try {
+    state.dexRuntime = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/runtime/start`, {
+      method: "POST",
+      body: {rpcUrl: $("rpcUrl").value.trim()}
+    });
+    started = true;
+  } catch (error) {
+    $("handoffMessage").className = "handoff-card";
+    $("handoffMessage").innerHTML = `<strong>DEX start failed</strong><span>${escapeHtml(error.message)}</span>`;
+  } finally {
+    setBusy($("startDexDemo"), false, "Start DEX demo");
+    if (started) await refreshHandoff();
+  }
+}
+
+async function stopDexDemo() {
+  setBusy($("stopDexDemo"), true, "Stopping…");
+  let stopped = false;
+  try {
+    state.dexRuntime = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/runtime/stop`, {
+      method: "POST",
+      body: {}
+    });
+    stopped = true;
+  } catch (error) {
+    $("handoffMessage").className = "handoff-card";
+    $("handoffMessage").innerHTML = `<strong>DEX stop failed</strong><span>${escapeHtml(error.message)}</span>`;
+  } finally {
+    setBusy($("stopDexDemo"), false, "Stop DEX");
+    if (stopped) await refreshHandoff();
+  }
 }
 
 async function api(path, options = {}) {
