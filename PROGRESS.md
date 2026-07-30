@@ -15,6 +15,14 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `RFQ-POLICY-001 — Production RFQ Policy`: ADR-009로 protocol non-custodial,
+  exact full-fill v1, maker/signer 분리, durable nonce/idempotency, time-bounded
+  inventory reservation, pricing/risk 역할 분리와 Router fill-time compliance를
+  accepted baseline으로 확정했다. owner/trust matrix, quote lifecycle/reorg,
+  signer rotation, incident flow와 hostile test matrix를 component spec에 기록하고
+  후속 구현을 #65(authorizer/cap), #66(durable coordinator), #67(service
+  hardening)로 분리했다. local link check, `git diff --check`, independent
+  architect review와 adversarial critic 재검토를 통과했다.
 - `SDK-001 — Modular Integration and Deployment Toolkit`: RFQ pricing, risk,
   signer와 nonce를 versioned capability module로 교체할 수 있게 하고 reference와
   custom 구현이 같은 conformance suite를 사용하도록 했다. Toolkit/CLI는 reference
@@ -169,8 +177,8 @@ source of truth로 사용한다.
 
 1. 실제 TA provider API/authorization, amount-specific lot allocation과 production
    WORM/indexer를 별도 refinement로 구현한다.
-2. RFQ production policy를 별도 feature로 분리한다: production pricing/risk
-   module, durable nonce store, custody, partial fill과 dealer/operator 책임.
+2. ADR-009 순서에 따라 RFQ maker authorizer/regulated cap, durable nonce와
+   production pricing/risk·endpoint hardening을 독립 feature로 구현한다.
 3. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
 4. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
@@ -179,6 +187,12 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- production RFQ v1을 non-custodial exact full-fill로 고정하고 maker settlement
+  account와 signer authority, Operator/dealer/TA/host/surveillance 책임을 분리했다.
+- durable quote lifecycle은 nonce와 inventory lease를 원자적으로 예약하고
+  observed/finalized fill·cancel 및 reorg recovery를 추적하도록 명세했다.
+- 구현은 #65 maker authorizer/cap, #66 durable coordinator, #67 audit/service
+  hardening으로 나눴다. partial fill은 새 quote/adapter version 전까지 비활성이다.
 - RFQ pricing/risk/signer/nonce 교체 경계와 공통 conformance suite를 추가하고,
   demo backend를 같은 module contract의 reference consumer로 전환했다.
 - CLI가 독립 실행 가능한 reference RFQ service 또는 기존 backend 연결 scaffold를
@@ -309,8 +323,9 @@ source of truth로 사용한다.
   각각 7/7 scenario와 backend RFQ success/failure path를 통과했다.
 - backend는 live-Anvil deployment artifact의 maker/pair/venue/RFQAdapter에 고정되고
   RFQ SDK의 fixed pricing, in-memory nonce와 no-op risk fixture를 사용한다.
-- production signer custody, persistent nonce, pricing/inventory와 hosting은 범위 밖이며
-  최종 compliance는 Router fill 시점에 유지한다.
+- 당시 feature에서 production signer custody, persistent nonce, pricing/inventory와
+  hosting은 범위 밖이었다. 후속 기준은 ADR-009이며 최종 compliance는 Router fill
+  시점에 유지한다.
 - `scripts/check.sh` 통과: Foundry 248/248, RFQ SDK, CLI/backend smoke, deploy-v3.
 - 기존 Foundry `1.4.0-nightly` build cache의 constructor decode 오류는
   Foundry v1.7.1 clean rebuild로 해소했고, 실제 protected Router walkthrough를 완료했다.

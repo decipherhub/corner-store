@@ -1153,3 +1153,34 @@ passing
 
 - completed plan: `docs/exec-plans/completed/SDK-001-modular-integration-toolkit.md`
 - hosted dealer, custody, production pricing/inventory와 Kubernetes는 범위 밖이다.
+
+## RFQ-POLICY-001 — Production RFQ Policy
+
+### Behavior
+
+- production RFQ v1은 protocol non-custodial, exact full-fill을 유지한다.
+- maker settlement account와 quote signer를 분리하고 current authorization을
+  fill 시점에 다시 검사한다.
+- durable nonce는 maker scope에서 atomic/monotonic하게 할당되며 idempotency
+  conflict와 restart reconciliation을 지원한다.
+- pricing/inventory risk는 서명 전 fail-closed module이고 Router의 최신
+  compliance가 최종 gate다.
+- partial fill은 기존 quote의 옵션이 아니라 새 quote/adapter version이다.
+- finite compliance cap은 regulated asset quantity에 적용한다.
+
+### Verification
+
+- ADR/product spec consistency review
+- current contract/SDK gap mapping
+- hostile concurrency, signer rotation과 fill-time policy test matrix
+- independent architecture/critic review
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- completed plan: `docs/exec-plans/completed/RFQ-POLICY-001-production-rfq-policy.md`
+- 특정 custodian/dealer/KMS/database vendor와 법률 적합성은 범위 밖이다.

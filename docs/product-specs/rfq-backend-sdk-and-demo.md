@@ -201,8 +201,9 @@ RFQ backend responsibilities remain split:
 ## Follow-up boundary
 
 Further RFQ work must be split from this demo application: production pricing,
-signer custody, persistent nonce storage, inventory/risk controls, authentication,
-rate limiting, monitoring, partial fill and custody policy remain separate features.
+signer integration, persistent nonce storage, inventory/risk controls, authentication,
+rate limiting과 monitoring은 ADR-009를 따르는 별도 implementation feature다.
+partial fill은 새 quote/adapter version 전까지 v1에서 허용하지 않는다.
 
 ## Phase 4 — Modular integration toolkit
 

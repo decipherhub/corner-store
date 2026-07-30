@@ -102,16 +102,15 @@ custody, websocket discovery, orderbook matching, hosting과 compliance 판단�
 - v1에서는 partial fill을 허용하지 않고 signed amount와 request amount가 정확히
   일치해야 함
 
-### Open Decisions
+### Production v1 Decisions
 
-- dealer 승인 모델
-- exact taker 외 taker class 허용 여부
-- partial fill 허용 여부
-- settlement custody와 identity 등록
-- quote cancellation 방식
+ADR-009에 따라 exact fill, exact taker, protocol non-custodial settlement와
+Router-only 진입점을 유지한다. maker settlement account와 signer authority는
+분리하며 quote cancellation은 maker nonce namespace를 사용한다. partial fill과
+taker class 확장은 새 quote/adapter version 없이는 허용하지 않는다.
 
-결정 전 기본값은 exact fill, exact taker, non-custodial settlement, Router-only
-진입점이다.
+특정 dealer/custodian의 identity onboarding, signer vendor와 운영 인허가는
+operator 책임이다.
 
 ## Order Book
 

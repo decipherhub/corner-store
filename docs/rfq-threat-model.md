@@ -13,8 +13,11 @@ RFQ settlement에 한정한 actor, asset, trust boundary와 threat/mitigation을
 - direct adapter call, 비-router settlement, wrapper/custodian을 통한 이전은
   본 모델의 보장 범위 밖이다. 이는 D006(Corner Store compliance 보장은 Router
   경로에 한정)의 RFQ 구체화이며, 별도 예외를 만들지 않는다.
-- production dealer pricing, signer key custody, partial fill, inventory risk는
-  이 모델의 범위 밖이며 별도 feature spec에서 다룬다.
+- production 책임과 migration 기준은 ADR-009와
+  `docs/product-specs/production-rfq-policy.md`에서 정한다. maker authorizer,
+  durable nonce, production pricing/risk와 endpoint hardening은 아직 미구현이다.
+- partial fill은 현 Adapter 범위 밖이며 새 quote/adapter version 전까지 허용하지
+  않는다.
 
 ## Actors
 
@@ -61,7 +64,11 @@ RFQ settlement에 한정한 actor, asset, trust boundary와 threat/mitigation을
 | Rogue/unvetted maker | operator `approvedMaker` allowlist(`RFQMakerNotApproved`) | mitigated |
 | Maker needs to pull a live quote | `cancelQuoteNonce`(`RFQQuoteCancelled`); cancel-vs-fill race는 first-lander로 해소, cancel은 확정 전까지 best-effort | mitigated (documented residual) |
 | Malicious/re-entrant token contract | `SafeERC20` + router `nonReentrant` + regulated asset는 upstream manifest로 gating | partially mitigated |
-| Operator key compromise | reference 구현 범위 밖; production key management은 open decision | residual |
+| Operator key compromise | D011 governance separation + ADR-009 immediate tightening; vendor key custody는 operator 책임 | residual |
+| Quote signer compromise/rotation | ADR-009는 maker와 signer 분리, fill-time current authorization과 immediate revoke를 요구 | specified, not implemented |
+| Multi-instance nonce collision | ADR-009는 maker-scoped atomic durable allocation과 idempotency를 요구 | specified, not implemented |
+| Stale pricing/inventory dependency | production module은 signer 호출 전에 fail-closed해야 함 | specified, not implemented |
+| Partial-fill accounting/replay ambiguity | v1은 exact full-fill만 허용; 새 adapter version 전까지 비활성 | mitigated by scope |
 
 각 mitigation의 구현 위치:
 
@@ -80,9 +87,9 @@ RFQ settlement에 한정한 actor, asset, trust boundary와 threat/mitigation을
 - **Exotic ERC-20 behavior**: unregulated 측 token이 fee-on-transfer, rebasing,
   reentrant hook 등 비표준 동작을 하면 `SafeERC20`와 `nonReentrant`로 완화되나
   잔여 위험이 남는다. regulated 측은 upstream manifest gating으로 제한한다.
-- **Operator key compromise**: reference 구현은 production key management(multisig,
-  HSM, rotation)을 확정하지 않는다. 이는 open decision이며 D007과 `docs/ROADMAP.md`
-  production hardening 항목에서 추적한다.
+- **Operator/signer key compromise**: governance와 signer custody의 vendor 선택은
+  열려 있다. ADR-009는 authority 추가 지연, 즉시 revoke, venue pause와 external
+  signer boundary를 요구하며 구현은 roadmap에서 추적한다.
 - **Allowance hygiene**: maker는 필요한 `tokenOut` allowance만 유지하고, 승인
   해제(off-boarding) 시 잔여 allowance를 회수한다. taker도 마찬가지로 `tokenIn`
   allowance를 최소화한다.
