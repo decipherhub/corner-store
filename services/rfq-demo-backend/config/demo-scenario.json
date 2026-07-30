@@ -102,7 +102,7 @@
     ]
   },
   "temporalEligibility": {
-    "walletId": "eligible-a",
+    "walletId": "eligible-b",
     "baselineFreshnessSeconds": 31536000,
     "freshnessSeconds": 60,
     "advanceSeconds": 61,

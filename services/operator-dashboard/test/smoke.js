@@ -18,6 +18,7 @@ for (const marker of [
   'id="casePrepare"', 'id="caseQuote"', 'id="caseMutate"', 'id="caseExecute"', 'id="caseRestore"',
   'id="caseTimeline"', 'id="caseResult"', "Element", "ExecutionRouter", "Adapter 직접 호출",
   "Compliance Pre-check", 'id="estimatePay"', 'id="estimateReceive"', "예상 단가", "최종 온체인 거부 시연", 'id="prepareTemporal"', 'id="advanceTemporal"',
+  "특정 투자자 claim 만료", "Maker 승인 철회 시연", "Single configured demo Maker",
   'id="buySide"', 'id="sellSide"', 'id="quoteHolding"',
   'id="ttl"', "scenario 기본값",
   'id="marketChart"', 'id="marketCurrent"', 'id="marketVolume"', "Indicative RFQ mid",
@@ -41,6 +42,7 @@ for (const marker of [
   , 'side: tradeSide', 'setTradeSide("sell")', "transaction.quoteDelta",
   "defaultQuoteTtlSeconds", "formatInputBaseUnits", "coveredCompanyMatchesFund"
   , "beginNewRfq", '$("executeQuote").disabled = false', "formatRatio", "marketPrice",
+  "session.rfqs.unshift", "selectRfqRecord", "activeRfqCount", "다른 투자자의 claim은 그대로 유지됩니다",
   "qpBasisHelp", "개인 투자자", "Rule 3c-5의 KE 예외 경로", "renderMarketChart",
   "marketHistory.fills", "suggestedTradeAmounts", "applySuggestedAmount", "setMarketRange",
   "fill-ticket", "displayOrder", "amountRwa", "renderRfqEstimate", "result.amountOut"

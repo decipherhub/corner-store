@@ -8,10 +8,19 @@ import {RFQ_QUOTE_TYPES} from "../../rfq/src";
 import {ANVIL_MNEMONIC, DemoBackendConfig, loadConfig} from "../src/config";
 import {startDemoServer} from "../src/server";
 import {createDemoPricing} from "../src/service";
+import {temporalClaimVerifiedAt} from "../src/settlement";
 
 const makerWallet = HDNodeWallet.fromPhrase(ANVIL_MNEMONIC, "", "m/44'/60'/0'/0/2");
 
 async function main(): Promise<void> {
+  assert(
+    temporalClaimVerifiedAt(1_700_000_000, 31_536_000, 60) === 1_668_464_060,
+    "targeted expiry ages one claim while preserving the global freshness cap"
+  );
+  assertThrows(
+    () => temporalClaimVerifiedAt(1_700_000_000, 60, 60),
+    "targeted expiry rejects a remaining lifetime that cannot expire under the baseline cap"
+  );
   const dir = mkdtempSync(join(tmpdir(), "corner-store-rfq-demo-"));
   const artifactPath = join(dir, "anvil-e2e.json");
   const artifact = {
@@ -105,7 +114,7 @@ async function main(): Promise<void> {
       indicativeMidPrices: ["1.48", "1.49", "1.50", "1.50"]
     },
     temporalEligibility: {
-      walletId: "investor",
+      walletId: "investor-b",
       baselineFreshnessSeconds: 31_536_000,
       freshnessSeconds: 60,
       advanceSeconds: 61,

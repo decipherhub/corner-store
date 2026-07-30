@@ -15,6 +15,15 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DEMO-015 — RFQ Session History and Targeted Claim Expiry`: My RFQs가 세션의
+  firm quote를 누적하고 각 taker/방향/payload 및 quoted/accepted/rejected/
+  expired 상태를 다시 선택할 수 있게 했다. 과거 RFQ 선택 시 해당 quote의
+  방향과 정확한 입력 금액으로 Pre-check를 다시 수행한다. temporal demo는
+  전역 freshness cap을 유지한 채 적격투자자 B의 claim 발급시각만 조정하므로
+  시간 전진 후 B만 만료되고 적격투자자 A는 계속 허용된다. `Maker 관리`는
+  다중 Maker 기능이 아니라 현재 주입된 단일 Maker의 승인 철회 보안 시연으로
+  명확히 바꿨다. Dashboard/backend smoke, BUIDL-like RFQ live E2E와
+  `git diff --check`를 통과했다.
 - `DEMO-014 — RFQ Counter-Amount Preview`: RFQ 생성 화면에서 매수·매도 방향별
   지불 자산, backend pre-check가 계산한 반대 페어 예상 수령량과 현재 단가를
   함께 표시한다. 입력이 바뀌면 이전 값을 지우고 최신 `amountOut` 응답으로만

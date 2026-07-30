@@ -78,8 +78,9 @@ The command exits non-zero on failure. A successful run proves, in order:
 8. Admin can change the local Trusted-Issuer claim facts on chain, while the
    A-13 Element independently derives and restores the QP result;
 9. revoking the maker prevents a stored signed quote from settling;
-10. a quote-time eligible investor becomes ineligible after the injected claim
-    freshness window, and the still-live quote is rejected at Router fill time;
+10. only the configured quote-time eligible investor's claim reaches expiry
+    after the injected time advance, while another eligible investor remains
+    valid; the target's still-live quote is rejected at Router fill time;
 11. the backend can settle again after CLI activity without reusing a stale
    account nonce.
 12. a direct `RFQAdapter.execute` transaction is mined with status `0`, and the
@@ -118,17 +119,21 @@ Use the one-command launcher and open `http://127.0.0.1:8790`.
 2. Select **적격투자자 A**. Request a fresh quote, compare it with disabled
    preview fixtures and settle it through the Router.
 3. Request another eligible quote, switch to **Admin**, revoke Meridian in
-   **Maker 관리**, then return to the same eligible wallet and submit the stored
-   quote. The final fill-time check rejects it.
+   **Maker 승인 시연**, then return to the same eligible wallet, reopen that RFQ
+   from **My RFQs** and submit it. The final fill-time check rejects it. This
+   screen controls the one configured demo Maker; it is not a multi-maker
+   onboarding console.
 4. In **투자자 Claim 관리**, change the QP basis, issuer trust, signature or
    look-through facts. Show that Admin never sets an eligibility result:
    the A-13 Element recomputes it from the recorded claim. Restore the original
    claim facts before ending the demo.
-5. For the temporal proof, click **만료 데모 준비**, switch to the configured
-   target investor, request a quote, then return to Admin and click **시간
-   경과시키기**. Return to the same investor and submit the stored quote. The
-   quote TTL is still live, but the final Router check rejects the expired QP
-   claim.
+5. For the temporal proof, click **대상 claim 만료 준비**, switch to the
+   configured target investor, request a quote, then return to Admin and click
+   **대상 claim 만료시키기**. Return to the same investor, reopen that RFQ from
+   **My RFQs** and submit it. The quote TTL is still live, but the final Router
+   check rejects the expired QP claim. The global freshness policy does not
+   change, so the other eligible investor remains eligible and provides the
+   control case.
 6. Open **Portfolio** to show that holdings remain readable even when trading is
    blocked.
 7. For the strongest operator proof, open **Enforcement Cases** and run the

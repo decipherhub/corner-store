@@ -412,6 +412,7 @@ if [[ "$ASSET_PROFILE" == "buidl-like" ]]; then
     -H "content-type: application/json" \
     -d "{\"walletId\":\"${TEMPORAL_ID}\"}")
   TEMPORAL_WALLET=$(node -e 'const value=JSON.parse(process.argv[1]); const id=process.argv[2]; process.stdout.write(value.wallets.find((wallet) => wallet.id === id).address);' "$TEMPORAL_PREPARED" "$TEMPORAL_ID")
+  TEMPORAL_CONTROL_WALLET=$(node -e 'const value=JSON.parse(process.argv[1]); const id=process.argv[2]; const wallet=value.wallets.find((candidate) => candidate.id !== id && candidate.qualifiedPurchaser); if (!wallet) process.exit(1); process.stdout.write(wallet.address);' "$TEMPORAL_PREPARED" "$TEMPORAL_ID")
   TEMPORAL_QUOTE=$(curl -fsS -X POST "${BACKEND_BASE}/demo/quote" \
     -H "content-type: application/json" \
     -d "{\"taker\":\"${TEMPORAL_WALLET}\",\"amountIn\":\"${DEMO_AMOUNT}\",\"ttlSeconds\":${TEMPORAL_TTL}}")
@@ -422,6 +423,10 @@ if [[ "$ASSET_PROFILE" == "buidl-like" ]]; then
     -H "content-type: application/json" \
     -d "{\"taker\":\"${TEMPORAL_WALLET}\",\"amountIn\":\"${DEMO_AMOUNT}\"}")
   node -e 'const value=JSON.parse(process.argv[1]); if (value.allowed || value.verdict.reason !== "Qualified Purchaser claim expired") { console.error(value); process.exit(1); } console.log("    PASS: chain-time advance expired the previously valid QP claim");' "$TEMPORAL_PRECHECK"
+  TEMPORAL_CONTROL_PRECHECK=$(curl -fsS -X POST "${BACKEND_BASE}/demo/precheck" \
+    -H "content-type: application/json" \
+    -d "{\"taker\":\"${TEMPORAL_CONTROL_WALLET}\",\"amountIn\":\"${DEMO_AMOUNT}\"}")
+  node -e 'const value=JSON.parse(process.argv[1]); if (!value.allowed || !value.wallet.qualifiedPurchaser) { console.error(value); process.exit(1); } console.log("    PASS: another eligible investor remained valid under the unchanged global freshness policy");' "$TEMPORAL_CONTROL_PRECHECK"
   TEMPORAL_TRADE_BODY=$(node -e 'const quote=JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({amountIn:quote.quote.amountIn,action:"compliance-proof",quote}));' "$TEMPORAL_QUOTE")
   TEMPORAL_REJECTED=$(curl -fsS -X POST "${BACKEND_BASE}/demo/trade" \
     -H "content-type: application/json" \

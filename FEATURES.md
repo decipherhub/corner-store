@@ -9,6 +9,32 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DEMO-015 — RFQ Session History and Targeted Claim Expiry
+
+### Behavior
+
+- My RFQs는 브라우저 세션에서 요청한 firm quote를 덮어쓰지 않고 누적하며,
+  taker, 매수/매도 방향, quote payload와 `quoted | accepted | rejected |
+  expired` 상태를 개별 RFQ에 유지한다.
+- 과거 RFQ를 다시 선택하면 해당 quote의 방향과 정확한 `amountIn`으로
+  Pre-check와 payload review를 다시 수행한다.
+- temporal demo는 전역 freshness cap을 줄이지 않고 지정된 투자자 claim의
+  `verifiedAt`만 조정한다. 시간 전진 후 대상 claim만 만료되고 다른 적격
+  투자자는 계속 거래할 수 있어야 한다.
+- Maker 화면은 다중 Maker 관리 기능으로 오해되지 않도록, 현재 주입된 단일
+  Maker의 승인 철회 후 기존 서명 quote가 거부되는 보안 시연으로 표시한다.
+
+### Verification
+
+- `npm test --prefix services/operator-dashboard`
+- `npm test --prefix services/rfq-demo-backend`
+- `scripts/e2e-anvil.sh --profile buidl-like --mode rfq`
+- `git diff --check`
+
+### State
+
+passing
+
 ## DEMO-014 — RFQ Counter-Amount Preview
 
 ### Behavior
