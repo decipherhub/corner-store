@@ -31,6 +31,7 @@ export type CommandAction =
   | "plan"
   | "deploy"
   | "verify"
+  | "onboard"
   | "production-preflight"
   | "production-plan";
 
@@ -41,6 +42,7 @@ export interface CommandRequest {
   mode?: RFQIntegrationMode;
   docker?: boolean;
   productionConfigPath?: string;
+  artifactPath?: string;
 }
 
 export interface CommandResult {
@@ -93,6 +95,7 @@ interface ProjectEvidence {
 interface DeploymentBinding {
   projectFingerprint: string;
   rpcUrl: string;
+  demoActivated?: boolean;
 }
 
 const PROJECT_NAME = /^[a-z0-9][a-z0-9._-]{1,63}$/;
@@ -155,6 +158,17 @@ export class NodeCliRunner implements StudioCommandRunner {
     }
     if (input.action === "doctor") return ["doctor"];
     if (input.action === "verify") return ["verify"];
+    if (input.action === "onboard") {
+      if (!input.artifactPath) throw new Error("Onboarding requires an explicit deployment artifact.");
+      return [
+        "--rpc",
+        input.rpcUrl ?? this.defaultRpcUrl,
+        "--artifact",
+        input.artifactPath,
+        "toolkit-onboard",
+        "corner-store.config.json"
+      ];
+    }
     if (input.action === "production-preflight") {
       return ["production-preflight", input.productionConfigPath ?? PRODUCTION_CONFIG_FILE];
     }
@@ -389,7 +403,8 @@ class ProjectStore {
     const root = this.root(name);
     const binding: DeploymentBinding = {
       projectFingerprint: this.projectFingerprint(name),
-      rpcUrl
+      rpcUrl,
+      demoActivated: false
     };
     this.writeJson(root, resolve(root, ".corner-store/deployment.json"), binding);
   }
@@ -406,6 +421,13 @@ class ProjectStore {
       throw new StudioError(409, "deployment_binding_missing", "Deploy the current project files before starting the DEX demo.");
     }
     return value as DeploymentBinding;
+  }
+
+  markDemoActivated(name: string): DeploymentBinding {
+    const root = this.root(name);
+    const binding = {...this.deploymentBinding(name), demoActivated: true};
+    this.writeJson(root, resolve(root, ".corner-store/deployment.json"), binding);
+    return binding;
   }
 
   private readJson(root: string, path: string): unknown {
@@ -755,6 +777,16 @@ export function createStudioServer(options: StudioServerOptions): Server {
           const deployment = store.deploymentBinding(name);
           if (deployment.rpcUrl !== rpcUrl) {
             throw new StudioError(409, "rpc_mismatch", "Start the DEX demo with the exact RPC used for this deployment.");
+          }
+          if (deployment.demoActivated !== true) {
+            const onboarding = await options.runner.run({
+              action: "onboard",
+              projectRoot: store.root(name),
+              rpcUrl,
+              artifactPath: store.artifactPath(name)
+            });
+            assertCommand(onboarding, "Demo asset onboarding failed");
+            store.markDemoActivated(name);
           }
           try {
             const runtime = await options.runtimeManager.start({

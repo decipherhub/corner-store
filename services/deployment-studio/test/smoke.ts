@@ -121,6 +121,10 @@ class FakeRunner implements StudioCommandRunner {
     if (input.action === "verify") {
       return {code: 0, stdout: JSON.stringify({ready: true, checks: [{name: "artifact-router", pass: true, detail: "ok"}]}), stderr: ""};
     }
+    if (input.action === "onboard") {
+      onLine?.("manifest ACTIVE");
+      return {code: 0, stdout: "manifest ACTIVE", stderr: ""};
+    }
     return {code: 1, stdout: "", stderr: "unsupported"};
   }
 }
@@ -314,12 +318,27 @@ async function main(): Promise<void> {
   ) {
     throw new Error("verified artifact was not handed to the DEX runtime");
   }
+  const onboardingCalls = runner.calls.filter((entry) => entry.action === "onboard");
+  if (
+    onboardingCalls.length !== 1 ||
+    onboardingCalls[0].rpcUrl !== "http://127.0.0.1:8545" ||
+    onboardingCalls[0].artifactPath !== join(workspace, "treasury-dex/deployments/anvil-e2e.json")
+  ) {
+    throw new Error("DEX runtime did not activate the selected profile on the verified deployment");
+  }
   const runningHandoff = await call("GET", "/api/v1/projects/treasury-dex/handoff");
   if (!runningHandoff.body.running || runningHandoff.body.url !== "http://dex.test") {
     throw new Error("running DEX handoff was not exposed");
   }
   const stoppedRuntime = await call("POST", "/api/v1/projects/treasury-dex/runtime/stop", {});
   if (stoppedRuntime.body.state !== "stopped") throw new Error("DEX runtime stop regression");
+  const restartedRuntime = await call("POST", "/api/v1/projects/treasury-dex/runtime/start", {
+    rpcUrl: "http://127.0.0.1:8545"
+  });
+  if (restartedRuntime.status !== 200 || runner.calls.filter((entry) => entry.action === "onboard").length !== 1) {
+    throw new Error("DEX restart repeated the already-completed demo onboarding");
+  }
+  await call("POST", "/api/v1/projects/treasury-dex/runtime/stop", {});
   server.close();
   await new Promise<void>((done) => server.once("close", done));
 

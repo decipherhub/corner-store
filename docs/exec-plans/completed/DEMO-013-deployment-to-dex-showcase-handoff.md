@@ -53,8 +53,10 @@ production activation.
 - the deployment artifact supplies core lineage and exact addresses to the RFQ
   backend and Dashboard.
 - Deployment Studio can start, open and stop the DEX services after verification;
-  those services consume the same project artifact, scenario and deployment RPC
-  rather than deploying a second stack.
+  the first start reuses the CLI onboarding flow to activate the selected demo
+  Manifest and venues on that deployment, then the services consume the same
+  project artifact, scenario and deployment RPC rather than deploying a second
+  stack. Later runtime restarts do not repeat onboarding.
 - the local BUIDL-like RFQ E2E proved successful buy/sell settlement, repeated
   liquidity and the ineligible-investor, expired-claim, maker-revocation and
   direct-adapter rejection paths.

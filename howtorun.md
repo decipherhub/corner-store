@@ -26,6 +26,10 @@ Anvil 실행
 - 프로젝트 config와 scenario
 - 실제 배포에 사용한 RPC
 
+처음 시작할 때는 기존 `e2e-anvil.sh`와 같은 CLI onboarding 절차를 사용해
+선택한 demo Manifest와 venue를 **방금 배포한 동일 stack에서** 활성화합니다.
+DEX를 중지했다가 다시 시작할 때는 완료된 onboarding을 반복하지 않습니다.
+
 ---
 
 ## 1. 저장소 루트에서 실행하기
@@ -189,10 +193,11 @@ Integration Mode의 의미:
 Artifact 검증이 끝나면:
 
 1. **Start DEX demo**를 누릅니다.
-2. 상태가 `DEX running on verified deployment`로 바뀌는지 확인합니다.
-3. **Open DEX**를 누릅니다.
-4. Dashboard의 Environment에서 Router 주소를 확인합니다.
-5. Studio의 Artifact Viewer에 표시된 Router 주소와 같은지 확인합니다.
+2. 최초 실행이면 선택한 profile의 Manifest가 같은 배포물에서 활성화됩니다.
+3. 상태가 `DEX running on verified deployment`로 바뀌는지 확인합니다.
+4. **Open DEX**를 누릅니다.
+5. Dashboard의 Environment에서 Router 주소를 확인합니다.
+6. Studio의 Artifact Viewer에 표시된 Router 주소와 같은지 확인합니다.
 
 이 과정에서 Studio는 다음 서비스를 시작합니다.
 

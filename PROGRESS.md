@@ -23,6 +23,9 @@ source of truth로 사용한다.
   inventory activation → artifact → RFQ backend → Operator API/Dashboard 순서를
   재현한다. Studio의 Deploy/Verify 이후에도 같은 project artifact, scenario와
   배포 RPC를 세 서비스에 직접 넘기는 Start/Open/Stop DEX handoff를 추가했다.
+  Studio 최초 Start는 기존 CLI `toolkit-onboard`를 재사용해 선택한 demo
+  Manifest/venue를 동일 배포물에서 활성화하고 완료 상태를 기록하므로 재시작 때
+  불필요한 retire/re-onboard를 반복하지 않는다.
   다른 RPC나 변경된 artifact를 거부하며 실제 integration에서 Studio artifact의
   Router와 backend가 사용하는 Router가 같음을 검증했다. artifact lineage는
   backend와 Dashboard에 표시되며 local fixture가 production evidence가 아님을

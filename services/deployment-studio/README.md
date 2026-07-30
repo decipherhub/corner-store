@@ -76,7 +76,8 @@ editing repository files.
   `{schemaVersion, network:{name,chainId,rpcUrl,approvedRpcHosts}, release:{sourceCommit,contractsHash}, deploymentId, deployer, operator, venues:{amm,rfq}, safe:{address,expectedOwners,threshold,expectedSingleton,proxyCodeHash}, deployment:{artifact,evidence}, erc3643?:{token?}}`
 - production-preflight execution and production-plan preview/export
 - deployment job event stream, artifact viewer and activation checklist
-- start/open/stop an artifact-bound local RFQ DEX runtime after verification
+- first-start CLI onboarding of the selected demo Manifest/venues on the verified
+  deployment, followed by start/open/stop of its artifact-bound local RFQ DEX runtime
 - persisted handoff verification bound to config/integration/scenario/artifact hashes
 
 Existing production ERC-3643 onboarding, mainnet broadcast, multisig/HSM

@@ -24,9 +24,10 @@
   asset onboarding → RFQ backend → Operator API/Dashboard 순서로 기존 demo를
   재현한다.
 - Deployment Studio에서 reference stack을 배포·검증한 뒤 `Start DEX demo`를
-  누르면 두 번째 배포 없이 해당 project의 exact artifact, scenario와 배포 RPC로
-  RFQ backend, Operator API와 Dashboard를 시작한다. RPC/artifact가 달라지거나
-  RFQ venue가 비활성화된 경우 fail closed한다.
+  누르면 두 번째 배포 없이 기존 CLI onboarding을 최초 1회 실행해 선택한 demo
+  Manifest/venue를 같은 stack에서 활성화하고, 해당 project의 exact artifact,
+  scenario와 배포 RPC로 RFQ backend, Operator API와 Dashboard를 시작한다.
+  RPC/artifact가 달라지거나 RFQ venue가 비활성화된 경우 fail closed한다.
 - artifact와 UI 문서는 local rehearsal이 production deployment 또는 legal
   onboarding evidence가 아님을 명시한다.
 
@@ -36,6 +37,7 @@
 - `forge test --offline --match-path test/unit/deployment/DeployProductionCore.t.sol`
 - BUIDL-like RFQ showcase E2E
 - Studio deploy → verify → same-artifact DEX handoff integration
+- Studio first-start demo onboarding 및 restart idempotency smoke
 - `scripts/check.sh`
 - `git diff --check`
 
