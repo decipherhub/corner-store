@@ -75,13 +75,20 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
         if (d.flagsBitmap != 0) emit Events.ComplianceFlags(d.decisionHash, d.flagsBitmap);
         if (!d.allowed) revert Errors.ComplianceRejected(d.reasonCode);
 
-        // 4. amount bound. NOTE (open decision): this bounds the INPUT (quote-side)
-        //    notional `amountIn`, whereas the engine reasons about the RWA-side
-        //    amount (see _runChecks). The mismatch is latent only because the engine
-        //    returns maxAmount = type(uint256).max today. When a real recipe returns
-        //    a finite cap, decide which axis maxAmount binds — RWA quantity vs quote
-        //    notional — and align this check with that choice.
-        if (req.context.amountIn > d.maxAmount) revert Errors.MaxAmountExceeded();
+        // 4. finite amount bound. The decision explicitly binds the cap to the
+        //    regulated token so buy (tokenOut) and sell (tokenIn) use the same
+        //    policy meaning. Unlimited decisions do not require an axis.
+        if (d.maxAmount != type(uint256).max) {
+            uint256 regulatedAmount;
+            if (d.maxAmountToken == req.context.tokenIn) {
+                regulatedAmount = req.context.amountIn;
+            } else if (d.maxAmountToken == req.context.tokenOut) {
+                regulatedAmount = req.context.amountOut;
+            } else {
+                revert Errors.InvalidAmountCapToken();
+            }
+            if (regulatedAmount > d.maxAmount) revert Errors.MaxAmountExceeded();
+        }
 
         // 5. venue policy binding (type mask + venues-hash)
         if (!selector.validate(req.context.venue, req.context.venueType, d)) revert Errors.VenueNotAllowed();

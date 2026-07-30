@@ -37,6 +37,7 @@ import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
 import {VenueSelector} from "../src/execution/VenueSelector.sol";
 import {UniswapV3Adapter} from "../src/execution/adapters/amm/UniswapV3Adapter.sol";
 import {RFQAdapter} from "../src/execution/adapters/rfq/RFQAdapter.sol";
+import {MakerAuthorizer} from "../src/registry/MakerAuthorizer.sol";
 
 import {CornerStoreFactory} from "../src/factory/CornerStoreFactory.sol";
 import {ITokenPolicyRegistry} from "../src/interfaces/compliance/ITokenPolicyRegistry.sol";
@@ -92,6 +93,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     VenueSelector internal selector;
     UniswapV3Adapter internal ammAdapter;
     RFQAdapter internal rfqAdapter;
+    MakerAuthorizer internal makerAuthorizer;
     CornerStoreFactory internal factory;
 
     MockERC20 internal quote;
@@ -174,7 +176,8 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         venueReg = new VenueRegistry();
         selector = new VenueSelector();
         ammAdapter = new UniswapV3Adapter();
-        rfqAdapter = new RFQAdapter();
+        makerAuthorizer = new MakerAuthorizer();
+        rfqAdapter = new RFQAdapter(makerAuthorizer);
         router = new ExecutionRouter(engine, venueReg, selector, operatorReg);
         factory = new CornerStoreFactory(ITokenPolicyRegistry(address(policyReg)), IVenueRegistry(address(venueReg)));
 
@@ -420,6 +423,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         vm.serializeAddress(k, "selector", address(selector));
         vm.serializeAddress(k, "ammAdapter", address(ammAdapter));
         vm.serializeAddress(k, "rfqAdapter", address(rfqAdapter));
+        vm.serializeAddress(k, "makerAuthorizer", address(makerAuthorizer));
         vm.serializeAddress(k, "router", address(router));
         vm.serializeAddress(k, "factory", address(factory));
         vm.serializeAddress(k, "jurisdiction", address(jurisdiction));

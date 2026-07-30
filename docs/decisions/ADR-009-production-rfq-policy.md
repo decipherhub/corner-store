@@ -192,8 +192,8 @@ finite cap이 활성화되기 전에 Router/decision contract를 이 의미와 �
 ## Consequences
 
 - current v1의 단순성과 원자성은 유지된다.
-- production signer authorization과 regulated amount cap은 별도 contract migration이
-  필요하다.
+- production signer authorization과 regulated amount cap contract migration은
+  RFQ-003에서 완료했다.
 - production backend는 durable storage와 external signer가 필수지만 특정 vendor는
   core SDK에 강제되지 않는다.
 - partial fill은 독립 feature로 남으며 기존 quote와 혼용하지 않는다.

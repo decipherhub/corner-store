@@ -17,6 +17,7 @@ export const ERRORS_ABI = [
   "error NotAuthorized()",
   "error NonceUsed()",
   "error MaxAmountExceeded()",
+  "error InvalidAmountCapToken()",
   "error VenueSuspended()",
   "error VenueNotAllowed()",
   "error AdapterNotRegistered()",
@@ -53,7 +54,7 @@ export const RECIPE_ABI = [
 // ComplianceEngine.evaluate(ctx) is a VIEW returning the full ComplianceDecision
 // (src/types/ComplianceTypes.sol). `check` calls it for the overall verdict.
 export const ENGINE_ABI = [
-  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))"
+  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))"
 ];
 
 // Event fragments for `watch` (src/libraries/Events.sol + RFQAdapter.sol). Only
@@ -118,7 +119,13 @@ export const RFQ_ADAPTER_ABI = [
   "function approvedMaker(address maker) view returns (bool)",
   "function usedQuoteNonce(address maker, uint256 nonce) view returns (bool)",
   "function setMakerApproved(address maker, bool approved)",
-  "function cancelQuoteNonce(uint256 nonce)"
+  "function cancelQuoteNonce(uint256 nonce)",
+  "function makerAuthorizer() view returns (address)"
+];
+
+export const MAKER_AUTHORIZER_ABI = [
+  "function authorizerVersion() view returns (uint64)",
+  "function isAuthorizedSigner(address maker,bytes32 quoteHash,bytes signature) view returns (bool)"
 ];
 
 // Lockup (C-01) consumes a provider-neutral operator-attested snapshot.

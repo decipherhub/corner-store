@@ -293,7 +293,7 @@ Completion:
 
 Production implementation prerequisites:
 
-- ADR-009 maker-authorizer와 regulated-quantity cap migration
+- ADR-009 maker-authorizer와 regulated-quantity cap migration (완료: #65)
 - durable nonce/idempotency와 external signer integration
 - production pricing/inventory-risk, auth/audit/monitoring implementation
 - partial fill은 새 quote/adapter version의 별도 설계·검토
@@ -370,16 +370,15 @@ Reference/demo evidence:
 
 가까운 후속 이슈:
 
-1. `#65 feat(rfq): add versioned maker authorizer and regulated-amount cap`
-2. `#66 feat(rfq): add durable nonce/idempotency reference adapter`
-3. `#67 feat(rfq): add production module audit envelope and service hardening`
-4. `feat(compliance): RecipeBinding 기반 production Asset Compliance Manifest schema/migration`
-5. `feat(compliance): verified TA provider adapter와 amount-specific lot allocation`
-6. `feat(amm): production pool/LP onboarding과 unified deployment 연결`
-7. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
-8. `ops(production): TLS, secret rotation, 실제 multisig provider와 live RPC
+1. `#66 feat(rfq): add durable nonce/idempotency reference adapter`
+2. `#67 feat(rfq): add production module audit envelope and service hardening`
+3. `feat(compliance): RecipeBinding 기반 production Asset Compliance Manifest schema/migration`
+4. `feat(compliance): verified TA provider adapter와 amount-specific lot allocation`
+5. `feat(amm): production pool/LP onboarding과 unified deployment 연결`
+6. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
+7. `ops(production): TLS, secret rotation, 실제 multisig provider와 live RPC
    finality/recovery 구현`
-9. `security: medium warning budget, independent analysis와 production review`
+8. `security: medium warning budget, independent analysis와 production review`
 
 ## Decision Backlog
 

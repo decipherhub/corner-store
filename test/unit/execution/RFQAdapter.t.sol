@@ -7,8 +7,10 @@ import {VenueRegistry} from "../../../src/execution/VenueRegistry.sol";
 import {VenueSelector} from "../../../src/execution/VenueSelector.sol";
 import {RFQAdapter} from "../../../src/execution/adapters/rfq/RFQAdapter.sol";
 import {OperatorRegistry} from "../../../src/registry/OperatorRegistry.sol";
+import {MakerAuthorizer} from "../../../src/registry/MakerAuthorizer.sol";
 import {MockComplianceEngine} from "../../mocks/MockComplianceEngine.sol";
 import {MockERC20} from "../../mocks/MockERC20.sol";
+import {MockERC1271Maker} from "../../mocks/MockERC1271Maker.sol";
 import {RFQQuote} from "../../../src/execution/adapters/rfq/RFQTypes.sol";
 import {VenueConfig, CustodyModel} from "../../../src/types/VenueTypes.sol";
 import {ExecutionRequest} from "../../../src/types/ExecutionTypes.sol";
@@ -21,6 +23,7 @@ contract RFQAdapterTest is Test {
 
     uint256 internal constant MAKER_PK = 0xA11CE;
     uint256 internal constant WRONG_PK = 0xB0B;
+    uint256 internal constant DELEGATE_PK = 0xD311;
 
     address internal maker;
     address internal taker = address(0xCAFE);
@@ -30,6 +33,7 @@ contract RFQAdapterTest is Test {
     MockERC20 internal tokenIn;
     MockERC20 internal tokenOut;
     RFQAdapter internal adapter;
+    MakerAuthorizer internal makerAuthorizer;
     ExecutionRouter internal router;
     VenueRegistry internal venueReg;
     VenueSelector internal selector;
@@ -41,7 +45,8 @@ contract RFQAdapterTest is Test {
 
         tokenIn = new MockERC20("TokenIn", "TIN");
         tokenOut = new MockERC20("TokenOut", "TOUT");
-        adapter = new RFQAdapter();
+        makerAuthorizer = new MakerAuthorizer();
+        adapter = new RFQAdapter(makerAuthorizer);
         venueReg = new VenueRegistry();
         selector = new VenueSelector();
         operatorReg = new OperatorRegistry();
@@ -151,6 +156,56 @@ contract RFQAdapterTest is Test {
         assertTrue(engine.committed(), "router committed after RFQ fill");
     }
 
+    function test_execute_validDelegatedSignerQuoteThroughRouter() public {
+        address delegate = vm.addr(DELEGATE_PK);
+        makerAuthorizer.scheduleDelegate(maker, delegate, bytes32("rotation"));
+        vm.warp(block.timestamp + makerAuthorizer.AUTHORIZATION_DELAY());
+        makerAuthorizer.executeDelegateAuthorization(maker, delegate);
+
+        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        ExecutionRequest memory req = _request(q, _sign(q, DELEGATE_PK), 1);
+
+        vm.prank(taker);
+        router.execute(req);
+
+        assertEq(tokenIn.balanceOf(maker), 100 ether, "settlement account received tokenIn");
+        assertEq(tokenOut.balanceOf(taker), 250 ether, "taker received tokenOut");
+        assertEq(tokenIn.balanceOf(delegate), 0, "signer is not the settlement account");
+        assertEq(tokenOut.balanceOf(delegate), 0, "signer receives no inventory");
+    }
+
+    function test_execute_revertsWhenDelegateRevokedAfterQuoteSigned() public {
+        address delegate = vm.addr(DELEGATE_PK);
+        makerAuthorizer.scheduleDelegate(maker, delegate, bytes32("rotation"));
+        vm.warp(block.timestamp + makerAuthorizer.AUTHORIZATION_DELAY());
+        makerAuthorizer.executeDelegateAuthorization(maker, delegate);
+
+        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        ExecutionRequest memory req = _request(q, _sign(q, DELEGATE_PK), 1);
+        makerAuthorizer.revokeDelegate(maker, delegate, bytes32("compromised"));
+
+        vm.prank(taker);
+        vm.expectRevert(Errors.RFQInvalidSignature.selector);
+        router.execute(req);
+    }
+
+    function test_execute_acceptsErc1271MakerAuthorization() public {
+        MockERC1271Maker smartMaker = new MockERC1271Maker(vm.addr(DELEGATE_PK));
+        adapter.setMakerApproved(address(smartMaker), true);
+        tokenOut.mint(address(smartMaker), 250 ether);
+        smartMaker.approveToken(tokenOut, address(adapter), type(uint256).max);
+
+        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        q.maker = address(smartMaker);
+        ExecutionRequest memory req = _request(q, _sign(q, DELEGATE_PK), 1);
+
+        vm.prank(taker);
+        router.execute(req);
+
+        assertEq(tokenIn.balanceOf(address(smartMaker)), 100 ether, "smart maker received payment");
+        assertEq(tokenOut.balanceOf(taker), 250 ether, "smart maker delivered inventory");
+    }
+
     function test_revert_directRFQAdapterCallBypass() public {
         (, ExecutionRequest memory req) = _validRequest(1, 1);
         ComplianceDecision memory d;
@@ -223,6 +278,77 @@ contract RFQAdapterTest is Test {
 
         assertEq(tokenIn.balanceOf(taker), 1_000 ether, "no settlement on compliance rejection");
         assertEq(tokenOut.balanceOf(maker), 1_000 ether, "maker funds unchanged");
+    }
+
+    function test_execute_buyUsesRegulatedOutputForFiniteCap() public {
+        ComplianceDecision memory decision =
+            _decision(true, 1 << uint256(VenueType.RFQ), bytes32(0), 200 ether, bytes32(0));
+        decision.maxAmountToken = address(tokenOut);
+        engine.setDecision(decision);
+
+        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        q.amountIn = 500 ether;
+        q.amountOut = 150 ether;
+        ExecutionRequest memory req = _request(q, _sign(q, MAKER_PK), 1);
+
+        vm.prank(taker);
+        router.execute(req);
+        assertEq(tokenOut.balanceOf(taker), 150 ether);
+    }
+
+    function test_execute_buyRevertsWhenRegulatedOutputExceedsFiniteCap() public {
+        ComplianceDecision memory decision =
+            _decision(true, 1 << uint256(VenueType.RFQ), bytes32(0), 200 ether, bytes32(0));
+        decision.maxAmountToken = address(tokenOut);
+        engine.setDecision(decision);
+        (, ExecutionRequest memory req) = _validRequest(1, 1);
+
+        vm.prank(taker);
+        vm.expectRevert(Errors.MaxAmountExceeded.selector);
+        router.execute(req);
+    }
+
+    function test_execute_sellUsesRegulatedInputForFiniteCap() public {
+        tokenOut.mint(taker, 100 ether);
+        tokenIn.mint(maker, 250 ether);
+        vm.prank(taker);
+        tokenOut.approve(address(adapter), type(uint256).max);
+        vm.prank(maker);
+        tokenIn.approve(address(adapter), type(uint256).max);
+
+        ComplianceDecision memory decision =
+            _decision(true, 1 << uint256(VenueType.RFQ), bytes32(0), 150 ether, bytes32(0));
+        decision.maxAmountToken = address(tokenOut);
+        engine.setDecision(decision);
+
+        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        q.tokenIn = address(tokenOut);
+        q.tokenOut = address(tokenIn);
+        q.amountIn = 100 ether;
+        q.amountOut = 250 ether;
+        ExecutionRequest memory req = _request(q, _sign(q, MAKER_PK), 1);
+
+        vm.prank(taker);
+        router.execute(req);
+        assertEq(tokenIn.balanceOf(taker), 1_250 ether);
+    }
+
+    function test_execute_sellRevertsWhenRegulatedInputExceedsFiniteCap() public {
+        ComplianceDecision memory decision =
+            _decision(true, 1 << uint256(VenueType.RFQ), bytes32(0), 99 ether, bytes32(0));
+        decision.maxAmountToken = address(tokenOut);
+        engine.setDecision(decision);
+
+        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        q.tokenIn = address(tokenOut);
+        q.tokenOut = address(tokenIn);
+        q.amountIn = 100 ether;
+        q.amountOut = 250 ether;
+        ExecutionRequest memory req = _request(q, _sign(q, MAKER_PK), 1);
+
+        vm.prank(taker);
+        vm.expectRevert(Errors.MaxAmountExceeded.selector);
+        router.execute(req);
     }
 
     function test_execute_revertsWhenMakerNotApproved() public {

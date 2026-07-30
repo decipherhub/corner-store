@@ -120,9 +120,11 @@
    `decisionHash`와 `DecisionMismatch`/`DecisionExpired` 에러는 "서명된 decision을 미리
    받아 검증하는 미래 흐름"을 위한 seam. (`ComplianceEngine._buildDecision`,
    `ExecutionRouter` 주석 참고)
-2. **`maxAmount` 축 미결.** 라우터는 입력(quote)측 `amountIn`을 제한하는데 엔진은
-   RWA측 수량으로 추론한다. 지금은 엔진이 `type(uint256).max`를 반환해 잠재적. 실제
-   유한 cap을 쓸 때 어느 축(RWA 수량 vs quote 금액)에 묶을지 결정 필요.
+2. **finite `maxAmount`는 regulated asset 수량에 적용한다.** decision의
+   `maxAmountToken`이 `tokenIn`이면 `amountIn`, `tokenOut`이면 `amountOut`을
+   검사한다. finite cap인데 대상 token이 pair와 일치하지 않으면 Router가
+   fail-closed한다. 두 regulated asset에 서로 다른 cap을 적용하는 다중-cap
+   contract는 아직 범위 밖이다.
 3. **post-trade 인증은 갖췄다.** `commit`은 router만, stateful `onTransfer`는 engine만
    호출 가능(operator가 카운터 직접 못 씀 = §6 불변식). 감사 로거
    (`ComplianceLogger`/`ExecutionLogger`)는 아직 비인증 emit — production 연결 시

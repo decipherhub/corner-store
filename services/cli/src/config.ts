@@ -33,6 +33,7 @@ export interface Artifact {
   investor: string;
   jurisdiction: string;
   maker: string;
+  makerAuthorizer: string;
   operatorReg: string;
   policyReg: string;
   pool: string;

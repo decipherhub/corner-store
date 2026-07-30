@@ -4,6 +4,7 @@ import {
   HDNodeWallet,
   JsonRpcProvider,
   MaxUint256,
+  ZeroAddress,
   formatEther,
   formatUnits,
   id,
@@ -27,7 +28,7 @@ const ROUTER_ABI = [
   "error ComplianceRejected(bytes32 reasonCode)"
 ];
 const ENGINE_ABI = [
-  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))"
+  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))"
 ];
 const ERC20_ABI = [
   "function balanceOf(address account) view returns (uint256)",
@@ -37,7 +38,7 @@ const ERC20_ABI = [
 const RFQ_ADAPTER_ABI = [
   "function setMakerApproved(address maker,bool approved)",
   "function approvedMaker(address maker) view returns (bool)",
-  "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req,(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash) decision) returns (tuple(uint256 amountOut,bytes32 executionId))",
+  "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req,(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash) decision) returns (tuple(uint256 amountOut,bytes32 executionId))",
   "error NotAuthorized()"
 ];
 const QP_ABI = [
@@ -392,6 +393,7 @@ export class DemoSettlementService {
         0n,
         0n,
         0n,
+        ZeroAddress,
         0n,
         ZERO_BYTES32,
         ZERO_BYTES32,

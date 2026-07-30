@@ -23,6 +23,7 @@ async function main(): Promise<void> {
     eligibleInvestorB: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
     ineligibleInvestor: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
     maker: await makerWallet.getAddress(),
+    makerAuthorizer: "0x0000000000000000000000000000000000000008",
     quote: "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
     rfqAdapter: "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0",
     rfqVenue: "0x000000000000000000000000000000000000F00D",

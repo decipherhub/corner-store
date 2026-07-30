@@ -15,6 +15,13 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `RFQ-003 — Maker Authorizer and Regulated Amount Cap`: maker settlement
+  account와 quote signer를 immutable versioned authorizer로 분리했다. maker
+  직접 ECDSA, delayed governed delegate, immediate revoke와 ERC-1271을 fill
+  시점에 검증한다. compliance decision은 `maxAmountToken`을 함께 bind하고
+  Router는 regulated token이 tokenIn인 매도와 tokenOut인 매수에 finite cap을
+  적용하며 잘못된 cap axis는 fail-closed한다. 전체 repository check
+  (Forge 665/665), service/deploy-v3 checks와 BUIDL-like RFQ E2E를 통과했다.
 - `RFQ-POLICY-001 — Production RFQ Policy`: ADR-009로 protocol non-custodial,
   exact full-fill v1, maker/signer 분리, durable nonce/idempotency, time-bounded
   inventory reservation, pricing/risk 역할 분리와 Router fill-time compliance를
@@ -177,8 +184,8 @@ source of truth로 사용한다.
 
 1. 실제 TA provider API/authorization, amount-specific lot allocation과 production
    WORM/indexer를 별도 refinement로 구현한다.
-2. ADR-009 순서에 따라 RFQ maker authorizer/regulated cap, durable nonce와
-   production pricing/risk·endpoint hardening을 독립 feature로 구현한다.
+2. ADR-009 순서에 따라 durable nonce와 production pricing/risk·endpoint
+   hardening을 독립 feature로 구현한다.
 3. 실제 Uniswap v3 pool 배포를 demo/E2E에 연결한다(현재 AMM venue는 MockPool;
    `tools/deploy-v3` vendor isolation 유지).
 4. Order Book은 matching/custody/surveillance 모델 결정 후 구현한다.
@@ -187,6 +194,14 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- RFQ maker settlement account와 signer authority를 분리했다. delegate 권한
+  추가는 1일 delay, revoke는 즉시 적용하며 direct maker ECDSA와 ERC-1271도
+  동일한 fill-time authorizer 경계에서 검증한다.
+- finite compliance cap의 대상 regulated token을 decision hash에 포함하고,
+  Router가 매수·매도의 실제 regulated quantity를 비교하도록 migration했다.
+- deployment artifact, CLI quote inspection, Toolkit preflight와 RFQ demo backend를
+  새 authorizer/cap ABI로 갱신했다. repository check에서 Forge 665/665와 모든
+  service/deploy-v3 검사가 통과했다.
 - production RFQ v1을 non-custodial exact full-fill로 고정하고 maker settlement
   account와 signer authority, Operator/dealer/TA/host/surveillance 책임을 분리했다.
 - durable quote lifecycle은 nonce와 inventory lease를 원자적으로 예약하고

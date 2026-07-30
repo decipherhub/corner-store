@@ -12,7 +12,16 @@ import {createDeploymentPlan} from "../../toolkit/src/deploy";
 import {toSafeTransactionDraft} from "../../toolkit/src/multisig";
 import {scaffoldRFQIntegration} from "../../toolkit/src/scaffold";
 
-import {ACQ_SOURCE_ABI, ERC20_ABI, ELEMENT_ABI, ELEMENT_SETTERS_ABI, EVENTS_ABI, LOCKUP_ABI, RECIPE_ABI} from "./abi";
+import {
+  ACQ_SOURCE_ABI,
+  ERC20_ABI,
+  ELEMENT_ABI,
+  ELEMENT_SETTERS_ABI,
+  EVENTS_ABI,
+  LOCKUP_ABI,
+  MAKER_AUTHORIZER_ABI,
+  RECIPE_ABI
+} from "./abi";
 import {
   ALLOWED_JURISDICTION,
   Artifact,
@@ -35,7 +44,15 @@ import {
   walletForAccount,
   DEFAULT_CHAIN_ID,
 } from "./config";
-import {AbiCoder, Contract, Interface, decodeBytes32String, encodeBytes32String, verifyTypedData} from "ethers";
+import {
+  AbiCoder,
+  Contract,
+  Interface,
+  TypedDataEncoder,
+  decodeBytes32String,
+  encodeBytes32String,
+  verifyTypedData
+} from "ethers";
 import {assetProfileBinding, resolveAssetProfileForArtifact} from "./assetProfiles";
 import {ELEMENT_IDS, applyAttestation, defaultIdentityId} from "./elements";
 import {ELEMENT_LABELS, POLICY_STATUS, RECIPE_LABELS, decodeReason, encodeReason} from "./reason";
@@ -1191,14 +1208,12 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
   const qf = readQuoteFile(file);
   const q = qf.quote;
 
-  // Recover the signer via the services/rfq typed-data — REUSE the lib's domain
-  // + type set (no re-declared type strings). Must equal quote.maker.
+  // EOA recovery is diagnostic only. The Adapter's immutable authorizer is the
+  // source of truth for direct maker, delegated and ERC-1271 signatures.
   const dom = rfqDomain(DEFAULT_CHAIN_ID, a.rfqAdapter as `0x${string}`);
   let recovered = "";
-  let sigOk = false;
   try {
     recovered = verifyTypedData(dom, RFQ_QUOTE_TYPES, q, qf.signature);
-    sigOk = recovered.toLowerCase() === q.maker.toLowerCase();
   } catch (e: any) {
     recovered = `<recovery failed: ${e?.shortMessage ?? e?.message ?? e}>`;
   }
@@ -1210,16 +1225,25 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
   const expired = secsLeft <= 0;
 
   const rfq = rfqAdapter(a, provider);
-  const [nonceUsed, makerApproved]: [boolean, boolean] = await Promise.all([
+  const [nonceUsed, makerApproved, authorizerAddress]: [boolean, boolean, string] = await Promise.all([
     rfq.usedQuoteNonce(q.maker, BigInt(q.nonce)),
-    rfq.approvedMaker(q.maker)
+    rfq.approvedMaker(q.maker),
+    rfq.makerAuthorizer()
+  ]);
+  const authorizer = new Contract(authorizerAddress, MAKER_AUTHORIZER_ABI, provider);
+  const quoteHash = TypedDataEncoder.hash(dom, RFQ_QUOTE_TYPES, q);
+  const [sigOk, authorizerVersion]: [boolean, bigint] = await Promise.all([
+    authorizer.isAuthorizedSigner(q.maker, quoteHash, qf.signature),
+    authorizer.authorizerVersion()
   ]);
 
   const checks = [
     {
       name: "signature",
       pass: sigOk,
-      detail: sigOk ? `recovered ${recovered} == maker` : `recovered ${recovered} != maker ${q.maker}`
+      detail: sigOk
+        ? `authorizer v${authorizerVersion} accepts current signer (${recovered})`
+        : `authorizer v${authorizerVersion} rejects current signer (${recovered})`
     },
     {name: "not-expired", pass: !expired, detail: expired ? `expired ${-secsLeft}s ago` : `${secsLeft}s remaining`},
     {

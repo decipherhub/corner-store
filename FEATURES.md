@@ -184,6 +184,35 @@ passing
   integration-test 시나리오를 `test/integration/RFQFlow.t.sol`에서 real ERC-3643
   스택 위 protected path로 커버한다.
 
+## RFQ-003 — Maker Authorizer and Regulated Amount Cap
+
+### Behavior
+
+- maker settlement account와 quote signer를 분리하는 versioned authorizer를 제공한다.
+- maker 직접 ECDSA, governed EOA delegate와 ERC-1271 maker 서명을 검증한다.
+- signer 권한 추가는 delay를 거치고 revoke는 즉시 적용되며, fill은 현재 권한을
+  다시 검사한다.
+- RFQ quote schema와 exact full-fill/replay/cancel/Router-only 불변식은 유지한다.
+- finite compliance cap은 결제 notional이 아니라 regulated asset quantity에
+  적용하고, cap의 대상 token이 요청 pair와 일치하지 않으면 fail-closed한다.
+
+### Verification
+
+- MakerAuthorizer unit tests
+- RFQAdapter direct/delegated/revoked/ERC-1271 authorization tests
+- Router finite-cap buy/sell/invalid-axis tests
+- RFQ integration and full repository checks
+- BUIDL-like RFQ E2E
+
+### State
+
+passing
+
+### Notes
+
+- Completed plan: `docs/exec-plans/completed/RFQ-003-maker-authorizer-cap.md`
+- Non-goals: partial fill, custody, durable nonce coordinator, production hosting.
+
 ## CMP-001 — Reg D 506(c) 9-element Recipe
 
 ### Behavior
