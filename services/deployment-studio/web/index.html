@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corner Store Deployment Studio</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="studio-shell">
+    <aside class="rail">
+      <a class="brand" href="/">
+        <span class="brand-mark">CS</span>
+        <span><strong>Corner Store</strong><small>Deployment Studio</small></span>
+      </a>
+      <div class="boundary-chip"><span></span>Local control surface</div>
+      <nav class="workflow-map" aria-label="Deployment workflow">
+        <button class="workflow-step is-current" data-stage="project" data-target="projectSection"><b>01</b><span>Project mode<small>Create the integration shell</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="config" data-target="configSection"><b>02</b><span>Configuration<small>Network, asset, venues</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="doctor" data-target="doctorSection"><b>03</b><span>Doctor<small>Required environment checks</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="plan" data-target="planSection"><b>04</b><span>Deployment plan<small>Read-only dry-run</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="deploy" data-target="deploySection"><b>05</b><span>Demo deploy<small>Operator-allowed target only</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="artifact" data-target="artifactSection"><b>06</b><span>Artifact & verify<small>Address source of truth</small></span></button>
+        <button class="workflow-step is-blocked" data-stage="activation" data-target="activationSection"><b>07</b><span>Activation<small>Operations handoff</small></span></button>
+      </nav>
+      <div class="rail-footer">
+        <span class="status-led" id="apiLed"></span>
+        <span><strong id="apiStatus">Connecting</strong><small id="workspacePath">Local workspace</small></span>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Configuration → evidence → operation</p>
+          <h1>Build a regulated DEX from the real Corner Store workflow.</h1>
+        </div>
+        <label class="project-switcher">Current project
+          <select id="projectSelector"><option value="">No project</option></select>
+        </label>
+      </header>
+
+      <section class="boundary-banner">
+        <div><strong>Runtime constraints</strong><span>Operator policy is injected when the local control service starts.</span></div>
+        <div class="boundary-rules">
+          <span><b>Direct deploy</b> Demo allowlist only</span>
+          <span><b>Other networks</b> Plan and review only</span>
+          <span><b>Secrets</b> Browser prohibited</span>
+        </div>
+      </section>
+
+      <section id="projectSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">01 / Project mode</p><h2>Choose how Corner Store enters your stack</h2></div>
+          <span class="section-state" id="projectState">Not created</span>
+        </div>
+        <div class="mode-grid" id="projectMode">
+          <article class="mode-card is-selected">
+            <label><input type="radio" name="mode" value="library-only" checked><b>Library only</b><span>Import Corner Store modules inside a service you build.</span><small>You own the HTTP and runtime boundary</small></label>
+            <button type="button" class="help-trigger" data-help-topic="library-only" aria-label="Library only 사용 예시">?</button>
+          </article>
+          <article class="mode-card">
+            <label><input type="radio" name="mode" value="reference-service"><b>Reference service</b><span>Generate a minimal RFQ HTTP service, then replace modules.</span><small>Fastest runnable starting point</small></label>
+            <button type="button" class="help-trigger" data-help-topic="reference-service" aria-label="Reference service 사용 예시">?</button>
+          </article>
+          <article class="mode-card">
+            <label><input type="radio" name="mode" value="existing-backend"><b>Existing backend</b><span>Connect Corner Store modules to an API you already operate.</span><small>Keep your current service boundary</small></label>
+            <button type="button" class="help-trigger" data-help-topic="existing-backend" aria-label="Existing backend 사용 예시">?</button>
+          </article>
+        </div>
+        <div class="form-row project-create">
+          <label>Project name<input id="projectName" placeholder="e.g. treasury-rfq — not created yet" pattern="[a-z0-9._-]+"></label>
+          <label class="check-field"><input id="dockerCompose" type="checkbox"><span>Include optional Docker reference</span></label>
+          <button id="createProject" class="button primary">Create integration project</button>
+        </div>
+        <div id="projectMessage" class="inline-message" aria-live="polite"></div>
+      </section>
+
+      <section id="configSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">02 / Configuration</p><h2>Bind the JSON contracts the CLI actually consumes</h2></div>
+          <button id="saveConfiguration" class="button secondary" disabled>Save configuration</button>
+        </div>
+        <div class="schema-trace">
+          <article>
+            <div class="file-label"><span>CONFIG</span><code>corner-store.config.json</code></div>
+            <div class="form-grid">
+              <label><span class="label-line">Network target<button type="button" class="help-trigger compact" data-help-topic="network" aria-label="Network target 설명">?</button></span>
+                <select id="networkPreset">
+                  <option value="anvil">Anvil · local direct demo deploy</option>
+                  <option value="sepolia">Ethereum Sepolia · plan only</option>
+                  <option value="arbitrum-sepolia">Arbitrum Sepolia · plan only</option>
+                  <option value="arbitrum-one">Arbitrum One · production plan only</option>
+                  <option value="giwa">GIWA / organization EVM · plan only</option>
+                  <option value="custom">Custom EVM network…</option>
+                </select>
+                <input id="network" class="conditional-input" placeholder="e.g. giwa-testnet" hidden>
+                <small id="networkModeNote" class="field-note">Direct broadcast is available only for the operator-injected demo network.</small>
+              </label>
+              <label><span class="label-line">RPC URL<button type="button" class="help-trigger compact" data-help-topic="rpc" aria-label="RPC URL 설명">?</button></span><input id="rpcUrl" placeholder="Injected by the operator, e.g. provider endpoint"><small class="field-note">Runtime input; credentials are not stored in project JSON.</small></label>
+              <label><span class="label-line">Asset profile<button type="button" class="help-trigger compact" data-help-topic="asset-profile" aria-label="Asset profile 설명">?</button></span>
+                <select id="assetProfile"><option value="buidl-like">BUIDL-like reference</option><option value="reg-d">Reg D reference</option></select>
+              </label>
+              <label><span class="label-line">Artifact path<button type="button" class="help-trigger compact" data-help-topic="artifact" aria-label="Artifact path 설명">?</button></span><input id="artifactPath" value="deployments/anvil-e2e.json"><small class="field-note">The generated address file consumed by downstream services.</small></label>
+            </div>
+            <fieldset>
+              <legend>Execution venues</legend>
+              <label class="check-field"><input id="venueRfq" type="checkbox" checked><span>RFQ Adapter</span></label>
+              <label class="check-field"><input id="venueAmm" type="checkbox"><span>AMM Adapter</span></label>
+              <label class="check-field is-disabled"><input id="venueOrderBook" type="checkbox" disabled><span>Order Book · not implemented</span></label>
+            </fieldset>
+            <div class="form-grid three">
+              <label><span class="label-line">Operator role label<button type="button" class="help-trigger compact" data-help-topic="operator" aria-label="Operator role 설명">?</button></span><input id="operatorAccount" value="operator" placeholder="e.g. treasury-operator"><small class="field-note">Reference metadata, not a browser signer.</small></label>
+              <label><span class="label-line">Investor fixture label<button type="button" class="help-trigger compact" data-help-topic="investor" aria-label="Investor fixture 설명">?</button></span><input id="investorAccount" value="investor" placeholder="e.g. eligible-investor"><small class="field-note">Demo persona label; balances come from scenario JSON.</small></label>
+              <label><span class="label-line">Maker role label<button type="button" class="help-trigger compact" data-help-topic="maker" aria-label="Maker role 설명">?</button></span><input id="makerAccount" value="maker" placeholder="e.g. primary-dealer"><small class="field-note">Dealer identity label; approval is an on-chain step.</small></label>
+              <label><span class="label-line">Governance label<button type="button" class="help-trigger compact" data-help-topic="governance" aria-label="Governance 설명">?</button></span><input id="multisig" value="governance-multisig" placeholder="e.g. issuer-safe"><small class="field-note">Expected authority name; no Safe is created here.</small></label>
+              <label><span class="label-line">Required approvals<button type="button" class="help-trigger compact" data-help-topic="approvals" aria-label="Required approvals 설명">?</button></span><input id="requiredApprovals" type="number" min="1" value="2"><small class="field-note">Review threshold recorded in generated governance proposals.</small></label>
+            </div>
+            <div class="notice role-boundary"><strong>Reference account boundary</strong><p>These fields describe roles in the generated config. The current reference DeployStack obtains funded Anvil accounts from the demo scenario; production wallet addresses and signer custody require a production deployment adapter.</p></div>
+          </article>
+
+          <article>
+            <div class="file-label"><span>INTEGRATION</span><code>corner-store.integration.json</code></div>
+            <div id="moduleGrid" class="module-grid">
+              <label><span class="label-line">Pricing module<button type="button" class="help-trigger compact" data-help-topic="pricing" aria-label="Pricing module 설명">?</button></span><select id="pricingModule"><option value="corner-store.fixed-rate">Fixed rate · demo</option><option value="integrator.pricing">Integrator pricing adapter</option><option value="custom">Custom module ID…</option></select><input id="pricingModuleCustom" class="conditional-input" placeholder="organization.pricing-v1" hidden><small>Required capability · rfq.price.v1</small></label>
+              <label><span class="label-line">Risk module<button type="button" class="help-trigger compact" data-help-topic="risk" aria-label="Risk module 설명">?</button></span><select id="riskModule"><option value="corner-store.noop-risk">No-op risk · demo only</option><option value="integrator.risk">Integrator risk adapter</option><option value="custom">Custom module ID…</option></select><input id="riskModuleCustom" class="conditional-input" placeholder="organization.risk-v1" hidden><small>Required capability · rfq.risk.pre-sign.v1</small></label>
+              <label><span class="label-line">Signer module<button type="button" class="help-trigger compact" data-help-topic="signer" aria-label="Signer module 설명">?</button></span><select id="signerModule"><option value="integrator.signer">External integrator signer</option><option value="custom">Custom module ID…</option></select><input id="signerModuleCustom" class="conditional-input" placeholder="organization.hsm-signer" hidden><small>Required capability · rfq.sign.eip712.v1</small></label>
+              <label><span class="label-line">Nonce module<button type="button" class="help-trigger compact" data-help-topic="nonce" aria-label="Nonce module 설명">?</button></span><select id="nonceModule"><option value="corner-store.in-memory-nonce">In-memory nonce · demo</option><option value="integrator.nonce">Durable integrator nonce</option><option value="custom">Custom module ID…</option></select><input id="nonceModuleCustom" class="conditional-input" placeholder="organization.database-nonce" hidden><small>Required capability · rfq.nonce.maker-scoped.v1</small></label>
+            </div>
+            <div class="notice"><strong>Module contract, not package discovery</strong><p>The list provides safe reference IDs and custom adapter slots. The Studio validates required capabilities, but it does not download a module by name. Your runtime must provide every custom implementation.</p></div>
+          </article>
+
+          <article class="demo-fixtures">
+            <div class="file-label"><span>DEMO ONLY</span><code>corner-store.scenario.json</code></div>
+            <h3>Demo fixtures</h3>
+            <p>Initial balances, fixture wallets, quote TTL and mock pricing are deployment test inputs—not production policy.</p>
+            <details>
+              <summary>Inspect demo JSON</summary>
+              <textarea id="scenarioJson" spellcheck="false" rows="12">{"schemaVersion":2,"note":"Demo fixture loaded after project creation."}</textarea>
+            </details>
+          </article>
+        </div>
+        <div id="configMessage" class="inline-message" aria-live="polite"></div>
+      </section>
+
+      <section id="doctorSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">03 / Doctor</p><h2>Prove the local toolchain before planning a deployment</h2></div>
+          <button id="runDoctor" class="button primary" disabled>Run doctor</button>
+        </div>
+        <div id="doctorChecks" class="check-list empty-state">Create a project, then run the required environment checks.</div>
+      </section>
+
+      <section id="planSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">04 / Deployment plan</p><h2>Review the exact read-only Foundry command</h2></div>
+          <button id="reviewPlan" class="button primary" disabled>Generate dry-run</button>
+        </div>
+        <div id="planReview" class="plan-review empty-state">The plan combines CLI output with the saved configuration.</div>
+      </section>
+
+      <section id="deploySection" class="surface deploy-surface">
+        <div class="section-heading">
+          <div><p class="step-label">05 / Demo deployment</p><h2>Broadcast only when the operator policy allows the target</h2></div>
+          <button id="deployDemo" class="button danger" disabled>Deploy reference stack</button>
+        </div>
+        <div class="deploy-gate">
+          <div><span id="gateDoctor" class="gate-dot"></span>Doctor ready</div>
+          <div><span id="gatePlan" class="gate-dot"></span>Dry-run reviewed</div>
+          <div><span id="gateNetwork" class="gate-dot"></span><span id="gateNetworkLabel">Operator-allowed demo RPC</span></div>
+          <div><span class="gate-dot is-pass"></span>No browser secrets</div>
+        </div>
+        <p class="runtime-policy">Runtime policy: <code id="broadcastPolicy">Loading injected settings…</code></p>
+        <pre id="deployLog" class="terminal"><code>$ Waiting for a guarded local deployment.</code></pre>
+      </section>
+
+      <section id="artifactSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">06 / Artifact & verify</p><h2>Turn deployment output into operational evidence</h2></div>
+          <button id="verifyArtifact" class="button primary" disabled>Verify artifact</button>
+        </div>
+        <div id="verifySummary" class="verify-summary">Verification has not run.</div>
+        <div id="artifactViewer" class="artifact-grid empty-state">The deployment artifact will appear here as the address source of truth.</div>
+      </section>
+
+      <section id="activationSection" class="surface">
+        <div class="section-heading">
+          <div><p class="step-label">07 / Activation</p><h2>Hand a verified stack to day-to-day operations</h2></div>
+          <button id="openOperations" class="button primary" disabled>Open Operations Console</button>
+        </div>
+        <div class="notice activation-boundary"><strong>Manual evidence checklist</strong><p>Checking an item records that an operator reviewed the step. It does not approve a Maker, authorize a signer, transfer tokens or create a multisig transaction.</p></div>
+        <div id="activationChecklist" class="activation-list">
+          <label><input data-activation="makerApproved" type="checkbox"><span><b>Maker approval reviewed</b><small>Confirm MakerAuthorizer already reports the dealer as approved.</small></span></label>
+          <label><input data-activation="signerAuthorized" type="checkbox"><span><b>Signer authorization reviewed</b><small>Confirm the current quote signer is authorized for that Maker.</small></span></label>
+          <label><input data-activation="inventoryReady" type="checkbox"><span><b>Inventory and allowances reviewed</b><small>Confirm both RFQ directions have balances and token approvals.</small></span></label>
+          <label><input data-activation="smokeSettlement" type="checkbox"><span><b>Router smoke settlement observed</b><small>Record that final compliance and token movement were proved.</small></span></label>
+          <label><input data-activation="governanceHandoff" type="checkbox"><span><b>Governance handoff reviewed</b><small>Record the external ownership or multisig handoff review.</small></span></label>
+        </div>
+        <div id="handoffMessage" class="handoff-card"><strong>Operations handoff locked</strong><span>Verify the artifact before opening the existing runtime dashboard.</span></div>
+      </section>
+    </main>
+  </div>
+  <dialog id="contextDialog" class="context-dialog" aria-labelledby="contextDialogTitle">
+    <div class="dialog-heading">
+      <div><p class="step-label">Context guide</p><h2 id="contextDialogTitle">How this option is used</h2></div>
+      <button id="closeContextDialog" type="button" class="dialog-close" aria-label="도움말 닫기">×</button>
+    </div>
+    <div id="contextDialogBody" class="dialog-body"></div>
+  </dialog>
+  <script src="/app.js"></script>
+</body>
+</html>

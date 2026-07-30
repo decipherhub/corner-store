@@ -75,6 +75,15 @@ echo "==> Running read-only Operator API smoke test"
   npm test
 )
 
+echo "==> Running local Deployment Studio build + smoke test"
+(
+  cd services/deployment-studio
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
 echo "==> Running compliance data SDK smoke test"
 (
   cd services/compliance-data
