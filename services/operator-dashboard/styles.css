@@ -282,18 +282,13 @@ select { appearance: auto; }
 .oracle-line { stroke: #718096; stroke-dasharray: 5 5; }
 .indicative-line { stroke: var(--blue); }
 .spread-band { fill: rgba(38, 103, 170, .09); }
+.fill-point { cursor: help; }
 .fill-point circle { stroke: #fff; stroke-width: 2; }
 .fill-point.buy circle { fill: var(--green); }
 .fill-point.sell circle { fill: #d26767; }
 .fill-point:focus { outline: none; }
 .fill-point:focus circle { stroke: var(--ink); stroke-width: 3; }
-.fill-label { paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; font: 800 9px ui-monospace, monospace; }
-.fill-point.buy .fill-label { fill: var(--green); }
-.fill-point.sell .fill-label { fill: #b84d4d; }
-.range-switcher { display: inline-flex; border: 1px solid var(--line); background: #f7fafc; }
-.range-switcher button { min-width: 45px; padding: 7px 9px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 9px; font-weight: 800; }
-.range-switcher button:last-child { border-right: 0; }
-.range-switcher button.active { background: var(--ink); color: #fff; }
+.market-range-label { color: var(--muted); font-size: 11px; font-weight: 700; }
 .market-metrics { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-top: 0; }
 .market-metrics div { padding: 11px 13px; border-right: 1px solid var(--line); }
 .market-metrics div:last-child { border: 0; }

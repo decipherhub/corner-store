@@ -3,7 +3,7 @@ const profiles = {admin: {id: "admin", label: "Admin", role: "admin", address: n
 const viewMeta = {
   dashboard: ["Overview", "Dashboard"], create: ["New request", "RFQ 거래"], rfqs: ["Requests & quotes", "My RFQs"],
   portfolio: ["Holdings", "Portfolio"], adminDashboard: ["Admin", "Dashboard"], adminMonitoring: ["Admin", "RFQ 모니터링"],
-  adminUsers: ["Admin", "사용자 / 화이트리스트"], adminMaker: ["Admin", "Maker 관리"],
+  adminUsers: ["Admin", "사용자 / 화이트리스트"], adminMaker: ["Admin", "Maker 승인 시연"],
   adminEnforcement: ["Compliance operations", "Enforcement Cases"], adminHistory: ["Admin", "거래 내역"]
 };
 let currentProfile = profiles.admin;
@@ -16,9 +16,18 @@ let live = null;
 let quoteConsumed = false;
 let quoteTimer = null;
 let tradeSide = "buy";
-let marketRange = "1h";
 let enforcementCase = null;
-let session = {rfqId: null, status: null, quoteCount: 0, settledCount: 0, rwaDelta: 0n, quoteDelta: 0n, activities: []};
+let session = {
+  rfqId: null,
+  status: null,
+  quoteCount: 0,
+  settledCount: 0,
+  rwaDelta: 0n,
+  quoteDelta: 0n,
+  activities: [],
+  rfqs: [],
+  selectedRfqId: null
+};
 
 function endpoint(path) { return `${$("backend").value.replace(/\/$/, "")}${path}`; }
 async function api(path, init) {
@@ -116,11 +125,48 @@ function addActivity(title, detail) {
   session.activities = session.activities.slice(0, 6);
   $("homeActivity").innerHTML = session.activities.map((a) => `<div class="activity-item"><div><strong>${escapeHtml(a.title)}</strong><small>${escapeHtml(a.detail)}</small></div><time>${a.time.toLocaleTimeString("ko-KR", {hour:"2-digit",minute:"2-digit"})}</time></div>`).join("");
 }
+function selectedRfqRecord() {
+  return session.rfqs.find((record) => record.id === session.selectedRfqId) || null;
+}
+function visibleRfqRecords() {
+  if (currentProfile.role === "admin") return session.rfqs;
+  const address = currentProfile.address?.toLowerCase();
+  return session.rfqs.filter((record) => record.signedQuote.quote.taker.toLowerCase() === address);
+}
+function activeRfqCount() {
+  return visibleRfqRecords().filter((record) => record.status === "quoted").length;
+}
+function selectRfqRecord(id) {
+  const record = session.rfqs.find((candidate) => candidate.id === id);
+  if (!record) return;
+  session.selectedRfqId = record.id;
+  session.rfqId = record.id;
+  session.status = record.status;
+  live = record.signedQuote;
+  tradeSide = record.side;
+  quoteConsumed = record.status === "accepted";
+  const inputDecimals = record.side === "buy"
+    ? chainState.presentation.quoteAsset.decimals
+    : chainState.presentation.asset.decimals;
+  $("amount").value = formatInputBaseUnits(record.signedQuote.quote.amountIn, inputDecimals);
+  updateSidePresentation();
+  renderQuote();
+  updateSummary();
+}
+function updateSelectedRfq(status) {
+  const record = selectedRfqRecord();
+  if (record) {
+    record.status = status;
+    record.consumed = status === "accepted";
+  }
+  session.status = status;
+}
 function updateSummary() {
-  $("activeRfqCount").textContent = session.status === "quoted" ? "1" : "0";
-  $("settledCount").textContent = String(session.settledCount);
-  $("quoteCount").textContent = String(session.quoteCount);
-  $("rfqNavCount").textContent = session.rfqId ? "1" : "0";
+  const visible = visibleRfqRecords();
+  $("activeRfqCount").textContent = String(activeRfqCount());
+  $("settledCount").textContent = String(visible.filter((record) => record.status === "accepted").length);
+  $("quoteCount").textContent = String(visible.length);
+  $("rfqNavCount").textContent = String(visible.length);
 }
 function showView(view) {
   document.querySelectorAll(".view").forEach((node) => node.classList.toggle("hidden", node.id !== `${view}View`));
@@ -199,22 +245,9 @@ function renderMarketChart() {
   const valueOf = (point) => Number(point.numerator) / Number(point.denominator);
   const spreadHalf = marketHistory.spreadBps / 20_000;
   const fixtureCount = Math.max(marketHistory.oracle.length, marketHistory.indicative.length - marketHistory.fills.length);
-  const allHistory = [...marketHistory.oracle, ...marketHistory.indicative, ...marketHistory.fills];
-  const latestTime = Math.max(...allHistory.map((point) => Number(point.timestamp)));
-  const rangeSeconds = { "1m": 60, "5m": 300, "1h": 3600, all: Infinity }[marketRange];
-  const cutoff = Number.isFinite(rangeSeconds) ? latestTime - rangeSeconds : -Infinity;
-  const visible = (points, orderFor) => points
-    .map((point, index) => ({...point, displayOrder: orderFor(index)}))
-    .filter((point) => Number(point.timestamp) >= cutoff);
-  let oracle = visible(marketHistory.oracle, (index) => index);
-  let indicative = visible(marketHistory.indicative, (index) => index);
-  const fills = visible(marketHistory.fills, (index) => fixtureCount + index);
-  if (!oracle.length && marketHistory.oracle.length) {
-    oracle = [{...marketHistory.oracle.at(-1), displayOrder: fixtureCount - 1}];
-  }
-  if (!indicative.length && marketHistory.indicative.length) {
-    indicative = [{...marketHistory.indicative.at(-1), displayOrder: fixtureCount - 1 + marketHistory.fills.length}];
-  }
+  const oracle = marketHistory.oracle.map((point, index) => ({...point, displayOrder: index}));
+  const indicative = marketHistory.indicative.map((point, index) => ({...point, displayOrder: index}));
+  const fills = marketHistory.fills.map((point, index) => ({...point, displayOrder: fixtureCount + index}));
   const all = [...oracle, ...indicative, ...fills];
   if (!all.length) return;
   const times = all.map((point) => Number(point.timestamp));
@@ -243,19 +276,22 @@ function renderMarketChart() {
     const yy = pad.top + (height - pad.top - pad.bottom) * index / 3;
     return `<line x1="${pad.left}" y1="${yy}" x2="${width-pad.right}" y2="${yy}" class="chart-grid"/><text x="${pad.left-9}" y="${yy+4}" text-anchor="end" class="chart-axis">${price.toFixed(4)}</text>`;
   }).join("");
-  const fillMarkers = fills.map((point, index) => {
+  const fillMarkers = fills.map((point) => {
     const xx = x(point.displayOrder);
     const yy = y(valueOf(point));
-    const alignRight = xx > width - 150;
-    const labelY = Math.max(13, Math.min(height - 18, yy + (index % 2 ? 19 : -12)));
     const price = valueOf(point).toFixed(4);
-    return `<g class="fill-point ${point.side}" tabindex="0"><circle cx="${xx.toFixed(1)}" cy="${yy.toFixed(1)}" r="5"/><text x="${(xx + (alignRight ? -9 : 9)).toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="${alignRight ? "end" : "start"}" class="fill-label">${point.side === "buy" ? "B" : "S"} ${price}</text><title>${point.side === "buy" ? "매수" : "매도"} 체결 · ${price} ${marketHistory.quoteSymbol}/${marketHistory.assetSymbol} · ${formatBaseUnits(point.amountRwa)} ${marketHistory.assetSymbol} · ${new Date(Number(point.timestamp) * 1000).toLocaleTimeString("ko-KR")}</title></g>`;
+    const tooltip = `${point.side === "buy" ? "매수" : "매도"} 체결 · ${price} ${marketHistory.quoteSymbol}/${marketHistory.assetSymbol} · ${formatBaseUnits(point.amountRwa)} ${marketHistory.assetSymbol} · ${new Date(Number(point.timestamp) * 1000).toLocaleTimeString("ko-KR")}`;
+    return `<g class="fill-point ${point.side}" tabindex="0" aria-label="${escapeHtml(tooltip)}"><circle cx="${xx.toFixed(1)}" cy="${yy.toFixed(1)}" r="6"/><title>${escapeHtml(tooltip)}</title></g>`;
   }).join("");
   const firstTime = new Date(minTime * 1000).toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit"});
   const lastTime = new Date(Math.max(...times) * 1000).toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit", second: "2-digit"});
   $("marketChart").innerHTML = `${grid}<polygon points="${upper.concat(lower).join(" ")}" class="spread-band"/><path d="${line(oracle)}" class="chart-line oracle-line"/><path d="${line(indicative)}" class="chart-line indicative-line"/>${fillMarkers}<text x="${pad.left}" y="${height-10}" class="chart-axis">${firstTime}</text><text x="${width-pad.right}" y="${height-10}" text-anchor="end" class="chart-axis">${lastTime}</text>`;
   $("marketCurrent").textContent = referencePrice();
-  $("marketMove").textContent = marketHistory.current.lastMove === "buy-up" ? "최근 매수 후 상승" : marketHistory.current.lastMove === "sell-down" ? "최근 매도 후 하락" : "주입된 초기 가격";
+  $("marketMove").textContent = marketHistory.current.lastMove === "buy-up"
+    ? `최근 매수 · +${marketHistory.current.lastImpactBps} bps`
+    : marketHistory.current.lastMove === "sell-down"
+      ? `최근 매도 · -${marketHistory.current.lastImpactBps} bps`
+      : "주입된 초기 가격";
   $("marketSpread").textContent = `${marketHistory.spreadBps} bps`;
   const volume = fills.reduce((sum, fill) => sum + BigInt(fill.amountQuote), 0n);
   $("marketVolume").textContent = `${formatBaseUnits(volume, chainState.presentation.quoteAsset.decimals)} ${chainState.presentation.quoteAsset.symbol}`;
@@ -266,12 +302,7 @@ function renderMarketChart() {
     : "아직 체결 없음";
   $("marketFillTape").innerHTML = fills.length
     ? [...fills].reverse().slice(0, 6).map((fill) => `<article class="fill-ticket ${fill.side}"><strong>${fill.side === "buy" ? "매수" : "매도"} · ${valueOf(fill).toFixed(4)} ${marketHistory.quoteSymbol}/${marketHistory.assetSymbol}</strong><small>${formatBaseUnits(fill.amountRwa)} ${marketHistory.assetSymbol} · ${new Date(Number(fill.timestamp) * 1000).toLocaleTimeString("ko-KR")} · ${shortAddress(fill.transactionHash)}</small></article>`).join("")
-    : "<span>선택 구간에 실제 Router 체결이 없습니다.</span>";
-  document.querySelectorAll("[data-market-range]").forEach((button) => button.classList.toggle("active", button.dataset.marketRange === marketRange));
-}
-function setMarketRange(range) {
-  marketRange = range;
-  renderMarketChart();
+    : "<span>아직 실제 Router 체결이 없습니다.</span>";
 }
 function updateSidePresentation() {
   if (!chainState) return;
@@ -291,8 +322,9 @@ async function setTradeSide(side) {
   quoteConsumed = false;
   session.rfqId = null;
   session.status = null;
+  session.selectedRfqId = null;
   $("quoteComparison").classList.add("hidden");
-  $("rfqRows").innerHTML = '<tr><td colspan="7"><div class="empty-row">아직 RFQ가 없습니다.</div></td></tr>';
+  renderRfqRows();
   applySuggestedAmount(side);
   updateSidePresentation();
   await runPrecheck();
@@ -303,11 +335,12 @@ async function beginNewRfq() {
   quoteConsumed = false;
   session.rfqId = null;
   session.status = null;
+  session.selectedRfqId = null;
   if (quoteTimer) clearTimeout(quoteTimer);
   $("executeQuote").disabled = false;
   $("quoteComparison").classList.add("hidden");
   $("result").innerHTML = "";
-  $("rfqRows").innerHTML = '<tr><td colspan="7"><div class="empty-row">아직 RFQ가 없습니다.</div></td></tr>';
+  renderRfqRows();
   applySuggestedAmount();
   updateSummary();
   showView("create");
@@ -331,6 +364,15 @@ async function switchProfile() {
   $("roleBanner").innerHTML = admin ? "" : `<strong>현재 지갑은 적격투자자가 아닙니다.</strong> ${escapeHtml(currentProfile.eligibilityReason || "Qualified Purchaser claim missing")}`;
   if (admin) showView("adminDashboard");
   else {
+    const selected = selectedRfqRecord();
+    if (selected && selected.signedQuote.quote.taker.toLowerCase() !== currentProfile.address.toLowerCase()) {
+      live = null;
+      quoteConsumed = false;
+      session.selectedRfqId = null;
+      session.rfqId = null;
+      session.status = null;
+      $("quoteComparison").classList.add("hidden");
+    }
     showView("dashboard");
     applySuggestedAmount();
     const latest = await runPrecheck();
@@ -341,6 +383,8 @@ async function switchProfile() {
     $("portfolioRfq").disabled = !latest?.allowed;
     renderWalletBalances();
   }
+  renderRfqRows();
+  updateSummary();
 }
 
 function precheckHtml(result) {
@@ -381,6 +425,12 @@ async function setupDemo() {
   $("setupDemo").disabled = true;
   try {
     await post("/demo/setup", {});
+    session.rfqs = [];
+    session.selectedRfqId = null;
+    session.rfqId = null;
+    session.status = null;
+    live = null;
+    quoteConsumed = false;
     await loadState(); await switchProfile();
     $("environmentBadge").textContent = "Ready"; $("environmentBadge").className = "status-pill live";
     $("setupChecks").classList.remove("hidden");
@@ -398,28 +448,64 @@ async function requestQuote(event) {
     const latest = await runPrecheck();
     if (!latest?.allowed) throw Error(latest?.verdict.reason || "Compliance Pre-check failed");
     const wallet = selectedWallet();
-    live = await post("/demo/quote", {
+    const signedQuote = await post("/demo/quote", {
       taker: wallet.address,
       amountIn: latest.amountIn,
       side: tradeSide,
       ttlSeconds: Number($("ttl").value)
     });
+    const rfqId = `#${String(signedQuote.quote.nonce).slice(-6)}`;
+    const record = {
+      id: rfqId,
+      ownerId: wallet.id,
+      ownerLabel: wallet.label,
+      side: tradeSide,
+      signedQuote,
+      status: "quoted",
+      consumed: false,
+      createdAt: Date.now()
+    };
+    session.rfqs.unshift(record);
+    session.selectedRfqId = rfqId;
+    live = signedQuote;
     quoteConsumed = false;
     $("executeQuote").disabled = false;
-    session.rfqId = `#${String(live.quote.nonce).slice(-6)}`; session.status = "quoted"; session.quoteCount += 1;
+    session.rfqId = rfqId; session.status = "quoted"; session.quoteCount += 1;
     addActivity("Firm quote 도착", `${wallet.label} · ${chainState.presentation.maker.label}`);
     renderQuote(); updateSummary(); showView("rfqs");
   } catch (error) { setStatus("status", error.message, "bad"); }
   finally { $("requestQuote").disabled = !precheck?.allowed; }
 }
 function renderRfqRows() {
-  if (!live) return;
-  const owner = Object.values(profiles).find((p) => p.address?.toLowerCase() === live.quote.taker.toLowerCase());
-  $("rfqRows").innerHTML = `<tr><td><strong>${session.rfqId}</strong></td><td>${escapeHtml(owner?.label || shortAddress(live.quote.taker))}</td><td><strong>${tradeSide === "buy" ? "매수" : "매도"}</strong></td><td>${escapeHtml(chainState.presentation.asset.name)}</td><td><span class="status-pill neutral">${session.status}</span></td><td>1 live + ${chainState.presentation.previewQuotes.length} preview</td><td><button id="viewQuote" class="text-button">견적 보기 →</button></td></tr>`;
-  $("viewQuote").onclick = () => $("quoteComparison").scrollIntoView({behavior:"smooth"});
+  const records = visibleRfqRecords();
+  if (!records.length) {
+    $("rfqRows").innerHTML = '<tr><td colspan="7"><div class="empty-row">아직 RFQ가 없습니다.</div></td></tr>';
+    return;
+  }
+  $("rfqRows").innerHTML = records.map((record) => `<tr>
+    <td><strong>${escapeHtml(record.id)}</strong><small>${new Date(record.createdAt).toLocaleTimeString("ko-KR")}</small></td>
+    <td>${escapeHtml(record.ownerLabel)}</td>
+    <td><strong>${record.side === "buy" ? "매수" : "매도"}</strong></td>
+    <td>${escapeHtml(chainState.presentation.asset.name)}</td>
+    <td><span class="status-pill ${record.status === "accepted" ? "live" : record.status === "quoted" ? "neutral" : "warning"}">${escapeHtml(record.status)}</span></td>
+    <td>1 firm + ${chainState.presentation.previewQuotes.length} preview</td>
+    <td><button class="text-button view-rfq" data-rfq-id="${escapeHtml(record.id)}">견적 보기 →</button></td>
+  </tr>`).join("");
+  document.querySelectorAll(".view-rfq").forEach((button) => {
+    button.onclick = () => {
+      selectRfqRecord(button.dataset.rfqId);
+      $("quoteComparison").scrollIntoView({behavior:"smooth"});
+    };
+  });
 }
 function renderQuote() {
+  if (!live) {
+    renderRfqRows();
+    $("quoteComparison").classList.add("hidden");
+    return;
+  }
   renderRfqRows(); $("quoteComparison").classList.remove("hidden");
+  const record = selectedRfqRecord();
   const maker = chainState.presentation.maker.label;
   const liveRate = quoteRate(live.quote);
   const input = tradeSide === "buy" ? chainState.presentation.quoteAsset : chainState.presentation.asset;
@@ -428,17 +514,32 @@ function renderQuote() {
     currentProfile.address?.toLowerCase() === live.quote.taker.toLowerCase();
   const quoteAction = quoteConsumed
     ? "새 RFQ 만들기"
+    : record?.status !== "quoted"
+      ? "현재 지갑으로 새 RFQ"
     : ownsQuote
       ? "이 견적 검토"
       : "현재 지갑으로 새 RFQ";
-  $("quoteCards").innerHTML = `<article class="quote-card live"><div class="maker-line"><strong>${escapeHtml(maker)}</strong><span>${quoteConsumed ? "Settled · consumed" : "Live · executable"}</span></div><strong class="rate">${liveRate}</strong><small>${tradeSide === "buy" ? "매수" : "매도"} · Backend-generated firm quote</small><dl><div><dt>Pay</dt><dd>${formatBaseUnits(live.quote.amountIn, input.decimals)} ${escapeHtml(input.symbol)}</dd></div><div><dt>Receive</dt><dd>${formatBaseUnits(live.quote.amountOut, output.decimals)} ${escapeHtml(output.symbol)}</dd></div><div><dt>유효시간</dt><dd id="liveExpiry">${quoteConsumed ? "Consumed" : "—"}</dd></div><div><dt>Taker</dt><dd>${shortAddress(live.quote.taker)}</dd></div></dl><button id="selectLive" class="primary">${quoteAction}</button></article>${chainState.presentation.previewQuotes.map((quote) => `<article class="quote-card preview"><div class="maker-line"><strong>${escapeHtml(quote.maker)}</strong><span>Scenario fixture</span></div><strong class="rate">${escapeHtml(quote.rate)}</strong><small>Indicative only</small><button class="secondary" disabled>Preview only</button></article>`).join("")}`;
-  $("selectLive").onclick = quoteConsumed || !ownsQuote ? beginNewRfq : selectQuote;
+  const stateLabel = record?.status === "accepted"
+    ? "Settled · consumed"
+    : record?.status === "rejected"
+      ? "Rejected · not settled"
+      : record?.status === "expired"
+        ? "Expired"
+        : "Live · executable";
+  $("quoteCards").innerHTML = `<article class="quote-card live"><div class="maker-line"><strong>${escapeHtml(maker)}</strong><span>${stateLabel}</span></div><strong class="rate">${liveRate}</strong><small>${tradeSide === "buy" ? "매수" : "매도"} · Backend-generated firm quote</small><dl><div><dt>Pay</dt><dd>${formatBaseUnits(live.quote.amountIn, input.decimals)} ${escapeHtml(input.symbol)}</dd></div><div><dt>Receive</dt><dd>${formatBaseUnits(live.quote.amountOut, output.decimals)} ${escapeHtml(output.symbol)}</dd></div><div><dt>유효시간</dt><dd id="liveExpiry">${quoteConsumed ? "Consumed" : "—"}</dd></div><div><dt>Taker</dt><dd>${shortAddress(live.quote.taker)}</dd></div></dl><button id="selectLive" class="primary">${quoteAction}</button></article>${chainState.presentation.previewQuotes.map((quote) => `<article class="quote-card preview"><div class="maker-line"><strong>${escapeHtml(quote.maker)}</strong><span>Scenario fixture</span></div><strong class="rate">${escapeHtml(quote.rate)}</strong><small>Indicative only</small><button class="secondary" disabled>Preview only</button></article>`).join("")}`;
+  $("selectLive").onclick = quoteConsumed || !ownsQuote || record?.status !== "quoted" ? beginNewRfq : selectQuote;
   if (quoteTimer) clearTimeout(quoteTimer);
   if (quoteConsumed) return;
   const tick = () => {
     if (!live) return;
     const left = Number(live.quote.expiry) - chainNow();
-    if (left <= 0) { session.status = "expired"; $("liveExpiry").textContent = "Expired"; return; }
+    if (left <= 0) {
+      updateSelectedRfq("expired");
+      $("liveExpiry").textContent = "Expired";
+      renderRfqRows();
+      updateSummary();
+      return;
+    }
     $("liveExpiry").textContent = `${Math.floor(left/60)}분 ${left%60}초`; quoteTimer = setTimeout(tick, 1000);
   }; tick();
 }
@@ -467,9 +568,9 @@ async function execute() {
     const result = await post("/demo/trade", {amountIn: live.quote.amountIn, action, quote: live});
     if (result.rejection) {
       $("result").innerHTML = `<div class="inline-status good"><strong>Router가 체결을 거부했습니다.</strong><br>${escapeHtml(result.rejection)}<br><small>${escapeHtml(result.reasonCode || "")}</small></div>`;
-      addActivity("RFQ 체결 거부", result.rejection); session.status = "rejected";
+      addActivity("RFQ 체결 거부", result.rejection); updateSelectedRfq("rejected");
     } else {
-      session.status = "accepted"; session.settledCount += 1;
+      updateSelectedRfq("accepted"); session.settledCount += 1;
       session.rwaDelta += BigInt(result.transaction.rwaDelta);
       session.quoteDelta += BigInt(result.transaction.quoteDelta);
       quoteConsumed = true;
@@ -509,9 +610,9 @@ async function refreshAdmin() {
     const events = eventsPayload.events || [];
     const rejected = events.filter((e) => e.name === "RFQRejected").length;
     const settled = events.filter((e) => e.name === "RFQSettled").length;
-    $("adminStats").innerHTML = `<article class="stat-card"><span>진행 중 RFQ</span><strong>${session.status === "quoted" ? 1 : 0}</strong></article><article class="stat-card"><span>오늘 거부</span><strong>${rejected}</strong></article><article class="stat-card"><span>적격 / 비적격</span><strong>${chainState.wallets.filter((w)=>w.qualifiedPurchaser).length} / ${chainState.wallets.filter((w)=>!w.qualifiedPurchaser).length}</strong></article>`;
+    $("adminStats").innerHTML = `<article class="stat-card"><span>진행 중 RFQ</span><strong>${activeRfqCount()}</strong></article><article class="stat-card"><span>오늘 거부</span><strong>${rejected}</strong></article><article class="stat-card"><span>적격 / 비적격</span><strong>${chainState.wallets.filter((w)=>w.qualifiedPurchaser).length} / ${chainState.wallets.filter((w)=>!w.qualifiedPurchaser).length}</strong></article>`;
     $("adminRecent").innerHTML = events.length ? events.slice(-6).reverse().map(eventRow).join("") : '<div class="empty-row">아직 이벤트가 없습니다.</div>';
-    $("monitoringContent").innerHTML = `<div><span>현재 RFQ</span><strong>${session.rfqId || "없음"}</strong></div><div><span>상태</span><strong>${session.status || "—"}</strong></div><div><span>Quote taker</span><strong>${live ? shortAddress(live.quote.taker) : "—"}</strong></div>`;
+    $("monitoringContent").innerHTML = `<div><span>세션 RFQ</span><strong>${session.rfqs.length}건</strong></div><div><span>진행 중</span><strong>${activeRfqCount()}건</strong></div><div><span>선택 RFQ</span><strong>${session.rfqId || "없음"}</strong></div><div><span>선택 상태</span><strong>${session.status || "—"}</strong></div><div><span>Quote taker</span><strong>${live ? shortAddress(live.quote.taker) : "—"}</strong></div>`;
     $("adminUserRows").innerHTML = chainState.wallets.map(renderClaimEditor).join("");
     document.querySelectorAll(".admin-claim-save").forEach((button) => button.onclick = () => saveClaim(button));
     document.querySelectorAll('[data-claim-field="basis"]').forEach((select) => {
@@ -519,14 +620,12 @@ async function refreshAdmin() {
         select.closest(".claim-editor").querySelector(".claim-basis-help").textContent = qpBasisHelp(select.value);
       };
     });
-    $("makerFacts").innerHTML = `<div><span>Maker</span><strong>${escapeHtml(chainState.presentation.maker.label)} · ${shortAddress(chainState.maker)}</strong></div><div><span>상태</span><strong>${chainState.makerApproved ? "Active" : "Cancelled"}</strong></div><div><span>RWA inventory</span><strong>${formatBaseUnits(chainState.makerInventory.rwaBalance)} ${escapeHtml(chainState.presentation.asset.symbol)}</strong></div><div><span>Settlement inventory</span><strong>${formatBaseUnits(chainState.makerInventory.quoteBalance, chainState.presentation.quoteAsset.decimals)} ${escapeHtml(chainState.presentation.quoteAsset.symbol)}</strong></div>`;
-    const temporal = chainState.presentation.temporalEligibility;
-    const target = chainState.wallets.find((wallet) => wallet.id === temporal.walletId);
-    $("temporalFacts").innerHTML = `<div><span>대상 지갑</span><strong>${escapeHtml(target?.label || temporal.walletId)}</strong></div><div><span>현재 chain time</span><strong>${new Date(chainState.chainTimestamp * 1000).toLocaleTimeString("ko-KR")}</strong></div><div><span>주입 freshness</span><strong>${temporal.freshnessSeconds}초</strong></div><div><span>시간 전진</span><strong>+${temporal.advanceSeconds}초</strong></div>`;
-    $("advanceTemporal").disabled = !live || live.quote.taker.toLowerCase() !== target?.address.toLowerCase();
-    setStatus("temporalStatus", $("advanceTemporal").disabled ? "먼저 대상 지갑으로 quote를 요청하세요." : "저장된 quote가 있습니다. 시간을 경과시키면 claim만 만료되고 quote는 아직 유효합니다.");
+    $("makerFacts").innerHTML = `<div><span>주입된 단일 Maker</span><strong>${escapeHtml(chainState.presentation.maker.label)} · ${shortAddress(chainState.maker)}</strong></div><div><span>체결 승인</span><strong>${chainState.makerApproved ? "Approved" : "Revoked"}</strong></div><div><span>RWA inventory</span><strong>${formatBaseUnits(chainState.makerInventory.rwaBalance)} ${escapeHtml(chainState.presentation.asset.symbol)}</strong></div><div><span>Settlement inventory</span><strong>${formatBaseUnits(chainState.makerInventory.quoteBalance, chainState.presentation.quoteAsset.decimals)} ${escapeHtml(chainState.presentation.quoteAsset.symbol)}</strong></div>`;
     $("revokeMaker").disabled = !chainState.makerApproved; $("restoreMaker").disabled = chainState.makerApproved;
-    setStatus("makerStatus", chainState.makerApproved ? "Maker가 승인되어 있습니다." : "Maker가 취소되어 새 체결이 차단됩니다.", chainState.makerApproved ? "good" : "bad");
+    setStatus("makerStatus", chainState.makerApproved
+      ? "현재 구성된 Maker의 quote를 체결할 수 있습니다. 이 화면은 새 Maker 등록 기능이 아니라 승인 철회 보안 시연입니다."
+      : "현재 구성된 Maker의 승인이 철회되어 기존 서명 quote도 체결 시점에 차단됩니다.",
+    chainState.makerApproved ? "good" : "bad");
     renderEvents(events);
   } catch (error) { setStatus("makerStatus", error.message, "bad"); }
 }
@@ -585,7 +684,7 @@ async function saveClaim(button) {
     const updated = await post("/demo/admin/claim", {walletId: button.dataset.wallet, claim});
     setStatus(
       "adminUserStatus",
-      `${updated.label}: 입력 claim을 기록했고 ICA 투자자 판정은 ${updated.qualifiedPurchaser ? "거래 허용" : `차단 (${updated.eligibilityReason})`}입니다.`,
+      `${updated.label}: 입력 claim을 온체인에 기록했습니다 · Block ${updated.transaction.blockNumber} · ${shortAddress(updated.transaction.hash)} · ICA 판정 ${updated.qualifiedPurchaser ? "거래 허용" : `차단 (${updated.eligibilityReason})`}`,
       updated.qualifiedPurchaser ? "good" : "bad"
     );
     await refreshAdmin();
@@ -593,31 +692,9 @@ async function saveClaim(button) {
   finally { button.disabled = false; }
 }
 async function setMaker(approved) {
-  try { await post("/demo/admin/maker", {approved}); addActivity("Maker 상태 변경", approved ? "복구" : "취소"); await refreshAdmin(); }
+  try { await post("/demo/admin/maker", {approved}); addActivity("Maker 승인 상태 변경", approved ? "승인 복구" : "승인 철회"); await refreshAdmin(); }
   catch (error) { setStatus("makerStatus", error.message, "bad"); }
 }
-async function prepareTemporal() {
-  $("prepareTemporal").disabled = true;
-  try {
-    const temporal = chainState.presentation.temporalEligibility;
-    await post("/demo/admin/temporal/prepare", {walletId: temporal.walletId});
-    addActivity("시간 만료 데모 준비", `${temporal.freshnessSeconds}초 freshness 주입`);
-    await refreshAdmin();
-    setStatus("temporalStatus", `${temporal.walletId}의 QP claim을 새로 발급했습니다. 해당 지갑으로 quote를 요청하세요.`, "good");
-  } catch (error) { setStatus("temporalStatus", error.message, "bad"); }
-  finally { $("prepareTemporal").disabled = false; }
-}
-async function advanceTemporal() {
-  $("advanceTemporal").disabled = true;
-  try {
-    const temporal = chainState.presentation.temporalEligibility;
-    await post("/demo/admin/temporal/advance", {seconds: temporal.advanceSeconds});
-    addActivity("Anvil 시간 경과", `+${temporal.advanceSeconds}초`);
-    await refreshAdmin();
-    setStatus("temporalStatus", "QP claim이 만료되었습니다. 같은 taker 지갑으로 돌아가 저장된 quote의 최종 거부를 확인하세요.", "good");
-  } catch (error) { setStatus("temporalStatus", error.message, "bad"); }
-}
-
 const enforcementLabels = {
   "adapter-boundary": {
     title: "Adapter 직접 호출 차단",
@@ -628,7 +705,7 @@ const enforcementLabels = {
   "claim-expiry": {
     title: "Quote 이후 QP claim 만료",
     control: "ExecutionRouter fill-time compliance",
-    mutation: "Anvil chain time 전진",
+    mutation: "Anvil chain time +15분",
     expected: "ComplianceRejected + reasonCode + 잔액 불변"
   },
   "maker-revocation": {
@@ -765,7 +842,7 @@ async function prepareEnforcementCase() {
     await loadState();
     enforcementCase.status = "prepared";
     const wallet = caseWalletState();
-    if (enforcementCase.type === "maker-revocation") {
+    if (enforcementCase.type === "maker-revocation" || enforcementCase.type === "claim-expiry") {
       const baseline = await post("/demo/precheck", {
         taker: wallet.address,
         amountIn: chainState.suggestedTradeAmounts.buyAmountIn,
@@ -778,7 +855,9 @@ async function prepareEnforcementCase() {
     }
     caseStep(
       "Baseline captured",
-      `Maker ${chainState.makerApproved ? "approved" : "not approved"} · RWA ${formatBaseUnits(wallet.rwaBalance)} · ${chainState.presentation.quoteAsset.symbol} ${formatBaseUnits(wallet.quoteBalance, chainState.presentation.quoteAsset.decimals)}`,
+      enforcementCase.type === "claim-expiry"
+        ? `Claim은 현재 유효 · ${Math.floor(chainState.presentation.temporalEligibility.freshnessSeconds / 60)}분 후 만료 예정 · RFQ TTL ${Math.floor(chainState.presentation.temporalEligibility.quoteTtlSeconds / 60)}분`
+        : `Maker ${chainState.makerApproved ? "approved" : "not approved"} · RWA ${formatBaseUnits(wallet.rwaBalance)} · ${chainState.presentation.quoteAsset.symbol} ${formatBaseUnits(wallet.quoteBalance, chainState.presentation.quoteAsset.decimals)}`,
       "passed"
     );
   } catch (error) {
@@ -816,7 +895,7 @@ async function mutateEnforcementPolicy() {
     if (enforcementCase.type === "claim-expiry") {
       const seconds = chainState.presentation.temporalEligibility.advanceSeconds;
       await post("/demo/admin/temporal/advance", {seconds});
-      caseStep("Claim state changed", `Chain time advanced by ${seconds}s after quote issuance`, "rejected");
+      caseStep("Claim state changed", `Quote 발급 후 chain time을 ${seconds / 60}분 전진 · quote TTL은 아직 유효`, "rejected");
     } else {
       await post("/demo/admin/maker", {approved: false});
       caseStep("Maker policy changed", "Operator revoked the quote maker after signing", "rejected");
@@ -883,17 +962,12 @@ async function refreshHistory() { try { renderEvents((await operatorApi("/api/v1
 
 document.querySelectorAll("[data-view]").forEach((button) => button.onclick = () => showView(button.dataset.view));
 $("walletSelector").onchange = switchProfile;
-$("range1m").onclick = () => setMarketRange("1m");
-$("range5m").onclick = () => setMarketRange("5m");
-$("range1h").onclick = () => setMarketRange("1h");
-$("rangeAll").onclick = () => setMarketRange("all");
 $("newRfq").onclick = beginNewRfq; $("newRfqFromList").onclick = beginNewRfq; $("portfolioRfq").onclick = beginNewRfq;
 $("setupDemo").onclick = setupDemo; $("connect").onclick = check; $("rfqForm").onsubmit = requestQuote; $("proveCompliance").onclick = proveCompliance;
 $("buySide").onclick = () => setTradeSide("buy"); $("sellSide").onclick = () => setTradeSide("sell");
 $("amount").oninput = () => { renderRfqEstimate(null); clearTimeout(window.precheckTimer); window.precheckTimer = setTimeout(runPrecheck, 250); };
 $("executeQuote").onclick = execute; $("closeConfirm").onclick = $("cancelConfirm").onclick = () => $("confirmBackdrop").classList.add("hidden");
 $("adminRefresh").onclick = refreshAdmin; $("refresh").onclick = refreshHistory; $("revokeMaker").onclick = () => setMaker(false); $("restoreMaker").onclick = () => setMaker(true);
-$("prepareTemporal").onclick = prepareTemporal; $("advanceTemporal").onclick = advanceTemporal;
 $("caseCreate").onclick = createEnforcementCase;
 $("casePrepare").onclick = prepareEnforcementCase;
 $("caseQuote").onclick = issueEnforcementQuote;

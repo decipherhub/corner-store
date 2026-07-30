@@ -98,6 +98,12 @@ export interface DemoWalletState {
   qpClaim: QpClaimState;
 }
 
+export interface DemoTransactionEvidence {
+  hash: string;
+  blockNumber: number;
+  status: 1;
+}
+
 export interface DemoPrecheckResult {
   allowed: boolean;
   wallet: DemoWalletState;
@@ -106,6 +112,29 @@ export interface DemoPrecheckResult {
   amountOut: string;
   checks: Array<{key: "investor" | "maker" | "asset"; label: string; pass: boolean; reason?: string}>;
   verdict: {allowed: boolean; reasonCode: string; reason?: string};
+}
+
+export function temporalClaimVerifiedAt(
+  chainTimestamp: number,
+  baselineFreshnessSeconds: number,
+  remainingFreshnessSeconds: number
+): number {
+  if (!Number.isSafeInteger(chainTimestamp) || chainTimestamp <= 0) {
+    throw new Error("chain timestamp must be a positive safe integer");
+  }
+  if (!Number.isSafeInteger(baselineFreshnessSeconds) || baselineFreshnessSeconds <= 0) {
+    throw new Error("baseline freshness must be a positive safe integer");
+  }
+  if (
+    !Number.isSafeInteger(remainingFreshnessSeconds) ||
+    remainingFreshnessSeconds <= 0 ||
+    remainingFreshnessSeconds >= baselineFreshnessSeconds
+  ) {
+    throw new Error("remaining freshness must be positive and below the baseline");
+  }
+  const verifiedAt = chainTimestamp - baselineFreshnessSeconds + remainingFreshnessSeconds;
+  if (verifiedAt <= 0) throw new Error("chain timestamp is too early for the targeted expiry fixture");
+  return verifiedAt;
 }
 
 export interface DemoTradeResult {
@@ -334,11 +363,14 @@ export class DemoSettlementService {
     });
   }
 
-  async setUserClaim(walletId: DemoWalletId, claim: QpClaimInput): Promise<DemoWalletState> {
+  async setUserClaim(
+    walletId: DemoWalletId,
+    claim: QpClaimInput
+  ): Promise<DemoWalletState & {transaction: DemoTransactionEvidence}> {
     return this.enqueue(async () => {
       const entry = this.walletById(walletId);
-      await this.setWalletClaim(entry, claim);
-      return this.walletState(entry);
+      const transaction = await this.setWalletClaim(entry, claim);
+      return {...await this.walletState(entry), transaction};
     });
   }
 
@@ -346,8 +378,20 @@ export class DemoSettlementService {
     return this.enqueue(async () => {
       const temporal = this.config.scenario.temporalEligibility;
       const entry = this.walletById(walletId ?? temporal.walletId);
-      await this.setFreshnessCap(temporal.freshnessSeconds);
-      await this.setWalletEligibility(entry, true);
+      await this.setFreshnessCap(temporal.baselineFreshnessSeconds);
+      const latest = await this.latestBlock();
+      const verifiedAt = temporalClaimVerifiedAt(
+        latest.timestamp,
+        temporal.baselineFreshnessSeconds,
+        temporal.freshnessSeconds
+      );
+      await this.setWalletClaim(entry, {
+        basis: "NATURAL",
+        signatureValid: true,
+        issuerTrusted: true,
+        lookThroughStatus: "NONE",
+        coveredCompanyMatchesFund: false
+      }, verifiedAt);
       return this.state();
     });
   }
@@ -824,14 +868,18 @@ export class DemoSettlementService {
     });
   }
 
-  private async setWalletClaim(entry: WalletEntry, claim: QpClaimInput): Promise<void> {
+  private async setWalletClaim(
+    entry: WalletEntry,
+    claim: QpClaimInput,
+    verifiedAt?: number
+  ): Promise<DemoTransactionEvidence> {
     const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.operator);
     const latest = await this.latestBlock();
     const encoded = [
       QP_BASIS_VALUES[claim.basis],
       claim.signatureValid,
       claim.issuerTrusted,
-      claim.basis === "NONE" ? 0 : latest.timestamp,
+      claim.basis === "NONE" ? 0 : (verifiedAt ?? latest.timestamp),
       LOOK_THROUGH_VALUES[claim.lookThroughStatus],
       claim.coveredCompanyMatchesFund ? this.fundKey() : ZERO_BYTES32
     ];
@@ -848,9 +896,11 @@ export class DemoSettlementService {
         signatureValid: String(claim.signatureValid),
         issuerTrusted: String(claim.issuerTrusted),
         lookThroughStatus: claim.lookThroughStatus,
-        coveredCompanyMatchesFund: String(claim.coveredCompanyMatchesFund)
+        coveredCompanyMatchesFund: String(claim.coveredCompanyMatchesFund),
+        verifiedAt: String(claim.basis === "NONE" ? 0 : (verifiedAt ?? latest.timestamp))
       }
     });
+    return {...tx, status: 1};
   }
 
   private fundKey(): string {
