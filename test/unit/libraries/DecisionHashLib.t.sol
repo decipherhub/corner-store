@@ -19,8 +19,8 @@ contract DecisionHashLibTest is Test {
         context.venue = address(6);
         context.flowType = FlowType.PRIMARY_DISTRIBUTION;
 
-        bytes32 actual = DecisionHashLib.compute(context, 300, 5, bytes32(uint256(7)), 8, 9);
+        bytes32 actual = DecisionHashLib.compute(context, 300, address(10), 5, bytes32(uint256(7)), 8, 9);
 
-        assertEq(actual, 0xde197a82d876e515a314630ada3ce30fa0bd21f156b23e377889430d1aad8cbd);
+        assertEq(actual, 0x9846cf7862a80bb9629750d8823762e2dfe3e2584fdeef36fa712b4e118812ae);
     }
 }

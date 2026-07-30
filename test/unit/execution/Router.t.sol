@@ -178,9 +178,70 @@ contract RouterTest is Test {
     }
 
     function test_revert_maxAmountExceeded() public {
-        // decision.maxAmount below amountIn
-        engine.setDecision(_decision(true, 1 << uint256(VenueType.AMM), bytes32(0), 99, REASON_OK));
+        ComplianceDecision memory decision = _decision(true, 1 << uint256(VenueType.AMM), bytes32(0), 99, REASON_OK);
+        decision.maxAmountToken = TOKEN_IN;
+        engine.setDecision(decision);
         ExecutionRequest memory req = _req(1, 100, uint64(block.timestamp + 1 hours));
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.MaxAmountExceeded.selector);
+        router.execute(req);
+    }
+
+    function test_execute_buyUsesRegulatedTokenOutForFiniteCap() public {
+        ComplianceDecision memory decision = _decision(true, 1 << uint256(VenueType.AMM), bytes32(0), 200, REASON_OK);
+        decision.maxAmountToken = TOKEN_OUT;
+        engine.setDecision(decision);
+
+        ExecutionRequest memory req = _req(1, 500, uint64(block.timestamp + 1 hours));
+        req.context.amountOut = 150;
+        vm.prank(BUYER);
+        router.execute(req);
+
+        assertTrue(adapter.called(), "quote notional must not be compared to an RWA output cap");
+    }
+
+    function test_revert_buyWhenRegulatedTokenOutExceedsFiniteCap() public {
+        ComplianceDecision memory decision = _decision(true, 1 << uint256(VenueType.AMM), bytes32(0), 200, REASON_OK);
+        decision.maxAmountToken = TOKEN_OUT;
+        engine.setDecision(decision);
+
+        ExecutionRequest memory req = _req(1, 100, uint64(block.timestamp + 1 hours));
+        req.context.amountOut = 250;
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.MaxAmountExceeded.selector);
+        router.execute(req);
+    }
+
+    function test_revert_finiteCapWithoutPairTokenBinding() public {
+        ComplianceDecision memory decision = _decision(true, 1 << uint256(VenueType.AMM), bytes32(0), 200, REASON_OK);
+        decision.maxAmountToken = address(0xBAD);
+        engine.setDecision(decision);
+
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.InvalidAmountCapToken.selector);
+        router.execute(_defaultReq());
+    }
+
+    function test_execute_sellUsesRegulatedTokenInForFiniteCap() public {
+        ComplianceDecision memory decision = _decision(true, 1 << uint256(VenueType.AMM), bytes32(0), 150, REASON_OK);
+        decision.maxAmountToken = TOKEN_IN;
+        engine.setDecision(decision);
+
+        ExecutionRequest memory req = _req(1, 100, uint64(block.timestamp + 1 hours));
+        req.context.amountOut = 500;
+        vm.prank(BUYER);
+        router.execute(req);
+
+        assertTrue(adapter.called(), "quote output must not be compared to an RWA input cap");
+    }
+
+    function test_revert_sellWhenRegulatedTokenInExceedsFiniteCap() public {
+        ComplianceDecision memory decision = _decision(true, 1 << uint256(VenueType.AMM), bytes32(0), 99, REASON_OK);
+        decision.maxAmountToken = TOKEN_IN;
+        engine.setDecision(decision);
+
+        ExecutionRequest memory req = _req(1, 100, uint64(block.timestamp + 1 hours));
+        req.context.amountOut = 50;
         vm.prank(BUYER);
         vm.expectRevert(Errors.MaxAmountExceeded.selector);
         router.execute(req);

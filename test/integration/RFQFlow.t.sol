@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {IntegrationBase} from "./IntegrationBase.sol";
 
 import {RFQAdapter} from "../../src/execution/adapters/rfq/RFQAdapter.sol";
+import {MakerAuthorizer} from "../../src/registry/MakerAuthorizer.sol";
 import {RFQQuote} from "../../src/execution/adapters/rfq/RFQTypes.sol";
 
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
@@ -46,6 +47,7 @@ contract RFQFlowTest is IntegrationBase {
 
     // Deterministic maker signing key (distinct from alice = 0xA11CE).
     uint256 internal constant MAKER_PK = uint256(keccak256("CORNER_STORE.RFQ_MAKER"));
+    uint256 internal constant DELEGATE_PK = uint256(keccak256("CORNER_STORE.RFQ_DELEGATE"));
 
     // RFQ venue is a pure label (non-custodial): target/operator zero, custody NONE.
     address internal constant RFQ_VENUE = address(0xF00D);
@@ -56,6 +58,7 @@ contract RFQFlowTest is IntegrationBase {
 
     address internal maker;
     RFQAdapter internal rfqAdapter;
+    MakerAuthorizer internal makerAuthorizer;
 
     function setUp() public {
         deployStack(); // full stack; RWA manifest lands AMM-only.
@@ -64,7 +67,8 @@ contract RFQFlowTest is IntegrationBase {
         maker = vm.addr(MAKER_PK);
 
         // RFQ adapter shares the router; authenticate it and approve the maker.
-        rfqAdapter = new RFQAdapter();
+        makerAuthorizer = new MakerAuthorizer();
+        rfqAdapter = new RFQAdapter(makerAuthorizer);
         rfqAdapter.setRouter(address(router));
         rfqAdapter.setMakerApproved(maker, true);
 
@@ -123,7 +127,11 @@ contract RFQFlowTest is IntegrationBase {
     }
 
     function _sign(RFQQuote memory q) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(MAKER_PK, rfqAdapter.hashQuote(q));
+        return _sign(q, MAKER_PK);
+    }
+
+    function _sign(RFQQuote memory q, uint256 privateKey) internal view returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, rfqAdapter.hashQuote(q));
         return abi.encodePacked(r, s, v);
     }
 
@@ -176,6 +184,38 @@ contract RFQFlowTest is IntegrationBase {
         // Non-custodial: the adapter retains nothing.
         assertEq(quote.balanceOf(address(rfqAdapter)), 0, "adapter holds no QUOTE");
         assertEq(rwaToken.balanceOf(address(rfqAdapter)), 0, "adapter holds no RWA");
+    }
+
+    function test_rfqFill_succeedsWithGovernedDelegate() public {
+        address delegate = vm.addr(DELEGATE_PK);
+        makerAuthorizer.scheduleDelegate(maker, delegate, bytes32("rotation"));
+        vm.warp(block.timestamp + makerAuthorizer.AUTHORIZATION_DELAY());
+        makerAuthorizer.executeDelegateAuthorization(maker, delegate);
+
+        (RFQQuote memory q, ExecutionRequest memory req) = _validRequest(10);
+        req.venueData = abi.encode(q, _sign(q, DELEGATE_PK));
+
+        vm.prank(alice);
+        router.execute(req);
+
+        assertEq(quote.balanceOf(maker), QUOTE_IN, "maker settlement account received QUOTE");
+        assertEq(rwaToken.balanceOf(alice), RWA_OUT, "taker received RWA");
+        assertEq(quote.balanceOf(delegate), 0, "delegate is authorization only");
+    }
+
+    function test_rfqFill_revertsAfterDelegateRevoked() public {
+        address delegate = vm.addr(DELEGATE_PK);
+        makerAuthorizer.scheduleDelegate(maker, delegate, bytes32("rotation"));
+        vm.warp(block.timestamp + makerAuthorizer.AUTHORIZATION_DELAY());
+        makerAuthorizer.executeDelegateAuthorization(maker, delegate);
+
+        (RFQQuote memory q, ExecutionRequest memory req) = _validRequest(11);
+        req.venueData = abi.encode(q, _sign(q, DELEGATE_PK));
+        makerAuthorizer.revokeDelegate(maker, delegate, bytes32("compromised"));
+
+        vm.prank(alice);
+        vm.expectRevert(Errors.RFQInvalidSignature.selector);
+        router.execute(req);
     }
 
     /// @notice Reverse RFQ direction: the taker delivers regulated inventory

@@ -17,6 +17,7 @@ export interface Artifact {
   eligibleInvestorB?: string;
   ineligibleInvestor?: string;
   maker: string;
+  makerAuthorizer: string;
   quote: string;
   rfqAdapter: string;
   rfqVenue: string;

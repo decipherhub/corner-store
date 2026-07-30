@@ -77,7 +77,8 @@ Router/Adapter slot을 사용하므로 Manifest/Recipe가 RFQ venue를 허용한
 
 - full-fill only
 - exact taker only
-- maker가 서명한 EIP-712 quote만 허용
+- maker 직접 ECDSA 또는 현재 authorizer가 승인한 delegate/ERC-1271 EIP-712
+  quote만 허용
 - quote domain은 chainId와 RFQAdapter verifying contract에 바인딩
 - quote message는 maker, taker, tokenIn, tokenOut, amountIn, amountOut, venue,
   nonce, expiry에 바인딩
@@ -94,7 +95,7 @@ custody, websocket discovery, orderbook matching, hosting과 compliance 판단�
 
 ### Adapter Responsibilities
 
-- EIP-712 signature와 domain 검증
+- EIP-712 domain과 fill-time current maker/signer authorization 검증
 - maker/taker/token/amount/price binding
 - nonce, expiry, replay protection
 - Router가 평가한 최신 compliance decision과 venue/operator 상태 반영
@@ -106,8 +107,9 @@ custody, websocket discovery, orderbook matching, hosting과 compliance 판단�
 
 ADR-009에 따라 exact fill, exact taker, protocol non-custodial settlement와
 Router-only 진입점을 유지한다. maker settlement account와 signer authority는
-분리하며 quote cancellation은 maker nonce namespace를 사용한다. partial fill과
-taker class 확장은 새 quote/adapter version 없이는 허용하지 않는다.
+immutable versioned authorizer로 분리하며, delegate 추가는 governance delay,
+revoke는 즉시 적용한다. quote cancellation은 maker nonce namespace를 사용한다.
+partial fill과 taker class 확장은 새 quote/adapter version 없이는 허용하지 않는다.
 
 특정 dealer/custodian의 identity onboarding, signer vendor와 운영 인허가는
 operator 책임이다.

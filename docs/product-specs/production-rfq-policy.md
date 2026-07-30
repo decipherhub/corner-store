@@ -192,6 +192,9 @@ authority is delayed/governed; revocation is immediate. The adapter checks curre
 authorization at fill time so rotation invalidates outstanding quotes from removed
 signers.
 
+RFQ-003 implements this seam with direct maker ECDSA compatibility, delayed governed
+EOA delegates, immediate revocation and ERC-1271 maker verification.
+
 Planned rotation may overlap old/new signer authorization for no longer than the
 maximum quote TTL. Emergency rotation pauses the venue first, revokes the compromised
 signer immediately and invalidates all of its outstanding quotes regardless of TTL.

@@ -123,7 +123,14 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         }
 
         return _buildDecision(
-            ctx, policyId, policyVersion, allowedVenueTypes, state.allowed, state.reasonCode, state.flagsBitmap
+            ctx,
+            policyId,
+            policyVersion,
+            _singleRegulatedToken(ctx, statusIn, statusOut),
+            allowedVenueTypes,
+            state.allowed,
+            state.reasonCode,
+            state.flagsBitmap
         );
     }
 
@@ -248,6 +255,7 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         ComplianceContext calldata ctx,
         bytes32 policyId,
         uint64 policyVersion,
+        address maxAmountToken,
         uint256 allowedVenueTypes,
         bool allowed,
         bytes32 reasonCode,
@@ -258,6 +266,7 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         d.policyVersion = policyVersion;
         d.validUntil = uint64(block.timestamp + 1 days);
         d.maxAmount = type(uint256).max;
+        d.maxAmountToken = maxAmountToken;
         d.allowedVenueTypes = allowedVenueTypes;
         d.reasonCode = reasonCode;
         d.flagsBitmap = flagsBitmap;
@@ -266,7 +275,7 @@ contract ComplianceEngine is IComplianceEngine, Governed {
 
     function _hash(ComplianceContext calldata ctx, ComplianceDecision memory d) private pure returns (bytes32) {
         return DecisionHashLib.compute(
-            ctx, d.maxAmount, d.allowedVenueTypes, d.allowedVenuesHash, d.policyVersion, d.validUntil
+            ctx, d.maxAmount, d.maxAmountToken, d.allowedVenueTypes, d.allowedVenuesHash, d.policyVersion, d.validUntil
         );
     }
 
@@ -276,6 +285,17 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         d.maxAmount = type(uint256).max;
         d.allowedVenueTypes = type(uint256).max;
         d.decisionHash = _hash(ctx, d);
+    }
+
+    function _singleRegulatedToken(ComplianceContext calldata ctx, PolicyStatus statusIn, PolicyStatus statusOut)
+        private
+        pure
+        returns (address)
+    {
+        bool tokenInActive = statusIn == PolicyStatus.ACTIVE;
+        bool tokenOutActive = statusOut == PolicyStatus.ACTIVE;
+        if (tokenInActive == tokenOutActive) return address(0);
+        return tokenInActive ? ctx.tokenIn : ctx.tokenOut;
     }
 
     function _rejectPolicy(ComplianceContext calldata ctx, PolicyStatus status)

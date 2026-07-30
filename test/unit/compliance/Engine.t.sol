@@ -238,6 +238,20 @@ contract EngineTest is Test {
         assertTrue(d.decisionHash != bytes32(0));
         assertTrue(d.policyId != bytes32(0));
         assertEq(d.policyVersion, 1);
+        assertEq(d.maxAmountToken, RWA, "single regulated output binds the cap axis");
+    }
+
+    function test_singleRegulatedInput_bindsCapAxisToTokenIn() public {
+        _registerRWA(0, 0);
+        _makeBuyerCompliant();
+
+        ComplianceContext memory c = _ctxBuy();
+        (c.tokenIn, c.tokenOut) = (c.tokenOut, c.tokenIn);
+        (c.amountIn, c.amountOut) = (c.amountOut, c.amountIn);
+        ComplianceDecision memory d = engine.evaluate(c);
+
+        assertTrue(d.allowed);
+        assertEq(d.maxAmountToken, RWA);
     }
 
     function test_active_rejects_when_not_accredited() public {
@@ -411,6 +425,7 @@ contract EngineTest is Test {
         assertTrue(d.allowed);
         assertEq(d.reasonCode, bytes32(0));
         assertEq(d.maxAmount, type(uint256).max);
+        assertEq(d.maxAmountToken, address(0));
     }
 
     function test_suspended_fails_closed() public {

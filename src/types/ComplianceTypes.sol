@@ -134,6 +134,7 @@ struct ComplianceDecision {
     uint64 policyVersion;
     uint64 validUntil;
     uint256 maxAmount;
+    address maxAmountToken;
     uint256 allowedVenueTypes;
     bytes32 allowedVenuesHash;
     bytes32 reasonCode;

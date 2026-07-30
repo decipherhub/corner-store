@@ -100,7 +100,7 @@ contract InvariantsTest is IntegrationBase {
     // HONEST NOTE: the REAL ComplianceEngine currently returns
     // maxAmount = type(uint256).max (skeleton: no quantitative cap), so the
     // real-engine path can never trip MaxAmountExceeded. The gate itself lives
-    // in ExecutionRouter (`amountIn > d.maxAmount → MaxAmountExceeded`). To test
+    // in ExecutionRouter (regulated amount > maxAmount). To test
     // it honestly we stand up a router backed by a MockComplianceEngine that
     // returns a constrained maxAmount — exercising the router gate directly
     // rather than faking the engine's behavior in the integration path.
@@ -113,6 +113,7 @@ contract InvariantsTest is IntegrationBase {
         d.allowedVenueTypes = 1 << uint256(VenueType.AMM);
         d.allowedVenuesHash = bytes32(0);
         d.maxAmount = 10 ether; // constrained cap
+        d.maxAmountToken = address(rwaToken);
         mockEngine.setDecision(d);
 
         // amountIn (50e18) > maxAmount (10e18) → MaxAmountExceeded before dispatch.
