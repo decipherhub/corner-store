@@ -60,6 +60,8 @@ export interface ProjectSummary {
   artifact: boolean;
 }
 
+const DEMO_BROADCAST_NETWORKS = new Set(["anvil"]);
+
 interface DeployJob {
   id: string;
   project: string;
@@ -498,13 +500,14 @@ export function createStudioServer(options: StudioServerOptions): Server {
           const rpcUrl = parseRpc(body.rpcUrl);
           const config = store.config(name);
           if (
+            !DEMO_BROADCAST_NETWORKS.has(options.broadcastNetwork) ||
             config.deployment.network !== options.broadcastNetwork ||
             !isAllowedRpc(rpcUrl, options.allowedRpcHosts)
           ) {
             throw new StudioError(
               403,
               "demo_broadcast_only",
-              `Direct broadcast requires network ${options.broadcastNetwork} and an operator-allowed RPC host. Export a plan for every other target.`
+              "Direct browser broadcast is restricted to the Anvil demo profile and an operator-allowed RPC host. Export a plan for every other target."
             );
           }
           const fingerprint = store.projectFingerprint(name);

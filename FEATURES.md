@@ -1227,6 +1227,15 @@ passing
   truth로 표시하며 verify 이후 기존 Operations Dashboard로 handoff한다.
 - UI는 demo fixture와 production configuration을 명확히 분리하고 private key,
   production secret 또는 mainnet broadcast 입력을 제공하지 않는다.
+- integration mode와 account/governance role label은 contextual guide로 실제
+  생성물, integrator 책임과 reference 경계를 설명한다.
+- network preset은 Anvil, public testnet, Arbitrum과 GIWA/custom EVM을 설정 및
+  dry-run 대상으로 제공하되 direct broadcast는 runtime 오설정으로도 확장할 수
+  없는 Anvil-only gate와 operator RPC allowlist로 제한한다.
+- RFQ module은 검증된 reference ID와 custom adapter slot을 선택하게 하며,
+  module ID 입력이 package 설치나 runtime 구현을 의미하지 않음을 표시한다.
+- Activation은 온체인 mutation 버튼이 아닌 manual evidence checklist임을
+  명시한다.
 
 ### Verification
 
@@ -1234,6 +1243,7 @@ passing
 - config/integration validation과 JSON persistence smoke
 - doctor → dry-run → artifact/verify state transition smoke
 - Deployment Studio static UI/control wiring smoke
+- contextual help, network preset/custom target와 module preset/custom slot smoke
 - 로컬 Anvil deployment walkthrough
 - `scripts/check.sh`
 - `git diff --check`

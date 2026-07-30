@@ -34,6 +34,38 @@ same-origin browser UI.
 | service host/port | runtime/process configuration | injected through environment variables |
 | deployment addresses | configured deployment artifact | read-only source of truth after broadcast |
 
+## Guided configuration semantics
+
+The three integration modes describe how the generated project enters an
+integrator's runtime; they do not select different Solidity stacks:
+
+- `library-only` provides SDK/module boundaries without generating an HTTP
+  service;
+- `reference-service` provides the minimal replaceable RFQ HTTP service and an
+  optional Docker reference;
+- `existing-backend` keeps an integrator's API, authentication, database and
+  deployment boundary while binding Corner Store module capabilities.
+
+The network selector contains local, public testnet, Arbitrum and organization
+EVM examples such as GIWA. A preset is a configuration aid, not a claim that a
+production chain has been certified. Direct Studio broadcast is hard-limited
+to the Anvil demo profile plus the operator RPC allowlist; changing the runtime
+network setting cannot enable Arbitrum, GIWA or another production target.
+Every non-Anvil target remains configuration and dry-run review only.
+
+The `operator`, `investor`, `maker` and governance fields are role labels in the
+current Toolkit config. They are not browser signer inputs. The reference
+`DeployStack` obtains funded Anvil accounts from the demo scenario, while a
+future production adapter must bind real addresses, external signer custody and
+multisig authority.
+
+RFQ module controls expose known reference IDs and explicit custom adapter
+slots. Selecting or entering a module ID does not download executable code.
+Custom runtimes must provide implementations that satisfy the listed
+capability. The activation controls are a manual evidence checklist and do not
+execute Maker approval, signer authorization, token allowance or governance
+transactions.
+
 The Studio does not render secret-value fields. The initial RPC, direct-broadcast
 network, allowed RPC hosts, Operations URL, workspace and CLI entry are server
 runtime inputs rather than frontend constants.
@@ -44,7 +76,7 @@ bind address or reverse-proxy route does not require rebuilding frontend assets.
 
 ## Safety gates
 
-- direct broadcast requires the configured demo network and an allowlisted RPC host;
+- direct broadcast requires the Anvil demo profile and an allowlisted RPC host;
 - state-changing API requests require the HttpOnly same-site Studio session,
   same-origin browser requests and `application/json`;
 - required doctor failures keep deployment disabled;

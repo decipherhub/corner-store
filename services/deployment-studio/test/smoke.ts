@@ -188,6 +188,8 @@ async function main(): Promise<void> {
   server.close();
   await new Promise<void>((done) => server.once("close", done));
 
+  await assertPlanOnlyRuntimeCannotBroadcast(workspace, runner, webRoot, sessionToken);
+
   const restarted = createStudioServer({
     workspaceRoot: workspace,
     runner,
@@ -233,24 +235,67 @@ async function main(): Promise<void> {
     'id="projectMode"', 'id="network"', 'id="assetProfile"', 'id="venueRfq"',
     'id="runDoctor"', 'id="reviewPlan"', 'id="deployDemo"', 'id="verifyArtifact"',
     'id="artifactViewer"', 'id="activationChecklist"', 'id="openOperations"',
-    "Runtime constraints", "Demo fixtures", "Demo allowlist only"
+    'id="networkPreset"', 'id="contextDialog"', 'id="pricingModuleCustom"',
+    "Runtime constraints", "Demo fixtures", "Manual evidence checklist",
+    "Arbitrum One · production plan only", "GIWA / organization EVM · plan only"
   ]) {
     if (!html.includes(marker)) throw new Error(`studio UI marker missing: ${marker}`);
   }
   for (const marker of [
     "/api/v1/projects", "saveConfig", "runDoctor", "reviewPlan", "deployDemo",
-    "verifyArtifact", "renderArtifact", "refreshHandoff", "EventSource"
+    "verifyArtifact", "renderArtifact", "refreshHandoff", "EventSource",
+    "HELP_CONTENT", "DEMO_BROADCAST_NETWORKS", "selectedNetwork", "selectedModule",
+    "openContextHelp"
   ]) {
     if (!app.includes(marker)) throw new Error(`studio UI wiring missing: ${marker}`);
   }
   for (const marker of [
     "--ink:", "--signal:", ".studio-shell", ".rail", ".workflow-map", ".status-led",
-    ".artifact-grid", ".boundary-banner", "@media (max-width: 820px)"
+    ".artifact-grid", ".boundary-banner", ".help-trigger", ".context-dialog",
+    "@media (max-width: 820px)"
   ]) {
     if (!css.includes(marker)) throw new Error(`studio visual token missing: ${marker}`);
   }
   if (/private.?key/i.test(html)) throw new Error("studio must not render a private-key field");
   console.log("corner-store deployment studio smoke ok");
+}
+
+async function assertPlanOnlyRuntimeCannotBroadcast(
+  workspace: string,
+  runner: StudioCommandRunner,
+  webRoot: string,
+  sessionToken: string
+): Promise<void> {
+  const server = createStudioServer({
+    workspaceRoot: workspace,
+    runner,
+    webRoot,
+    operationsUrl: "http://operations.test",
+    defaultRpcUrl: "http://rpc.test",
+    broadcastNetwork: "arbitrum-one",
+    allowedRpcHosts: ["rpc.test"],
+    sessionToken
+  });
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("plan-only regression server did not bind");
+  const call = (method: string, path: string, body?: unknown) =>
+    http(address.port, method, path, body, sessionToken);
+  const created = await call("POST", "/api/v1/projects", {
+    name: "plan-only-project",
+    mode: "library-only"
+  });
+  if (created.status !== 201) throw new Error("plan-only regression project create failed");
+  const saved = await call("PUT", "/api/v1/projects/plan-only-project/config", baseConfig("arbitrum-one"));
+  if (saved.status !== 200) throw new Error("plan-only network config save regression");
+  const blocked = await call("POST", "/api/v1/projects/plan-only-project/deploy", {
+    rpcUrl: "http://rpc.test"
+  });
+  if (blocked.status !== 403 || blocked.body.error !== "demo_broadcast_only") {
+    throw new Error("runtime configuration enabled a plan-only network broadcast");
+  }
+  server.close();
+  await new Promise<void>((done) => server.once("close", done));
 }
 
 function baseConfig(network: string): any {

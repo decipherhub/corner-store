@@ -23,7 +23,12 @@ source of truth로 사용한다.
   않으며, config/integration/scenario 변경 시 verify evidence를 무효화한다.
   API/UI smoke, Node 20 + Foundry v1.7.1 전체 check(Forge 665/665), 실제 별도
   Anvil 포트 배포·verify, Chrome interaction smoke와 visual verdict 91/100을
-  통과했다.
+  통과했다. 후속 UX pass에서 library/reference/existing-backend의 실제 이용
+  경계, account/governance role label, production plan-only network와 module
+  preset/custom adapter 의미를 contextual help로 노출하고 Activation이 수동
+  evidence checklist임을 명확히 했다. Anvil-only server/UI gate와 production
+  runtime 오설정 회귀 테스트를 추가했고, 최종 desktop/mobile visual verdict
+  9/10을 통과했다.
 - `SDK-002 — Standalone Integration and Deployment Workflow`: 단일 CLI로
   library-only, reference-service, existing-backend 프로젝트를 생성하고
   doctor, deploy, verify와 RFQ module conformance를 실행할 수 있게 했다.
