@@ -15,6 +15,16 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DOC-004 — Product Architecture and Technical Whitepaper`: current
+  source-of-truth와 구현을 기준으로 외부 공유용 기술 백서를 작성했다. 문제 정의,
+  제품 경계, Element/Recipe/Manifest/Operator, Router fill-time enforcement,
+  RFQ backend module, trust boundary, control/execution plane, 핵심 ABI와
+  protocol invariant, 통합자별 adoption path, architectural trade-off, current
+  implementation과 production gap을 11개의 Mermaid diagram과 함께 설명한다.
+  GitBook/GitHub에서 직접 읽을 수 있도록 루트 README와 문서 인덱스에 연결하고,
+  공식 1차 자료와 claim-to-evidence matrix를 추가했다. 내부 링크, Mermaid
+  fence/diagram 구성, Engine 34/34, RFQ integration 8/8, RFQ SDK smoke와
+  `git diff --check`를 검증했다.
 - `DEMO-016 — Artifact-bound Public Testnet RFQ Demo`: 기존 local Anvil
   facilitator를 변경하지 않고 committed public deployment artifact를 읽는 별도
   browser demo를 추가했다. runtime은 RPC chain/bytecode와 artifact Maker를

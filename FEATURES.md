@@ -9,6 +9,36 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DOC-004 — Product Architecture and Technical Whitepaper
+
+### Behavior
+
+- 외부 이해관계자가 Corner Store의 문제 정의, 제품 경계, 정책 조합 모델,
+  Router-mediated 실행 보장과 RFQ 통합 구조를 하나의 문서에서 이해할 수 있다.
+- 백서는 현재 구현과 production 후속 과제를 분리하고, ERC-3643/ONCHAINID,
+  issuer/TA, Corner Store와 운영자의 trust boundary를 과장 없이 설명한다.
+- 프로젝트 목적, 대상 통합자, 성공 기준, control/execution plane, 핵심 ABI,
+  protocol invariant, adoption path와 architectural trade-off를 명시한다.
+- GitBook과 GitHub에서 직접 렌더링할 수 있는 Mermaid diagram으로 system
+  context, policy composition, fill-time enforcement, RFQ module과 보호 경계를
+  시각화한다.
+- ERC-3643, EIP-712와 illustrative legal profile의 공식 1차 자료를 연결하고,
+  기술 구현 증거와 법률·운영·production 미검증 범위를 구분한다.
+- 루트 README와 문서 인덱스에서 백서에 바로 접근할 수 있다.
+
+### Verification
+
+- 백서의 내부 링크가 모두 존재한다.
+- Mermaid code fence와 diagram 종류를 정적 검증한다.
+- `forge test --offline --match-path test/unit/compliance/Engine.t.sol`
+- `forge test --offline --match-path test/integration/RFQFlow.t.sol`
+- `npm test --prefix services/rfq`
+- `git diff --check`
+
+### State
+
+passing
+
 ## DEMO-015 — RFQ Session History and Targeted Claim Expiry
 
 ### Behavior

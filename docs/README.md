@@ -7,6 +7,7 @@
 
 | 문서                                                 | 역할                          | 상태       |
 | ---------------------------------------------------- | ----------------------------- | ---------- |
+| [`WHITEPAPER.md`](./WHITEPAPER.md)                   | 제품 아키텍처·기술 구현 백서  | Current    |
 | [`../ARCHITECTURE.md`](../ARCHITECTURE.md)           | 루트 아키텍처 라우터          | Current    |
 | [`product-specs/index.md`](./product-specs/index.md)  | 제품 명세 인덱스              | Current    |
 | [`MVP-v2-multi-venue.md`](./MVP-v2-multi-venue.md)   | SDK 제품 범위와 전체 설계     | Current    |
@@ -32,6 +33,7 @@ Uniswap v3 배포 도구의 실제 포함 범위와 의존성은
 
 ## Source Of Truth
 
+- 외부 공유용 제품·기술 개요: `WHITEPAPER.md`
 - 제품 범위와 전체 상호작용: `MVP-v2-multi-venue.md`
 - 컴포넌트 책임, trust boundary, 불변성: `architecture/`
 - 구현 순서와 완료 판단: `ROADMAP.md`
