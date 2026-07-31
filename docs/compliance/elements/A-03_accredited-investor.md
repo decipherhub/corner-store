@@ -666,7 +666,234 @@ Element 부품 ID 체계:
 
 ---
 
+<<<<<<< HEAD
+## §6. ④ 거절·예외 처리 — 검사에 실패하면 어떻게 되는가
+
+| Code | 언제 발생하나 | 처리 |
+|------|---------------|------|
+| `FAIL_NO_AI_CLAIM` | accredited investor claim 없음 | onboarding / verification 안내 |
+| `FAIL_UNTRUSTED_AI_CLAIM_ISSUER` | 발급기관이 Trusted Issuer Registry에 없음 | 운영자 확인 |
+| `FAIL_INVALID_AI_CLAIM_SIGNATURE` | claim 서명 검증 실패 | 위조 가능성, 거래 차단 |
+| `FAIL_AI_CLAIM_EXPIRED` | claim 만료 | 재검증 요청 |
+| `FAIL_506C_VERIFICATION_NOT_ESTABLISHED` | Rule 506(c)에 필요한 verification basis 부족 | 거래 차단 또는 manual review |
+| `FAIL_4A7_PURCHASER_NOT_AI` | §4(a)(7) resale에서 purchaser AI 요건 불충족 | 거래 차단 |
+| `FAIL_AI_LOOKTHROUGH_PENDING` | entity buyer look-through 미완료 | pending 처리 |
+| `FAIL_AI_CATEGORY_UNSUPPORTED` | claim.basis가 미지원 카테고리 | manual review |
+| `REVIEW_AI_UNCERTAIN` | off-chain 판단 필요 | 거래 대기 + Trusted Issuer 검토 |
+
+---
+
+## §7. ⑤ 테스트 케이스 — 스펙이 제대로 작동하는지 검증
+
+> 아래 케이스가 모두 기대대로 동작해야 스펙이 완성(complete)이다. 자연인 소득·순자산 경계, entity look-through, 검증 방식, 그리고 BUIDL(AI+QP 결합·Rule 144 재판매) 시나리오를 함께 검증한다.
+
+| 테스트 | 결과 |
+|--------|------|
+| 개인, 순자산 $1.2M, primary residence 제외 계산 완료 | PASS |
+| 개인, 순자산 $900K | FAIL_NO_AI_CLAIM 또는 FAIL_NOT_ACCREDITED |
+| 개인, 최근 2년 소득 $250K + 올해도 같은 수준 기대 | PASS |
+| 개인, 최근 1년만 $250K | FAIL_NOT_ACCREDITED |
+| 부부 합산 소득 $320K, 최근 2년 충족 | PASS |
+| primary residence 포함하면 $1M 초과, 제외하면 미달 | FAIL_NOT_ACCREDITED |
+| issuer의 executive officer | PASS |
+| entity의 모든 equity owner가 AI, look-through 완료 | PASS |
+| entity buyer인데 look-through pending | FAIL_AI_LOOKTHROUGH_PENDING |
+| AI claim은 있으나 Trusted Issuer가 미등록 | FAIL_UNTRUSTED_AI_CLAIM_ISSUER |
+| AI claim 만료 | FAIL_AI_CLAIM_EXPIRED |
+| Rule 506(c) 거래인데 단순 자기확인만 있음 | FAIL_506C_VERIFICATION_NOT_ESTABLISHED |
+| §4(a)(7) resale 거래에서 buyer AI claim 없음 | FAIL_NO_AI_CLAIM |
+| 고액 최소투자($1M 법인) 기반 claim, Trusted Issuer가 C&DI 256.36 정책으로 발급, 제3자 미융자 확인 | PASS (verificationBasis 인정 시) |
+| §3(c)(7) 펀드가 아닌 issuer의 직원이 501(a)(11) knowledgeable employee로 주장 | FAIL_NOT_ACCREDITED (한정어 미충족) |
+| issuer 쪽 bad actor 이슈 발생 | A-03 아님. E-03에서 fail |
+| Rule 506(b) path 선택 시도 | 본 프로젝트 기본 path 아님. Recipe inactive 또는 manual legal review |
+| R2 거래인데 resalePath = Rule 144 (buyer는 비-AI) | A-03 비활성 → A-03 사유로 fail하지 않음 (Rule 144는 buyer AI 불요) |
+| BUIDL 발행: buyer AI claim PASS, 그러나 QP(A-13) claim 없음 | A-03 PASS — 그러나 **거래는 A-13에서 차단** (BUIDL은 AI+QP 둘 다 필요) |
+| BUIDL 발행: $5M 청약, Securitize가 C&DI 256.36 기반 AI claim + 제3자 미융자 확인 발급, QP claim 보유 | PASS (A-03 verificationBasis 인정 + A-13 PASS) |
+| BUIDL 재판매 (Manifest resale path = Rule 144) | A-03 dormant — buyer AI는 A-03 사유 아님. buyer 자격은 A-13(QP)이 판정 |
+| 비-US person이 Reg S로 BUIDL 매수 | A-03 직접 관할 아님 — A-02(국적)+Reg S Recipe 소관 |
+
+---
+
+## §9. (β) Cross-Element·Cross-Recipe Coordination — 혼자 움직이지 않는다
+
+> **혼자 움직이지 않는다.** 본 부품은 다른 부품·레시피와 *누적적으로(cumulative)* 작동한다. §2 메타의 Cascade Element(A-04 KYC·A-11 Claim Freshness·A-01 Sanctions)가 함께 호출되고, 발행(R1)·재판매(R2) 레시피와 함께 켜질 수 있다. 아래는 그 경계 — 본 부품이 *직접* 책임지는 것과, *다른 부품에 넘기는* 것 — 의 정리다. (A-13 양식의 §8 (α) 증명서 패턴은 A-03에 별도 절이 없어 생략했고, 본 절은 A-13 §9.1 책임 경계에 해당한다.)
+
+**A-03이 직접 책임지는 것**
+
+- buyer에게 accredited investor claim이 있는지
+- claim이 신뢰기관에서 발급됐는지
+- claim 서명이 유효한지
+- claim이 아직 유효한지
+- Rule 506(c) path라면 reasonable verification basis가 있는지
+- §4(a)(7) resale path라면 purchaser AI 요건을 충족하는지
+- entity buyer의 경우 필요한 look-through가 끝났는지
+
+**A-03 밖의 문제**
+
+- 이 토큰이 securities인지
+- issuer가 §5 등록의무를 전체적으로 면제받았는지
+- Form D가 제출되었는지 (→ E-01)
+- Rule 506(d) bad actor disqualification이 없는지 (→ E-03)
+- resale path가 §4(a)(7) / Rule 144 / Rule 144A 중 무엇인지
+- **qualified purchaser 자격** (§3(c)(7) 펀드, 예: BUIDL) (→ A-13)
+- 비-US person / **Reg S** 경로 (→ A-02 + Reg S Recipe)
+- §3(c)(7) 2000-investor cap·12(g) 보유자 수 (→ D-01)
+- DEX가 broker-dealer 또는 ATS인지
+- AML/KYC/SAR 의무가 충족되었는지
+- custody / settlement 이슈
+
+---
+
+## §12. Open Issues — 변호사 follow-up 대상
+
+> 본 부품의 스펙이 완전해지려면 풀어야 할 질문들이다. A-03 본문 곳곳의 미결·주의 사항을 한 표로 모았다.
+
+| # | 질문(무엇을 결정해야 하나) | 왜 필요한가 | Priority | 해소 경로(권고) |
+| --- | --- | --- | --- | --- |
+| 1 | **(Q-B1) BUIDL 재판매의 §5 면제 경로** — Rule 144인가 §4(a)(7)인가 | 경로에 따라 A-03이 재판매에서 active(§4(a)(7))/dormant(Rule 144)로 갈림. 구현 플랜은 Rule 144 가정, A-13 문서는 §4(a)(7) 사용, 공개 공시는 면제 조항 미명시 | 🔴 즉시 | 변호사 follow-up(§3.0.1·§3.12·부록 C) |
+| 2 | **고액 최소투자 verificationBasis 인정 범위** — `HIGH_MINIMUM_INVESTMENT`의 C&DI 256.36 조건(제3자 미융자 확인 + AI 서면진술 + 반대사실 부지) 충족·문서화 방식 | NAL·C&DI는 직접 PASS/FAIL 규칙이 아니라 factor → Trusted Issuer 발급 정책으로 명문화 필요 | 🟡 높음 | 변호사 + Trusted Issuer 정책(§3.8·§3.9·부록 B) |
+| 3 | **Entity look-through 재귀 깊이** — equity owner를 몇 단계까지 보나, partial 처리 | cascade(A-09) 설계 직결, 미정 시 미작동/무한 복잡도 | 🟡 높음 | 변호사 + A-09 |
+| 4 | **AI claim 만료(expiry) 기간** — prior-verification 5년 옵션(506(c)(2)(ii)(E)) vs 보수적 기간 | A-11(Claim Freshness)과 조율, 취득시점 요건 구현 | 🟢 중간 | Decipher 자체 + A-11 |
+| 5 | **미지원 501(a) 카테고리 처리** — `FAIL_AI_CATEGORY_UNSUPPORTED` 발생 시 manual review 정책 | 일부 카테고리 지원 범위·경계 | 🟢 중간 | Decipher 자체 |
+
+---
+
+> *— 이하 부록 A~D는 A-03 고유 내용으로, A-13 양식엔 대응 슬롯이 없어 보존한다. —*
+
+---
+
+## 부록 A. Authority Verification Table — Official URLs Only
+
+| Issue | Correct Authority | Direct / Supporting | A-03 반영 | Official URL |
+|-------|-------------------|---------------------|-----------|--------------|
+| 등록되지 않은 증권 offer/sale 금지 | Securities Act §5, 15 U.S.C. §77e | Supporting | Reg D 면제 필요성 | https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title15-section77e |
+| private placement 기본 면제 | Securities Act §4(a)(2), 15 U.S.C. §77d(a)(2) | Supporting | Rule 506(c)의 statutory basis | https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title15-section77d |
+| §4(a)(7) resale exemption | Securities Act §4(a)(7), 15 U.S.C. §77d(a)(7), §77d(d)(1) | Direct(resale) | resale 시 A-03 호출 | https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title15-section77d |
+| AI 정의 | Rule 501(a), 17 C.F.R. §230.501(a) | Direct | claim.basis | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.501 |
+| **private BDC** | Rule 501(a)(2), 17 C.F.R. §230.501(a)(2) | Direct | claim.basis = AI_PRIVATE_BDC | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.501 |
+| **knowledgeable employee 한정** | Rule 501(a)(11), 17 C.F.R. §230.501(a)(11) | Direct | 3(c)(1)/3(c)(7) issuer 한정 | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.501 |
+| restricted securities / resale 제한 | Rule 502(d), 17 C.F.R. §230.502(d) | Supporting | resale Recipe 필요 | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.502 |
+| Rule 506(c) exemption | Rule 506(c), 17 C.F.R. §230.506(c) | Direct | Rule 506(c) path | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.506 |
+| 모든 purchaser AI 요건 | Rule 506(c)(2)(i) | Direct | buyer AI claim 필수 | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.506 |
+| reasonable verification | Rule 506(c)(2)(ii) | Direct | verificationBasis | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.506 |
+| income verification | Rule 506(c)(2)(ii)(A) | Direct | verificationMethod = INCOME | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.506 |
+| net worth verification | Rule 506(c)(2)(ii)(B) | Direct | verificationMethod = NET_WORTH | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.506 |
+| third-party confirmation | Rule 506(c)(2)(ii)(C) | Direct | Trusted Issuer claim | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.506 |
+| **506(b) 보유자 방법** | Rule 506(c)(2)(ii)(D) | Direct | PRIOR_506B_HOLDER | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.506 |
+| prior verification 5-year | Rule 506(c)(2)(ii)(E) | Direct / policy | expiry 최대 5년 옵션 | https://www.ecfr.gov/current/title-17/chapter-II/part-230/section-230.506 |
+| Rule 506(c) adopting release | SEC Release No. 33-9415 | Supporting | reasonable verification 해석 | https://www.sec.gov/files/rules/final/2013/33-9415.pdf |
+| 506(c) small business guide | SEC, General Solicitation — Rule 506(c) | Supporting | 팀 설명 / UX 문구 | https://www.sec.gov/resources-small-businesses/exempt-offerings/general-solicitation-rule-506c |
+| 고액 최소투자 no-action | Latham & Watkins No-Action Letter, 2025-03-12 | Supporting only | 직접 PASS/FAIL 금지. verificationPolicy 참고 | https://www.sec.gov/rules-regulations/no-action-interpretive-exemptive-letters/division-corporation-finance-no-action/latham-watkins-503c-031225 |
+| **고액 최소투자 C&DI** | C&DI: Securities Act Rules, Q 256.35 & 256.36, 2025-03-12 | Supporting only | 직접 PASS/FAIL 금지. verificationPolicy 참고 | https://www.sec.gov/rules-regulations/staff-guidance/compliance-disclosure-interpretations/securities-act-rules |
+
+---
+
+## 부록 B. BUIDL 레퍼런스 케이스 — 개요·최소투자금액·A-03 실행사항
+
+> 본 프로젝트가 A-03을 설계·검증할 때 기준으로 삼는 실제 토큰은 BlackRock BUIDL이다. 이 절은 세 가지에 답한다 — ① BUIDL이 무엇이고 어떤 법을 따르는지, ② 최소투자금액과 그 근거(authorities), ③ 그래서 A-03 부품에 구체적으로 무엇을 구현·확인해야 하는지. (Manifest 적용의 세부 메커니즘은 §3.12 참조.)
+
+### 12.1 BUIDL이란 무엇인가 — 개요와 법적 프레임워크
+
+**개요.** BUIDL(BlackRock USD Institutional Digital Liquidity Fund)은 BlackRock이 2024년 3월 Ethereum에 출시한 **토큰화 머니마켓펀드**다. 현금·미국 단기국채(T-bill)·환매조건부채권(repo)에 투자하고, 토큰 1개 = $1의 안정가치를 목표로 하며, 배당을 매일 적립해 투자자 지갑으로 분배한다. 세계 최대 규모의 토큰화 국채 펀드이며, 이후 Aptos·Arbitrum·Avalanche·Optimism·Polygon 등 다중 체인으로 확장됐다.
+
+**관계자.** 운용 = BlackRock Financial Management · 수탁/관리 = BNY Mellon · 토큰화·transfer agent = Securitize · placement agent = Securitize Markets LLC · 감사 = PwC.
+
+**법적 프레임워크.** BUIDL은 두 개의 등록 면제를 동시에 쓴다.
+
+| 층위 | 근거 | 효과 |
+|------|------|------|
+| 발행 (1933년법) | **Securities Act Rule 506(c)** (17 C.F.R. §230.506(c)) | SEC 미등록·거래소 미상장. general solicitation 허용 대신 **모든 purchaser가 AI**여야 하고 issuer가 reasonable verification 수행 |
+| 펀드 구조 (ICA 1940) | **ICA §3(c)(7)** (15 U.S.C. §80a-3(c)(7)) | 투자회사 등록 면제. 단 **모든 투자자가 QP**여야 함 |
+| 역외·비-US | **Reg S** | BUIDL은 **BVI 도미사일**의 역외 펀드 → 미국 밖 투자자는 Reg S 경로 |
+
+→ 결과적으로 BUIDL 투자자는 **accredited investor(AI)이면서 동시에 qualified purchaser(QP)**여야 한다(또는 비-US person). 지분은 restricted securities이고, 본 프로젝트 Manifest는 재판매를 **Rule 144** 경로로 둔다(§3.12).
+
+> 실제 BUIDL은 Securitize 자체 표준(DS Protocol)으로 발행된다. 본 프로젝트는 "BUIDL이 **ERC-3643(T-REX)으로 재구성**됐다"는 가정 위에서 A-03을 설계하며, 그 경우 **Securitize가 AI/QP claim의 Trusted Issuer**가 된다.
+
+### 12.2 BUIDL의 최소투자금액 — 수치와 근거(authorities)
+
+**최소투자금액(initial investment minimum) = $5M.** 이는 법정 문턱이 아니라 **발행자(BlackRock)가 설정한 청약 조건**이다. (최소 환매금액은 별도로 약 $250K.)
+
+| 사실 | 근거(authority) | 성격 |
+|------|------------------|------|
+| 최소투자 **$5M** | BlackRock 공식 보도자료 — *"BUIDL's initial investment minimum is $5 million"* (2024-11-13 share class 확장 보도자료; 2024-03 출시 보도자료에도 동일) | 발행자 진술 |
+| **506(c)** 발행·SEC 미등록·미상장 | 동 보도자료 — *"offered solely pursuant to 506(c) under the Securities Act … will not be listed on any exchange"* + Rule 506(c), 17 C.F.R. §230.506(c) | 발행자 진술 + 연방규칙 |
+| **§3(c)(7)** 펀드 면제 | 동 보도자료 — *"excepted from the definition of 'investment company' … pursuant to Section 3(c)(7)"* + ICA §3(c)(7), 15 U.S.C. §80a-3(c)(7) | 발행자 진술 + 법령 |
+| 최소 환매 $250K | Securitize 발행물·BUIDL 안내 | 발행자 조건 |
+
+> **보도자료·청약 출처 URL.**
+> - BlackRock 최초 발행 공시 (Business Wire, 2024-03-20) — *"The Fund will issue shares pursuant to Rule 506(c) … and Section 3(c)(7)…"*: `https://www.nasdaq.com/press-release/blackrock-launches-its-first-tokenized-fund-buidl-on-the-ethereum-network-2024-03-20`
+> - BlackRock share class 확장 공시 (PRNewswire, 2024-11-13) — *"initial investment minimum is $5 million"*: `https://www.prnewswire.com/news-releases/blackrock-launches-new-buidl-share-classes-across-multiple-blockchains-to-expand-access-and-potential-of-buidl-ecosystem-302304035.html`
+> - Securitize 청약 포털 (qualified institution 청약·whitelist): `https://securitize.io`
+> - 펀드의 SEC Form D 공시(EDGAR)에서도 최소투자금액·면제근거가 확인된다.
+
+**왜 이 $5M이 A-03과 직접 얽히나.** $5M은 NAL/C&DI 256.36의 고액 최소투자 임계($200K 개인/$1M 법인)를 크게 상회한다. 그래서 BUIDL에서는 이 **고액 최소투자 자체가 AI 검증의 1차 경로**가 된다(`verificationBasis = HIGH_MINIMUM_INVESTMENT`). 단 C&DI 256.36 조건상 **제3자 미융자 확인 + AI 서면진술 + 반대사실 부지**가 함께 필요하다.
+
+> **같은 $5M, 다른 개념 주의.** BUIDL 청약 최소액 $5M(발행자 조건, 변경 가능) ≠ QP 자격의 investments $5M(법정, ICA §2(a)(51)(A)(i)). 한 투자자에게 둘 다 요구되지만 서로 다른 요건이다(§3.12(7)).
+
+### 12.3 그래서 A-03에 무엇을 해야 하나 — 실행 체크리스트
+
+BUIDL을 정확히 처리하려면 A-03 부품과 그 주변 배선에 다음을 구현·확인한다.
+
+**A. claim 스키마**
+- AI claim의 `verificationBasis`에 **`HIGH_MINIMUM_INVESTMENT`** 값을 정의한다(BUIDL의 1차 경로). C&DI 256.36 정책(제3자 미융자 확인 포함)을 Trusted Issuer 발급 조건으로 명문화한다.
+- claim topic = `ACCREDITED_INVESTOR`, 발급자 = **Securitize(Trusted Issuer)**로 등록.
+
+**B. cumulative 게이트 — A-03만으로 통과시키지 말 것**
+- BUIDL 발행은 **R1(506(c)) + R3(§3(c)(7))** 동시 적용 → Recipe 엔진이 **A-03(AI) AND A-13(QP)** 둘 다 PASS를 요구하도록 배선한다. **AI claim만으로 BUIDL 매수가 체결되지 않게** 한다(BUIDL에서 가장 흔한 오작동 지점).
+
+**C. 재판매 시 dormant 처리**
+- BUIDL Manifest의 재판매 path = **Rule 144** → 재판매에서 A-03은 **dormant**(buyer AI 불요). Recipe 엔진이 Rule 144 재판매에 A-03 FAIL을 내지 않도록 한다(이때 buyer 게이트는 A-13(QP)).
+
+**D. Element는 일반으로 유지**
+- A-03 본체는 §4(a)(7)·전체 501(a) 카테고리를 **그대로 유지**한다. BUIDL용 협소화(Rule 144 전제, AI+QP 결합 등)는 **A-03 코드가 아니라 BUIDL Manifest**에 둔다(Element = Recipe-agnostic 공유 라이브러리, §3.12 전제).
+
+**E. 인접 부품 배선 확인 — A-03이 떠안지 말 것**
+- A-13(QP)·A-02(Reg S/비-US)·D-01(2000인 cap·§12(g))·E-03(bad actor)·A-01(sanctions)·A-04(KYC)가 BUIDL Manifest에 함께 걸려 있는지 확인한다. A-03이 이들을 암묵적으로 대신하지 않는다(§9).
+- A-11(claim freshness)이 AI claim 만료를 강제하는지 확인한다(특히 prior-verification 5년·고액최소투자 basis).
+
+**F. 테스트·UX**
+- §7의 BUIDL 케이스(AI PASS이나 QP 없음 → A-13 차단 / Rule 144 재판매 → A-03 dormant / Reg S 비-US 등)를 A-03 테스트 스위트에 포함한다.
+- "AI 검증 완료 = BUIDL 매수 가능"으로 오인되지 않게 한다 — QP(A-13)도 필요함을 UX·문구에 노출(부록 C).
+
+---
+
+## 부록 C. 안전한 표현 / 위험한 표현 (데모 가이드)
+
+**써도 되는 표현**
+
+- 본 프로젝트는 Rule 506(b)가 아니라 Rule 506(c) 기반 Reg D issuance framework를 전제로 합니다.
+- A-03은 buyer가 유효한 accredited investor claim을 보유했는지 확인하는 pre-trade gate입니다.
+- Rule 506(c)는 모든 purchaser가 accredited investor여야 하고 issuer가 reasonable steps to verify를 취해야 합니다.
+- Rule 506(b)의 general solicitation 금지는 506(b)(1)이 인용편입하는 Rule 502(c)에서 나옵니다.
+- Rule 506(d)는 buyer 자격 검사가 아니라 issuer 및 covered person의 bad actor disqualification 이슈입니다.
+- 고액 최소투자금액은 2025-03 SEC C&DI·no-action letter상 검증의 한 factor이며, 자동 AI 인정 규칙이 아닙니다.
+- §3(c)(7) 펀드(BUIDL 등)는 accredited investor **그리고** qualified purchaser 둘 다 필요하며, A-03은 그중 AI만 봅니다(QP는 A-13).
+- BUIDL의 $5M 최소투자와 qualified purchaser의 $5M investments 기준은 **다른 개념**입니다(청약 조건 vs 자격 요건).
+
+**피해야 할 표현**
+
+- ~~우리 케이스는 Rule 506(d)로 간다.~~ → 506(d)는 path가 아니라 결격 조항.
+- ~~Rule 506(b), 506(c), 506(d) 중 하나를 선택한다.~~ → 506(b)·506(c)는 offering path, 506(d)는 Rule 506 면제를 막는 결격 요건.
+- ~~general solicitation 금지는 Rule 506(b)의 원문이다.~~ → 그 문장은 Rule 502(c)이고, 506(b)는 이를 편입한다.
+- ~~A-03을 통과하면 모든 Reg D 문제가 해결된다.~~ → A-03은 buyer AI status만 본다. issuer bad actor(E-03), Form D(E-01), resale 제한, broker-dealer/ATS, AML/KYC/SAR은 별도.
+- ~~자기확인 체크박스만 있으면 Rule 506(c) 검증이 끝난다.~~ → 506(c)는 reasonable steps to verify를 요구한다.
+- ~~고액 투자($X 이상)면 자동으로 accredited investor다.~~ → C&DI 256.36·no-action letter는 factor일 뿐.
+- ~~A-03(적격투자자)을 통과했으니 BUIDL을 살 수 있다.~~ → BUIDL은 qualified purchaser(A-13)도 필요. A-03은 floor일 뿐.
+- ~~BUIDL은 §4(a)(7)로 재판매한다(확정).~~ / ~~BUIDL은 Rule 144로 재판매한다(확정).~~ → **둘 다 단정 금지.** BUIDL 재판매의 §5 면제 경로는 **미확정(Open Issue Q-B1)**이다 — 구현 플랜은 Rule 144를 가정하나 A-13 문서는 §4(a)(7)을 쓰고, 공개 공시는 면제 조항을 명시하지 않는다(§3.0.1·§3.12). 경로가 §4(a)(7)이면 A-03이 재판매에서 **active**, Rule 144면 **dormant**다.
+
+---
+
+## 부록 D. 팀 문서 결론 문구
+
+A-03 Accredited Investor Element는 Reg D Rule 506(c) 또는 §4(a)(7) resale 경로에서 prospective buyer가 Rule 501(a)의 accredited investor 범주에 해당하고, 필요한 경우 Rule 506(c)(2)(ii)에 따른 reasonable verification이 이루어졌는지를 거래 전에 확인하는 pre-trade gate다. 본 프로젝트의 Reg D issuance framework는 Rule 506(b)가 아니라 Rule 506(c)를 전제로 한다. Rule 506(b)는 general solicitation이 금지되는(이 금지는 506(b)(1)이 인용편입하는 Rule 502(c)에서 나온다) 전통적 비공개 사모 구조이므로 공개형 토큰화 유통 및 DEX 접근통제 시나리오와 맞지 않는다. 반면 Rule 506(d)는 buyer 자격 검사가 아니라 issuer 및 covered person의 bad actor disqualification 문제이므로 A-03이 아니라 별도 issuer-status Element(E-03)에서 처리한다. 온체인에서는 투자자의 원자료를 직접 심사하지 않고, Trusted Issuer가 off-chain에서 income, net worth, entity status, trust status, professional certification, third-party confirmation, 그리고 2025-03 SEC C&DI 256.35/256.36·no-action letter에 따른 고액 최소투자금액 기반 검증 등 관련 증빙을 검토한 뒤 발급한 signed claim을 확인한다. 따라서 A-03의 직접 PASS/FAIL 로직은 claim 존재 여부, Trusted Issuer 신뢰성, 서명 유효성, claim 만료 여부, verification basis, entity look-through 완료 여부에 한정된다.
+
+---
+
+*문서 끝.*
+=======
 ## §14. *변경 로그*
 
 - [2026-06-14] (canton-rwa) v2.1 patch. *citation 검증 정정 반영* (⚠️ 정정 노트로 *명시·*v1.0·v2.0의 *6 주요 *citation 오류 정정 — *Rule 501(a) 13 categories·*KE = (a)(11)·*Family Office = (a)(12)·*Family Client = (a)(13)·*Professional Credentials = (a)(10)·*Entity-based AI 4 categories ((a)(3)·(7)·(8)·(9) — *특히 (a)(9) investments-based entity 추가)·*Spousal equivalent는 *§ 230.501(j) 정의·*별도 category가 *아님·*Rule 506(c)(2)(ii) safe harbor methods는 *(A)·(B)·(C)·(D)·(E) 5종이며 *"prior three months" 요건이 *Rule 506(c) compliance의 *결정적 *시간 제약·*Decipher 1년 cap과 *gap articulation. *§3.2 §3(c)(2)(ii) safe harbor methods 전면 재작성·*frontmatter related-external-sources 정확 URL update·*eCFR 직접 인용으로 *전환).
 - [2026-06-13] (canton-rwa) v2.0 작성. *Accredited Investor walkthrough — *공유 산출물 form. *self-contained·*규제 맥락 우선·*친절한 해설·*Internal ID 분리·*법령 조문 인용 form 적용·*외부 공식 자료만. **§1 규제 맥락** (Securities Act 1933 4 Pillar 위치·*registration vs Reg D safe harbor·*Decipher RWA token 발행/유통 relevance·*한국 자본시장법 비교) + **§2 메타 정보** + **§3 ① 법적 근거** (§4(a)(2)·*Rule 506(c)·*Rule 501(a) 8 categories·*2020 modernization 3 categories·*Rule 506(c)(2) reasonable steps to verify safe harbor methods·*Ralston Purina·*Sub-요건 매트릭스 + A-13와의 결정적 3 차이 *상세 비교) + **§4 ② 입력 사실** + **§5 ③ 판정 로직** (5 step flow·*pseudocode 6 category branches·*"exceeds" vs "not less than" practice 결정·*비결정성 framing) + **§6 ④ 거절·예외 처리** (9 failure codes) + **§7 ⑤ 테스트 케이스** (Net Worth Pass·Net Worth Fail·Boundary $1M·Income path·Credentials path 5 cases·*주거 부동산 분리·*negative equity 처리) + **§8 (α) 패턴 B + Rule 506(c)(2)(iii) third-party verification direct fit** + **§9 (β) Cross coordination·*A-03 vs A-13 dual structure conflict resolution** + **§10 (γ) 3-Layer Solution + Rule 506(c)(2) safe harbor methods** + **§11 (δ) Frontend path 선택의 *A-03 특수성** + **§12 Open Issues 7건** + **§13 파일명 규칙**.
+>>>>>>> 8a8c56fb2fa198184523ac3ed682e3cb027fcfbf
