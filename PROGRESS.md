@@ -269,6 +269,14 @@ source of truth로 사용한다.
   inventory, 기본 매수·매도 수량, TTL과 mock price를 versioned scenario로
   주입하고 deployment artifact의 schema/hash로 backend 입력을 고정).
 
+- `CMP-004 — Wave-3 Illustrative Element Library`(illustrative element 6개 +
+  per-element unit test + `tools/deploy-wave3` opt-in deploy script): A-06
+  Affiliate, A-12 Red Flag Knowledge Bar, E-03 Bad Actor Disqualification,
+  F-01 Operator Self-Dealing, F-03 Fraud Surveillance, F-04 Reg M
+  restricted-period buying gate. operator-gated setter, fail-closed default,
+  monitoring element(A-12/F-03) non-blocking. active recipe/DeployStack 미변경.
+  `forge test --offline` 770/770.
+
 ## Blocked
 
 - 없음

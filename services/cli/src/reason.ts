@@ -1,12 +1,17 @@
 import {AbiCoder, encodeBytes32String, keccak256} from "ethers";
 
-// Element id (bytes32 string) -> human label. All 17 elements DeployStack
-// registers; see script/DeployStack.s.sol:_deployAndRegisterElements. The
-// first 11 are the original illustrative elements — six of which (A-01,
-// A-03, A-04, A-13, B-01, B-02) were upgraded in place to the
-// walkthrough-doc failure-code taxonomy (wave-2b, see ELEMENT_CODE_NAMES
-// below); the last 6 (A-08, A-09, A-11, B-03, B-04, D-01) are the wave-2
-// illustrative elements (CMP-003) — registered but not yet wired into any
+// Element id (bytes32 string) -> human label — 23 labeled elements. The first
+// 11 (A-01, A-02, A-03, A-04, A-05, B-01, B-02, C-01, E-01, A-13, F-02) are the
+// original illustrative elements — six of which (A-01, A-03, A-04, A-13, B-01,
+// B-02) were upgraded in place to the walkthrough-doc failure-code taxonomy
+// (wave-2b, see ELEMENT_CODE_NAMES below); the next 6 (A-08, A-09, A-11, B-03,
+// B-04, D-01) are the wave-2 illustrative elements (CMP-003); the last 6 (A-06,
+// A-12, E-03, F-01, F-03, F-04) are the wave-3 illustrative elements (CMP-004).
+// These are NOT all DeployStack-registered: script/DeployStack.s.sol's
+// _deployAndRegisterElements registers only 12 — the 11 originals labeled here
+// PLUS BUIDL-MIN-v1 (which is itself NOT labeled here). The wave-2 (CMP-003)
+// and wave-3 (CMP-004) sets are registered opt-in via tools/deploy-wave2 and
+// tools/deploy-wave3 respectively — not by DeployStack, and not wired into any
 // recipe's `requiredElements`.
 export const ELEMENT_LABELS: Record<string, string> = {
   "A-01-v1": "Sanctions",
@@ -25,7 +30,13 @@ export const ELEMENT_LABELS: Record<string, string> = {
   "A-11-v1": "Claim Freshness",
   "B-03-v1": "Transfer Restriction Metadata",
   "B-04-v1": "Engine Selection",
-  "D-01-v1": "Holder Count"
+  "D-01-v1": "Holder Count",
+  "A-06-v1": "Affiliate",
+  "A-12-v1": "Red Flag Knowledge Bar",
+  "E-03-v1": "Bad Actor Disqualification",
+  "F-01-v1": "Operator Self-Dealing",
+  "F-03-v1": "Fraud Surveillance",
+  "F-04-v1": "Reg M Issuer Buying"
 };
 
 // Recipe id -> human label. Recipes registered by DeployStack.
@@ -170,6 +181,68 @@ export const ELEMENT_CODE_NAMES: Record<string, Record<number, string>> = {
     2: "HOLDER_CAP_12G_NONAI",
     3: "HOLDER_CAP_3C1_100",
     4: "HOLDER_CAP_506B_35"
+  },
+  // A-06-v1 Affiliate (wave-3, CMP-004).
+  "A-06-v1": {
+    1: "FAIL_AFFILIATE_STATUS_UNKNOWN",
+    2: "FAIL_UNTRUSTED_AFFILIATE_CLAIM_ISSUER",
+    3: "FAIL_AFFILIATE_CLAIM_EXPIRED",
+    4: "REVIEW_AFFILIATE_UNCERTAIN"
+  },
+  // A-12-v1 RedFlagKnowledgeBar (wave-3). MONITORING element: `check()` never
+  // rejects (always returns passed=true, bytes32(0)) — every code below is a
+  // MARK, surfaced out-of-band via the SurveillanceFlag events / screen()
+  // operator+audit surfaces, never leaked in a party-facing reason code. Codes
+  // 1-7 are the seven RedFlag categories (bit i == RedFlag(i) == code i+1); 8
+  // is the REVIEW_REDFLAG_UNCERTAIN disposition marker. Same treatment as F-02
+  // SurveillanceFlag / F-03 below.
+  "A-12-v1": {
+    1: "FLAG_RESALE_INTENT",
+    2: "FLAG_CONTROL_UNDISCLOSED",
+    3: "FLAG_AI_INCONSISTENT",
+    4: "FLAG_WASH_CLUSTER",
+    5: "FLAG_STRUCTURING",
+    6: "FLAG_PRICE_ANOMALY",
+    7: "FLAG_SUSPICIOUS_PATTERN",
+    8: "REVIEW_REDFLAG_UNCERTAIN"
+  },
+  // E-03-v1 BadActorDisqualification (wave-3).
+  "E-03-v1": {
+    1: "FAIL_BADACTOR_ROSTER_MISSING",
+    2: "REVIEW_BADACTOR_ROSTER_INCOMPLETE",
+    3: "FAIL_BADACTOR_CLEARANCE_MISSING",
+    4: "REVIEW_BADACTOR_506E_PENDING",
+    5: "FAIL_BADACTOR_ISSUER_UNTRUSTED",
+    6: "FAIL_BADACTOR_SCOPE_MISMATCH",
+    7: "FAIL_BADACTOR_CLEARANCE_STALE",
+    8: "FAIL_BADACTOR_REVOKED",
+    9: "FAIL_BADACTOR_506E_DISCLOSURE_MISSING"
+  },
+  // F-01-v1 OperatorSelfDealing (wave-3).
+  "F-01-v1": {
+    1: "IDENTITY_UNRESOLVED",
+    2: "OP_REGISTRY_UNAVAILABLE",
+    3: "OP_SELF_DEALING_BLOCKED"
+  },
+  // F-03-v1 FraudSurveillance (wave-3, STATEFUL). MONITORING element: `check()`
+  // never rejects (it is `pure`, structurally unable to read flag state — the
+  // no-tipping-off guarantee). `n` numbers the 31 CFR §1023.320(a)(2) suspicion
+  // category that OPENED the flag; these codes surface only via the onlyOperator
+  // audit views (reasonCodeOf) and subject-opaque FlagLifecycle events, never as
+  // a party-facing rejection (same monitoring treatment as A-12 / F-02).
+  "F-03-v1": {
+    1: "ILLICIT_FUNDS",
+    2: "STRUCTURING_EVASION",
+    3: "NO_LAWFUL_PURPOSE",
+    4: "CRIME_FACILITATION"
+  },
+  // F-04-v1 RegMIssuerBuying (wave-3).
+  "F-04-v1": {
+    1: "REVIEW_REGM_EXCEPTION_CONFLICT",
+    2: "REG_M_OFFERING_STATUS_MISSING",
+    3: "REG_M_RESTRICTED_SET_UNVERIFIED",
+    4: "RESTRICTED_PERIOD_PURCHASE_BLOCKED_ISSUER",
+    5: "RESTRICTED_PERIOD_PURCHASE_BLOCKED_PARTICIPANT"
   }
 };
 
@@ -192,7 +265,7 @@ interface TableEntry {
 
 // Precompute every known reason code from THREE sources:
 //
-//  1. Engine-propagated verdicts: (recipeId in {1,2,7}) x (17 elementIds) x
+//  1. Engine-propagated verdicts: (recipeId in {1,2,7}) x (23 elementIds) x
 //     (every code in that element's ELEMENT_CODE_NAMES table, or just code 1
 //     for elements without one). `ComplianceEngine._runChecks` currently
 //     re-encodes every per-element failure as `encode(contributingRecipe,
@@ -203,7 +276,7 @@ interface TableEntry {
 //     covering known combos ahead of use, per the audit-matching rationale in
 //     ReasonCodes.sol) so decoding stays correct if/when richer propagation
 //     lands.
-//  2. Direct element-level codes: (recipeId 0) x (17 elementIds) x (every
+//  2. Direct element-level codes: (recipeId 0) x (23 elementIds) x (every
 //     code in ELEMENT_CODE_NAMES, or code 1 for elements without one). Every
 //     element's own `check()` self-encodes with `ReasonCodes.encode(0,
 //     ELEMENT_ID, n)` (see e.g. Sanctions.sol, HolderCount.sol) — this is
