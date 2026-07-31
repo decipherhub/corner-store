@@ -39,6 +39,7 @@ reference execution adapters including AMM and RFQ settlement paths.
 
 ## Product Documentation
 
+- [`docs/WHITEPAPER.md`](./docs/WHITEPAPER.md): product architecture and technical whitepaper
 - [`docs/README.md`](./docs/README.md): documentation map and source-of-truth rules
 - [`docs/MVP-v2-multi-venue.md`](./docs/MVP-v2-multi-venue.md): current product scope
 - [`docs/architecture/README.md`](./docs/architecture/README.md): responsibility boundaries
