@@ -112,6 +112,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 main { width: min(1240px, 100%); margin: 0 auto; padding: 28px 42px 70px; }
 .topbar { display: flex; justify-content: space-between; gap: 30px; align-items: flex-end; padding-bottom: 18px; }
+.topbar-actions { display: flex; gap: 12px; align-items: flex-end; }
+.language-toggle { min-height: 38px; padding: 0 12px; color: var(--signal-dark); background: white; border: 1px solid #9bb9e5; border-radius: 3px; font-size: 12px; font-weight: 750; }
+.language-toggle:hover { background: #f0f5fd; }
 .eyebrow, .step-label { margin: 0 0 8px; color: var(--signal); font: 700 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; }
 h1, h2, h3 { font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif; }
 h1 { max-width: 720px; margin: 0; font-size: clamp(30px, 3.4vw, 43px); font-weight: 680; line-height: 1.06; letter-spacing: -.035em; }
@@ -332,7 +335,7 @@ summary { color: var(--warn); cursor: pointer; font-size: 12px; font-weight: 700
   .workflow-step.is-current { border-bottom-color: #62a0ff; }
   .rail-footer { display: none; }
   main { padding: 22px 14px 50px; }
-  .topbar, .section-heading, .form-row, .handoff-card, .handoff-actions { align-items: stretch; flex-direction: column; }
+  .topbar, .topbar-actions, .section-heading, .form-row, .handoff-card, .handoff-actions { align-items: stretch; flex-direction: column; }
   .boundary-banner { grid-template-columns: 1fr; }
   .boundary-rules { grid-template-columns: 1fr; }
   .boundary-rules { justify-content: flex-start; }

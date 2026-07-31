@@ -9,6 +9,26 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## STUDIO-002 — Localized Evidence-Gated Workflow
+
+### Behavior
+
+- Deployment Studio는 한국어를 기본으로 제공하고 사용자가 English로 전환한
+  선택을 브라우저에 유지한다.
+- 설정 저장, Doctor, 배포 계획, 배포, Artifact 검증, DEX 실행 단계는 이전
+  단계의 실제 evidence가 존재할 때만 완료로 표시한다.
+- 후속 단계 데이터가 남아 있더라도 선행 설정이 저장되지 않았다면 완료 표시와
+  실행 버튼을 fail-closed한다.
+
+### Verification
+
+- `npm test --prefix services/deployment-studio`
+- `git diff --check`
+
+### State
+
+passing
+
 ## DOC-004 — Product Architecture and Technical Whitepaper
 
 ### Behavior

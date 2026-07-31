@@ -15,6 +15,11 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `STUDIO-002 — Localized Evidence-Gated Workflow`: Deployment Studio의 기본
+  언어를 한국어로 제공하고 English 전환 선택을 유지한다. 설정 저장부터 Doctor,
+  계획, 배포, Artifact 검증, DEX 실행까지 실제 evidence와 선행 단계가 모두
+  충족된 경우에만 완료로 표시하도록 workflow 상태를 fail-closed했다.
+  Deployment Studio smoke test와 `git diff --check`를 통과했다.
 - `DOC-004 — Product Architecture and Technical Whitepaper`: current
   source-of-truth와 구현을 기준으로 외부 공유용 기술 백서를 작성했다. 문제 정의,
   제품 경계, Element/Recipe/Manifest/Operator, Router fill-time enforcement,

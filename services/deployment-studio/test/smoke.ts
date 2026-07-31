@@ -386,6 +386,36 @@ async function main(): Promise<void> {
   const app = readFileSync(resolve(webRoot, "app.js"), "utf8");
   const css = readFileSync(resolve(webRoot, "styles.css"), "utf8");
   new Function(app);
+  const {workflowCompletion} = require(resolve(webRoot, "app.js")) as {
+    workflowCompletion(value: Record<string, unknown>): Record<string, boolean>;
+  };
+  const prematureWorkflow = workflowCompletion({
+    project: "treasury-dex",
+    configReady: false,
+    doctorReady: true,
+    planReady: true,
+    deploymentReady: true,
+    verified: true,
+    activationReady: true
+  });
+  if (
+    prematureWorkflow.project !== true ||
+    Object.entries(prematureWorkflow).some(([stage, complete]) => stage !== "project" && complete)
+  ) {
+    throw new Error("workflow displayed downstream completion before configuration was explicitly saved");
+  }
+  const completedWorkflow = workflowCompletion({
+    project: "treasury-dex",
+    configReady: true,
+    doctorReady: true,
+    planReady: true,
+    deploymentReady: true,
+    verified: true,
+    activationReady: true
+  });
+  if (Object.values(completedWorkflow).some((complete) => !complete)) {
+    throw new Error("workflow did not display completion after every stage supplied evidence");
+  }
   for (const marker of [
     'id="projectMode"', 'id="network"', 'id="assetProfile"', 'id="venueRfq"',
     'id="runDoctor"', 'id="reviewPlan"', 'id="deployDemo"', 'id="verifyArtifact"',
@@ -401,6 +431,7 @@ async function main(): Promise<void> {
     'id="productionDeploymentId"', 'id="productionDeployer"', 'id="productionOperator"',
     'id="productionVenueRfq"', 'id="productionVenueAmm"',
     'id="runProductionPreflight"', 'id="generateProductionPlan"', 'id="exportProductionPlan"',
+    'id="languageToggle"',
     "Runtime constraints", "Demo fixtures", "Manual evidence checklist",
     "Arbitrum One · production plan only", "GIWA / organization EVM · plan only",
     "Production core", "preflight → plan"
@@ -413,7 +444,8 @@ async function main(): Promise<void> {
     "startDexDemo", "stopDexDemo", "/runtime/start", "/runtime/stop",
     "HELP_CONTENT", "DEMO_BROADCAST_NETWORKS", "selectedNetwork", "selectedModule",
     "openContextHelp", "buildProductionConfig", "runProductionPreflight",
-    "generateProductionPlan", "exportProductionPlan"
+    "generateProductionPlan", "exportProductionPlan", "initializeLanguage",
+    "corner-store-studio-language", "프로젝트 방식", "Artifact 검증"
   ]) {
     if (!app.includes(marker)) throw new Error(`studio UI wiring missing: ${marker}`);
   }
@@ -421,7 +453,7 @@ async function main(): Promise<void> {
     "--ink:", "--signal:", ".studio-shell", ".rail", ".workflow-map", ".status-led",
     ".artifact-grid", ".boundary-banner", ".help-trigger", ".context-dialog",
     ".target-switch", ".production-ledger", ".production-actions",
-    ".handoff-actions",
+    ".handoff-actions", ".language-toggle",
     "@media (max-width: 820px)"
   ]) {
     if (!css.includes(marker)) throw new Error(`studio visual token missing: ${marker}`);
