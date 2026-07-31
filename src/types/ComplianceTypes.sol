@@ -38,6 +38,20 @@ enum FlowType {
     REDEMPTION
 }
 
+enum RecipeBindingMode {
+    REQUIRED_BLOCKING,
+    PATH_OPTION,
+    FLAG_ONLY
+}
+
+struct RecipeBinding {
+    uint16 recipeId;
+    uint16 recipeVersion;
+    RecipeBindingMode mode;
+    uint16 pathGroupId;
+    uint8 priority;
+}
+
 // 04-element-interface.md §2-3 (stable, verbatim)
 enum ElementCategory {
     INVESTOR_ATTRIBUTE,
@@ -85,6 +99,8 @@ struct ElementMetadata {
 
 struct ManifestCore {
     PolicyStatus status;
+    // Deprecated compatibility mirrors. Runtime evaluation uses the registry's
+    // RecipeBinding[] exclusively; remove these fields at the next major ABI.
     uint16 issuanceRecipeId;
     uint16 issuanceRecipeVersion;
     uint16 fundRecipeId;
@@ -118,9 +134,11 @@ struct ComplianceDecision {
     uint64 policyVersion;
     uint64 validUntil;
     uint256 maxAmount;
+    address maxAmountToken;
     uint256 allowedVenueTypes;
     bytes32 allowedVenuesHash;
     bytes32 reasonCode;
     bytes32 reliedClaims;
+    uint256 flagsBitmap;
     bytes32 decisionHash;
 }

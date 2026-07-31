@@ -3,10 +3,10 @@ pragma solidity 0.8.17;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {Governed} from "../../../auth/Governed.sol";
 import {IRFQAdapter} from "../../../interfaces/execution/adapters/IRFQAdapter.sol";
+import {IMakerAuthorizer} from "../../../interfaces/execution/adapters/IMakerAuthorizer.sol";
 import {ExecutionRequest, ExecutionResult} from "../../../types/ExecutionTypes.sol";
 import {ComplianceDecision} from "../../../types/ComplianceTypes.sol";
 import {Errors} from "../../../libraries/Errors.sol";
@@ -24,6 +24,7 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
     );
 
     address public router;
+    IMakerAuthorizer public immutable makerAuthorizer;
 
     mapping(address => mapping(uint256 => bool)) public usedQuoteNonce;
 
@@ -43,7 +44,10 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
         _;
     }
 
-    constructor() EIP712("CornerStoreRFQ", "1") {}
+    constructor(IMakerAuthorizer makerAuthorizer_) EIP712("CornerStoreRFQ", "1") {
+        if (address(makerAuthorizer_) == address(0)) revert Errors.ZeroAddress();
+        makerAuthorizer = makerAuthorizer_;
+    }
 
     function setRouter(address router_) external onlyOwner {
         router = router_;
@@ -130,7 +134,9 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
         if (usedQuoteNonce[quote.maker][quote.nonce]) revert Errors.RFQQuoteUsed();
         if (!approvedMaker[quote.maker]) revert Errors.RFQMakerNotApproved();
 
-        if (ECDSA.recover(quoteHash, signature) != quote.maker) revert Errors.RFQInvalidSignature();
+        if (!makerAuthorizer.isAuthorizedSigner(quote.maker, quoteHash, signature)) {
+            revert Errors.RFQInvalidSignature();
+        }
 
         if (
             quote.maker == address(0) || quote.taker == address(0) || quote.tokenIn == address(0)

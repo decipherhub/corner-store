@@ -11,6 +11,7 @@ import {ElementRegistry} from "../src/registry/ElementRegistry.sol";
 import {RecipeRegistry} from "../src/registry/RecipeRegistry.sol";
 import {TokenPolicyRegistry} from "../src/registry/TokenPolicyRegistry.sol";
 import {OperatorRegistry} from "../src/registry/OperatorRegistry.sol";
+import {AttestedAcquisitionSource} from "../src/registry/AttestedAcquisitionSource.sol";
 
 import {ComplianceEngine} from "../src/compliance/ComplianceEngine.sol";
 import {Sanctions} from "../src/compliance/elements/Sanctions.sol";
@@ -36,6 +37,7 @@ import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
 import {VenueSelector} from "../src/execution/VenueSelector.sol";
 import {UniswapV3Adapter} from "../src/execution/adapters/amm/UniswapV3Adapter.sol";
 import {RFQAdapter} from "../src/execution/adapters/rfq/RFQAdapter.sol";
+import {MakerAuthorizer} from "../src/registry/MakerAuthorizer.sol";
 
 import {CornerStoreFactory} from "../src/factory/CornerStoreFactory.sol";
 import {ITokenPolicyRegistry} from "../src/interfaces/compliance/ITokenPolicyRegistry.sol";
@@ -47,12 +49,12 @@ import {MockPool} from "../test/mocks/MockPool.sol";
 import {VenueType} from "../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../src/types/VenueTypes.sol";
 import {DemoConstants} from "./DemoConstants.sol";
+import {ProductionCoreDeployer} from "./ProductionCoreDeployer.sol";
 
 /// @title DeployStack
-/// @notice Deploys the FULL Corner Store stack onto a live node (Anvil) from a
-///         single forge script, then persists all addresses to a JSON artifact
-///         that {DemoScenarios} reads. This is deliverable (1) of the live-Anvil
-///         E2E / demo runner.
+/// @notice Deploys the production core contract set plus an explicit local-only
+///         showcase activation onto Anvil, then persists all addresses to a JSON
+///         artifact that {DemoScenarios} and the dashboard read.
 ///
 /// @dev Reuses {TREXCore} (shared with the test fixture) for the REAL ERC-3643 +
 /// OnchainID deployment. Everything is broadcast by the deployer (Anvil account
@@ -69,7 +71,7 @@ import {DemoConstants} from "./DemoConstants.sol";
 /// the deployer (operator) retains suspend/resume/retire/approve rights. The RFQ
 /// venue and the surveillance-enabled recipe (id 7, for scenario 6) are set up
 /// here, before ownership moves.
-contract DeployStack is Script, TREXCore, DemoConstants {
+contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer {
     // --- Corner Store stack ----------------------------------------------
     ElementRegistry internal elementReg;
     RecipeRegistry internal recipeReg;
@@ -83,7 +85,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     Erc3643Native internal erc3643;
     FormDFiling internal formD;
     Lockup internal lockup;
-    DemoAcquisitionSource internal acqSource;
+    AttestedAcquisitionSource internal acqSource;
     QualifiedPurchaser internal qualifiedPurchaser;
 
     ExecutionRouter internal router;
@@ -91,21 +93,51 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     VenueSelector internal selector;
     UniswapV3Adapter internal ammAdapter;
     RFQAdapter internal rfqAdapter;
+    MakerAuthorizer internal makerAuthorizer;
     CornerStoreFactory internal factory;
 
     MockERC20 internal quote;
     MockPool internal pool;
     string internal assetProfile;
     bool internal useBuidlLikeProfile;
+    uint256 internal deployerAccount;
+    uint256 internal investorAccount;
+    uint256 internal makerAccount;
+    uint256 internal unapprovedMakerAccount;
+    uint256 internal eligibleInvestorBAccount;
+    uint256 internal ineligibleInvestorAccount;
+    uint256 internal investorQuoteBalance;
+    uint256 internal investorRwaBalance;
+    uint256 internal makerQuoteBalance;
+    uint256 internal makerRwaBalance;
+    uint256 internal poolRwaBalance;
+    bool internal investorInitialQp;
+    bool internal eligibleInvestorBInitialQp;
+    bool internal ineligibleInvestorInitialQp;
+    bytes32 internal scenarioHash;
+
+    // vm.parseJson encodes object fields in lexicographic key order.
+    struct ScenarioWallet {
+        uint256 account;
+        string artifactKey;
+        string id;
+        bool initialQualifiedPurchaser;
+        string label;
+    }
 
     function run() external {
-        uint256 deployerPk = vm.deriveKey(MNEMONIC, 0);
-        uint256 investorPk = vm.deriveKey(MNEMONIC, 1);
-        uint256 makerPk = vm.deriveKey(MNEMONIC, 2);
+        _loadInjectedScenario();
+        uint256 deployerPk = vm.deriveKey(MNEMONIC, uint32(deployerAccount));
+        uint256 investorPk = vm.deriveKey(MNEMONIC, uint32(investorAccount));
+        uint256 makerPk = vm.deriveKey(MNEMONIC, uint32(makerAccount));
+        uint256 eligibleInvestorBPk = vm.deriveKey(MNEMONIC, uint32(eligibleInvestorBAccount));
+        uint256 ineligibleInvestorPk = vm.deriveKey(MNEMONIC, uint32(ineligibleInvestorAccount));
         address deployer = vm.addr(deployerPk);
         address investor = vm.addr(investorPk);
         address maker = vm.addr(makerPk);
-        address unapprovedMaker = vm.addr(vm.deriveKey(MNEMONIC, 3));
+        address unapprovedMaker = vm.addr(vm.deriveKey(MNEMONIC, uint32(unapprovedMakerAccount)));
+        address eligibleInvestorB = vm.addr(eligibleInvestorBPk);
+        address ineligibleInvestor = vm.addr(ineligibleInvestorPk);
 
         assetProfile = vm.envOr("ASSET_PROFILE", string("buidl-like"));
         bytes32 profileHash = keccak256(bytes(assetProfile));
@@ -121,11 +153,21 @@ contract DeployStack is Script, TREXCore, DemoConstants {
             deployTREX(deployer);
         }
 
-        // 2. compliance registries + engine.
-        elementReg = new ElementRegistry();
-        recipeReg = new RecipeRegistry();
-        policyReg = new TokenPolicyRegistry();
-        operatorReg = new OperatorRegistry();
+        // 2. Deploy the exact production core implementation seam. Governance
+        //    and operator are the deterministic local deployer only for this
+        //    Anvil rehearsal. The remaining steps are explicitly demo-only.
+        Deployment memory core = deployCore(deployer, deployer, true, true);
+        elementReg = ElementRegistry(core.elementReg);
+        recipeReg = RecipeRegistry(core.recipeReg);
+        policyReg = TokenPolicyRegistry(core.policyReg);
+        operatorReg = OperatorRegistry(core.operatorReg);
+        engine = ComplianceEngine(core.engine);
+        venueReg = VenueRegistry(core.venueReg);
+        selector = VenueSelector(core.selector);
+        router = ExecutionRouter(core.router);
+        ammAdapter = UniswapV3Adapter(core.ammAdapter);
+        makerAuthorizer = MakerAuthorizer(core.makerAuthorizer);
+        rfqAdapter = RFQAdapter(core.rfqAdapter);
 
         // 3. the full 9-element Reg D 506(c) reference set + surveillance.
         _deployAndRegisterElements();
@@ -138,20 +180,11 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         recipeReg.registerRecipe(3, 1, address(new BuidlLikeFundRecipe()));
         recipeReg.registerRecipe(SURVEIL_RECIPE_ID, 1, address(new DemoSurveillanceRecipe()));
 
-        engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
-
-        // 5. execution stack + factory.
-        venueReg = new VenueRegistry();
-        selector = new VenueSelector();
-        ammAdapter = new UniswapV3Adapter();
-        rfqAdapter = new RFQAdapter();
-        router = new ExecutionRouter(engine, venueReg, selector, operatorReg);
+        // 5. Demo-only onboarding helper. The core registries, engine, router
+        //    and adapters above came from DeployProductionCore.
         factory = new CornerStoreFactory(ITokenPolicyRegistry(address(policyReg)), IVenueRegistry(address(venueReg)));
 
-        // authenticate the post-trade write path (spec §6).
-        engine.setRouter(address(router));
-        ammAdapter.setRouter(address(router));
-        rfqAdapter.setRouter(address(router));
+        // Demo-only stateful surveillance element uses the production engine.
         surveillance.setEngine(address(engine));
 
         // 6. tokens + AMM pool (token0=QUOTE, token1=RWA).
@@ -171,13 +204,23 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         // 9. verified holders + liquidity: investor (buyer/taker), maker (dealer),
         //    pool (custody-as-holder). Investor gets full engine attestations.
         verifyInvestor(investor);
-        _attestInvestor(investor);
+        _attestInvestor(investor, investorInitialQp);
+        verifyInvestor(eligibleInvestorB);
+        _attestInvestor(eligibleInvestorB, eligibleInvestorBInitialQp);
+        verifyInvestor(ineligibleInvestor);
+        _attestInvestor(ineligibleInvestor, ineligibleInvestorInitialQp);
         verifyInvestor(maker);
         registerVenueIdentity(address(pool));
 
-        quote.mint(investor, INVESTOR_QUOTE);
-        mint(maker, MAKER_RWA);
-        mint(address(pool), POOL_RWA);
+        quote.mint(investor, investorQuoteBalance);
+        quote.mint(eligibleInvestorB, investorQuoteBalance);
+        quote.mint(ineligibleInvestor, investorQuoteBalance);
+        quote.mint(maker, makerQuoteBalance);
+        mint(investor, investorRwaBalance);
+        mint(eligibleInvestorB, investorRwaBalance);
+        mint(ineligibleInvestor, investorRwaBalance);
+        mint(maker, makerRwaBalance);
+        mint(address(pool), poolRwaBalance);
 
         ammAdapter.setPool(address(pool), true);
         rfqAdapter.setMakerApproved(maker, true);
@@ -207,14 +250,103 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         vm.startBroadcast(investorPk);
         quote.approve(address(ammAdapter), type(uint256).max);
         quote.approve(address(rfqAdapter), type(uint256).max);
+        rwaToken.approve(address(rfqAdapter), type(uint256).max);
+        vm.stopBroadcast();
+
+        vm.startBroadcast(eligibleInvestorBPk);
+        quote.approve(address(ammAdapter), type(uint256).max);
+        quote.approve(address(rfqAdapter), type(uint256).max);
+        rwaToken.approve(address(rfqAdapter), type(uint256).max);
+        vm.stopBroadcast();
+
+        vm.startBroadcast(ineligibleInvestorPk);
+        quote.approve(address(ammAdapter), type(uint256).max);
+        quote.approve(address(rfqAdapter), type(uint256).max);
+        rwaToken.approve(address(rfqAdapter), type(uint256).max);
         vm.stopBroadcast();
 
         vm.startBroadcast(makerPk);
         rwaToken.approve(address(rfqAdapter), type(uint256).max);
+        quote.approve(address(rfqAdapter), type(uint256).max);
         vm.stopBroadcast();
 
-        _writeArtifact(deployer, investor, maker, unapprovedMaker);
+        _writeArtifact(deployer, investor, eligibleInvestorB, ineligibleInvestor, maker, unapprovedMaker);
         _printSummary(deployer, investor, maker);
+    }
+
+    function _loadInjectedScenario() internal {
+        string memory json = vm.readFile(SCENARIO_RUNTIME_PATH);
+        require(vm.parseJsonUint(json, ".schemaVersion") == 2, "demo scenario schemaVersion must be 2");
+        scenarioHash = keccak256(bytes(json));
+
+        deployerAccount = vm.parseJsonUint(json, ".deployment.accounts.deployer");
+        investorAccount = vm.parseJsonUint(json, ".deployment.accounts.investor");
+        makerAccount = vm.parseJsonUint(json, ".deployment.accounts.maker");
+        unapprovedMakerAccount = vm.parseJsonUint(json, ".deployment.accounts.unapprovedMaker");
+        eligibleInvestorBAccount = vm.parseJsonUint(json, ".deployment.accounts.eligibleInvestorB");
+        ineligibleInvestorAccount = vm.parseJsonUint(json, ".deployment.accounts.ineligibleInvestor");
+        require(
+            deployerAccount <= 9 && investorAccount <= 9 && makerAccount <= 9 && unapprovedMakerAccount <= 9
+                && eligibleInvestorBAccount <= 9 && ineligibleInvestorAccount <= 9,
+            "demo scenario accounts must be in range 0-9"
+        );
+        require(
+            deployerAccount != investorAccount && deployerAccount != makerAccount
+                && deployerAccount != unapprovedMakerAccount && deployerAccount != eligibleInvestorBAccount
+                && deployerAccount != ineligibleInvestorAccount && investorAccount != makerAccount
+                && investorAccount != unapprovedMakerAccount && investorAccount != eligibleInvestorBAccount
+                && investorAccount != ineligibleInvestorAccount && makerAccount != unapprovedMakerAccount
+                && makerAccount != eligibleInvestorBAccount && makerAccount != ineligibleInvestorAccount
+                && unapprovedMakerAccount != eligibleInvestorBAccount
+                && unapprovedMakerAccount != ineligibleInvestorAccount
+                && eligibleInvestorBAccount != ineligibleInvestorAccount,
+            "demo scenario accounts must be unique"
+        );
+
+        investorQuoteBalance =
+            vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.investorQuote"));
+        investorRwaBalance = vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.investorRwa"));
+        makerQuoteBalance = vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.makerQuote"));
+        makerRwaBalance = vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.makerRwa"));
+        poolRwaBalance = vm.parseUint(vm.parseJsonString(json, ".deployment.initialBalancesBaseUnits.poolRwa"));
+        require(
+            investorQuoteBalance > 0 && investorRwaBalance > 0 && makerQuoteBalance > 0 && makerRwaBalance > 0
+                && poolRwaBalance > 0,
+            "demo scenario balances must be positive"
+        );
+
+        ScenarioWallet[] memory wallets = abi.decode(vm.parseJson(json, ".wallets"), (ScenarioWallet[]));
+        bool investorSeen;
+        bool eligibleInvestorBSeen;
+        bool ineligibleInvestorSeen;
+        for (uint256 i = 0; i < wallets.length; i++) {
+            bytes32 key = keccak256(bytes(wallets[i].artifactKey));
+            if (key == keccak256("investor")) {
+                require(!investorSeen && wallets[i].account == investorAccount, "scenario investor wallet mismatch");
+                investorInitialQp = wallets[i].initialQualifiedPurchaser;
+                investorSeen = true;
+            } else if (key == keccak256("eligibleInvestorB")) {
+                require(
+                    !eligibleInvestorBSeen && wallets[i].account == eligibleInvestorBAccount,
+                    "scenario eligibleInvestorB wallet mismatch"
+                );
+                eligibleInvestorBInitialQp = wallets[i].initialQualifiedPurchaser;
+                eligibleInvestorBSeen = true;
+            } else if (key == keccak256("ineligibleInvestor")) {
+                require(
+                    !ineligibleInvestorSeen && wallets[i].account == ineligibleInvestorAccount,
+                    "scenario ineligibleInvestor wallet mismatch"
+                );
+                ineligibleInvestorInitialQp = wallets[i].initialQualifiedPurchaser;
+                ineligibleInvestorSeen = true;
+            } else {
+                revert("scenario wallet artifactKey invalid");
+            }
+        }
+        require(
+            investorSeen && eligibleInvestorBSeen && ineligibleInvestorSeen,
+            "scenario must configure all demo investor wallets"
+        );
     }
 
     function _deployAndRegisterElements() internal {
@@ -228,7 +360,7 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         elementReg.registerElement(bytes32("B-01-v1"), address(assetClass));
         erc3643 = new Erc3643Native();
         elementReg.registerElement(bytes32("B-02-v1"), address(erc3643));
-        acqSource = new DemoAcquisitionSource();
+        acqSource = new AttestedAcquisitionSource();
         lockup = new Lockup(address(acqSource), LOCKUP_SECONDS);
         elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
         formD = new FormDFiling();
@@ -244,22 +376,43 @@ contract DeployStack is Script, TREXCore, DemoConstants {
     ///      Sanctions (A-01) and US-tax (A-05) pass by default (not blocked /
     ///      not flagged). Anvil's genesis timestamp is real wall-clock time, far
     ///      past the Rule 144 lockup window seeded at t=1, so C-01 passes on-chain.
-    function _attestInvestor(address who) internal {
+    function _attestInvestor(address who, bool initialQp) internal {
         jurisdiction.setJurisdiction(who, ALLOWED_JURISDICTION); // A-02
         IdentityUniqueness(elementReg.elementOf(bytes32("A-04-v1"))).bindIdentity(who, keccak256(abi.encode("ID", who))); // A-04
         AccreditedInvestor(elementReg.elementOf(bytes32("A-03-v1"))).setAccredited(who, true); // A-03
-        if (useBuidlLikeProfile) qualifiedPurchaser.setQp(who, true); // A-13
-        acqSource.setAcquiredAt(who, address(rwaToken), uint64(1)); // C-01 seed
+        if (useBuidlLikeProfile) qualifiedPurchaser.setQp(who, initialQp); // A-13
+        acqSource.setSnapshot(
+            who,
+            address(rwaToken),
+            uint64(1),
+            uint64(block.timestamp + 30 days),
+            keccak256("demo-ta-fixture"),
+            IAcquisitionSource.AcquisitionStatus.VALID
+        ); // C-01 seed
     }
 
-    function _writeArtifact(address deployer, address investor, address maker, address unapprovedMaker) internal {
+    function _writeArtifact(
+        address deployer,
+        address investor,
+        address eligibleInvestorB,
+        address ineligibleInvestor,
+        address maker,
+        address unapprovedMaker
+    ) internal {
         vm.createDir("deployments", true); // idempotent (recursive)
         string memory k = "corner-store-e2e";
         vm.serializeAddress(k, "deployer", deployer);
         vm.serializeAddress(k, "investor", investor);
+        vm.serializeAddress(k, "eligibleInvestorB", eligibleInvestorB);
+        vm.serializeAddress(k, "ineligibleInvestor", ineligibleInvestor);
         vm.serializeAddress(k, "maker", maker);
         vm.serializeAddress(k, "unapprovedMaker", unapprovedMaker);
         vm.serializeString(k, "assetProfile", assetProfile);
+        vm.serializeString(k, "coreDeployment", "DeployProductionCore.deployCore");
+        vm.serializeString(k, "activationMode", "local-demo-fixtures");
+        vm.serializeBool(k, "productionDeployment", false);
+        vm.serializeUint(k, "scenarioSchemaVersion", 2);
+        vm.serializeBytes32(k, "scenarioHash", scenarioHash);
         vm.serializeAddress(k, "rwaToken", address(rwaToken));
         vm.serializeAddress(k, "quote", address(quote));
         vm.serializeAddress(k, "pool", address(pool));
@@ -273,9 +426,11 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         vm.serializeAddress(k, "selector", address(selector));
         vm.serializeAddress(k, "ammAdapter", address(ammAdapter));
         vm.serializeAddress(k, "rfqAdapter", address(rfqAdapter));
+        vm.serializeAddress(k, "makerAuthorizer", address(makerAuthorizer));
         vm.serializeAddress(k, "router", address(router));
         vm.serializeAddress(k, "factory", address(factory));
         vm.serializeAddress(k, "jurisdiction", address(jurisdiction));
+        vm.serializeAddress(k, "qualifiedPurchaser", address(qualifiedPurchaser));
         string memory json = vm.serializeAddress(k, "surveillance", address(surveillance));
         vm.writeJson(json, ARTIFACT_PATH);
     }
@@ -297,20 +452,6 @@ contract DeployStack is Script, TREXCore, DemoConstants {
         console2.log("-----------------------------------------------------");
         console2.log("artifact written to       :", ARTIFACT_PATH);
         console2.log("=====================================================");
-    }
-}
-
-/// @dev Live-node acquisition-time source for the Lockup (C-01) element's CR-3
-///      seam. Mirrors the test fixture's `MockAcquisitionSource`.
-contract DemoAcquisitionSource is IAcquisitionSource {
-    mapping(bytes32 => uint64) internal _acquiredAt;
-
-    function setAcquiredAt(address holder, address asset, uint64 ts) external {
-        _acquiredAt[keccak256(abi.encode(holder, asset))] = ts;
-    }
-
-    function acquiredAt(address holder, address asset) external view override returns (uint64) {
-        return _acquiredAt[keccak256(abi.encode(holder, asset))];
     }
 }
 

@@ -169,7 +169,8 @@ Recipe를 선택하는 인상을 주었다. 법률 연구는 한 거래에 발�
 - Manifest: 자산별 Recipe/engine/version/coverage binding
 - Operator: 판단·승인·감시
 
-거래마다 applicable Recipe를 식별하고 Element 합집합을 cumulative AND로 평가한다.
+거래마다 applicable Recipe를 식별한다. Required Recipe의 Element는 cumulative
+AND로 평가하고, ADR-007 이후 명시적 path option과 flag-only binding을 분리한다.
 기존 ExecutionRouter, ComplianceEngine과 Adapter 분리는 유지한다.
 
 ### Alternatives Considered
@@ -486,17 +487,19 @@ custom error `Errors.InvalidManifestTransition`으로 revert한다.
 | UNKNOWN 또는 RETIRED | `registerManifest` | PROPOSED | onlyOwner |
 | PROPOSED | `approveManifest` | ACTIVE | onlyOperator (issuance recipe 필수) |
 | ACTIVE | `suspendManifest(reasonCode)` | SUSPENDED | onlyOperator |
-| SUSPENDED | `resumeManifest` | ACTIVE | onlyOperator |
+| SUSPENDED | `scheduleManifestResume` 후 `resumeManifest` | ACTIVE | owner schedule + timelock + operator execute |
 | ACTIVE 또는 SUSPENDED | `retireManifest(reasonCode)` | RETIRED (terminal) | onlyOperator |
 | UNKNOWN | `setUnregulated` | UNREGULATED | onlyOwner |
 | UNREGULATED | `clearUnregulated` | UNKNOWN | onlyOwner |
 
 `registerManifest`는 caller가 넣은 `m.status`를 무시하고 항상 PROPOSED로 착지하며
 `declaredBy = msg.sender`를 기록한다. `approveManifest`는 `approvedBy = msg.sender`를
-기록하고 `issuanceRecipeId == 0`이면 registry-level completeness floor로 revert한다.
+기록한다. MANIFEST-002 이후 completeness floor는 deprecated issuance field가 아니라
+비어 있지 않고 최소 하나의 blocking/path gate가 있는 validated `RecipeBinding[]`다.
 RETIRED는 terminal이며 재발행은 RETIRED→register→approve 경로로만 가능하다. gating
 model: owner가 자산을 classify/declare(register/setUnregulated/clearUnregulated)하고,
-operator가 기존 manifest의 lifecycle(approve/suspend/resume/retire)을 구동한다.
+operator가 approve/suspend/retire와 예약된 resume 실행을 구동한다. resume 예약과
+semantic update 예약은 D011에 따라 owner governance가 담당한다.
 
 **2. Enum-append storage rationale.** `PolicyStatus`에 PROPOSED(4)와 RETIRED(5)를
 SUSPENDED(3) 뒤에 APPEND한다. 기존 numeric value(UNKNOWN=0, UNREGULATED=1,
@@ -565,3 +568,267 @@ token의 `declaredBy`/`approvedBy`는 factory 주소이며, attribution은 facto
   `test/unit/registry/TokenPolicyRegistry.t.sol`
 - `test/integration/EmergencyPause.t.sol`, `test/integration/IntegrationBase.sol`,
   `test/integration/Surveillance.t.sol`
+
+## D011 — 위험 중단은 즉시, 재개와 Manifest 의미 변경은 timelock으로 분리한다
+
+Date: 2026-07-22
+
+### Context
+
+ADR-007은 모든 Router가 공유하는 central pause state, 즉시 containment, 지연된
+compliance relaxation, Manifest semantic version/history 보존을 요구한다. 기존
+reference stack은 venue suspension과 Manifest status만 있어 global/asset pause가
+없었고, 재개와 core fact 변경을 즉시 수행할 수 있었다. 배포 후
+`TokenPolicyRegistry.owner()`가 Factory가 되므로 owner-only governance 호출을 EOA가
+직접 실행할 수도 없었다.
+
+### Decision
+
+1. `OperatorRegistry`를 global/asset/venue pause의 source of truth로 사용하고 Router는
+   nonce 소비와 compliance evaluation 전에 세 범위를 모두 fail-closed로 검사한다.
+2. operator는 pause와 Manifest suspend처럼 위험을 줄이는 동작을 즉시 수행한다.
+   unpause는 owner가 예약하고 최소 1일 뒤 owner가 실행한다.
+3. Manifest resume와 ACTIVE/SUSPENDED semantic update도 owner 예약과 최소 1일
+   timelock을 요구한다. update activation은 version을 증가시키며 기존 SUSPENDED
+   상태를 해제하지 않는다.
+4. Manifest version, current hash, chained history hash와 pause history hash를
+   보존하고 actor, old/new, reason, effective time을 append-only event로 남긴다.
+5. 배포 후 registry owner인 `CornerStoreFactory`가 resume/update schedule/cancel을
+   forwarding한다. Factory owner는 production에서 외부 Safe-style governance다.
+   registry operator는 delay가 지난 동작의 실행과 즉시 tightening을 담당한다.
+
+### Consequences
+
+- 사고 containment는 timelock 없이 가능하지만 재개는 같은 actor가 즉시 우회할 수
+  없다.
+- Factory ownership wiring을 유지하면서 governance 호출이 실제 배포에서도
+  도달 가능하다.
+- chain별 delay, 실제 Safe provider, issuer-level disable과 RecipeBinding migration은
+  후속 production 설정/feature다.
+
+### Related Files
+
+- `src/registry/OperatorRegistry.sol`
+- `src/registry/TokenPolicyRegistry.sol`
+- `src/execution/ExecutionRouter.sol`
+- `src/factory/CornerStoreFactory.sol`
+- `test/integration/EmergencyPause.t.sol`
+- `scripts/e2e-anvil.sh`
+
+## D012 — 취득 lot와 거절·감시 상태는 provider-neutral off-chain 계층으로 수렴한다
+
+Date: 2026-07-22
+
+### Context
+
+ADR-008은 acquisition source, person-group state, reject logging과 Router 밖 transfer
+감시를 하나의 off-chain compliance data layer로 결정했다. 기존 `Lockup`은 만료나
+lineage 상태 없이 단일 timestamp만 읽었고, 실제 provider 계약이 없다는 이유로
+현재 문서에는 해당 결정을 여전히 open으로 표시한 곳이 남아 있었다.
+
+### Decision
+
+1. Transfer Agent별 API는 `TransferAgentProvider` adapter 뒤에 둔다. Corner Store
+   core는 Securitize 전용 undocumented field를 하드코딩하지 않는다.
+2. per-lot 입력은 acquisition date, payment completion, source type과 lineage를
+   검증한다. 단일 holder×asset 온체인 snapshot은 lot 선택을 과대 추정하지 않도록
+   현재 lot 중 가장 늦은 유효 clock을 사용한다.
+3. 온체인 `AttestedAcquisitionSource`에는 clock, observation/expiry, PII-free
+   source hash와 status만 저장한다. missing, broken lineage, stale과 immature는
+   `Lockup`에서 서로 다른 reason으로 fail-closed한다.
+4. person-group volume/holder state는 execution id로 idempotent하게 commit한다.
+   동일 id+동일 내용은 no-op, 동일 id+다른 내용은 충돌로 거부한다.
+5. rejected attempt와 Router 밖 transfer finding은 off-chain hash-chain audit
+   record로 보존한다. 이 local SDK는 tamper evidence를 제공하지만 production WORM,
+   retention 또는 SAR 시스템이라고 주장하지 않는다.
+
+### Consequences
+
+- mock TA로 전체 경계를 테스트할 수 있으나 실제 Securitize compatibility는 공식
+  API 계약과 provider 인증을 확인하기 전까지 미구현이다.
+- 보수적인 latest-lot clock은 안전하지만 일부 mature lot 매도를 과도하게 막을 수
+  있다. amount-specific lot allocation/FIFO는 provider 계약이 확정될 때 별도
+  versioned adapter로 추가한다.
+- PII, 원본 lot 문서와 감사 원장은 온체인에 저장하지 않는다.
+
+### Related Files
+
+- `docs/decisions/ADR-008-compliance-seam-decisions.md`
+- `services/compliance-data/`
+- `src/registry/AttestedAcquisitionSource.sol`
+- `src/compliance/elements/Lockup.sol`
+
+## D013 — Stateful commit은 regulated token 위치에서 실제 이동 방향을 유도한다
+
+Date: 2026-07-29
+
+### Context
+
+`ctx.buyer`와 `ctx.seller`는 엔진의 검증 대상/상대방 역할이다. RFQ 매도처럼 검증
+대상 taker가 RWA를 `tokenIn`으로 보내는 거래에서도 taker를 `buyer` 역할에 유지한다.
+기존 commit은 항상 `seller → buyer`로 기록해 실제 `tokenIn` 이동과 반대였다.
+
+### Decision
+
+stateful element의 `onTransfer` 방향은 regulated token 위치에서 결정한다.
+
+- regulated token이 `tokenOut`: `seller → buyer`, `amountOut`
+- regulated token이 `tokenIn`: `buyer → seller`, `amountIn`
+
+pre-trade element의 검증 대상 역할과 post-trade 자산 이동 방향을 분리한다.
+
+### Consequences
+
+- RFQ/AMM 매도에서 holder count, surveillance와 후속 stateful element가 실제 RWA
+  이동 방향을 받는다.
+- `buyer/seller` 명칭만 보고 실제 token sender/recipient를 추론하면 안 된다.
+
+### Related Files
+
+- `src/compliance/ComplianceEngine.sol`
+- `test/unit/compliance/Engine.t.sol`
+- `docs/architecture/SKELETON_GUIDE.md`
+
+## D014 — RFQ 모듈 의미와 통합·배포 표현을 분리한다
+
+Date: 2026-07-29
+
+### Context
+
+RFQ SDK의 pricing, risk, signer와 nonce seam은 교체 가능했지만 integrator가
+reference demo backend나 저장소 전체 구조를 채택하지 않고 해당 계약을 선택·검증·
+scaffold하는 공통 표면이 없었다.
+
+### Decision
+
+1. `services/rfq`가 versioned module capability와 공통 conformance 의미를 소유한다.
+2. `services/toolkit`은 module ID와 environment variable 이름만 가진 별도
+   integration manifest와 secret-free generator를 소유한다.
+3. `services/cli`는 reference service 또는 existing-backend scaffold를 rendering할
+   뿐 pricing, risk나 compliance 결정을 추가하지 않는다.
+4. `services/rfq-demo-backend`는 같은 module contract를 사용하는 reference
+   consumer로 유지한다.
+5. Docker Compose는 선택형 export이며 Corner Store SDK의 필수 runtime이 아니다.
+
+### Consequences
+
+- integrator는 필요한 RFQ module만 교체하고 기존 backend에 SDK를 삽입할 수 있다.
+- conformance는 인터페이스 호환성을 증명하지만 production pricing, signer custody,
+  nonce durability, risk 또는 법률 적합성을 인증하지 않는다.
+- module config 값과 secret은 manifest나 generated source에 기록하지 않는다.
+
+### Related Files
+
+- `services/rfq/src/modules.ts`
+- `services/rfq/src/conformance.ts`
+- `services/toolkit/src/integration.ts`
+- `services/toolkit/src/scaffold.ts`
+- `docs/sdk-integration.md`
+
+## D015 — Production RFQ v1은 non-custodial exact full-fill로 유지한다
+
+Date: 2026-07-30
+
+### Context
+
+RFQ v1과 SDK-001은 protected settlement와 교체 가능한 backend module을 제공하지만
+production custody, signer rotation, durable nonce, pricing/inventory risk와 partial
+fill 책임은 열려 있었다. 현재 Adapter는 maker inventory account와 ECDSA signer를
+동일 주소로 결합하고 Router의 finite `maxAmount`도 결제자산 `amountIn` 축만
+검사하므로 그대로 production 경계로 간주할 수 없다.
+
+### Decision
+
+1. production RFQ v1은 protocol non-custodial, atomic exact full-fill을 유지한다.
+   잔량은 새 quote로 처리하고 partial fill은 새 quote/adapter version으로 분리한다.
+2. maker settlement account와 quote signer를 분리한다. production Adapter는
+   ECDSA delegate/ERC-1271을 수용하는 versioned maker-authorizer를 fill 시점에
+   검사한다. signer 추가는 governed/delayed, revoke는 즉시 가능하다.
+3. production nonce는 `(chainId, adapter, maker)` scope에서 atomic monotonic하게
+   할당하고 idempotency key와 request hash를 durable하게 저장한다. 예약한 nonce는
+   장애가 나도 재사용하지 않는다.
+4. pricing/inventory risk는 operator-owned off-chain module이며 stale/missing
+   dependency에서 fail-closed한다. Router의 최신 compliance가 최종 gate다.
+5. compliance `maxAmount`는 regulated asset quantity에 적용한다. finite cap 활성화
+   전에 buy/sell 방향에 맞게 Router를 수정한다.
+6. production endpoint는 auth, TLS, rate limit, PII-free audit와 incident
+   reconciliation을 요구한다. Corner Store conformance는 운영·법률 인증이 아니다.
+
+### Consequences
+
+- current exact full-fill quote schema와 non-custodial transfer 원자성은 유지된다.
+- signer authorization, regulated amount cap, durable nonce와 production middleware는
+  독립 구현 feature로 분리된다.
+- 특정 dealer/custodian/KMS/database vendor와 인허가 적합성은 operator 선택 및
+  별도 검토로 남는다.
+
+### Related Files
+
+- `docs/decisions/ADR-009-production-rfq-policy.md`
+- `docs/product-specs/production-rfq-policy.md`
+- `src/execution/adapters/rfq/RFQAdapter.sol`
+- `src/execution/ExecutionRouter.sol`
+- `services/rfq/`
+
+## D016 — Production deployment uses external signer and staged activation
+
+Date: 2026-07-31
+
+### Context
+
+Deployment Studio and `toolkit-deploy` provide local/demo configuration,
+dry-run and Anvil broadcast paths. Treating that browser-controlled path as
+production deployment would blur demo fixtures, production ERC-3643 onboarding,
+legal approval, signer custody and Safe governance.
+
+### Decision
+
+Production deployment is a separate operations workflow:
+
+1. ERC-3643 token and ONCHAINID onboarding evidence is verified as an external
+   issuer trust boundary before Corner Store activation.
+2. Governance authority is verified by Safe proxy address, runtime code hash,
+   expected singleton/mastercopy, owner count `M`, threshold `N`, owner list,
+   chain ID, payload target addresses and calldata before signing.
+3. Production signing uses an external signer or Safe-style multisig boundary.
+   Browser applications do not hold production keys and do not broadcast
+   mainnet/production transactions.
+4. Element, Recipe and Asset Compliance Manifest activation requires a
+   legal-approved package. Demo profiles, fixture identities and illustrative
+   recipes are not production approval evidence.
+5. Venue, maker, signer and inventory activation happens only after dry-run,
+   fork simulation, multisig review, bytecode/role/Manifest verification and
+   monitoring readiness.
+6. CLI production broadcast requires a frozen evidence file bound to the
+   current config hash, source commit, successful dry-run and target-chain fork
+   simulation.
+
+### Alternatives Considered
+
+- Extend Deployment Studio into a production broadcaster: rejected because it
+  would put key custody and mainnet mutation behind a browser/local demo control
+  surface.
+- Treat demo scenario and illustrative recipe data as production activation
+  evidence: rejected because legal approval, issuer onboarding and production
+  data-source contracts are separate trust boundaries.
+- Skip Safe owner/threshold verification and rely on an address label: rejected
+  because governance authority depends on the exact owner set, threshold,
+  chain and payload.
+
+### Consequences
+
+- Production deployment docs are separate from local/demo runbooks.
+- Browser UI may support review and evidence display, but not production
+  broadcast.
+- Repository tooling may pass without claiming any deployment transaction or
+  Safe proposal succeeded on a production network.
+- Actual Safe provider, custody vendor, RPC/finality policy and legal approval
+  references remain deployment-specific inputs.
+
+### Related Files
+
+- `docs/deployment-production.md`
+- `docs/architecture/deployment-operations.md`
+- `docs/deployment-studio.md`
+- `FEATURES.md`
+- `PROGRESS.md`

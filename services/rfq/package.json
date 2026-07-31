@@ -1,11 +1,36 @@
 {
   "name": "@corner-store/rfq-service",
   "version": "0.1.0",
-  "private": true,
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "license": "GPL-3.0-or-later",
+  "files": [
+    "dist/src",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "require": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/decipherhub/corner-store.git",
+    "directory": "services/rfq"
+  },
   "description": "TypeScript SDK helpers for Corner Store RFQ quote backends.",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
     "test": "npm run build && node dist/test/smoke.js"
+  },
+  "dependencies": {
+    "ethers": "^6.13.5"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

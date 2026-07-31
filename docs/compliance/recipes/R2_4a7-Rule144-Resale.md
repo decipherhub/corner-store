@@ -1,222 +1,136 @@
 ---
-type: recipe-spec-sheet
+type: recipe-requirement-spec
 recipe-id: R2
 recipe-name: §4(a)(7)·Rule 144 Resale
-internal-id: RCP.R2
+project: RWA DEX (Giwa) · corner-store
+status: v2.0 (2026-07-28) — 2부 구성(제1부 법률논증 산문 + 제2부 목표 규격). 전용 Recipe 컨트랙트 미구현(target spec).
+substance-sot: "승준 recipe walkthrough — R2_4a7-Rule144-Resale.md v1.0 (2026-06-17, 조문별 삼단논법·경로 OR). 보경 recipe 검토본 없음 — 법률 검토 필요."
+implements: "전용 컨트랙트 미구현 — 목표 규격. 경로 라우팅은 Element C-00(재판매 경로 선택)에 의존."
+reflects-decisions: [ADR-004, ADR-005, ADR-006]
+umbrella: "SPEC.md — 공유 개념(Element/Recipe/Manifest·Router cumulative AND·경계)은 여기에 의한다"
 legal-effect: "§2(a)(11) underwriter 비해당 — 2차 거래(전매)가 §5 면제로 적법"
-status: v1.0 — 조문별 삼단논법 (경로 OR: §4(a)(7) 주 / Rule 144 보조 · ADR-005)
-audience: 개발팀·법무팀·외부 consultant·학회원
-related-external-sources:
-  - "15 U.S.C. § 77d(a)(7)·(d)·(e) — §4(a)(7) 전매 면제 8요건·효과: https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title15-section77d&num=0&edition=prelim"
-  - "15 U.S.C. § 77b(a)(11) — underwriter 정의: https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title15-section77b&num=0&edition=prelim"
-  - "17 CFR § 230.144 — Rule 144 전매 safe harbor(보유기간·공시·물량): https://www.ecfr.gov/current/title-17/section-230.144"
-created: 2026-06-17
-updated: 2026-06-17
-tags: [recipe, R2, resale, 4a7, rule-144, underwriter, path-or, spec-sheet, adr-005]
+review-required: legal
+tags: [recipe-requirement-spec, R2, resale, 4a7, rule-144, path-or, target-spec]
 ---
 
-# R2 — §4(a)(7)·Rule 144 Resale (Recipe 명세 = 조문별 삼단논법, 경로 OR)
+# R2 §4(a)(7)·Rule 144 Resale — 요구사항 명세서 (Recipe)
 
-> **이 문서는 무엇인가.** Recipe = *하나의 법률효과를 논증.* R2가 증명할 효과는 **"이 2차 거래(전매)에서 매도인은 §2(a)(11) underwriter가 *아니다* — 따라서 전매가 §5 면제로 적법하다."** R1(발행)과 *구조가 다르다*: 전매는 **두 경로(§4(a)(7) *또는* Rule 144) 중 *하나*로 면제**되므로, R2는 **경로 OR(둘 중 하나) + 경로 내 요건 AND** 구조다.
-> **결정 반영(ADR-005):** §4(a)(7) = *주 경로*, Rule 144 = *보조*(1년 이상 보유 비-내부자). 경로 선택은 **C-00이 `Manifest.resaleFramework`로** 한다.
-> **자산 일반성(ADR-006):** R2는 *모든 restricted 자산*에 적용. `resaleFramework`는 Manifest 값 — BUIDL의 `SEC_4A7`은 *예시*.
+> **저술 지위 고지.** 본 Recipe의 법적 논증은 승준 recipe walkthrough(2026-06-17)를 산문 2부 형식으로 재구성한 것이며, 대응 보경 recipe 검토본은 없다 — 법률 검토 전(제4절). 또한 R2에 대응하는 전용 Recipe 컨트랙트는 아직 실장되지 아니하였으므로, 제2부는 목표 규격(target spec)이다. 경로 선택은 Element C-00에 위임되어 있다.
+
+본 문서는 컴플라이언스 **Recipe** R2(§4(a)(7)·Rule 144 재판매)의 요구사항 명세서이다. **제1부**는 R2가 성립시키는 법률효과 — "이 재판매에서 매도인은 §2(a)(11)의 인수인(underwriter)이 아니다" — 의 근거와 조문별 도출을, **제2부**는 그 목표 구현 규격을 규정한다. R2는 R1의 단일 AND와 달리 두 경로(§4(a)(7) 또는 Rule 144) 중 하나로 면제되는 경로 OR 구조라는 점에서 다르다.
 
 ---
 
-## §1. 법률효과 + 법적 사슬
+# 제1부. 법적 근거 및 논증
 
-**효과(소결론): "이 전매에서 매도인은 underwriter가 아니다(§2(a)(11) 비해당) → 전매가 §5 등록 없이 적법."**
+## 1. 개요
 
-```
-문제:  사모로 산 증권 = restricted → 되팔면 매도인이 §2(a)(11) underwriter 위험 → §5 위반
-   │
-경로A §4(a)(7) [15 U.S.C. §77d(a)(7)]  — (d)(1)~(8) 충족 시
-        └ 효과: §77d(e)(1)(B) "거래는 §2(a)(11) distribution이 *아닌 것으로 간주*" (= underwriter 아님)
-   │
-경로B Rule 144 [17 CFR §230.144]       — 보유기간 등 충족 시
-        └ 효과: 제목 그대로 "매도인은 distribution에 종사하지 않아 *underwriter가 아님*"
-```
-→ R2 과제: **둘 중 *한 경로*의 요건이 *전부 충족*됨을 보이면 → 효과 성립.** (OR.)
+R2는 사모로 취득한 제한증권(restricted securities)의 2차 재판매에서, 매도인이 증권법 §2(a)(11)의 인수인에 해당하지 아니하여 그 재판매가 제5조 등록 없이 적법하다는 법률효과를 논증하는 Recipe이다. 제한증권을 되파는 자는 배포에 참여하는 인수인으로 취급될 위험이 있으므로, 그 위험을 벗는 면제가 필요하다. 그 면제 경로는 두 가지 — §4(a)(7)과 Rule 144 — 이며, 둘 중 하나의 요건이 전부 충족되면 효과가 성립한다.
+
+## 2. 규범적 근거
+
+증권법 §2(a)(11)은 인수인을 발행자로부터 배포 목적으로 증권을 취득하여 유통시키는 자 등으로 정의한다(15 U.S.C. § 77b(a)(11)). 사모로 취득한 제한증권을 되파는 자는 이 정의에 포섭될 위험이 있고, 그 경우 §5의 등록 의무가 부활한다. 이를 벗는 첫째 경로는 §4(a)(7)로, 그 하위 요건인 §4(d)의 여덟 가지 조건을 전부 충족하면 §4(e)(1)(B)에 의하여 그 거래가 §2(a)(11)의 배포가 아닌 것으로 간주된다(15 U.S.C. § 77d(a)(7)·(d)·(e)). 둘째 경로는 Rule 144로, 보유기간·현재 공시정보·(계열자인 경우) 물량·매도방법·통지 요건을 충족하면 매도인이 배포에 종사하지 아니하여 인수인이 아니라는 안전항을 제공한다(17 C.F.R. § 230.144). 어느 경로든 그 요건이 충족되면 재판매가 적법해진다.
+
+## 3. 쟁점별 논증
+
+### 3.1 경로 A — §4(a)(7)의 여덟 요건
+
+§4(a)(7)은 §4(d)의 여덟 요건을 전부 충족할 것을 요구한다. 첫째, 각 매수인이 적격투자자일 것(§4(d)(1)) — Element A-03이 확인하며, ADR-005에 따라 §4(a)(7) 경로에서 A-03이 활성이다. 둘째, 매도인 측의 일반적 권유·광고가 없을 것(§4(d)(2)) — Element B-04(폐쇄 풀 강제)와 A-12(권유 행태 위험신호)가 담당하되, 공개형 거래 구조가 일반적 권유에 해당하는지의 법적 판단은 보경 변호사 확인 대기 사항이다(ADR-005의 유일한 blocker). 셋째, 비보고 발행자의 경우 매도인이 매수인에게 지정 정보를 제공할 것(§4(d)(3)) — 이는 발행자 측 사실이어서 이를 판정하는 Element가 없다(발행자 attestation 필요, gap). 넷째, 매도인이 발행자나 그 자회사가 아닐 것(§4(d)(4)) — 신원 대조의 소형 결정론 검사이나 전용 Element가 없다(gap). 다섯째, 매도인·유료 참여자에 부적격 사유가 없을 것(§4(d)(5)) — Element E-03을 매도인 측으로 확장하여 담당한다. 여섯째, 발행자가 실제 영업 중이고 shell이 아닐 것(§4(d)(6)) — 발행자 측 사실(gap). 일곱째, 인수인의 미판매 배정분이 아닐 것(§4(d)(7)) — 증권 출처의 소형 결정론 검사(gap). 여덟째, 증권 클래스가 거래 90일 전부터 존재할 것(§4(d)(8)) — 발행일과 현재 날짜의 소형 결정론 비교(gap). 이 여덟 요건이 충족되면 §4(e)(1)(B)에 의하여 거래는 배포가 아닌 것으로 간주되고, 증권은 여전히 Rule 144상 제한증권으로 남는다(§4(e)(1)(C)).
+
+### 3.2 경로 B — Rule 144
+
+Rule 144는 보유기간(보고 발행자 6개월·비보고 1년, Element C-01), 현재 공시정보(발행자 측 사실, gap), 그리고 매도인이 계열자인 경우 물량 한도(Rule 144(e), Element C-08)·매도방법(Rule 144(f))·Form 144 통지(Rule 144(h), 계열자 판정은 Element A-06)를 요건으로 한다. 비계열자가 보유기간을 충족하면 이들 부가 요건 없이 자유롭게 재판매할 수 있다. 이 요건이 충족되면 매도인은 인수인에 해당하지 아니한다.
+
+### 3.3 경로 선택 — OR과 C-00
+
+제한증권의 재판매에는 경로가 필요하며, 어느 경로를 취할지는 Element C-00이 `Manifest.resaleFramework`(§4(a)(7)/Rule 144/양자택일)로 라우팅한다. R2는 그 선택된 경로의 요건만 평가한다. 한 경로가 불성립이어도 다른 경로가 가능하면 C-00이 재라우팅할 수 있다는 것이 OR 구조의 이점이다. ADR-005에 따라 본 시스템의 주 경로는 §4(a)(7)이며, Rule 144는 1년 이상 보유한 비계열자를 위한 보조 경로이다.
+
+## 4. 확정 사항 및 잔여 쟁점
+
+경로 OR 구조와 각 경로의 요건은 위와 같이 확정되었다. 잔여 쟁점은 다음과 같다. 첫째, §4(a)(7)의 소형 결정론 검사 세 가지(§4(d)(4) 매도인≠발행자, (d)(7) 미판매 배정분 아님, (d)(8) 90일 존재)는 전용 Element가 없어 신규 소형 부품 또는 C-00/A-06 확장이 필요하다. 둘째, 발행자 정보·지위 요건(§4(d)(3)·(6)·Rule 144(c))은 발행자 attestation을 확인하는 신규 Element(가칭 E-02류)로 묶어 처리하여야 한다. 셋째, §4(d)(5) 부적격자는 E-03을 매도인·유료 참여자로 확장하여야 한다. 넷째, 일반적 권유 해당성(§4(d)(2))은 보경 변호사 확인이 필요한 blocker이다. 다섯째, 양자택일(EITHER) 경로의 우선순위 정책이 미확정이다. 여섯째, 본 Recipe의 법적 논증은 보경 검토 전이다.
 
 ---
 
-## §2. 📋 메타 + 요약
+# 제2부. 목표 규격 (전용 컨트랙트 미구현)
+
+## 5. 시스템 내 위치
 
 | 항목 | 값 |
 |---|---|
-| Recipe / ID | §4(a)(7)·Rule 144 Resale / **R2** |
-| ① 법률효과 | **§2(a)(11) underwriter 비해당 → 전매 적법** |
-| ② 논증 | 경로별 조문 삼단논법(§4) — 경로A §4(d)(1)~(8) / 경로B Rule 144(d)(c)(e)(f)(h) |
-| ③ Activation | restricted 자산의 *2차 거래* + `Manifest.resaleFramework` |
-| ④ Composition | **경로 OR** (선택 경로의 요건 AND) |
-| ⑤ 거절 | `RECIPE_R2_RESALE_FAIL` + 경로·미충족 요건·부품 |
-| ⑥ Conflict | R3 cumulative(§3(c)(7) QP 항상)·R1 orthogonal·R-XJ always-on |
+| Recipe | R2(§4(a)(7)·Rule 144 재판매) |
+| 컨트랙트 | **미구현** — 목표 규격. 경로 라우팅은 Element `C-00`이 담당 |
+| 법률효과 | §2(a)(11) 인수인 비해당(재판매 적법) |
+| 결합 방식 | 경로 OR + 경로 내 cumulative AND |
+| 활성화 | restricted(B-03) 자산의 2차 거래 |
 
----
+## 6. 활성화 (Activation)
 
-## §3. ① 법률효과
+- **REQ-R2-1 (활성 조건).** 시스템은 자산이 제한증권(B-03 = true)이고 거래가 2차 재판매인 경우 R2를 활성화하여야 한다.
+- **REQ-R2-2 (경로 라우팅).** C-00이 `Manifest.resaleFramework`로 경로(§4(a)(7)/Rule 144/양자택일)를 선택하고, R2는 선택 경로의 요건만 평가하여야 한다.
 
-**"전매에서 매도인 underwriter 비해당 → §5 면제."** 단, *경로(§4(a)(7) or Rule 144)에 따라 요건이 다름.*
+## 7. 구성 (Composition) — 경로 OR + 경로 내 AND
 
----
+- **REQ-R2-3 (경로 A 구성).** `resaleFramework == SEC_4A7`이면 §4(d)(1)~(8)에 대응하는 요소·검사가 전부 통과할 때에만 통과한다: A-03(d1) ∧ [B-04·A-12](d2) ∧ [(d3) 발행자 attestation gap] ∧ [(d4) 소형검사 gap] ∧ E-03′(d5) ∧ [(d6) attestation gap] ∧ [(d7)(d8) 소형검사 gap].
+- **REQ-R2-4 (경로 B 구성).** `resaleFramework == RULE_144`이면 C-01(보유기간) ∧ [(c) 공시정보 gap] ∧ (계열자면 A-06 → C-08·매도방법·통지) 통과 시 통과.
+- **REQ-R2-5 (횡단 전제).** 모든 경로에 R-XJ(A-01·A-02)가 곱해진다.
+- **REQ-R2-6 (gap 보수 처리).** 부품 미커버 gap 요건(§3.1의 (d)(3)(4)(6)(7)(8)·(c))은 보강 전까지 보수적으로 보류하거나 off-chain으로 처리하여야 한다.
 
-## §4. ② 법률 논증 — 조문별 삼단논법 (경로 OR)
+## 8. 거절 (reasonCode)
 
-> **읽는 법.** §4.0에서 *문제*(왜 전매에 면제가 필요한가)를 세우고, §4.A(§4(a)(7))·§4.B(Rule 144) *각 경로*를 조문별 삼단논법으로, §4.C에서 *경로 선택(OR)*을, §4.D에서 gap을 처리한다.
+R2 실패는 `RECIPE_R2_RESALE_FAIL`로 표면화하되, 경로·미충족 요건·원인 요소가 병기된다 — 예: (4a7) A-03 실패 → "§4(d)(1) 매수인 비적격 → §4(a)(7) 불성립"; (144) C-01 실패 → "Rule 144(d) 보유기간 미충족 → §4(a)(7) 경로 대안 안내". 한 경로 실패 시 C-00이 다른 경로로 재라우팅할 수 있다.
 
-### §4.0 문제 설정 — §2(a)(11) underwriter
-
-> **15 U.S.C. §77b(a)(11)**(요지): "underwriter"는 *발행자로부터 배포 목적으로 취득해 유통시키는 자* 등. → 사모 restricted 증권을 *되파는 자*는 underwriter로 취급될 위험 → §5 등록 의무.
-
-→ 그래서 *전매가 underwriter 거래가 *아님*을 증명하는 면제*가 필요하다. 그 면제가 §4(a)(7) 또는 Rule 144.
-
----
-
-### §4.A 경로 A — §4(a)(7) (주 경로, ADR-005)
-
-> §4(a)(7) = §77d(a)(7): *"transactions meeting the requirements of subsection (d)."* → §4(d)의 **8개 요건(d)(1)~(8)**을 *전부* 충족하면, §77d(e)(1)(B)에 의해 *"distribution 아님(underwriter 아님)"으로 간주*. 아래 8요건을 조문별 논증한다.
-
-**㈎ (d)(1) Accredited investor** — *"Each purchaser is an accredited investor (§230.501(a))."*
-- 대전제: *각 매수인이 AI*여야.
-- 소전제: **A-03**이 매수인 AI claim 확인(법인이면 A-08·A-09). *(ADR-005로 §4(a)(7)서 A-03 active.)*
-- 소결론: ∴ A-03 PASS ⟹ (d)(1) 충족.
-
-**㈏ (d)(2) No general solicitation** — *"Neither the seller, nor any person acting on the seller's behalf, offers or sells ... by any form of general solicitation or general advertising."*
-- 대전제: *매도인이 공개 권유·광고로 팔지 않을 것.* ★ ADR-005의 *유일한 blocker*.
-- 소전제: **B-04**(엔진 — RFQ/whitelist 폐쇄 풀로 강제, 공개 AMM 차단) + **A-12**(권유 행태 red flag). *공개 DEX 구조가 general solicitation 아닌지의 *법적 판단*은 보경 변호사 확인 대기(ADR-005).*
-- 소결론: ∴ B-04(RFQ 강제) ∧ A-12 ⟹ (d)(2) 충족 *(general solicitation 판정 확정 조건부)*.
-
-**㈐ (d)(3) Information requirement** — *"In the case of [a non-reporting issuer] ... the seller ... makes available to a prospective purchaser, the following information [(A)~(K): 발행자명·주소·증권 종류·발행주식수·transfer agent·사업 내용·임원·재무제표 등]."*
-- 대전제: *비보고 발행자*면 매도인이 발행자로부터 받아 *지정 정보(A~K)를 매수인에 제공.*
-- 소전제: ***부품 없음*** — 발행자 정보 제공은 *발행자측 사실* → **gap (a)** (§4.D → 발행자 attestation).
-- 소결론: ㈐는 *부품 미커버* → gap.
-
-**㈑ (d)(4) Seller ≠ issuer** — *"The transaction is not for the sale of a security where the seller is an issuer or a subsidiary ... of the issuer."*
-- 대전제: *매도인이 발행자(또는 자회사)가 아닐 것.*
-- 소전제: 매도인 신원 vs 발행자 *결정론 대조* — 현재 *전용 부품 없음* → **gap (c) 소형 검사**(§4.D, C-00/F-01 확장 또는 thin check).
-- 소결론: ㈑는 *소형 결정론 검사 필요*.
-
-**㈒ (d)(5) Bad actor** — *"Neither the seller, nor any [paid participant] ... is subject to [Rule 506(d)(1) disqualifying event or §3(a)(39) statutory disqualification]."*
-- 대전제: *매도인·유료 참여자에 결격 부재.*
-- 소전제: **E-03**(bad actor) — 단 *대상이 발행자측이 아니라 *매도인측*으로 확장* 필요(§4.D 주).
-- 소결론: ∴ E-03(매도인 확장) ⟹ (d)(5) 충족.
-
-**㈓ (d)(6) Business requirement** — *"The issuer is engaged in business, is not in the organizational stage or in bankruptcy ..., and is not a blank check, blind pool, or shell company ..."*
-- 대전제: *발행자가 실제 영업 중·shell 아님.*
-- 소전제: *발행자측 사실* → **gap (a)** (발행자 attestation, ㈐와 묶음).
-- 소결론: ㈓는 *부품 미커버* → gap(a).
-
-**㈔ (d)(7) Underwriter prohibition** — *"... not ... an unsold allotment to, or a subscription or participation by, a broker or dealer as an underwriter ..."*
-- 대전제: *인수인의 미판매 배정분이 아닐 것.*
-- 소전제: *결정론 메타 검사*(증권 출처) — *전용 부품 없음* → **gap (c) 소형 검사**.
-- 소결론: ㈔는 *소형 검사 필요*.
-
-**㈕ (d)(8) Outstanding ≥90 days** — *"... a class that has been authorized and outstanding for at least 90 days prior to the date of the transaction."*
-- 대전제: *증권 클래스가 거래 90일 전부터 존재.*
-- 소전제: *발행일 vs 현재 날짜 결정론 비교*(C-01류) — *전용 부품 없음* → **gap (c) 소형 검사**(날짜 산수, A-11/C-01 패턴).
-- 소결론: ㈕는 *소형 날짜 검사 필요*.
-
-> **§4(e) 효과 확인**: (d)(1)~(8) 충족 시 §77d(e)(1)(B) — *"거래는 §2(a)(11) distribution이 아닌 것으로 간주"* + (e)(1)(C) *증권은 여전히 restricted(Rule 144상)*. → **경로 A 효과 성립.**
-
-### §4.B 경로 B — Rule 144 (보조: 1년 이상 보유 비-내부자)
-
-> Rule 144(17 CFR §230.144) = *"매도인이 distribution에 종사하지 않아 underwriter가 아님"* safe harbor. 요건:
-
-**㉮ 144(d) 보유기간** — 보고 6개월/비보고 1년. → **C-01.** (소전제: C-01 PASS ⟹ 보유기간 충족.)
-**㉯ 144(c) Current public information** — 발행자 현재 공시정보 존재. → *발행자측 사실* **gap (a)**(㈐㈓와 동일 "발행자 정보 가용" 묶음).
-**㉰ (affiliate) 144(e)물량·(f)매도방법·(h)Form 144** — 매도인이 affiliate면. → **A-06.** (비-affiliate·기간충족이면 자유.)
-
-> **효과:** 위 충족 시 매도인 *underwriter 비해당* → 전매 적법.
-
-### §4.C 경로 선택 (OR) — C-00
-
-> **§230.502(d)** 등으로 자산이 restricted이면 *재판매 경로가 필요*. **C-00**이 `Manifest.resaleFramework`(SEC_4A7 / RULE_144 / EITHER)로 *어느 경로*인지 라우팅하고, R2는 *그 경로의 요건*을 본다.
-- `SEC_4A7` → 경로 A(§4.A) 평가.
-- `RULE_144` → 경로 B(§4.B) 평가.
-- `EITHER` → 진입 가능한 경로(보유기간 충족 시 144 / 적격 매수인 시 4a7) 중 *보수 우선*.
-
-### §4.D Gap 분석 + 처리 (4분류 라우팅)
-
-| 요건 | 분류 | 처리 |
-|---|---|---|
-| (d)(3) 정보제공 · (d)(6) business · 144(c) 공시정보 | **(a)** | *발행자 attestation*(발행자측 사실) → **E-02류 "발행자 정보·지위 attestation"** 으로 묶어 처리(E-01·E-03 패밀리). Manifest claim. |
-| (d)(2) general solicitation *판정* | **(b)** | 공개 DEX가 general solicitation인지 = *법적 판단* → 보경 변호사(ADR-005 blocker). 코드는 B-04(RFQ 강제)로 *조건 충족 유도*. |
-| (d)(4) seller≠issuer · (d)(7) unsold allotment · (d)(8) 90일 outstanding | **(c)** | *결정론 소형 검사*(신원 대조·메타·날짜) — *전용 부품 없음.* → **신규 소형 부품 또는 C-00/A-06 확장**(pool 추가 = ADR). |
-| (d)(5) bad actor *매도인측* | **(b/확장)** | E-03을 *매도인+유료참여자*로 확장(현재 발행자측). |
-
-→ **결론: 경로 A(§4(a)(7))는 *부품으로 대부분 커버*되나, (c) 소형 결정론 검사 3개((d)(4)(7)(8))와 (a) 발행자 attestation((d)(3)(6))가 *미완*.** R2 완결엔 *E-02류 attestation + 소형 검사 3종* 보강 필요(§11).
-
----
-
-## §5. ③ Activation Logic
-
-- 자산이 **restricted**(B-03=true) AND 거래가 **2차(전매)** → R2 activate.
-- C-00이 `Manifest.resaleFramework`로 경로 선택(§4.C).
-- §3(c)(7) 펀드면 R3(A-13 QP) *항상 cumulative*(경로 무관 — §8).
-
----
-
-## §6. ④ Composition — 경로 OR + 경로 내 AND
-
-```
-R2_PASS ⟺  C-00.route == SEC_4A7  ?  (㈎A-03 ∧ ㈏[B-04∧A-12] ∧ ㈐gap ∧ ㈑gap ∧ ㈒E-03' ∧ ㈓gap ∧ ㈔gap ∧ ㈕gap)
-         :  C-00.route == RULE_144 ?  (㉮C-01 ∧ ㉯gap ∧ (affiliate→㉰A-06))
-         :  (EITHER → 진입 가능 경로 보수 우선)
-   ∧  [횡단 A-01 ∧ A-02 (R-XJ)]      # 제재·관할
-```
-- **R1과 차이:** R1은 *단일 AND*, R2는 ***경로 OR*** (선택 경로의 요건만 AND). 경로 선택은 C-00(Manifest 값).
-- gap(㈐㈑㈓㈔㈕·㉯)은 현재 *부품 미커버* → §4.D 처리 전까지 *보수 보류/off-chain*.
-
----
-
-## §7. ⑤ 거절·예외 처리
-
-- R2 FAIL → **`RECIPE_R2_RESALE_FAIL`** + *경로·미충족 요건·부품.*
-  - 예(4a7): A-03 FAIL → "§4(d)(1) 매수인 비적격 → §4(a)(7) 불성립"; B-04 FAIL → "§4(d)(2) general solicitation 위험".
-  - 예(144): C-01 FAIL → "Rule 144(d) 보유기간 미충족 → *§4(a)(7) 경로 대안 안내*"(매수인 적격 시).
-- 한 경로 FAIL이어도 *다른 경로가 가능하면* C-00이 재라우팅(OR의 장점).
-
----
-
-## §8. ⑥ Conflict·Interaction
+## 9. Conflict·Interaction
 
 | 상대 | 패턴 | 설명 |
 |---|---|---|
-| **R3**(§3(c)(7)) | **Cumulative(항상)** | 전매여도 §3(c)(7) 펀드 지위 유지 → *매수인 QP(A-13) 항상* 필요. R2(전매 적법)+R3(QP) 동시 |
-| **R1**(발행) | **Orthogonal** | R1=1차, R2=2차. 단 R1의 restricted(502d)가 R2를 *유발* |
-| **R-XJ** | **Cumulative(always-on)** | A-01·A-02 항상 |
-| 144A(QIB) | (대안 경로) | QIB 전용 — 본 시스템 미채택(C-00 §4) |
+| R3(§3(c)(7)) | Cumulative(항상) | 재판매여도 펀드 지위 유지 → 매수인 적격구매자(A-13) 항상 필요 |
+| R1(발행) | Orthogonal | R1의 제한증권(502d)이 R2를 유발하나 시점이 다름 |
+| R-XJ | Cumulative(always-on) | A-01·A-02 공유 |
+| Rule 144A(QIB) | 대안 경로 | 본 시스템 미채택(C-00) |
 
-> **핵심:** 전매에서도 **A-13(QP)는 R3로 항상 켜진다**(§3(c)(7) 유지). R2는 *전매 면제*를, R3는 *펀드 자격*을 — 둘 다 PASS해야.
+## 10. 목표 구현 요건 (컨트랙트 미구현)
 
----
+R2 전용 Recipe 컨트랙트가 실장될 경우, `BaseRecipe`/`IRecipe`를 상속하여 (1) `isApplicable`이 restricted·2차거래 조건을 게이트하고, (2) `requiredElements`가 C-00이 선택한 경로에 따라 동적으로 달라지는 경로 OR을 표현하여야 한다. 현재 `RecipeRegistry`에는 R2 항목이 없으며, 경로 분기는 Element C-00 스펙에 규정되어 있다. 소형 결정론 검사 세 가지와 발행자 attestation은 신규 Element 신설(ADR-004 pool 변경)을 요한다.
 
-## §9. 📐 결정론 경계
+## 11. 인수 기준
 
-| ✅ 온체인 | 🔵 claim/off-chain |
-|---|---|
-| 경로 라우팅(C-00)·경로 요건 부품 AND·날짜/신원 결정 검사·미충족 propagate | AI·bad actor 판단(claim) / general solicitation 법적 판정(보경) / 발행자 정보·지위(attestation) |
+| # | 시나리오 | 기대 결과 |
+|---|---|---|
+| 1 | SEC_4A7, 매수인 적격, 여타 충족 | R2 PASS(경로 A) |
+| 2 | SEC_4A7, A-03 실패 | RECIPE_R2_...FAIL (§4(d)(1)) |
+| 3 | RULE_144, 비계열자, C-01 충족 | R2 PASS(경로 B) |
+| 4 | RULE_144, C-01 미충족 | FAIL + 4a7 대안 안내 |
+| 5 | 펀드 자산, 매수인 비적격구매자 | R3 축에서 차단(누적) |
 
----
+## 12. 잔여 확정 항목
 
-## §10. 자산 적용 (BUIDL = 예시)
-
-- BUIDL `resaleFramework=SEC_4A7`(ADR-005) → 경로 A. A-03 active + (gap 보강 후) (d)(3)(6) attestation·(d)(4)(7)(8) 소형검사.
-- **§3(c)(7) 때문에 A-13(QP) 항상**(R3) — 전매 매수인도 QP여야(§8).
-- *다른 restricted 자산*은 자기 `resaleFramework`로 — R2 코드 동일(ADR-006).
-
----
-
-## §11. Open Issues
-
-1. **(c) 소형 결정론 검사 3종** 🟡 — (d)(4) seller≠issuer·(d)(7) unsold allotment·(d)(8) 90일 outstanding → 신규 소형 부품 or C-00/A-06 확장(pool 추가 ADR).
-2. **(a) 발행자 정보·지위 attestation** 🟡 — (d)(3)·(d)(6)·144(c) → E-02류 attestation 묶음(E-01/E-03 패밀리).
-3. **(d)(5) bad actor 매도인 확장** 🟡 — E-03을 *매도인+유료참여자*로 확장.
-4. **general solicitation 판정** 🔴 — (d)(2)/ADR-005 blocker, 보경 변호사 확인.
-5. **EITHER 경로 우선순위** 🟡 — 두 경로 모두 가능 시 선택 정책(C-00 §5.3).
+1. 소형 결정론 검사 3종(§4(d)(4)(7)(8)) 신규 부품/확장.
+2. 발행자 정보·지위 attestation(§4(d)(3)(6)·144(c)) — E-02류 신설.
+3. E-03의 매도인·유료참여자 확장.
+4. 일반적 권유 해당성(§4(d)(2)) 보경 확인(blocker).
+5. R2 전용 Recipe 컨트랙트 실장 및 RecipeRegistry 등재.
+6. 본 Recipe 법적 논증의 보경 검토(review-required: legal).
 
 ---
 
-## §12. 변경 로그
+# 부록. 출처 및 연혁
 
-- [2026-06-17] v1.0 작성(태스크 #32). **§77d 원문 기준 조문별 삼단논법**. 경로 OR 구조(§4(a)(7) 8요건 (d)(1)~(8)+§4(e) 효과 / Rule 144 보유기간·공시·물량). ADR-005(§4(a)(7) 주·A-03 active) 반영. gap 4분류 처리((c) 소형검사 3종·(a) 발행자 attestation·(b) general solicitation 판정·E-03 매도인 확장). ADR-006(자산 일반성) 명시. **R1과 달리 경로 OR** — 전매 면제의 본질(경로 택일) 반영. uscode/eCFR 원문 인용.
+## A. 절별 출처
+
+| 절 | 성격 | 출처 |
+|---|---|---|
+| 제1~4절 (법적 근거·논증) | 파생(승준 walkthrough 재구성, 보경 미검토) | 승준 recipe walkthrough R2 v1.0 (2026-06-17) §4 |
+| 제5~12절 (목표 규격) | 목표(컨트랙트 미구현) | 본 명세 + C-00 스펙 참조 |
+
+## B. 근거 문헌
+
+- 원 출처(substance): 승준 recipe walkthrough `R2_4a7-Rule144-Resale.md` v1.0 (2026-06-17). 보경 recipe 검토본 없음.
+- 구현: 전용 컨트랙트 미구현. `BaseRecipe.sol`/`IRecipe` 인터페이스 상속 예정. 경로 라우팅 = Element `C-00`.
+- 결정: `ADR-004`(Element Pool Freeze) · `ADR-005`(§4(a)(7) 주 경로) · `ADR-006`(asset-agnostic)
+- 공유 개념: `SPEC.md`
+- 1차 출처: 15 U.S.C. § 77d(a)(7)·(d)·(e) · § 77b(a)(11) · § 77e · 17 C.F.R. § 230.144 · § 230.502(d)
+
+## C. 변경 로그
+
+- [2026-07-28] v2.0 — element spec과 동일한 2부 형식(제1부 법률논증 산문 + 제2부 목표 규격)으로 재작성. 기존 v1.0(2026-06-17, 조문별 삼단논법 단일부)을 대체. 제1부는 §4(a)(7) 8요건·Rule 144·경로 OR·C-00 라우팅을 산문화. 제2부는 전용 컨트랙트 미구현이라 목표 규격(REQ-R2-1~6·gap·인수 기준). ADR-005(§4(a)(7) 주 경로) 반영. review-required: legal.
+- [2026-06-17] v1.0 — (구) 조문별 삼단논법 walkthrough(경로 OR).

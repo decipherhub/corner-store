@@ -1,0 +1,572 @@
+# ELE.A-02_국가거주제한
+
+# A-02 국가·거주 제한 (매수인 측) / Buyer-side Jurisdiction & Residence Gate — 부품 심층 인수인계 문서 (Walkthrough)
+
+**이 문서는 무엇인가.** Decipher RWA DEX의 컴플라이언스 부품 중 하나인 국가·거주 제한 부품(내부 식별자 A-02)을, 미국 증권규제와 제재법을 처음 보는 사람도 이해할 수 있도록 풀어 쓴 인수인계 문서다. 개발자·법무팀·외부 자문 변호사·학회원이 각자 작업의 base로 그대로 쓸 수 있도록 — ① 이 규제가 어디서 왔고 왜 존재하는지, ② 어떤 사실을 입력받아 ③ 어떤 로직으로 판정하고 ④ 실패하면 어떻게 처리하며 ⑤ 어떤 테스트로 검증하는지를, 기술 요소마다 풀이를 함께 붙여 설명한다.
+
+**자체완결 원칙.** 이 문서는 다른 내부 문서를 열지 않아도 단독으로 이해되도록 작성했다. 인용은 미국 연방법·연방규칙·SEC·재무부(OFAC)·판례 등 외부 공식 자료만 사용한다.
+
+**출처 기준 (Version 1.0, 2026-07-22).** 본 부품의 인용은 다음 1차 출처를 기준으로 한다 — 15 U.S.C. §77e·§77d, 50 U.S.C. §1702·§1705·§4305는 uscode.house.gov 현행본(§77e는 2026-06-14 기준, §1705는 2026-05-22 기준), 17 CFR §230.901~§230.905(Regulation S)·§240.3b-4, 31 CFR §560.204(Iranian Transactions and Sanctions Regulations)은 eCFR 현행본(Title 17은 2026-07-14 최신, Title 31은 현행), 관련 Executive Order(E.O. 13685·14065·14312)와 OFAC 프로그램 구성은 federalregister.gov·ofac.treasury.gov, 판례는 govinfo.gov·supremecourt.gov다. 제정법 출처는 uscode.house.gov로 통일했으며, govinfo.gov/link/uscode/... 딥링크도 동일한 1차 출처다.
+
+**테스트 토큰 전제 (중요).** 본 문서는 실제 BlackRock BUIDL의 발행 표준, transfer architecture, 또는 현재 운영 조건을 단정하지 않는다. 본 프로젝트는 BUIDL-like Rule 506(c) + ICA §3(c)(7) private fund interest를 ERC-3643 테스트 토큰으로 모델링하여, 관할·거주 기반 pre-trade transfer restriction을 검증하는 것이다. 이하 'BUIDL'·'ERC-3643' 관련 서술은 모두 이 모델링 전제 하의 것이다.
+
+**부등호 표기 규약.** 본 문서는 초과(>)와 이상(≥)을 엄격히 구분한다. 원문이 "fewer than"이면 미만(<), "not less than"이면 이상(≥), "more than"·"exceeding"이면 초과(>)로 옮기고, 경계값의 포함 여부를 판정 매트릭스(§5.3)에서 명시한다.
+
+## §1. 규제 맥락 — 이 부품이 다루는 규제는 어디서 왔는가 (Context First)
+
+**왜 맥락부터 읽어야 하나.** 이 부품은 한 줄로 말하면 "이 매수인의 관할(국적·거주, 법인이면 설립지)이 이 거래를 해도 되는 관할인가"를 거래 직전에 판정한다. 그런데 "해도 되는 관할"이라는 기준은 서로 다른 두 법체계에서 동시에 나온다 — 하나는 증권법(어디 사람에게 팔 자격이 있는가), 다른 하나는 제재법(어디와 거래하면 그 자체로 위법인가)이다. 이 둘은 목적도 근거법도 집행기관도 다르다. 그래서 큰 그림(미국 증권규제의 국경 축 → 제재법이라는 별도의 축 → 두 축이 A-02에서 만나는 방식 → 우리 시스템에서의 의미 → 한국법과의 비교)을 먼저 깐다.
+
+### 1.1 미국 규제의 두 국경 축, 그리고 A-02의 자리
+
+미국에서 "외국인에게, 또는 외국을 향해 증권 거래를 태워도 되는가"라는 질문은 한 법이 아니라 두 개의 독립한 법체계가 각각 답한다.
+
+- **축 1 — 증권법의 속지주의(Regulation S / Reg D 경계).** 1933년 증권법 §5는 등록 없이는 증권을 팔지 못하게 하는 것이 기본값이다. 이 §5가 "미국 안"에서만 작동한다는 것이 Regulation S의 출발점이다(§230.901). 그래서 미국인 매수인에게는 미국 국내 면제(Reg D 506(c))가, 미국 밖 매수인에게는 역외 면제(Reg S)가 각각 적용된다. 결국 "이 매수인이 U.S. person인가"(§230.902(k))가 어느 면제 lane을 타는지를 가르는 분기점이 된다. 이것이 A-02가 판정하는 첫 번째 관할이다.
+
+- **축 2 — 제재법의 관할 금지(OFAC 포괄제재).** 증권법과 무관하게, 미국은 특정 국가·지역과의 거의 모든 거래를 그 자체로 금지한다. 근거는 국제긴급경제권한법(IEEPA, 50 U.S.C. §1701 이하)과 대적성국교역법(TWEA, Cuba)이며, 재무부 해외자산통제국(OFAC)이 이를 프로그램으로 집행한다. 이 금지는 "누가 명단에 올랐는가"가 아니라 "어느 관할에 속한 사람·재산인가"로 걸린다. 이것이 A-02가 판정하는 두 번째 관할이다.
+
+**쉽게 말하면.** 증권법 축은 "이 손님에게 이 물건을 팔 자격이 우리에게 있는가"를 묻고, 제재법 축은 "이 손님과 거래하는 것 자체가 국가가 금지한 일인가"를 묻는다. 앞은 면제(자격)의 문제, 뒤는 금지(위법)의 문제다. A-02는 이 두 질문을 한 관문에서 함께 통과시켜야 스왑을 허가한다.
+
+### 1.2 왜 "국가"가 두 번 문제되는가 — 두 축의 성격 차이
+
+두 축은 결과적으로 모두 "관할"을 보지만, 성격이 정반대다. 이 차이를 놓치면 한쪽 논리로 다른 쪽을 잘못 처리한다.
+
+| 구분 | 축 1 증권법(Reg S/Reg D) | 축 2 제재법(OFAC) |
+| --- | --- | --- |
+| 묻는 것 | "팔 자격이 있는가"(면제 성립) | "거래가 금지되는가"(위법 여부) |
+| 근거법 | 1933 Securities Act §5, Reg D, Reg S | IEEPA §1702·§1705, TWEA §5(b) |
+| 집행기관 | SEC | 재무부 OFAC |
+| 실패의 성격 | 면제 상실 → 미등록 판매 책임 | IEEPA 위반 → 민·형사 제재 |
+| 판정 축 | U.S. person 여부(902(k)) | 포괄제재 관할 소속 여부 |
+| 되돌릴 수 있나 | 다른 lane(Reg S) 개방으로 가능 | 원칙적으로 불가(hard block) |
+| Phase 1 처리 | 미국인만 허용(Reg S 유보) | 포괄제재역 전면 차단 |
+
+**핵심.** 제재법 축은 값이 "차단"이면 절대 우회가 없다 — 갱신·재KYC로 풀리지 않는다. 반면 증권법 축의 "비미국인 차단"은 자격 미달이 아니라 lane 미개방의 결과라서, 나중에 Reg S 경로를 열면 통과할 수 있는 상태다. A-02는 이 둘을 서로 다른 실패 코드로 분리한다(§6.2).
+
+### 1.3 A-01(제재 명단)과 A-02(국가·관할)의 분업 — 명단 기반 vs 관할 기반
+
+같은 "제재"라도 A-01과 A-02는 소관이 다르다. 이 경계가 흐려지면 한쪽이 다른 쪽을 중복 구현하거나, 둘 다 놓치는 구멍이 생긴다.
+
+- **A-01 = 명단 기반(list-based).** OFAC의 Specially Designated Nationals and Blocked Persons List(SDN List)에 특정 사람·법인·지갑이 올랐는지를 이름·식별자로 대조한다. SDN이 50% 이상 소유한 법인을 SDN으로 간주하는 이른바 "50% Rule"도 A-01 소관이다. 요컨대 "이 특정 주체가 차단 대상인가"다.
+
+- **A-02 = 관할 기반(jurisdiction-based).** 특정 국가·지역 전체를 상대로 한 포괄제재(embargo)에 매수인의 거주·국적·(법인)설립지가 걸리는지, 그리고 증권법상 판매가 허용된 관할인지를 본다. 명단에 이름이 없어도 관할만으로 차단된다 — 예컨대 SDN이 아닌 평범한 개인이라도 이란에 거주하면 A-02에서 걸린다.
+
+**쉽게 말하면.** A-01은 "지명수배 명단"을 대조하고, A-02는 "출입금지 구역 지도"를 대조한다. 명단에 없어도 금지구역에서 왔으면 A-02가 막고, 허용구역에서 왔어도 명단에 있으면 A-01이 막는다. 둘은 같은 거래에 병렬로(AND) 작동하며 서로를 대체하지 않는다(§9.1 경계).
+
+### 1.4 Decipher 시스템에서 왜 치명적인가 — 이중의 Existential Risk
+
+A-02가 잘못 판정하면 두 법체계 각각에서 시스템 전체를 위협하는 사고가 난다.
+
+- **증권법 측 위험.** 비미국인에게 Reg D 면제로만 팔면(즉 Reg S 요건을 안 갖춘 채 역외 매수인에게 팔면), 그 판매는 면제 근거를 잃어 §5 위반(미등록 판매)이 된다. 발행 전체의 면제 신뢰가 흔들리고 매수인은 rescission(원상회복) 소권을 가질 수 있다.
+
+- **제재법 측 위험.** 포괄제재역 거주자에게 서비스를 제공하거나 거래를 체결시키면 IEEPA §1705 위반이다. 민사 제재는 위반 1건당 \$250,000 또는 거래금액의 2배 중 큰 금액, 고의(willful) 위반은 형사로 \$1,000,000 이하 벌금과 자연인 20년 이하 징역까지 갈 수 있다(§3.10). 이것은 부품 하나가 막지 못하면 회사와 개인 모두에게 형사 리스크가 되는 종류의 실패다.
+
+**쉽게 말하면.** 증권법 실수는 "면제가 깨져 소송당함", 제재법 실수는 "형사처벌 대상이 됨"이다. A-02는 이 두 재앙의 공동 방벽이며, 그래서 값싼 자동 게이트로 만들되 어느 쪽도 통과 후 사고가 나면 안 되는 부품이다.
+
+### 1.5 Phase 1 스코프 — 미국인 한정, Reg S 역외는 유보(deferred)
+
+본 프로젝트의 Phase 1은 미국 적격투자자(Reg D 506(c)) 대상만 연다. 역외(Reg S) 판매 — U.S. person이 아닌 매수인에게 offshore transaction으로 파는 경로 — 는 나중에 열 때 별도로 검토한다(§12 Open Issue). 따라서 Phase 1의 증권법 allowlist는 사실상 "미국"이며, A-02의 축 1 판정은 "U.S. person이면 통과, 아니면 유보 차단"으로 단순화된다. 이 유보는 자격 미달(제재)이 아니라 lane 미개방이므로, 별도 실패 코드(FAIL_JURISDICTION_NOT_ALLOWED)로 표시해 Reg S 개방 시 자연스럽게 확장되도록 한다.
+
+### 1.6 한국법 비교 (참고)
+
+한국 변호사 독자를 위한 대응 관계만 짚는다(현재 타깃은 미국법이므로 한국법은 비활성).
+
+- **증권법 축.** 자본시장법상 국경 간(cross-border) 증권 모집·매출 규제와, 외국인 투자자 대상 사모 특례가 미국 Reg S/Reg D 경계에 대응한다. 다만 미국의 "U.S. person" 개념처럼 정밀한 역외 안전항 정의는 없고, 실무는 개별 판단에 가깝다.
+
+- **제재법 축.** 미국 OFAC에 정확히 대응하는 단일 기관·법은 없고, 외국환거래법(지급·거래 허가·신고)과 대외무역법·전략물자수출입고시(전략물자·상황허가), 그리고 UN 안보리 결의 이행을 위한 개별 고시가 기능을 분담한다. 미국 IEEPA처럼 "국가 전체와의 거의 모든 거래 금지 + 강력한 역외적용 + 형사책임"을 한 축으로 묶은 구조는 아니다. 향후 한국 진출 시 본 부품의 관할 정책(파라미터)에 한국법 레이어를 추가하는 방식으로 확장한다.
+
+## §2. 메타 정보 (Internal Identifier Box)
+
+아래는 Decipher 내부 PM 규약상의 식별자·분류값을 한곳에 모은 박스다. 본문에서는 이 코드들을 단독으로 쓰지 않고, "본 부품"·"국가·거주 제한 부품" 같은 자연어로 부른다. 코드는 시스템 추적용으로만 여기 둔다.
+
+| 항목 | 값 | 한 줄 풀이 |
+| --- | --- | --- |
+| 부품 이름 | 국가·거주 제한 (Jurisdiction & Residence Gate) | "이 매수인의 관할에서 거래해도 되는가"를 판정 |
+| 검사 대상 | ① 증권법상 허용 관할(Phase 1 = U.S. person, §230.902(k)) · ② 제재법상 금지 관할(OFAC 포괄제재: Cuba·Iran·North Korea·Crimea/DNR/LNR) | 거주·국적·(법인)설립지가 허용집합 안이고 금지집합 밖인가 |
+| Internal ID | A-02 (Decipher PM 규약) | 신원·자격 카테고리 2번 부품 |
+| 검증 방식 | 기계 판정형(패턴 A) — 결정론적 집합 판정. 단 입력(거주·국적)은 Trusted Issuer(Sumsub) claim에 의존(하이브리드) | 값 자체는 기계가 집합 대조로 판정, 그 값의 사실 판단은 신뢰기관이 off-chain에서 수행 |
+| Timing | pre-trade(거래 체결 직전) | 거래가 일어나기 전에 막는다 |
+| Stateful 여부 | STATELESS (Element 한정) | Element 자체는 매수 시점 claim 스냅샷과 그 시점의 제재·정책 파라미터만 본다. 다만 포괄제재 목록과 관할 정책은 시간에 따라 변하는 파라미터라 Operator layer가 별도 관리·갱신한다 |
+| 주 활성화 Recipe | R1(Reg D 506(c) Issuance) · R2(§4(a)(7)/Rule 144 Resale) · R3(ICA §3(c)(7) Fund) | 세 레시피 모두에 필수 부착(고재사용 부품). R4(행위감시)에는 미부착 |
+| Cumulative Recipe | 위 R1·R2·R3는 한 거래에서 중첩 활성될 수 있음 | A-01·B-01과 함께 사실상 전(全) 거래 공통 검사 |
+| Cascade Element | A-01(SDN 명단) · A-04(신원 중복) · A-09(법인 look-through, 법인 매수인 시) · A-11(claim 신선도) | 병렬 AND(A-01·A-04) 및 조건부 하위 호출(A-09) |
+| Downstream 의존 | D-01(§12(g)/FPI 미국 거주 record holder 카운트)이 A-02의 거주 판정을 입력으로 소비 | A-02는 거주 claim의 출처, D-01은 그 소비처 |
+| 성숙도 | 완료(Spec Sheet 단계) · 본 walkthrough 최초 작성 | 데모 필수, 후속 보완은 §12 |
+| 파일·위치 | A-02_국가거주제한.md · 산출물/elements/ | 산출물 경로 |
+
+## §3. ① 법적 근거 (Layer 1 → 2 → 3)
+
+**읽는 법.** 법적 근거는 세 겹이다 — **Layer 1**(조문)은 의회가 만든 법률 텍스트(statute), **Layer 2**(규칙)는 행정청(SEC·OFAC)이 그것을 실무 수준으로 구체화한 연방규칙(rule) 및 대통령 명령(Executive Order), **Layer 3**(해석)은 판례·발행문서가 모호한 부분을 메운 해석이다. 아래 §3.0.2 표의 종류 칸이 그대로 Layer에 대응한다 — Statute = Layer 1, SEC/OFAC Rule·E.O. = Layer 2, Case = Layer 3. 본 절은 두 축(증권법 → 제재법)의 논리 흐름 순서로 배열되며 각 항목이 어느 Layer인지는 표의 종류 칸으로 확인한다.
+
+### 3.0 법조문 관계 플로우차트 (개발자용)
+
+아래 그림은 두 축의 조문·규칙이 관할 판정에서 어떻게 연결되는지를 하나의 큰 흐름으로 정리한 것이다 — 거래 발생 → (축 1) §5 등록 원칙에서 Reg D 미국 lane과 Reg S 역외 lane으로 분기, U.S. person 판정(902(k)) → (축 2) IEEPA 권한·처벌에서 OFAC 포괄제재 프로그램, 관할 기반 금지(560.204 등)로 하강 → 두 축이 "allowedJurisdiction ∧ ¬prohibitedJurisdiction" 게이트에서 합류 → PASS/FAIL. 각 조항의 상세는 §3.1~§3.16.
+
+![A-02 fig30 법조문·논리 흐름](A-02_fig30.png)
+
+**범례.**
+
+- 파랑 = 핵심(Direct: §5·§230.902(k)·IEEPA §1702/§1705·포괄제재 프로그램)
+
+- 회색 = 분기·판정 노드
+
+- 초록 = PASS
+
+- 빨강 = FAIL(제재역 hard block / 非허용 관할)
+
+- 주황 = 유보·참조(Reg S 역외 lane Phase 1 유보)
+
+- 점선 회색 상자 = 다른 부품 소관(A-01 SDN · D-01 카운트 · Rule 3b-4(c))으로 A-02와 병렬·연동
+
+### 3.0.1 실제 BUIDL은 어떻게 적용되나
+
+§3.0이 일반 조문 흐름이라면, 이 절은 BUIDL-like 자산에 A-02가 어떻게 걸리는지를 보여준다. **(재확인) 본 서술은 실제 BlackRock BUIDL의 발행 표준·현재 운영 조건을 단정하지 않는다 — BUIDL-like 자산을 ERC-3643 테스트 토큰으로 모델링한 것이다.**
+
+실제 BUIDL은 미국 밖 투자자에게는 Reg S로, BVI 역외 펀드 형태로 공시되어 있다. 즉 현실의 BUIDL은 축 1의 양쪽 lane(미국 = Reg D, 역외 = Reg S)을 모두 쓰는 구조다. 그러나 본 프로젝트 Phase 1은 미국인 lane만 열고 Reg S 역외 lane은 유보하므로(§1.5), A-02의 축 1 판정은 "U.S. person이면 통과"로 단순화된다. 축 2(제재)는 lane과 무관하게 항상 켜진다 — 미국인이든 아니든, 포괄제재역 거주·설립지면 차단이다.
+
+거주·국적의 사실 판단은 A-02가 직접 하지 않는다. ERC-3643 가정 하에서 Sumsub이 KYC 과정에서 거주지·국적(법인이면 설립 관할)을 확인하고 그 결과를 claim으로 서명·발급한다. 온체인 A-02는 그 claim의 값을 허용집합·금지집합과 대조하는 결정론적 판정만 한다. BUIDL이 실제 FPI(foreign private issuer)로 취급되는 경우, A-02가 공급하는 "미국 거주 여부"는 D-01이 §12(g)/Rule 12g3-2(a)의 "미국 거주 record holder 300명 미만" 경계를 계산하는 입력이 된다(§3.8·§9.3).
+
+### 3.0.2 조문 순서·중요성 한눈에 보기 (법 리스트)
+
+아래 두 표가 §3의 지도다. **표 1**(Authority)은 각 근거가 어떤 종류(=Layer)이고 무슨 내용이며 A-02에 어떻게 닿는지를, **표 2**(순서·중요성)는 소단원의 읽는 순서(논리 흐름)와 중요성(A-02가 실제로 그걸로 판정하는가)을 보여준다. 순서는 중요도순이 아니라 두 축의 흐름순이다.
+
+**표 1 — Authority(근거 목록)**
+
+| 종류 | Authority | 내용 | A-02 관련성 | Direct/Supporting | Official URL |
+| --- | --- | --- | --- | --- | --- |
+| Statute | Securities Act §5 · 15 U.S.C. §77e | 미등록 증권의 offer·sale 금지(기본값) | 두 면제 lane이 전제하는 등록 원칙 | Background | uscode.house.gov |
+| Statute | Securities Act §4(b) · 15 U.S.C. §77d(b) | 506(c) 발행은 일반청약해도 public offering 아님 | 미국 lane 발행 근거(A-03 소관) | Supporting | uscode.house.gov |
+| SEC Rule | Rule 506(c) · 17 CFR §230.506(c) | 미국 적격투자자 대상 발행 면제 | 축 1 미국 lane(A-03 소관) | Supporting | ecfr.gov |
+| SEC Rule | Reg S §230.901 · 17 CFR §230.901 | §5는 미국 내 거래에만 적용(역외 제외) | 축 1 역외 lane의 관문 | Direct | ecfr.gov |
+| SEC Rule | Reg S §230.902(k) · 17 CFR §230.902(k) | U.S. person 정의(8 포함 · 6 제외) | 어느 lane인지 가르는 핵심 판정 ⭐ | Direct | ecfr.gov |
+| SEC Rule | Reg S §230.902(h) · 17 CFR §230.902(h) | offshore transaction 정의 | 역외 판매의 형태 요건(유보) | Direct | ecfr.gov |
+| SEC Rule | Reg S §230.902(c) · 17 CFR §230.902(c) | directed selling efforts 금지·정의 | 역외 판매 시 미국향 광고 금지(유보) | Conditional | ecfr.gov |
+| SEC Rule | Reg S §230.903·§230.904 | 발행자/재판매 offshore safe harbor | 역외 lane 골격(Phase 1 유보) | Conditional | ecfr.gov |
+| SEC Rule | Rule 3b-4(c) · 17 CFR §240.3b-4 | foreign private issuer·미국 거주 record holder | A-02 거주 판정 → D-01 입력 | Supporting | ecfr.gov |
+| Statute | IEEPA §203 · 50 U.S.C. §1702 | 대통령의 거래 규제·금지 권한(OFAC 근거) | 축 2 포괄제재의 수권 | Direct | uscode.house.gov |
+| Statute | IEEPA §206 · 50 U.S.C. §1705 | 위반의 민·형사 책임·시효 | 관문이 존재하는 이유(집행 리스크) | Direct | uscode.house.gov |
+| Statute | TWEA §5(b) · 50 U.S.C. §4305(b) | Cuba 포괄제재의 별도 수권 | 축 2 Cuba 프로그램 근거 | Supporting | uscode.house.gov |
+| OFAC Rule | Iran ITSR §560.204 · 31 CFR §560.204 | 이란 대상 서비스 수출 등 포괄 금지(대표) | 관할 기반 금지의 구체 기제 | Direct | ecfr.gov |
+| E.O. | E.O. 13685(Crimea)·14065(DNR/LNR)·14312(Syria 종료) | 지역 포괄제재 지정/해제 | 금지집합이 동적 파라미터인 근거 | Supporting | federalregister.gov |
+| Case | Morrison v. National Australia Bank · 561 U.S. 247 (2010) | 증권법의 역외적용 한계(transactional test) | 속지주의(축 1)의 판례 토대 | Background | supremecourt.gov |
+| Statute | NSMIA §18 · 15 U.S.C. §77r | covered security의 주(州) 등록 preemption | 미국 내 州 관할과의 경계(A-02 밖) | Background | uscode.house.gov |
+
+**표 2 — 조문 순서·중요성 한눈에 보기**
+
+| 순서 | 조문 | 중요성 | A-02가 그걸로 하는 일 |
+| --- | --- | --- | --- |
+| §3.1 | Securities Act §5 (77e) | 배경 | 안 함 — 두 면제 lane의 전제(등록 원칙) 확인 |
+| §3.2 | §4(b)·Rule 506(c) | 보조 | 안 함 — 미국 lane 발행 근거(A-03 소관) |
+| §3.3 | Reg S §230.901 | 핵심 | 역외가 §5 밖임을 확인(축 1 역외 lane 관문) |
+| §3.4 | Reg S §230.902(k) — U.S. person | 핵심 ⭐ | 매수인이 미국인인지 판정(lane 분기의 본체) |
+| §3.5 | Reg S §230.902(h) — offshore transaction | 조건부 | 역외 판매 형태 요건(Phase 1 유보) |
+| §3.6 | Reg S §230.902(c) — directed selling efforts | 조건부 | 역외 시 미국향 광고 금지(유보) |
+| §3.7 | Reg S §230.903·904 | 조건부 | 역외 lane safe harbor 골격(유보) |
+| §3.8 | Rule 3b-4(c) | 보조 | 거주 판정을 D-01(FPI 300 카운트)에 공급 |
+| §3.9 | IEEPA §1702 | 핵심 | 안 함(수권) — 포괄제재 금지의 법적 뿌리 |
+| §3.10 | IEEPA §1705 | 핵심 | 안 함(집행) — 위반 시 민·형사 책임의 근거 |
+| §3.11 | TWEA §5(b) (4305) | 보조 | 안 함 — Cuba 프로그램의 별도 수권 |
+| §3.12 | Iran ITSR §560.204 | 핵심 | 관할 금지의 구체 기제(서비스 수출 금지) 대입 |
+| §3.13 | E.O. 13685·14065·14312 + 포괄제재 집합 | 핵심 | 금지집합(파라미터)의 현행 값과 갱신 근거 |
+| §3.14 | 판례·preemption(Morrison·NSMIA §18) | 보조 | 안 함 — 속지주의 토대·州 관할 경계 확인 |
+| §3.15 | Sub-요건 분해 매트릭스 | — | 위 요건을 원자적 검증 단위로 분해(§5.2와 1:1) |
+| §3.16 | ERC-3643 변환·claim 총정리 | — | §3.1~§3.14의 claim 매핑을 한 표로 |
+
+**경계 — 이 부품이 다루지 않는 것.** 아래는 같은 거래에 작동하지만 A-02가 아니라 다른 부품·레이어가 책임진다 — 누락이 아니라 소관 분리이며, A-02 안에 끌어다 구현하지 않는다.
+
+- **OFAC SDN 명단 대조·50% Rule** — A-01 소관. A-02는 관할(지도)만 보고, 명단(수배)은 A-01이 본다.
+
+- **적격투자자(AI)·적격매수인(QP) 자격 판정** — A-03·A-13 소관. A-02는 "어디 사람인가"만 보고, "자격이 있는가"는 보지 않는다.
+
+- **§12(g)/FPI 보유자 수 카운트 자체** — D-01 소관. A-02는 "미국 거주 여부" claim을 공급할 뿐, 300명·2,000명 임계 계산은 D-01이 한다.
+
+- **claim 신선도·만료** — A-11 소관. A-02는 신선도 게이트를 호출해 결과를 받아 쓴다.
+
+- **미국 내 州(state) blue sky 등록** — 발행·notice-filing 레이어 소관이며, 506 covered security는 NSMIA §18로 州 등록이 preempt된다(§3.14). A-02는 국가·지역(country/region) 단위 관할만 보고 州 단위는 보지 않는다.
+
+### 3.1 Securities Act §5 — 15 U.S.C. §77e — 등록 원칙(면제의 배경) [uscode.house.gov]
+
+- **조항**: Securities Act §5(a)·(c), 15 U.S.C. §77e(a)·(c) — uscode.house.gov (2026-06-14 기준 현행)
+
+- **핵심 원문**: (a) Unless a registration statement is in effect as to a security, it shall be unlawful for any person, directly or indirectly— (1) to make use of any means or instruments of transportation or communication in interstate commerce or of the mails to sell such security through the use or medium of any prospectus or otherwise; or (2) to carry or cause to be carried through the mails or in interstate commerce, by any means or instruments of transportation, any such security for the purpose of sale or for delivery after sale. … (c) It shall be unlawful for any person, directly or indirectly, to make use of any means or instruments of transportation or communication in interstate commerce or of the mails to offer to sell or offer to buy through the use or medium of any prospectus or otherwise any security, unless a registration statement has been filed as to such security, or while the registration statement is the subject of a refusal order or stop order or (prior to the effective date of the registration statement) any public proceeding or examination under section 77h of this title.
+
+- **한국어**: (a) 어느 증권에 관하여 registration statement가 발효 중이 아닌 한, 누구든지 직접·간접으로 다음을 하는 것은 위법이다 — (1) prospectus의 사용 또는 그 밖의 방법으로 그 증권을 판매하기 위하여, 주(州)간 상거래 또는 우편의 운송·통신 수단을 사용하는 것; 또는 (2) 판매를 위하여 또는 판매 후 인도를 위하여, 우편 또는 주간 상거래로 그 증권을 운송하거나 운송하게 하는 것. … (c) 누구든지 직접·간접으로, 어느 증권에 관하여 registration statement가 제출되지 않았거나, 그것이 거부명령·정지명령의 대상이거나 (발효일 전) §77h상 공개 절차·심사의 대상인 동안, prospectus의 사용 또는 그 밖의 방법으로 그 증권의 청약(offer to sell)·매수청약(offer to buy)을 하기 위하여 주간 상거래·우편의 수단을 사용하는 것은 위법이다.
+
+- **쉬운 설명**: 미국 증권법의 기본값은 "등록 안 했으면 팔지도, 팔겠다고 광고하지도 마라"이다. 이 §5가 모든 것의 출발점이며, Reg D(미국 lane)와 Reg S(역외 lane)는 각각 이 §5의 예외(면제)를 성립시키는 조건을 정한 것이다. A-02가 관할을 따지는 이유도 결국 여기서 나온다 — 어느 예외로 §5를 벗어나느냐가 매수인의 관할에 따라 갈리기 때문이다. 상세는 A-03(발행·재판매) 소관이며, 여기서는 두 lane의 공통 전제로만 인용한다.
+
+- **PASS/FAIL 반영**: 배경 — A-02가 직접 §5를 판정하지 않는다. 다만 A-02의 두 lane 분기(§3.3~§3.4)가 이 §5의 예외 구조 위에 서 있음을 확인한다.
+
+- **ERC-3643 변환**: 직접 매핑 없음. asset.manifest.issuanceFramework(= REG_D_506C)와 asset.manifest.regsLaneEnabled(Phase 1 = false)가 이 조문 구조를 반영하는 상위 파라미터다.
+
+### 3.2 Securities Act §4(b)·Rule 506(c) — 미국 lane 발행 면제 (A-03 소관) [uscode.house.gov · ecfr.gov]
+
+- **조항**: Securities Act §4(b), 15 U.S.C. §77d(b) — uscode.house.gov; Rule 506(c), 17 CFR §230.506(c) — ecfr.gov
+
+- **핵심 원문 (§4(b))**: Offers and sales exempt under section 230.506 of title 17, Code of Federal Regulations (as revised pursuant to section 201 of the Jumpstart Our Business Startups Act) shall not be deemed public offerings under the Federal securities laws as a result of general advertising or general solicitation.
+
+- **한국어**: 17 C.F.R. §230.506(JOBS Act §201에 따라 개정된)상 면제되는 청약·판매는, 일반광고 또는 일반청약을 이유로 연방 증권법상 public offering으로 간주되지 아니한다.
+
+- **쉬운 설명**: 미국인 매수인에게 파는 lane은 Reg D 506(c)다 — 일반청약(광고)을 허용하되 모든 매수인이 적격투자자여야 하고 발행자가 그 자격을 reasonable steps로 검증해야 한다. A-02 관점에서 중요한 것은 이 lane이 "미국 관할"에 대응한다는 점뿐이다. 매수인이 U.S. person이면 이 lane, 아니면 Reg S lane(§3.3~)이다. 자격 검증·일반청약 요건 자체는 A-03 소관이며, A-02는 lane 배정을 위한 참조로만 인용한다.
+
+- **PASS/FAIL 반영**: 보조 — A-02는 이 조문을 판정하지 않는다. 매수인이 U.S. person일 때 축 1이 이 lane으로 귀결됨을 확인하는 데 쓴다.
+
+- **ERC-3643 변환**: asset.manifest.issuanceFramework = REG_D_506C. A-02는 이 값을 읽어 "미국 lane 대상 자산"임을 전제한다.
+
+### 3.3 Regulation S §230.901 — 총칙: §5는 미국 안에만 적용 [ecfr.gov]
+
+- **조항**: 17 C.F.R. §230.901 (Regulation S 총칙) — ecfr.gov (Title 17 현행)
+
+- **핵심 원문**: For the purposes only of section 5 of the Act (15 U.S.C. § 77e), the terms offer, offer to sell, sell, sale, and offer to buy shall be deemed to include offers and sales that occur within the United States and shall be deemed not to include offers and sales that occur outside the United States.
+
+- **한국어**: 오직 이 법 §5(15 U.S.C. §77e)의 목적상, offer·offer to sell·sell·sale·offer to buy라는 용어는 미국 안에서 발생하는 청약·판매를 포함하는 것으로 보고, 미국 밖에서 발생하는 청약·판매는 포함하지 않는 것으로 본다.
+
+- **쉬운 설명**: 이 한 문장이 Regulation S 전체의 뿌리다 — §5의 등록의무는 "미국 안" 거래에만 걸리고, "미국 밖" 거래는 §5의 문언에서 아예 빠진다는 선언이다. 그래서 미국 밖 매수인에게 파는 역외 거래는 등록 없이도 §5 위반이 아니게 된다. 다만 "미국 밖"인지 여부는 자동이 아니라 아래 §230.902의 정의들(U.S. person·offshore transaction)로 판정한다. Regulation S에는 Preliminary Notes가 붙어 있어, 이 역외 면제가 미국 등록의무를 잠탈하려는 계획(scheme to evade registration)의 일부로 쓰이면 안 된다는 반(反)탈법 원칙을 못 박는다 — 형식상 역외 형태만 갖추고 실질이 미국 국내 판매면 면제가 인정되지 않는다. 본 프로젝트는 Phase 1에서 이 역외 lane을 유보하므로, A-02는 이 조문을 "역외 lane이 존재하지만 지금은 닫혀 있음"의 근거로 인용한다.
+
+- **PASS/FAIL 반영**: 직접 ○ (lane 관문) — 매수인이 미국 밖(비 U.S. person)이면 이론상 이 역외 lane이 열려야 하나, Phase 1에서는 유보이므로 FAIL_JURISDICTION_NOT_ALLOWED로 처리한다.
+
+- **ERC-3643 변환**: asset.manifest.regsLaneEnabled(bool). Phase 1 = false → 비 U.S. person은 통과 불가(유보). true로 전환 시 §3.4~§3.7 요건을 활성.
+
+### 3.4 Regulation S §230.902(k) — "U.S. person" 정의 [ecfr.gov]
+
+- **조항**: 17 C.F.R. §230.902(k) — ecfr.gov (Title 17, 2026-07-14 최신 확인)
+
+- **핵심 원문 (k)(1) 포함**: "U.S. person" means: (i) Any natural person resident in the United States; (ii) Any partnership or corporation organized or incorporated under the laws of the United States; (iii) Any estate of which any executor or administrator is a U.S. person; (iv) Any trust of which any trustee is a U.S. person; (v) Any agency or branch of a foreign entity located in the United States; (vi) Any non-discretionary account or similar account (other than an estate or trust) held by a dealer or other fiduciary for the benefit or account of a U.S. person; (vii) Any discretionary account or similar account (other than an estate or trust) held by a dealer or other fiduciary organized, incorporated, or (if an individual) resident in the United States; and (viii) Any partnership or corporation if: (A) Organized or incorporated under the laws of any foreign jurisdiction; and (B) Formed by a U.S. person principally for the purpose of investing in securities not registered under the Act, unless it is organized or incorporated, and owned, by accredited investors (as defined in § 230.501(a)) who are not natural persons, estates or trusts.
+
+- **핵심 원문 (k)(2) 제외 (요지)**: The following are not "U.S. persons": (i) 미국 소재 dealer·전문수탁자가 비(非)미국인을 위해 보유하는 재량계좌; (ii) 비미국인 전문수탁자가 재량을 갖고 외국법이 규율하는 estate; (iii) 비미국인 수탁자가 재량을 갖고, 수익자(및 철회가능 신탁의 위탁자)에 미국인이 없는 trust; (iv) 미국 밖 법·관행으로 설립·운영되는 employee benefit plan; (v) 유효한 사업상 이유로 미국 밖에 있고 보험·은행업으로 현지 규제를 받는 미국인의 해외 지점·대리점; (vi) IMF·IBRD·미주개발은행·아시아개발은행·아프리카개발은행·UN 등 국제기구와 그 기관·부속·연금.
+
+- **한국어 (k)(1)**: "U.S. person"이란 다음을 뜻한다 — (i) 미국에 거주하는(resident) 모든 자연인; (ii) 미국법에 따라 조직·설립된 모든 partnership 또는 corporation; (iii) executor·administrator 중 어느 하나가 U.S. person인 모든 estate; (iv) trustee 중 어느 하나가 U.S. person인 모든 trust; (v) 미국에 소재한 외국 실체의 대리점·지점; (vi) dealer 등 수탁자가 U.S. person의 이익·계산으로 보유하는 비재량(non-discretionary) 계좌; (vii) 미국에서 조직·설립(개인이면 거주)된 dealer 등 수탁자가 보유하는 재량(discretionary) 계좌; (viii) (A) 외국 관할법에 따라 조직·설립되었고 (B) 미등록 증권 투자를 주된 목적으로 U.S. person이 형성한 partnership·corporation. 단 자연인·estate·trust가 아닌 적격투자자(§230.501(a))에 의하여 조직·설립·소유된 경우는 제외.
+
+- **쉬운 설명**: 이것이 A-02 축 1의 심장이다. "미국인(U.S. person)"은 국적이 아니라 주로 **거주(resident)**와 **설립지(organized/incorporated)**로 정의된다 — 미국에 사는 자연인, 미국법으로 세운 법인이 기본이다. 여기서 두 가지가 특히 중요하다. 첫째, (viii)의 anti-abuse 조항 — 미국인이 미등록 증권을 사려고 외국에 급조한 회사는 겉은 외국법인이어도 U.S. person으로 본다(비자연인 적격투자자 소유면 예외). 둘째, (k)(2)의 제외 목록 — 형식상 미국과 연결돼 보여도 실질이 역외면 U.S. person이 아니다. A-02는 이 정의를 직접 재현하지 않고, Sumsub이 이 기준으로 판단한 결과(isUSPerson)를 claim으로 받아 쓴다. Phase 1에서는 isUSPerson = true여야 통과(미국 lane), false면 유보 차단이다. 유의 — U.S. person 여부(증권법 축 1)와 제재 관할(축 2)은 독립이다. 미국 거주자(U.S. person)라도 그가 동시에 이란 거주·국적 등 제재 접점을 가지면 축 2에서 별도로 걸릴 수 있다.
+
+- **PASS/FAIL 반영**: 직접 ○ (lane 분기 본체) — claim.isUSPerson = true → 미국 lane 후보(축 1 통과 가능). false → Phase 1에서는 FAIL_JURISDICTION_NOT_ALLOWED(Reg S 유보). 단 이 판정은 축 2(제재)와 독립이며, isUSPerson = true라도 거주·설립지가 제재역이면 축 2에서 차단된다.
+
+- **ERC-3643 변환**: claim.topic = US_PERSON_STATUS, claim.value ∈ {US_PERSON, NON_US_PERSON}, claim.basis(예: RESIDENT_NATURAL, ORGANIZED_US, FOREIGN_ENTITY_ABUSE_VIII, EXCLUDED_902K2). 판단은 off-chain(Sumsub), 온체인은 claim 값만 대조.
+
+### 3.5 Regulation S §230.902(h) — "offshore transaction" [ecfr.gov]
+
+- **조항**: 17 C.F.R. §230.902(h) — ecfr.gov
+
+- **핵심 원문 ((h)(1))**: An offer or sale of securities is made in an "offshore transaction" if: (i) The offer is not made to a person in the United States; and (ii) Either: (A) At the time the buy order is originated, the buyer is outside the United States, or the seller and any person acting on its behalf reasonably believe that the buyer is outside the United States; or (B) For purposes of: (1) Section 230.903, the transaction is executed in, on or through a physical trading floor of an established foreign securities exchange that is located outside the United States; or (2) Section 230.904, the transaction is executed in, on or through the facilities of a designated offshore securities market described in paragraph (b) of this section, and neither the seller nor any person acting on its behalf knows that the transaction has been pre-arranged with a buyer in the United States.
+
+- **한국어**: 증권의 청약·판매가 다음일 때 "offshore transaction"으로 이루어진 것이다 — (i) 청약이 미국 내의 자에게 이루어지지 않았고; 그리고 (ii) 다음 중 하나: (A) 매수주문이 개시되는 시점에 매수인이 미국 밖에 있거나, 매도인(및 그를 위해 행위하는 자)이 매수인이 미국 밖에 있다고 합리적으로 신뢰함; 또는 (B) §230.903 목적상 미국 밖 established foreign securities exchange의 물리적 거래소에서 체결되거나, §230.904 목적상 designated offshore securities market에서 체결되고 매도인이 그 거래가 미국 내 매수인과 사전 조율되었음을 알지 못함.
+
+- **쉬운 설명**: 역외 lane을 타려면 "거래가 미국 밖에서 일어났다"는 형태 요건을 갖춰야 한다. 핵심은 (ii)(A) — 매수주문 개시 시점에 매수인이 물리적으로 미국 밖에 있어야 한다(또는 매도인이 그렇게 합리적으로 믿어야 함). DEX 맥락에서 이 "매수주문 개시 시점의 소재"는 온체인만으로 확인하기 어려운 판단이라, Sumsub의 거주·소재 확인과 접속 시그널이 근거가 된다. 본 프로젝트는 Phase 1에서 역외 lane을 유보하므로, 이 요건은 Reg S 개방 시 활성될 조건으로만 인용한다. offshore transaction의 "취득 시점" 개념은 A-02의 취득 시점 논의(§5.4)와 맞물린다.
+
+- **PASS/FAIL 반영**: 조건부 ○ (Reg S 활성 시) — regsLaneEnabled = true인 경우, 비 U.S. person 매수인이라도 이 offshore-transaction 형태 요건을 충족해야 축 1을 통과한다. Phase 1(false)에서는 도달하지 않는다.
+
+- **ERC-3643 변환**: (유보) claim.buyerOutsideUS(bool) + 거래 실행 채널 태그. Phase 1 미사용, Reg S 개방 시 활성.
+
+### 3.6 Regulation S §230.902(c) — "directed selling efforts" [ecfr.gov]
+
+- **조항**: 17 C.F.R. §230.902(c) — ecfr.gov
+
+- **핵심 원문 ((c)(1))**: "Directed selling efforts" means any activity undertaken for the purpose of, or that could reasonably be expected to have the effect of, conditioning the market in the United States for any of the securities being offered in reliance on this Regulation S (§ 230.901 through § 230.905, and Preliminary Notes). Such activity includes placing an advertisement in a publication "with a general circulation in the United States" that refers to the offering of securities being made in reliance upon this Regulation S.
+
+- **한국어**: "directed selling efforts"란, Regulation S(§230.901~§230.905 및 Preliminary Notes)에 의거하여 청약되는 증권에 대하여 미국 내 시장을 조성(conditioning)할 목적으로, 또는 그러한 효과를 합리적으로 기대할 수 있는, 모든 활동을 말한다. 그러한 활동에는 이 Regulation S에 의거한 증권 청약을 언급하는 광고를 "미국 내 일반 유통(general circulation)" 간행물에 게재하는 것이 포함된다.
+
+- **쉬운 설명**: 역외 lane을 쓰려면 "미국을 향해 판촉하지 마라"는 조건이 붙는다 — 미국 시장을 겨냥한 광고·마케팅(directed selling efforts)이 있으면 offshore transaction 형태를 갖춰도 역외 면제가 깨진다. 이는 발행·판촉 레이어의 행위 규율이라 A-02가 개별 거래에서 직접 판정하는 대상은 아니지만, Reg S 개방 시 venue 운영이 미국향 광고를 하지 않도록 하는 근거가 된다. Phase 1에서는 유보. 참고 — 이는 미국 lane의 일반청약 허용(§4(b)/506(c))과 정반대 방향의 제약이라, lane마다 광고 규율이 다르다는 점을 기억해야 한다.
+
+- **PASS/FAIL 반영**: 조건부 — A-02가 개별 거래에서 판정하지 않는다(운영·발행 레이어 규율). Reg S 개방 시 Operator 정책으로 반영.
+
+- **ERC-3643 변환**: (유보) 개별 claim 없음. Operator 정책 파라미터(marketingUSDirected = 금지)로 관리.
+
+### 3.7 Regulation S §230.903·§230.904 — 발행/재판매 offshore safe harbor 골격 [ecfr.gov]
+
+- **조항**: 17 C.F.R. §230.903(발행자 등), §230.904(재판매) — ecfr.gov
+
+- **핵심 원문 (§230.903 chapeau)**: An offer or sale of securities by the issuer, a distributor, any of their respective affiliates, or any person acting on behalf of any of the foregoing, shall be deemed to occur outside the United States within the meaning of § 230.901 if: (1) The offer or sale is made in an offshore transaction; (2) No directed selling efforts are made in the United States by the issuer, a distributor, any of their respective affiliates, or any person acting on behalf of any of the foregoing; and [해당 Category별 추가 요건].
+
+- **핵심 원문 (§230.904 chapeau)**: An offer or sale of securities by any person other than the issuer, a distributor, any of their respective affiliates (except any officer or director who is an affiliate solely by virtue of holding such position), or any person acting on behalf of any of the foregoing, shall be deemed to occur outside the United States within the meaning of § 230.901 if: (1) The offer or sale are made in an offshore transaction; (2) No directed selling efforts are made in the United States by the seller, an affiliate, or any person acting on their behalf; and (3) The conditions of paragraph (b) of this section, if applicable, are satisfied.
+
+- **한국어**: (§230.903) 발행자·distributor·그 affiliate 등에 의한 청약·판매는, (1) offshore transaction으로 이루어지고 (2) 미국 내 directed selling efforts가 없으며 (3) 해당 Category(발행자 성격·미국 시장 이해관계에 따른 1·2·3 분류)의 추가 요건을 충족하면 §230.901상 미국 밖에서 발생한 것으로 본다. (§230.904) 발행자·distributor 등 이외의 자(즉 후속 재판매자)에 의한 청약·판매도, (1) offshore transaction이고 (2) 매도인 측의 미국 내 directed selling efforts가 없으며 (3) (해당 시) (b)항 요건을 충족하면 미국 밖 발생으로 본다.
+
+- **쉬운 설명**: 역외 면제에는 두 개의 safe harbor가 있다 — §230.903은 발행 단계(발행자·인수인), §230.904는 유통 단계(그 밖의 매도인·재판매)다. 둘 다 공통적으로 "offshore transaction + 미국향 판촉 없음"을 요구하고, 발행 단계는 Category 1/2/3에 따라 추가 제한(예: distribution compliance period, offering restrictions)을 얹는다. 본 프로젝트 Phase 1은 역외 lane을 유보하므로 이 골격은 참조로만 둔다. Reg S를 열 때, R1(발행)은 §230.903, R2(재판매)는 §230.904 프레임을 각각 A-02 상위에서 적용하게 된다.
+
+- **PASS/FAIL 반영**: 조건부 (Reg S 활성 시) — Phase 1에서는 도달하지 않음. 개방 시 lane 배정(발행/재판매)에 따라 903/904 요건을 상위 Recipe가 관리하고, A-02는 offshore-transaction·U.S. person 축만 담당.
+
+- **ERC-3643 변환**: (유보) asset.manifest.regsCategory ∈ {CAT1, CAT2, CAT3} + regsResaleFrame(904). Phase 1 미사용.
+
+### 3.8 Rule 3b-4(c) — foreign private issuer·미국 거주 record holder [ecfr.gov]
+
+- **조항**: 17 C.F.R. §240.3b-4(c) (및 관련 §240.12g3-2(a)) — ecfr.gov
+
+- **핵심 원문 (3b-4(c))**: The term foreign private issuer means any foreign issuer other than a foreign government except for an issuer meeting the following conditions as of the last business day of its most recently completed second fiscal quarter: (1) More than 50 percent of the issuer's outstanding voting securities are directly or indirectly held of record by residents of the United States; and [(2) any of: (i) a majority of executive officers or directors are U.S. citizens or residents; (ii) more than 50 percent of assets located in the United States; or (iii) business administered principally in the United States].
+
+- **한국어**: "foreign private issuer(FPI)"란, 가장 최근 완료된 제2 회계분기의 마지막 영업일 기준 다음에 해당하는 issuer를 제외한, 외국 정부가 아닌 모든 foreign issuer를 말한다 — (1) 발행 의결권증권의 50% 초과(more than 50 percent)를 미국 거주자가 직접·간접으로 record상 보유하고; 그리고 (2) (i) 임원·이사의 과반이 미국 시민·거주자이거나, (ii) 자산의 50% 초과가 미국 내에 있거나, (iii) 사업이 주로 미국에서 관리되는 경우.
+
+- **쉬운 설명**: 이 조문 자체는 D-01(보유자 수)의 소관이지만, A-02와 직접 맞물린다. FPI 판정과 그에 따르는 Rule 12g3-2(a) 면제("미국 거주 record holder가 300명 미만이면 §12(g) 면제")는 모두 "미국 거주자"를 세는 데서 출발하는데, 그 "미국 거주 여부"의 원천이 바로 A-02의 거주 판정이다. 즉 A-02는 각 매수인의 거주지를 확정해 claim으로 남기고, D-01은 그 claim들을 합산해 "미국 거주 보유자 < 300"(초과 아님, 미만) 경계를 감시한다. 부등호 유의 — FPI 요건 (1)은 "50 percent 초과"(> 50%), 12g3-2(a) 면제는 "300명 미만"(< 300)으로, 방향이 다르다. A-02는 이 계산을 하지 않고 입력(거주)만 제공한다.
+
+- **PASS/FAIL 반영**: 보조 ○ (D-01 입력 공급) — A-02는 residence claim을 확정·보존한다. FPI 여부·300명 경계 판정은 D-01이 수행하며, 그 결과가 A-02의 통과/차단을 바꾸지는 않는다(소관 분리).
+
+- **ERC-3643 변환**: claim.residence(ISO 3166 관할 코드) → D-01의 usResidentHolderCount 집계 입력. asset.manifest.issuerIsFPI·fpiExemption12g3_2a는 D-01 소관 파라미터.
+
+### 3.9 IEEPA §203 — 50 U.S.C. §1702 — 대통령의 거래 규제·금지 권한 [uscode.house.gov]
+
+- **조항**: International Emergency Economic Powers Act §203, 50 U.S.C. §1702(a)(1) — uscode.house.gov
+
+- **핵심 원문 (§1702(a)(1))**: At the times and to the extent specified in section 1701 of this title, the President may, under such regulations as he may prescribe, by means of instructions, licenses, or otherwise— (A) investigate, regulate, or prohibit— (i) any transactions in foreign exchange, (ii) transfers of credit or payments between, by, through, or to any banking institution, to the extent that such transfers or payments involve any interest of any foreign country or a national thereof, (iii) the importing or exporting of currency or securities, by any person, or with respect to any property, subject to the jurisdiction of the United States; (B) investigate, block during the pendency of an investigation, regulate, direct and compel, nullify, void, prevent or prohibit, any acquisition, holding, withholding, use, transfer, withdrawal, transportation, importation or exportation of, or dealing in, or exercising any right, power, or privilege with respect to, or transactions involving, any property in which any foreign country or a national thereof has any interest by any person, or with respect to any property, subject to the jurisdiction of the United States.
+
+- **한국어**: §1701에 정한 시기·범위에서, 대통령은 그가 정하는 규칙에 따라 지시·허가 기타 방법으로 다음을 할 수 있다 — (A) 다음을 조사·규제·금지한다: (i) 외국환에 관한 모든 거래, (ii) 어느 외국 또는 그 국민의 이해관계가 관련되는 한, 은행기관 간·을 통한·에 대한 신용공여 또는 지급의 이전, (iii) 미국의 관할에 속한 어느 자에 의한 또는 어느 재산에 관한 통화·증권의 수입·수출; (B) 미국의 관할에 속한 어느 자에 의한 또는 어느 재산에 관한, 어느 외국 또는 그 국민이 이해관계를 갖는 재산의 취득·보유·유보·사용·이전·인출·운송·수입·수출, 또는 그에 관한 거래·권리·권한·특권의 행사를, 조사·(조사 계속 중) 차단·규제·지시·강제·무효화·취소·방지·금지한다.
+
+- **쉬운 설명**: 이 조문이 OFAC 포괄제재의 헌법적 뿌리다. 대통령이 국가비상사태(§1701)를 선언하면, 이 §1702가 "외국 또는 그 국민이 이해관계를 갖는 재산·거래를 사실상 전면적으로 금지·차단할 수 있는" 광범위한 권한을 준다. 특히 (iii)의 "통화·증권의 수입·수출"과 (B)의 "거래·재산 dealing 금지"가 증권 거래에 직결된다 — 제재역 국민이 이해관계를 갖는 증권 거래를 미국의 관할에 속한 자가 하면, 이 권한으로 금지된 거래가 된다. Decipher가 미국의 관할에 속한 운영자라면(또는 미국인이 참여하면) 이 금지의 수범자다. A-02가 관할을 기계적으로 막는 이유는 이 광범위한 금지에 걸리지 않기 위함이다. 이 조문 자체는 A-02가 "판정"하는 대상이 아니라, 아래 프로그램(§3.12·§3.13)의 수권 근거로 인용한다.
+
+- **PASS/FAIL 반영**: 핵심(수권) — A-02가 직접 이 조문을 판정하지 않는다. 이 권한에 근거해 만들어진 개별 프로그램(포괄제재역 목록)이 A-02의 금지집합(파라미터)을 채운다.
+
+- **ERC-3643 변환**: 직접 매핑 없음. 이 수권 아래의 프로그램들이 sanctionsPolicy.prohibitedJurisdictions 집합을 구성한다.
+
+### 3.10 IEEPA §206 — 50 U.S.C. §1705 — 위반의 민·형사 책임·시효 [uscode.house.gov]
+
+- **조항**: IEEPA §206, 50 U.S.C. §1705(a)·(b)·(c)·(d) — uscode.house.gov (2026-05-22 기준 현행)
+
+- **핵심 원문**: (a) Unlawful acts. It shall be unlawful for a person to violate, attempt to violate, conspire to violate, or cause a violation of any license, order, regulation, or prohibition issued under this chapter. (b) Civil penalty. A civil penalty may be imposed on any person who commits an unlawful act described in subsection (a) in an amount not to exceed the greater of— (1) \$250,000; or (2) an amount that is twice the amount of the transaction that is the basis of the violation with respect to which the penalty is imposed. (c) Criminal penalty. A person who willfully commits, willfully attempts to commit, or willfully conspires to commit, or aids or abets in the commission of, an unlawful act described in subsection (a) shall, upon conviction, be fined not more than \$1,000,000, or if a natural person, may be imprisoned for not more than 20 years, or both. (d) Statute of limitations … [10 years].
+
+- **한국어**: (a) 위법행위 — 누구든지 이 장에 따라 발령된 license·order·regulation·prohibition을 위반하거나, 위반을 기도·공모하거나, 위반을 야기(cause)하는 것은 위법이다. (b) 민사 제재 — (a)의 위법행위를 한 자에게 다음 중 큰 금액을 초과하지 않는 범위에서 민사 제재를 부과할 수 있다: (1) \$250,000; 또는 (2) 위반의 기초가 된 거래 금액의 2배. (c) 형사 제재 — (a)의 위법행위를 고의로(willfully) 범하거나 기도·공모하거나 방조한 자는, 유죄판결 시 \$1,000,000 이하의 벌금에 처하고, 자연인인 경우 20년 이하의 징역에 처하거나 이를 병과할 수 있다. (d) 공소·제소 시효 … [10년].
+
+- **쉬운 설명**: 이것이 A-02가 존재하는 이유의 실체다. 제재를 위반하면 처벌이 "civil \$250,000 또는 거래액의 2배 중 큰 것", "criminal(고의) 벌금 \$1M·징역 20년"이다. 특히 (a)가 "cause a violation"(위반을 야기)까지 위법으로 규정하므로, Decipher가 제재역 거주자에게 거래를 체결시켜 준 것만으로도 야기·방조 책임에 걸릴 수 있다. 부등호·금액 유의 — (b) 민사 상한은 "not to exceed"(초과 불가)이고 "\$250,000 또는 2배 중 큰 것"이다. (2024년 개정 Pub. L. 118-50은 (d) 10년 시효를 신설했고 민사 상한 \$250,000은 유지했다.) 이 형사 리스크 때문에 A-02는 제재 관할 실패를 절대 통과시키지 않는 hard block으로 설계한다(§6.2).
+
+- **PASS/FAIL 반영**: 핵심(집행) — A-02가 판정하는 대상은 아니나, 이 처벌 규정이 "제재 관할 적중 = 되돌릴 수 없는 차단"이라는 설계 원칙의 근거다.
+
+- **ERC-3643 변환**: 직접 매핑 없음. sanctionsPolicy 적중 시 FAIL_SANCTIONED_JURISDICTION(hard block)으로 귀결되는 것이 이 조문의 정책적 반영이다.
+
+### 3.11 TWEA §5(b) — 50 U.S.C. §4305(b) — Cuba 포괄제재의 별도 수권 [uscode.house.gov]
+
+- **조항**: Trading with the Enemy Act §5(b), 50 U.S.C. §4305(b) — uscode.house.gov
+
+- **핵심 취지(요지 인용)**: §4305(b)는, 전시 또는 국가비상사태 기간 중, 대통령이 외국 또는 그 국민이 이해관계를 갖는 재산에 관한 이전·지급·수출입·거래를 조사·규제·금지할 수 있도록 수권한다. Cuba 제재(Cuban Assets Control Regulations, 31 CFR Part 515)는 IEEPA가 아니라 이 TWEA §5(b)의 계속 적용을 근거로 유지된다.
+
+- **한국어(취지)**: 대적성국교역법 §5(b)는 대통령에게, 외국·그 국민의 이해관계가 걸린 재산·거래를 규제·금지할 권한을 부여한다. 다른 현행 포괄제재 프로그램 대부분이 IEEPA(§1702)에 근거하는 것과 달리, Cuba 프로그램은 역사적으로 TWEA §5(b)의 지속 근거 위에 서 있다는 점이 특징이다.
+
+- **쉬운 설명**: A-02의 금지집합에 포함되는 Cuba는 다른 나라들(Iran·North Korea)과 근거법이 다르다 — Iran·NK 등은 IEEPA(§1702), Cuba는 TWEA §5(b)다. 실무상 A-02의 판정 로직에는 차이가 없다(둘 다 "prohibitedJurisdictions에 속하면 차단"). 다만 법적 근거가 프로그램마다 다를 수 있다는 점, 그래서 금지집합을 "단일 법의 산물"이 아니라 "여러 근거법 아래 여러 프로그램의 합집합"으로 이해해야 한다는 점이 중요하다. 이는 금지집합을 하드코딩하지 않고 프로그램 단위로 관리해야 하는 또 다른 이유다.
+
+- **PASS/FAIL 반영**: 보조(수권) — A-02가 판정하지 않는다. Cuba가 prohibitedJurisdictions에 포함되는 근거가 TWEA §5(b)임을 명시하는 데 쓴다.
+
+- **ERC-3643 변환**: sanctionsPolicy.prohibitedJurisdictions에 CU(Cuba) 포함, program 메타에 authority = TWEA_5B 태그.
+
+### 3.12 Iran ITSR §560.204 — 관할 기반 서비스 수출 금지 (대표 프로그램) [ecfr.gov]
+
+- **조항**: Iranian Transactions and Sanctions Regulations §560.204, 31 C.F.R. §560.204 — ecfr.gov (현행)
+
+- **핵심 원문**: Except as otherwise authorized pursuant to this part, and notwithstanding any contract entered into or any license or permit granted prior to May 7, 1995, the exportation, reexportation, sale, or supply, directly or indirectly, from the United States, or by a United States person, wherever located, of any goods, technology, or services to Iran or the Government of Iran is prohibited, including the exportation, reexportation, sale, or supply of any goods, technology, or services to a person in a third country undertaken with knowledge or reason to know that: (a) Such goods, technology, or services are intended specifically for supply, transshipment, or reexportation, directly or indirectly, to Iran or the Government of Iran; or (b) Such goods, technology, or services are intended specifically for use in the production of, for commingling with, or for incorporation into goods, technology, or services to be directly or indirectly supplied, transshipped, or reexported exclusively or predominantly to Iran or the Government of Iran.
+
+- **한국어**: 이 part에서 달리 허가된 경우를 제외하고, 그리고 1995년 5월 7일 이전에 체결된 계약이나 부여된 license·permit에도 불구하고, 미국으로부터 또는 (소재지 불문) 미국인에 의한, 이란 또는 이란 정부에 대한 goods·technology·services의 수출·재수출·판매·공급을 직접·간접으로 하는 것은 금지된다. 여기에는, (a) 그 goods·technology·services가 직접·간접으로 이란(정부)에 공급·환적·재수출될 목적임을, 또는 (b) 이란(정부)에 배타적·주로 공급될 goods 등의 생산·혼합·편입에 사용될 목적임을, 알거나 알 만한 이유가 있으면서(with knowledge or reason to know) 제3국의 자에게 공급하는 것도 포함된다.
+
+- **쉬운 설명**: 이것이 "관할 기반 금지"가 실제로 어떻게 작동하는지를 보여주는 대표 조문이다. 핵심은 "services … to Iran" — 이란(또는 이란 정부, 또는 이란 소재자)에게 서비스를 제공하는 것 자체가 금지다. Decipher가 이란 거주자에게 DEX 거래 서비스를 제공·체결하면 이는 금지된 서비스 수출(exportation of services)에 해당할 수 있다. 그리고 이 조문에는 명단(SDN)이 등장하지 않는다 — 이란 소재라는 관할만으로 걸린다는 점이 A-02(관할)와 A-01(명단)의 분업을 정확히 드러낸다. 또 "reason to know"로 우회(제3국 경유)까지 포섭하므로, A-02는 표면 거주지뿐 아니라 회피 신호(§12 IP/VPN)도 운영 차원에서 고려해야 한다. 다른 포괄제재 프로그램(North Korea Sanctions Regulations 31 CFR Part 510, Cuban Assets Control Regulations 31 CFR Part 515 등)도 구조는 유사하다 — 이 §560.204는 그 대표 예시다.
+
+- **PASS/FAIL 반영**: 직접 ○ (금지 기제) — 매수인의 거주·국적·설립지가 이란(또는 그 밖 포괄제재역)이면 이 유형의 서비스 수출 금지에 걸려 FAIL_SANCTIONED_JURISDICTION(hard block).
+
+- **ERC-3643 변환**: sanctionsPolicy.prohibitedJurisdictions에 IR(Iran) 포함. 판정: residence ∈ prohibitedJurisdictions ∨ nationality ∈ prohibitedJurisdictions ∨ incorporationJurisdiction ∈ prohibitedJurisdictions → 차단.
+
+### 3.13 포괄제재 관할 집합 + E.O. 13685·14065·14312 — 동적 파라미터의 근거 [federalregister.gov · ofac.treasury.gov]
+
+- **근거**: 지역·국가 포괄제재를 지정·해제하는 Executive Order와 그 이행규칙 — E.O. 13685(2014, Crimea 지역), E.O. 14065(2022, 이른바 DNR·LNR 및 추가 지정 지역), Ukraine-/Russia-Related Sanctions Regulations(31 CFR Part 589), E.O. 14312(2025, Syria 국가비상사태 종료·기존 Syria E.O. 취소) — federalregister.gov·ofac.treasury.gov
+
+- **현행 포괄제재 집합(2026-07 기준, 확인)**: 미국이 현재 포괄제재(comprehensive embargo)를 유지하는 관할은 **Cuba · Iran · North Korea**, 그리고 우크라이나의 피점령 지역인 **Crimea · 이른바 Donetsk(DNR) · Luhansk(LNR) 지역**이다. 이들 관할에 대해서는 특정·일반 license가 없는 한 미국인과 그 관할 소재 사람·재산 간 거의 모든 거래·서비스·수출이 금지된다.
+
+- **Syria — 목록이 변한다는 결정적 실례**: Syria는 오랫동안 포괄제재 대상이었으나, 2025년 6월 30일 OFAC이 Syria 포괄제재를 종료(E.O. 14312로 국가비상사태 종료·관련 E.O. 취소)했다. 따라서 2026년 7월 현재 Syria는 포괄제재역이 아니다(다만 특정 개인·단체에 대한 SDN 지정 등 명단 기반 제재는 잔존할 수 있으며, 이는 A-01 소관이다). 반대로 Russia는 국가 전체가 포괄제재역은 아니고 강력한 sectoral·targeted 제재 대상이며, 우크라이나의 Zaporizhzhia·Kherson 지역은 부분 점령이나 포괄제재 "covered region"으로 지정되지는 않았다.
+
+- **쉬운 설명**: 이 절의 요점은 조문 하나가 아니라 설계 원칙이다 — **포괄제재역 목록은 하드코딩할 수 없다.** Syria 사례가 이를 증명한다. Syria는 어제까지 금지집합의 확실한 원소였다가 하루아침에 빠졌다. 만약 A-02가 "Cuba·Iran·NK·Syria"를 코드에 박아 두었다면, 2025년 6월 30일부터 잘못된 판정(합법 거래를 차단)을 하게 된다. 그래서 A-02의 금지집합(prohibitedJurisdictions)은 반드시 Operator가 유지·갱신하는 동적 파라미터여야 하고, OFAC의 프로그램 페이지·E.O.·SDN List 갱신을 정기적으로 반영해야 한다(§11 운영). A-02의 로직(집합 대조)은 고정이지만, 그 로직이 참조하는 데이터(집합의 내용)는 살아 움직인다.
+
+- **PASS/FAIL 반영**: 핵심(파라미터 근거) — A-02는 이 집합의 "현재 값"을 대조한다. 값의 갱신은 Operator layer의 의무이며(§11), 갱신 지연은 컴플라이언스 리스크로 관리된다.
+
+- **ERC-3643 변환**: sanctionsPolicy = { prohibitedJurisdictions: Set<ISO3166>, coveredRegions: Set<RegionCode>, version, lastSyncedAt, source }. Manifest·Operator가 서명·버전 관리, A-02는 대조만.
+
+### 3.14 판례·Preemption (Layer 3·Background) — Morrison / NSMIA §18 [supremecourt.gov · uscode.house.gov]
+
+- **Morrison v. National Australia Bank, 561 U.S. 247 (2010)** — supremecourt.gov·govinfo.gov. 미국 증권법(특히 Exchange Act §10(b))의 역외적용에 관하여, "미국 거래소 상장 증권" 또는 "미국 내에서 이루어진 증권 거래"에만 적용된다는 이른바 transactional test를 세웠다. 취지 — 증권법의 국경은 발행인·투자자의 국적이 아니라 "거래가 어디서 일어났는가"로 그어진다. 이는 Regulation S의 속지주의(§230.901: "미국 안" 거래에만 §5 적용)와 궤를 같이하는 판례적 토대다. A-02는 이 원칙을 직접 판정하지 않으나, 축 1이 "국적"이 아니라 "거주·거래 소재(U.S. person·offshore transaction)"를 보는 이유의 배경으로 인용한다.
+
+- **NSMIA §18 — 15 U.S.C. §77r** — uscode.house.gov. Rule 506 발행분은 "covered security"로서 주(州)의 증권 등록·자격 요건이 preempt된다(주는 notice-filing과 사기 방지 권한만 보유). 취지 — 미국 내 관할 문제 중 "州(state)" 단위는 A-02의 대상이 아니라 발행·notice-filing 레이어에서 처리된다. A-02는 국가·지역(country/region) 단위 관할만 본다는 경계를 이 조문으로 확인한다.
+
+- **PASS/FAIL 반영**: 보조 — 둘 다 A-02가 판정하지 않는다. 축 1의 속지주의 근거(Morrison)와 州 단위 경계(NSMIA §18)를 확인하는 해석 자료다.
+
+### 3.15 Sub-요건 분해 매트릭스
+
+아래는 §3.1~§3.14의 요건을 A-02가 실제로 확인하는 원자적 검증 단위로 분해한 것이다. 각 행은 §5.2 pseudocode의 한 단계와 1:1 대응하며, reasonCode는 §6.2 거절 코드와 일치한다.
+
+| # | 원자 검증 단위 | 근거 | 축 | 판정 방식 | 실패 코드 |
+| --- | --- | --- | --- | --- | --- |
+| S1 | 관할 claim(거주·국적·설립지) 존재·서명·신뢰기관·신선도 | 검증구조(A-11 연동) | 전제 | 존재·암호 검증·timestamp | FAIL_JURISDICTION_CLAIM_INVALID / _EXPIRED |
+| S2 | 거주·국적·설립지가 prohibitedJurisdictions(포괄제재역)에 속하는가 | IEEPA §1702/§1705, §560.204, E.O.(§3.13) | 축 2 | 집합 소속(∈) | FAIL_SANCTIONED_JURISDICTION (hard) |
+| S3 | 관할이 allowedJurisdictions(증권법 허용집합; Phase 1 = US)에 속하는가 | §230.901, §230.902(k) | 축 1 | 집합 소속(∈) | FAIL_JURISDICTION_NOT_ALLOWED |
+| S4 | U.S. person 여부(자연인 거주·법인 설립·(viii) anti-abuse) | §230.902(k)(1)·(2) | 축 1 | claim 값 대조 | FAIL_JURISDICTION_NOT_ALLOWED |
+| S5 | 법인 매수인이면 설립지·구성원 관할 look-through | §230.902(k)(1)(viii), §3.13, A-09 | 축 1·2 | cascade(A-09) | FAIL_ENTITY_JURISDICTION |
+| S6 | 이중국적·거주 변경·라이선스(일반허가) 여지의 경계 판단 | 프로그램별 general license, (§12) | 양축 | 수동 검토 | REVIEW_JURISDICTION_UNCERTAIN |
+
+**설계 원칙 — 순서.** S1(전제) → S2(제재, hard block) → S3·S4(증권법) → S5(법인) → S6(경계) 순으로, 값싸고 되돌릴 수 없는 검사(제재)를 앞에 두어 fail-fast한다. 특히 S2를 S3보다 앞에 두는 이유는, 제재 적중은 어떤 경우에도 통과가 없으므로 증권법 lane 판정에 자원을 쓰기 전에 먼저 끊는 것이 안전하기 때문이다.
+
+### 3.16 ERC-3643 변환·claim 총정리
+
+§3.1~§3.14의 조문을 ERC-3643(T-REX) 온체인 요소로 매핑한 종합표다. A-02는 아래 claim·파라미터를 읽어 결정론적으로 판정하며, 사실 판단(거주·국적·설립지·U.S. person 여부)은 모두 off-chain(Sumsub)에서 이루어진다.
+
+| 온체인 요소 | 값/타입 | 근거 조문 | A-02가 하는 일 |
+| --- | --- | --- | --- |
+| claim.topic = US_PERSON_STATUS | {US_PERSON, NON_US_PERSON} + basis | §230.902(k) | lane 분기(축 1) |
+| claim.topic = RESIDENCE | ISO 3166 관할 코드 | §230.902(k)(i), 3b-4(c) | 축 1·축 2 대조 + D-01 입력 |
+| claim.topic = NATIONALITY | ISO 3166 관할 코드 | §1702, §560.204 | 축 2 대조 |
+| claim.incorporationJurisdiction | ISO 3166 (법인) | §230.902(k)(viii) | 법인 축 1·2 + A-09 |
+| sanctionsPolicy.prohibitedJurisdictions | Set<ISO3166> | §1702/§1705, §560.204, E.O. | 축 2 금지집합(∈ → 차단) |
+| sanctionsPolicy.coveredRegions | Set<RegionCode> | E.O. 13685·14065 | 지역 포괄제재 대조 |
+| policy.allowedJurisdictions | Set<ISO3166> (Phase 1={US}) | §230.901, §230.902(k) | 축 1 허용집합 |
+| asset.manifest.regsLaneEnabled | bool (Phase 1=false) | §230.901·903·904 | 역외 lane 개폐 |
+| asset.manifest.issuanceFramework | REG_D_506C | §4(b)/506(c) | 미국 lane 전제 |
+| (연동) A-01 SDN 결과 | PASS/FAIL | 별도 | 병렬 AND |
+| (연동) A-11 신선도 | 유효/만료 | 별도 | S1 게이트 |
+| (연동) A-09 look-through | 구성원 관할 | 별도 | S5 cascade |
+
+## §4. ② 입력 사실 — 판정에 필요한 데이터
+
+**왜 입력부터 정리하나.** A-02의 판정은 결정론적이지만, 그 판정이 먹는 재료(거주·국적·설립지)는 온체인이 스스로 알 수 없는 사실이다. 이 절은 "그 사실을 어디서, 어떤 형태로, 어떻게 받아 오는가"를 정리한다. 재료의 신뢰가 판정의 신뢰를 결정하므로, 입력의 출처와 형태를 명확히 하는 것이 §5 로직만큼 중요하다.
+
+### 4.1 본 부품이 판정하려면 어떤 증거가 필요한가
+
+A-02가 두 축을 판정하려면 다음 사실이 확정되어 있어야 한다.
+
+- **자연인 매수인**: 거주 관할(country of residence)과 국적(nationality). 거주는 축 1(U.S. person)·축 2(제재)·D-01(FPI 카운트)에 모두 쓰이고, 국적은 주로 축 2(제재 관할)에 쓰인다.
+
+- **법인 매수인**: 설립 관할(jurisdiction of incorporation/organization)과, §230.902(k)(viii) anti-abuse·포괄제재 우회 판단을 위한 구성원 관할(A-09 look-through 결과).
+
+- **U.S. person 판정 결과**: 위 사실에 §230.902(k)를 적용해 Sumsub이 내린 isUSPerson 값(자연인 거주·법인 설립·(viii) 예외 반영).
+
+- **정책 파라미터(자산·시스템 측)**: allowedJurisdictions(Phase 1 = US), prohibitedJurisdictions·coveredRegions(현행 포괄제재 집합), regsLaneEnabled(Phase 1 = false).
+
+### 4.2 Data field — DEX가 실제로 읽는 항목
+
+| 필드 | 출처 | 타입/예시 | 쓰이는 축 |
+| --- | --- | --- | --- |
+| claim.residence | Sumsub KYC → 서명 claim | ISO 3166-1 (예: US, KR, IR) | 축 1·축 2·D-01 |
+| claim.nationality | Sumsub KYC → 서명 claim | ISO 3166-1 (복수 가능) | 축 2 |
+| claim.isUSPerson | Sumsub 판정 → 서명 claim | {US_PERSON, NON_US_PERSON} + basis | 축 1 |
+| claim.incorporationJurisdiction | Sumsub(법인 KYB) → 서명 claim | ISO 3166-1 | 축 1·축 2(법인) |
+| claim.issuer / signature | Trusted Issuer(Sumsub) | 주소·서명 | S1 전제 |
+| claim.verifiedAt | Trusted Issuer | timestamp | S1 신선도(A-11) |
+| policy.allowedJurisdictions | 시스템 정책 파라미터 | Set (Phase 1 = {US}) | 축 1 |
+| sanctionsPolicy.prohibitedJurisdictions | Operator 유지 파라미터 | Set (Cuba·Iran·NK 등) | 축 2 |
+| sanctionsPolicy.coveredRegions | Operator 유지 파라미터 | Set (Crimea·DNR·LNR) | 축 2 |
+| asset.manifest.regsLaneEnabled | Manifest | bool (Phase 1 = false) | 축 1 lane |
+
+**유의.** residence·nationality는 별개 필드다 — 한 사람이 미국 거주·이란 국적일 수 있고, 그 경우 축 1(거주 기준)은 US_PERSON이어도 축 2(제재)는 국적으로 걸릴 수 있다. 두 필드를 하나로 뭉개면 이런 케이스를 놓친다.
+
+### 4.3 수집 경로 — 5단계 흐름
+
+1. **매수인 신원확인(KYC/KYB) 개시**: 매수인이 frontend에서 Sumsub 온보딩을 시작한다(자연인은 KYC, 법인은 KYB).
+
+2. **관할 사실 확정**: Sumsub이 신분증·주소증빙·법인등기 등으로 거주지·국적·(법인)설립지를 확정한다. 이 단계에서 §230.902(k) 기준으로 U.S. person 여부도 판단한다.
+
+3. **claim 서명·발급**: Sumsub(Trusted Issuer)이 residence·nationality·isUSPerson·incorporationJurisdiction claim을 서명해 매수인 ONCHAINID에 부착한다.
+
+4. **정책 파라미터 로드**: A-02가 거래 시점의 allowedJurisdictions·prohibitedJurisdictions·coveredRegions·regsLaneEnabled를 읽는다(포괄제재 집합은 Operator가 최신으로 유지).
+
+5. **판정**: A-02가 claim 값과 정책 파라미터를 집합 대조해 PASS/FAIL/REVIEW를 반환한다(§5).
+
+### 4.4 갈래별 증거 예시
+
+- **미국 거주 자연인(전형)**: residence=US, nationality=US, isUSPerson=US_PERSON → 축 1 통과(미국 lane), 축 2 무적중 → PASS(A-01 등 병렬 검사 별도).
+
+- **미국 거주·이란 국적 자연인**: residence=US, nationality=IR, isUSPerson=US_PERSON → 축 1은 통과하나 축 2에서 nationality=IR이 prohibitedJurisdictions 적중 → FAIL_SANCTIONED_JURISDICTION(hard). 국적만으로도 제재역 접점이면 차단된다는 보수적 정책(§12 OD-A02 참조).
+
+- **비미국 거주 자연인(예: 한국 거주)**: residence=KR, isUSPerson=NON_US_PERSON → 축 2 무적중이나 축 1 allowedJurisdictions(={US}) 밖 → FAIL_JURISDICTION_NOT_ALLOWED(Reg S 유보). 자격 미달이 아니라 lane 미개방.
+
+- **법인 매수인(BUIDL 전형)**: incorporationJurisdiction=US(또는 (viii) 예외 충족 외국법인), 구성원 관할 look-through(A-09) 통과 → 축 1·2 통과. 설립지 또는 구성원이 제재역이면 FAIL_ENTITY_JURISDICTION.
+
+## §5. ③ 판정 로직 — 어떻게 PASS/FAIL이 결정되는가
+
+### 5.0 판정 흐름 플로우차트
+
+아래 그림은 A-02가 입력 claim을 받아 두 축을 순서대로 통과시키는 런타임 흐름이다 — 입력(거주·국적·(법인)설립지) → Gate 1(전제: 존재·진위·신선도) → Gate 2(제재 blocklist, hard block) → Gate 3(증권법 allowlist) → Gate 4(법인 look-through) → 경계 판단(이중국적·거주 변경·라이선스) → PASS. 각 게이트의 상세는 §5.2.
+
+![A-02 fig50 런타임 판정 흐름](A-02_fig50.png)
+
+### 5.1 전체 흐름 (사람 말로)
+
+매수인의 관할 claim이 들어오면, A-02는 먼저 그 claim이 믿을 만한지(있는가·서명이 유효한가·신뢰기관이 발급했나·너무 오래되지 않았나)를 값싸게 확인한다. 그다음 되돌릴 수 없는 검사인 제재부터 본다 — 거주·국적·설립지 중 하나라도 포괄제재역에 걸리면 그 자리에서 hard block이다. 제재를 통과하면 증권법 축을 본다 — Phase 1에서는 U.S. person이어야 통과하고, 아니면 lane 미개방으로 유보 차단이다. 법인이면 설립지와 구성원 관할까지 look-through한다. 마지막으로 이중국적·거주 변경·일반허가(license) 같은 경계 케이스는 사람(Operator)이 본다. 모든 축을 통과하면 A-02는 PASS를 반환하고, 같은 거래의 다른 검사(A-01 SDN·A-03 자격·A-04 신원)와 함께 AND로 최종 판정된다.
+
+### 5.2 Pseudocode + 단계별 해설
+
+**검사 순서 한눈에 보기 — 왜 이 순서인가**
+
+| 순서 | 검사 | 무엇을 확인 | 실패 코드 | 비용 | 왜 이 위치인가 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | claim 전제(S1) | 존재·서명·신뢰기관·신선도 | _CLAIM_INVALID/_EXPIRED | 매우 낮음 | 판정 대상 자체의 신뢰 확보 |
+| 2 | 제재 blocklist(S2) | 거주·국적·설립지 ∈ 포괄제재역 | _SANCTIONED_JURISDICTION | 낮음(집합 대조) | 되돌릴 수 없는 검사 → 최우선 fail-fast |
+| 3 | 증권법 allowlist(S3·S4) | U.S. person ∧ 관할 ∈ 허용집합 | _JURISDICTION_NOT_ALLOWED | 낮음(집합 대조) | 제재 통과분에만 lane 판정 |
+| 4 | 법인 look-through(S5) | 설립지·구성원 관할 | _ENTITY_JURISDICTION | 높음(A-09 cascade) | 가장 비싼 단계라 맨 뒤 |
+| 5 | 경계(S6) | 이중국적·거주변경·license | REVIEW_JURISDICTION_UNCERTAIN | 사람 | 자동 판정 불가분 |
+
+```
+function check_A_02(prospective_buyer, asset, block, policy, sanctionsPolicy):
+# S1: claim 전제 (존재·서명·신뢰기관·신선도)
+jc = ONCHAINID.getJurisdictionClaims(prospective_buyer) # residence, nationality, isUSPerson, (incorp)
+if jc == null or not Cryptography.verify(jc.signature, jc.issuer):
+return FAIL_JURISDICTION_CLAIM_INVALID
+if not TrustedIssuerRegistry.contains(jc.issuer):
+return FAIL_JURISDICTION_CLAIM_INVALID # 신뢰기관 아님(운영 알림)
+if not A_11.isFresh(jc.verifiedAt, block.timestamp): # 신선도는 A-11 위임
+return FAIL_JURISDICTION_CLAIM_EXPIRED
+
+# S2: 제재 blocklist (hard block) — 되돌릴 수 없음
+jset = { jc.residence, jc.nationality } # 자연인
+if asset_buyer_is_entity(prospective_buyer):
+jset = jset ∪ { jc.incorporationJurisdiction }
+if (jset ∩ sanctionsPolicy.prohibitedJurisdictions) != ∅
+or region_hit(prospective_buyer, sanctionsPolicy.coveredRegions):
+return FAIL_SANCTIONED_JURISDICTION # hard block, 갱신 불가
+
+# S3·S4: 증권법 allowlist (Phase 1 = US only)
+if jc.isUSPerson == US_PERSON:
+us_lane = true
+else:
+us_lane = false
+if us_lane and (jc.residence in policy.allowedJurisdictions):
+pass_axis1 = true
+elif (not us_lane) and asset.manifest.regsLaneEnabled:
+pass_axis1 = check_offshore_transaction(prospective_buyer, asset) # Reg S (유보 시 도달 안 함)
+else:
+return FAIL_JURISDICTION_NOT_ALLOWED # 非US person + Reg S 유보
+
+# S5: 법인 look-through (설립지·구성원 관할)
+if asset_buyer_is_entity(prospective_buyer):
+lt = check_A_09_jurisdiction(prospective_buyer, sanctionsPolicy, policy)
+if lt == FAIL:
+return FAIL_ENTITY_JURISDICTION
+if lt == IN_PROGRESS:
+return REVIEW_JURISDICTION_UNCERTAIN # suspend, 대기
+
+# S6: 경계 (이중국적·거주 변경·license 여지)
+if boundary_case(jc, sanctionsPolicy): # 예: 일반허가 대상 활동, 최근 거주 변경
+return REVIEW_JURISDICTION_UNCERTAIN
+
+return PASS
+```
+
+- **S1 해설**: 관할 claim이 있고, 서명이 유효하며, 발급자가 Trusted Issuer 명부에 있고, 신선도(A-11)가 유효한지를 본다. 신선도 판정 자체는 A-11에 위임한다 — A-02는 그 결과만 게이트로 쓴다. 서명이 깨졌거나 발급자가 명부에 없으면 _CLAIM_INVALID(대개 운영 이슈라 관리자 알림), 오래됐으면 _CLAIM_EXPIRED.
+
+- **S2 해설**: 여기가 제재 축이다. 자연인은 거주·국적을, 법인은 설립지까지 합쳐 포괄제재역 집합과 교집합을 본다. 하나라도 걸리면 즉시 hard block이며, 이 실패는 갱신·재KYC로 풀리지 않는다(§3.10 IEEPA 형사 리스크). coveredRegions(Crimea·DNR·LNR)는 국가가 아니라 지역이라 별도 region 판정 함수로 확인한다. S2를 S3보다 앞에 둔 것은 되돌릴 수 없는 검사를 먼저 끊기 위함이다.
+
+- **S3·S4 해설**: 증권법 lane 판정이다. Phase 1에서는 isUSPerson=US_PERSON이고 거주가 허용집합(={US})에 있어야 통과(미국 lane). 비 U.S. person은 regsLaneEnabled=true여야 offshore-transaction 검사(§3.5)로 넘어가는데, Phase 1은 false이므로 그 가지에 도달하지 않고 _JURISDICTION_NOT_ALLOWED로 끝난다. 이 실패는 "자격 미달"이 아니라 "lane 미개방"이라, Reg S를 열면 자연스럽게 확장된다.
+
+- **S5 해설**: 법인 매수인이면 설립지와 구성원 관할을 A-09 look-through로 확인한다. 설립지가 제재역이거나(축 2), (viii) anti-abuse에 걸리거나(축 1), 구성원 중 제재역 접점이 있으면 _ENTITY_JURISDICTION. look-through가 아직 진행 중이면 거절이 아니라 대기(REVIEW/suspend)로 둔다 — 자료가 채워지면 통과할 수 있기 때문이다.
+
+- **S6 해설**: 자동으로 결정할 수 없는 경계는 사람이 본다. 예 — 최근 거주지를 옮겨 claim과 실거주가 어긋나는 경우, 특정 일반허가(general license)로 예외 허용될 여지가 있는 활동, 이중국적으로 축 2 판단이 갈리는 경우. 이들은 REVIEW_JURISDICTION_UNCERTAIN으로 Operator 큐에 넣는다.
+
+### 5.3 판정 매트릭스 (포함성·부등호 명시)
+
+A-02의 핵심 판정은 수치 임계가 아니라 집합 소속(∈/∉)이다. 다만 연동 축(D-01·FPI)에 넘기는 값에는 부등호가 있으므로 함께 정리한다.
+
+| 항목 | 판정 | 근거 | 경계·부등호 |
+| --- | --- | --- | --- |
+| 제재역 소속 | jset ∩ prohibitedJurisdictions ≠ ∅ → 차단 | §1702/§1705, §560.204 | 교집합이 공집합이 아니면(∅ 초과) 차단. 원소 1개라도 적중이면 hard block |
+
+[output truncated at 50000 of 70078 characters. Pass a larger max_chars (default 50000) to see more, or use read_page with a ref_id to focus on a smaller section.]
+
+Tab Context:
+- Executed on tabId: 437007778
+- Available tabs:
+  • tabId 437007716: "(1) 7/15 | Notion" (https://app.notion.com/p/deciphersnu/7-15-3a0dff004c8980fe857bd4158b970eab)
+  • tabId 437007775: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/9a48abef-135b-4c26-9a93-f37cde6e95eb/C-01_보유기간.md?table=block&id=3a4dff00-4c89-80e2-8ec4-cc568055656c&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=AY0lG0OyMgQQfhbNQfv8j3rKgvDSFIxAbewipoAcOc0&downloadName=C-01_보유기간.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/9a48abef-135b-4c26-9a93-f37cde6e95eb/C-01_%E1%84%87%E1%85%A9%E1%84%8B%E1%85%B2%E1%84%80%E1%85%B5%E1%84%80%E1%85%A1%E1%86%AB.md?table=block&id=3a4dff00-4c89-80e2-8ec4-cc568055656c&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=AY0lG0OyMgQQfhbNQfv8j3rKgvDSFIxAbewipoAcOc0&downloadName=C-01_%E1%84%87%E1%85%A9%E1%84%8B%E1%85%B2%E1%84%80%E1%85%B5%E1%84%80%E1%85%A1%E1%86%AB.md)
+  • tabId 437007778: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/44cb0c3e-0ae2-4086-9692-f376fa1e412d/A-02_국가거주제한.md?table=block&id=3a5dff00-4c89-80af-bcc4-f13938fe02d1&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=QJagHK9XceJG2PMkC3rmR6bEmsmmoT5j4Dw_aBXuVQw&downloadName=A-02_국가거주제한.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/44cb0c3e-0ae2-4086-9692-f376fa1e412d/A-02_%E1%84%80%E1%85%AE%E1%86%A8%E1%84%80%E1%85%A1%E1%84%80%E1%85%A5%E1%84%8C%E1%85%AE%E1%84%8C%E1%85%A6%E1%84%92%E1%85%A1%E1%86%AB.md?table=block&id=3a5dff00-4c89-80af-bcc4-f13938fe02d1&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=QJagHK9XceJG2PMkC3rmR6bEmsmmoT5j4Dw_aBXuVQw&downloadName=A-02_%E1%84%80%E1%85%AE%E1%86%A8%E1%84%80%E1%85%A1%E1%84%80%E1%85%A5%E1%84%8C%E1%85%AE%E1%84%8C%E1%85%A6%E1%84%92%E1%85%A1%E1%86%AB.md)
+  • tabId 437007781: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/33c64232-39cc-488d-83d7-a39ad9feefce/A-06_법리검증기준서_v1_(1).md?table=block&id=3a4dff00-4c89-804e-84e6-da3984af99c8&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=b4tRdFbb7DLorz2-eG0X6MTX76nHZ6_lIuiLGt21Amc&downloadName=A-06_법리검증기준서_v1+%281%29.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/33c64232-39cc-488d-83d7-a39ad9feefce/A-06_%E1%84%87%E1%85%A5%E1%86%B8%E1%84%85%E1%85%B5%E1%84%80%E1%85%A5%E1%86%B7%E1%84%8C%E1%85%B3%E1%86%BC%E1%84%80%E1%85%B5%E1%84%8C%E1%85%AE%E1%86%AB%E1%84%89%E1%85%A5_v1_(1).md?table=block&id=3a4dff00-4c89-804e-84e6-da3984af99c8&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=b4tRdFbb7DLorz2-eG0X6MTX76nHZ6_lIuiLGt21Amc&downloadName=A-06_%E1%84%87%E1%85%A5%E1%86%B8%E1%84%85%E1%85%B5%E1%84%80%E1%85%A5%E1%86%B7%E1%84%8C%E1%85%B3%E1%86%BC%E1%84%80%E1%85%B5%E1%84%8C%E1%85%AE%E1%86%AB%E1%84%89%E1%85%A5_v1+%281%29.md)
+  • tabId 437007782: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/ade38c9a-ce84-4b84-aa27-91edc237a754/A-12_모름항변차단.md?table=block&id=3a5dff00-4c89-80e8-8524-da603109dd58&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=u1nHuNkhQ5QmWJ5nUdDJ0CVvE5wciLF1s3CS92vBu_8&downloadName=A-12_모름항변차단.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/ade38c9a-ce84-4b84-aa27-91edc237a754/A-12_%E1%84%86%E1%85%A9%E1%84%85%E1%85%B3%E1%86%B7%E1%84%92%E1%85%A1%E1%86%BC%E1%84%87%E1%85%A7%E1%86%AB%E1%84%8E%E1%85%A1%E1%84%83%E1%85%A1%E1%86%AB.md?table=block&id=3a5dff00-4c89-80e8-8524-da603109dd58&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=u1nHuNkhQ5QmWJ5nUdDJ0CVvE5wciLF1s3CS92vBu_8&downloadName=A-12_%E1%84%86%E1%85%A9%E1%84%85%E1%85%B3%E1%86%B7%E1%84%92%E1%85%A1%E1%86%BC%E1%84%87%E1%85%A7%E1%86%AB%E1%84%8E%E1%85%A1%E1%84%83%E1%85%A1%E1%86%AB.md)
+  • tabId 437007783: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/21ccdd0a-9027-44bd-a8c7-829673cffd3f/E-01_FormD확인.md?table=block&id=3a4dff00-4c89-80c1-9d9f-fe0d327ed295&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=SALjKL_3ScNyMgrW3R0IMonDmV2BM0KeSzndBWu-2SY&downloadName=E-01_FormD확인.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/21ccdd0a-9027-44bd-a8c7-829673cffd3f/E-01_FormD%E1%84%92%E1%85%AA%E1%86%A8%E1%84%8B%E1%85%B5%E1%86%AB.md?table=block&id=3a4dff00-4c89-80c1-9d9f-fe0d327ed295&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=SALjKL_3ScNyMgrW3R0IMonDmV2BM0KeSzndBWu-2SY&downloadName=E-01_FormD%E1%84%92%E1%85%AA%E1%86%A8%E1%84%8B%E1%85%B5%E1%86%AB.md)
+  • tabId 437007784: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/544d2676-445b-4bdb-a452-20c1681d8299/E-03_bad-actor.md?table=block&id=3a4dff00-4c89-80f9-961f-f7cb3d76a74e&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=Epf-VGxVflPxdrQZkyg0qEYN7wPkNrov3Nq-U8_wdyg&downloadName=E-03_bad-actor.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/544d2676-445b-4bdb-a452-20c1681d8299/E-03_bad-actor.md?table=block&id=3a4dff00-4c89-80f9-961f-f7cb3d76a74e&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=Epf-VGxVflPxdrQZkyg0qEYN7wPkNrov3Nq-U8_wdyg&downloadName=E-03_bad-actor.md)
+  • tabId 437007785: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/5c92bb6a-033a-43ec-90c1-a16ff623b600/F-01_operator-self-dealing.md?table=block&id=3a4dff00-4c89-80dd-9ecf-fef84b68b207&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=9UqQL7XXnpoiB1FVdChUEiu1kSw0Y-zLNs8hZCExy8g&downloadName=F-01_operator-self-dealing.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/5c92bb6a-033a-43ec-90c1-a16ff623b600/F-01_operator-self-dealing.md?table=block&id=3a4dff00-4c89-80dd-9ecf-fef84b68b207&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=9UqQL7XXnpoiB1FVdChUEiu1kSw0Y-zLNs8hZCExy8g&downloadName=F-01_operator-self-dealing.md)
+  • tabId 437007786: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/143e6081-9365-43ea-9e5c-717b58f76ca5/F-02_market-surveillance.md?table=block&id=3a4dff00-4c89-80ac-a2ab-e569f170fcb1&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=l0FsVhtHxOVI3fAepvGKpDQGg7Z05wvshiuT11XjR9I&downloadName=F-02_market-surveillance.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/143e6081-9365-43ea-9e5c-717b58f76ca5/F-02_market-surveillance.md?table=block&id=3a4dff00-4c89-80ac-a2ab-e569f170fcb1&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=l0FsVhtHxOVI3fAepvGKpDQGg7Z05wvshiuT11XjR9I&downloadName=F-02_market-surveillance.md)
+  • tabId 437007787: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/304d28b0-4a62-4bed-a878-7ef9c5c27d42/F-03_suspicious-activity-monitoring.md?table=block&id=3a4dff00-4c89-802b-bcb9-e5d3ca2a5252&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=Z_OvMDEYu9El18YazUH25PaqMNO9pMuFfVldKrBtZRc&downloadName=F-03_suspicious-activity-monitoring.md" (https://file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/304d28b0-4a62-4bed-a878-7ef9c5c27d42/F-03_suspicious-activity-monitoring.md?table=block&id=3a4dff00-4c89-802b-bcb9-e5d3ca2a5252&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=Z_OvMDEYu9El18YazUH25PaqMNO9pMuFfVldKrBtZRc&downloadName=F-03_suspicious-activity-monitoring.md)
+  • tabId 437007788: "file.notion.com/f/f/46247d45-d757-4834-8084-c6beac171ffc/5353e81e-96a2-4d4b-a965-fb4cafccc156/F-04_no-purchase-during-distribution.md?table=block&id=3a4dff00-4c89-80f8-af9f-cc7028cb641d&spaceId=46247d45-d757-4834-8084-c6beac171ffc&expirationTimestamp=1784764800000&signature=J2D6J2JjovGrC18Rlg9blfXeyYYrthiwuJqBAzGUkBM&downloadName=F-04_no-purchase-during-distribution.md" (

@@ -20,11 +20,16 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `src/` | 제품 Solidity 컨트랙트: Compliance Core, Execution Integration Kit, reference adapters |
 | `test/` | Foundry 단위·통합 테스트 |
 | `docs/` | 제품 명세, 아키텍처, 로드맵과 Harness 문서 |
-| `services/rfq/` | RFQ v1 quote signer reference service |
+| `docs/deployment-production.md` | production deployment runbook: ERC-3643 onboarding, Safe/external signer, legal policy package, activation and monitoring evidence |
+| `docs/testnet-deployment.md` | public-testnet RFQ reference deployment, participant approvals and artifact verification |
+| `services/testnet-rfq-demo/` | verified public artifact + Maker quote service + browser-wallet Router settlement |
+| `services/rfq/` | RFQ quote/signing SDK, versioned module contracts와 conformance suite |
 | `services/rfq-demo-backend/` | RFQ SDK를 사용하는 local Anvil 전용 demo application |
-| `services/toolkit/` | versioned Toolkit config schema와 공통 validation primitives |
+| `services/toolkit/` | versioned deployment/integration schema, validation과 scaffold generator |
+| `services/deployment-studio/` | local reference deployment 실행과 production core config/preflight/plan export를 분리한 control UI |
 | `services/operator-api/` | private-key 없는 read-only operator snapshot/event API |
 | `services/operator-dashboard/` | Operator API를 소비하는 read-only snapshot/proposal review 화면 |
+| `services/compliance-data/` | provider-neutral TA lot, person-group state와 reject/surveillance audit SDK |
 | `tools/deploy-v3/` | 독립적으로 유지하는 vendored Uniswap v3 배포 도구 |
 | `lib/` | Foundry 의존성 |
 | `scripts/` | 저장소 setup, 검증과 정리 명령 |
@@ -34,7 +39,9 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - ERC-3643과 ONCHAINID는 외부 token/identity trust boundary다.
 - Element, Recipe, Manifest, Operator의 이름 기반 4-Layer compliance model을
   사용한다.
-- applicable Recipe는 cumulative AND로 평가한다.
+- Manifest는 bounded `RecipeBinding[]`로 Recipe/version/mode를 고정한다.
+- `REQUIRED_BLOCKING`은 AND, 같은 `pathGroupId`의 `PATH_OPTION`은 OR,
+  서로 다른 path group은 AND로 평가하며 `FLAG_ONLY` 실패는 기록만 한다.
 - `tokenIn`과 `tokenOut` 양쪽의 classification과 Manifest를 평가한다.
 - Asset Compliance Manifest는 자산별 Recipe, engine, version과 발행 측 coverage를
   binding한다.
@@ -60,6 +67,7 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - [`docs/architecture/execution-routing.md`](./docs/architecture/execution-routing.md)
 - [`docs/architecture/venues/README.md`](./docs/architecture/venues/README.md)
 - [`docs/architecture/deployment-operations.md`](./docs/architecture/deployment-operations.md)
+- [`docs/deployment-production.md`](./docs/deployment-production.md)
 
 ## Data Flow
 
@@ -67,6 +75,8 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 
 - 전체 실행 흐름: [`docs/MVP-v2-multi-venue.md`](./docs/MVP-v2-multi-venue.md)
 - phase별 구현 흐름: [`docs/ROADMAP.md`](./docs/ROADMAP.md)
+- production deployment workflow:
+  [`docs/deployment-production.md`](./docs/deployment-production.md)
 
 SDK와 reference DEX의 전체 실행 흐름은 제품 명세에, 세부 책임과 불변성은
 `docs/architecture/`에 둔다.
@@ -125,6 +135,8 @@ Adapter/configuration의 의존 방향이 드러나게 구성한다.
 - Router/venue registry/selector와 공통 adapter interface는 `src/execution`에 둔다.
 - 구체 reference venue adapter는 `src/execution/adapters/<venue>/`에 둔다.
 - RFQ offchain quote signer reference는 `services/rfq`에 둔다.
+- RFQ module 의미와 conformance는 `services/rfq`, integrator가 선택한 module
+  binding/scaffold는 `services/toolkit`, 명령 rendering은 `services/cli`에 둔다.
 - 사용자 관점의 local RFQ demo API는 `services/rfq-demo-backend`에 두고 SDK와 분리한다.
 - production dealer, custody, matching, pricing engine은 별도 decision/feature 없이
   reference adapter 내부에 섞지 않는다.

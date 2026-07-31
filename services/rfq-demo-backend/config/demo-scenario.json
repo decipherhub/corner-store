@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 2,
+  "deployment": {
+    "accounts": {
+      "deployer": 0,
+      "investor": 1,
+      "maker": 2,
+      "unapprovedMaker": 3,
+      "eligibleInvestorB": 4,
+      "ineligibleInvestor": 5
+    },
+    "initialBalancesBaseUnits": {
+      "investorQuote": "100000000000000000000000000",
+      "investorRwa": "50000000000000000000000000",
+      "makerQuote": "200000000000000000000000000",
+      "makerRwa": "200000000000000000000000000",
+      "poolRwa": "50000000000000000000000000"
+    }
+  },
+  "execution": {
+    "pricing": {
+      "provider": "trade-impact-mock",
+      "numerator": "1",
+      "denominator": "1",
+      "impactBpsPerReferenceAmount": 12,
+      "referenceAmountRwaBaseUnits": "5000000000000000000000000",
+      "maxImpactBps": 75
+    },
+    "defaultBuyAmountBaseUnits": "5000000000000000000000000",
+    "defaultSellAmountBaseUnits": "5000000000000000000000000",
+    "minimumTradeBufferBps": 50,
+    "defaultQuoteTtlSeconds": 900
+  },
+  "asset": {
+    "name": "BUIDL-like Treasury Fund",
+    "symbol": "BL",
+    "minimumAmountBaseUnits": "5000000000000000000000000",
+    "decimals": 18
+  },
+  "quoteAsset": {
+    "name": "Quote USD",
+    "symbol": "qUSD",
+    "decimals": 18
+  },
+  "maker": {
+    "label": "Meridian OTC"
+  },
+  "wallets": [
+    {
+      "id": "eligible-a",
+      "label": "적격투자자 A",
+      "account": 1,
+      "artifactKey": "investor",
+      "initialQualifiedPurchaser": true
+    },
+    {
+      "id": "eligible-b",
+      "label": "적격투자자 B",
+      "account": 4,
+      "artifactKey": "eligibleInvestorB",
+      "initialQualifiedPurchaser": true
+    },
+    {
+      "id": "ineligible",
+      "label": "비적격투자자",
+      "account": 5,
+      "artifactKey": "ineligibleInvestor",
+      "initialQualifiedPurchaser": false
+    }
+  ],
+  "previewQuotes": [
+    {
+      "maker": "Falcon Markets",
+      "rate": "0.9998"
+    },
+    {
+      "maker": "Nomos Capital",
+      "rate": "1.0003"
+    }
+  ],
+  "marketHistory": {
+    "intervalSeconds": 3600,
+    "sampleIntervalSeconds": 60,
+    "indicativeSpreadBps": 12,
+    "oraclePrices": [
+      "0.9988",
+      "0.9991",
+      "0.9990",
+      "0.9994",
+      "0.9993",
+      "0.9997",
+      "0.9998",
+      "1.0000"
+    ],
+    "indicativeMidPrices": [
+      "0.9990",
+      "0.9992",
+      "0.9991",
+      "0.9995",
+      "0.9994",
+      "0.9998",
+      "0.9999",
+      "1.0000"
+    ]
+  },
+  "temporalEligibility": {
+    "walletId": "eligible-b",
+    "baselineFreshnessSeconds": 31536000,
+    "freshnessSeconds": 600,
+    "advanceSeconds": 900,
+    "quoteTtlSeconds": 3600
+  }
+}

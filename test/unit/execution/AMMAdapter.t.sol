@@ -100,6 +100,24 @@ contract AMMAdapterTest is Test {
         adapter.uniswapV3SwapCallback(int256(100 ether), -int256(100 ether), data);
     }
 
+    function test_revert_requestTokensDoNotMatchPoolDirection() public {
+        ExecutionRequest memory req = _req("");
+        req.context.tokenIn = address(token1);
+        req.context.tokenOut = address(token0);
+
+        vm.prank(ROUTER);
+        vm.expectRevert(Errors.AMMPoolTokenMismatch.selector);
+        adapter.execute(req, _emptyDecision);
+    }
+
+    function test_revert_registeredPoolCallbackTokenDoesNotMatchPositiveDelta() public {
+        bytes memory data = abi.encode(BUYER, address(token1));
+
+        vm.prank(address(pool));
+        vm.expectRevert(Errors.AMMPoolTokenMismatch.selector);
+        adapter.uniswapV3SwapCallback(int256(100 ether), -int256(100 ether), data);
+    }
+
     function test_setPool_onlyOwner() public {
         vm.prank(address(0xA11CE));
         vm.expectRevert("Ownable: caller is not the owner");

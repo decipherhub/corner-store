@@ -19,6 +19,8 @@
 | **ADR-005** | **§4(a)(7) = 주 재판매경로**(A-03 active), Rule 144 보조 | 리걸 | ⚖️ general solicitation 충족 판정만 잔여(07 ③) |
 | **ADR-006** | 부품 asset-agnostic(자산 사실이 일반 부품에 하드코딩 ❌) | 리걸 | |
 | **ADR-007** | PD-1~PD-7 Phase 1 architecture baseline accepted | 개발팀 | Manifest/Recipe/state/claims/enforcement/governance/lifecycle |
+| **ADR-008** | 취득 출처·상태 카운팅·거절 로깅·라우터 밖 감시 seam | 리걸/PM + 개발팀 | off-chain compliance data layer 기준 |
+| **ADR-009** | production RFQ dealer/settlement baseline | 개발팀 | non-custodial exact full-fill, signer/nonce/risk 운영 경계 |
 
 ## 2. ✅ 확정 — 사용자(리걸/PM) 비준 [스코프·정책]
 
@@ -84,3 +86,4 @@
 - [2026-06-24] (canton-rwa) v1.0 신설. 흩어진 결정(ADR-001~006·사용자 비준 Q1~7·proposed PD-1~7·Recipe DR-1~8·법률대기 07)을 *팀 전체 마스터 인덱스* 한 장으로 통합. 상태 범례(✅확정/🟢제안·방향비준/🟠미비준/⚖️법률대기/🍃deferred) + 담당 + 출처 링크. 개발팀 DECISIONS.md와 상보(컴플라이언스·구조 인덱스). DRY — 상세는 각 ADR/제안문서/의뢰서.
 
 - [2026-07-14] ADR-007 accepted PD-1~PD-7 Phase 1 architecture baseline. Section 3 moved from proposed/development-team pending to accepted.
+- [2026-07-30] ADR-008 compliance data seam과 ADR-009 production RFQ policy를 accepted index에 추가.

@@ -218,8 +218,10 @@ The profile has been verified on Anvil to:
 - omit the migrator, staker, and `SwapRouter02`.
 
 The automated unit test locks the profile contents and dependency order. The
-Anvil run performed during profile extraction was a deployment integration
-check; it is not yet a committed automated integration test.
+repository integration suite also deploys the pinned v3 core factory/pool
+artifact and proves canonical CREATE2 addressing, liquidity callbacks and a
+Router-protected ERC-3643 swap. A unified deploy-v3 + Corner Store deployment
+command remains a separate orchestration task.
 
 ## Not Yet Provided
 
@@ -228,8 +230,9 @@ check; it is not yet a committed automated integration test.
 - Deployment of Corner Store compliance, asset registry, routing, order-book,
   or RFQ contracts.
 - A unified deployment manifest across Uniswap and Corner Store contracts.
-- Pool creation, liquidity provisioning, swaps, or end-to-end compliance
-  tests.
+- Production pool creation/liquidity orchestration and a unified deployment
+  command. Canonical pool behavior is covered by the repository integration
+  fixture, not by this vendored CLI.
 - Production network configuration, contract verification, multisig handoff,
   or upgrade-governance procedures.
 

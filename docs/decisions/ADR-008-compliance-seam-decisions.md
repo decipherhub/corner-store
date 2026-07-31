@@ -8,6 +8,8 @@
 
 > **이 문서가 뭔가.** 개발팀이 mock으로 우회 구현하고 "열린 결정"으로 남긴 컴플라이언스 이음매(seam) 4개를, 정식 법률검토 결과로 **어떻게 채울지** 확정한다. 4개는 독립이 아니라 **하나의 off-chain 컴플라이언스 데이터 레이어 + Securitize(TA) 어댑터**로 수렴한다(§5). 데모(Gasok)엔 mock으로 충분하고, 본 문서는 *production 적용 규격이 확정됐다*는 증빙이다.
 
+> **⚠️ 정오 (2026-07-28).** 본 문서 §0 표·§2 D-B의 "(a)(2) person-group 키가 **C-08·D-01 공통**"이라는 서술은 **오기**다. **D-01(보유자 수)의 카운팅 단위는 Rule 12g5-1의 held of record**(명의 보유자 — 법인 = 1, (a)(2) 가족·person-group 합산 없음)이며, §2 D-B의 D-01 bullet("§12(g) held of record, 법인 = 1, look-through 안 함")이 통제한다. **(a)(2) person-group 합산은 C-08(Rule 144(e) 물량 한도) 전용**이다. 두 규칙은 목적이 다르다 — §12(g)(D-01)는 등록 트리거 산정이라 명의 보유자를 개별로 세고, Rule 144(a)(2)(C-08)는 계열자의 매도 물량 합산이라 person-group으로 묶는다. 해당 문구는 아래에서 정정 표기했다(§0 표 ②·§2 person-group 소절·§5 다이어그램). 상세는 D-01 spec sheet §4.
+
 ---
 
 ## 0. 왜 이 4개가 함께 결정되나
@@ -15,7 +17,7 @@
 | seam | 한 줄 문제 | 수렴점 |
 |------|-----------|--------|
 | ① acquisition source (C-01 lockup) | "이 사람이 언제 취득했나"를 코드가 어디서 아나 | **Securitize(TA) 어댑터** |
-| ② stateful counting (C-08·D-01) | "누적 물량·보유자 수"를 어떻게 세나 | off-chain 상태 + person-group 키 |
+| ② stateful counting (C-08·D-01) | "누적 물량·보유자 수"를 어떻게 세나 | off-chain 상태 (키: C-08 = (a)(2) person-group / D-01 = 12g5-1 held-of-record — 정오 참조) |
 | ③ reject logging | 거절(revert)된 거래를 어떻게 남기나 | **off-chain 컴플라이언스 데이터 레이어** |
 | ④ out-of-router path | 우리 검사 우회하는 transfer를 어떻게 | 예방(발행측/venue) + **탐지(off-chain surveillance)** |
 
@@ -73,10 +75,12 @@
 - **주의:** §12(g) 트리거는 실시간이 아니라 **회계연도 말 기준** → D-01의 거래별 게이트는 *등록위험 예방용 보수 장치*.
 - **확인:** 실제 BUIDL이 **FPI(BVI 역외)**인지 → < 2,000 vs < 300 결정(OD-D01-3).
 
-### (a)(2) person-group 합산 (C-08·D-01 공통, 설계 난점)
+### (a)(2) person-group 합산 (C-08 물량 전용, 설계 난점)
+
+> **⚠️ 정오 (2026-07-28).** 이 소절의 person-group 키는 **C-08(Rule 144(e) 물량 한도) 전용**이다. **D-01(보유자 수)에는 적용되지 않는다** — D-01의 카운팅 단위는 Rule 12g5-1의 held of record(명의 보유자, 법인 = 1)로 (a)(2) 가족·person-group 합산을 하지 않는다(위 D-01 bullet이 통제). 원문의 "C-08·D-01 공통"·"C-08·D-01은 그 그룹 단위로 누적"은 오기이며, 아래에서 C-08 한정으로 정정한다.
 
 - Rule 144(a)(2): 매도 계산 주체 = 본인 + **동거 친족·배우자** + 그들이 합산 **10% 이상** 지분/수익권 가진 **신탁·법인**.
-- → **상태 카운터의 키가 *지갑주소*가 아니라 *person-group***이어야 한다. person-group 식별은 **A-06(control)·A-04(신원)**가 하고, C-08·D-01은 그 그룹 단위로 누적한다.
+- → **C-08 상태 카운터의 키가 *지갑주소*가 아니라 *person-group***이어야 한다. person-group 식별은 **A-06(control)·A-04(신원)**가 하고, C-08은 그 그룹 단위로 매도 물량을 누적한다. (D-01은 이 소절 대상이 아니다 — 위 정오 참조.)
 
 ---
 
@@ -134,7 +138,7 @@
 ```
 [Securitize TA] --(①취득/attestation)--> [off-chain 컴플라이언스 데이터 레이어]
                                               ├─ ③ 성공거래 + 거절 기록 (WORM/audit-trail)
-                                              ├─ ② stateful 상태 (C-08 물량·D-01 보유자수, person-group 키)
+                                              ├─ ② stateful 상태 (C-08 물량=person-group 키 / D-01 보유자수=12g5-1 held-of-record 키 — 정오)
                                               ├─ ④ chain-wide transfer 감시 (out-of-router 탐지)
                                               └─ SAR/알림 생성, operator 대시보드
 [온체인]  발행측 whitelist/module (예방·baseline) + our Router(venue 강제, 성공만 온체인)
@@ -163,3 +167,4 @@
 ## 변경 이력
 
 - [2026-07-22] 초안. D004/D006/D009 열린 결정 4건을 정식 검토로 확정. 리서치: Rule 144(e) 물량(무거래→1%)·144(d)(3) tacking·§12(g)/§3(c)(7) holder count·Securitize DS Protocol/BUIDL whitelist 구조. 4건이 off-chain 데이터 레이어 + Securitize 어댑터로 수렴. 예방(온체인 발행측/venue) vs 탐지(off-chain surveillance) 구분 확립.
+- [2026-07-28] **정오.** §2 D-B의 "(a)(2) person-group 키 = C-08·D-01 공통" 서술을 정정. D-01(§12(g) 보유자 수)의 카운팅 단위는 Rule 12g5-1 held of record(법인 = 1, person-group 합산 없음)이고, (a)(2) person-group 합산은 C-08(Rule 144(e) 물량) 전용이다. §2 D-B의 D-01 bullet(held of record)이 통제하며, 문서 내부 모순을 그 방향으로 정리. 최상단 정오 배너 + §0 표 ②·person-group 소절·§5 다이어그램에 정정 표기. 근거: D-01 spec sheet §4.

@@ -1,13 +1,27 @@
 {
   "name": "@corner-store/cli",
   "version": "0.1.0",
-  "private": true,
-  "description": "Interactive reference CLI for driving the Corner Store stack against a live node (CLI-001).",
+  "license": "GPL-3.0-or-later",
+  "files": [
+    "dist",
+    "bundle",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/decipherhub/corner-store.git",
+    "directory": "services/cli"
+  },
+  "description": "Create, diagnose, deploy and verify standalone Corner Store integrations.",
+  "engines": {
+    "node": ">=18"
+  },
   "bin": {
     "corner-store": "dist/cli/src/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build && node scripts/prepare-package.mjs",
     "start": "node dist/cli/src/index.js",
     "test": "npm run build && node dist/cli/test/smoke.js"
   },

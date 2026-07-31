@@ -27,6 +27,7 @@ export function preflightConfig(config: ToolkitConfig, artifact: Record<string, 
   }
   if (selected.venues.rfq) {
     check("rfq-adapter", isAddress(artifact.rfqAdapter), "RFQ adapter is a non-zero address");
+    check("maker-authorizer", isAddress(artifact.makerAuthorizer), "maker authorizer is a non-zero address");
     check("rfq-venue", isAddress(artifact.rfqVenue), "RFQ venue is a non-zero address");
   }
   return {ready: checks.every((item) => item.pass), checks};

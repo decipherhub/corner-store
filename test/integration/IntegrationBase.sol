@@ -38,7 +38,14 @@ import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockPool} from "../mocks/MockPool.sol";
 
 import {BuidlLikeDemoAsset} from "../../src/demo/BuidlLikeDemoAsset.sol";
-import {ManifestCore, PolicyStatus, VenueType, FlowType} from "../../src/types/ComplianceTypes.sol";
+import {
+    ManifestCore,
+    PolicyStatus,
+    RecipeBinding,
+    RecipeBindingMode,
+    VenueType,
+    FlowType
+} from "../../src/types/ComplianceTypes.sol";
 import {ComplianceContext} from "../../src/types/ComplianceTypes.sol";
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
 import {VenueConfig, CustodyModel} from "../../src/types/VenueTypes.sol";
@@ -126,13 +133,18 @@ abstract contract IntegrationBase is TREXSuite {
         uint16 fundRecipeId,
         uint256 factsPacked
     ) internal {
-        deployStackWithManifest(tokenName, tokenSymbol, _activeManifest(fundRecipeId, factsPacked));
+        deployStackWithManifest(
+            tokenName, tokenSymbol, _activeManifest(fundRecipeId, factsPacked), _bindings(fundRecipeId)
+        );
     }
 
     /// @notice Stand up the same stack with an explicit asset Manifest/profile.
-    function deployStackWithManifest(string memory tokenName, string memory tokenSymbol, ManifestCore memory manifest)
-        internal
-    {
+    function deployStackWithManifest(
+        string memory tokenName,
+        string memory tokenSymbol,
+        ManifestCore memory manifest,
+        RecipeBinding[] memory bindings
+    ) internal {
         deployTREX(tokenName, tokenSymbol); // real ERC-3643 token() + identity registry
 
         // 1. compliance registries
@@ -200,7 +212,7 @@ abstract contract IntegrationBase is TREXSuite {
         // 7. manifests: onboarding goes through the lifecycle (propose -> approve).
         //    Keep the caller-provided manifest so BUIDL-like profiles can bind
         //    their own fund recipe/facts while still using the current lifecycle.
-        policyReg.registerManifest(address(rwaToken), manifest);
+        policyReg.registerManifest(address(rwaToken), manifest, bindings);
         policyReg.approveManifest(address(rwaToken));
         // Quote/cash is out-of-scope: tag UNREGULATED directly from UNKNOWN.
         policyReg.setUnregulated(address(quote));
@@ -246,7 +258,10 @@ abstract contract IntegrationBase is TREXSuite {
     ///      This is a local demo asset, not integration with real BlackRock BUIDL.
     function deployBuidlLikeStack() internal {
         deployStackWithManifest(
-            BuidlLikeDemoAsset.TOKEN_NAME, BuidlLikeDemoAsset.TOKEN_SYMBOL, BuidlLikeDemoAsset.manifest(ENGINES_AMM)
+            BuidlLikeDemoAsset.TOKEN_NAME,
+            BuidlLikeDemoAsset.TOKEN_SYMBOL,
+            BuidlLikeDemoAsset.manifest(ENGINES_AMM),
+            BuidlLikeDemoAsset.recipeBindings()
         );
     }
 
@@ -254,11 +269,16 @@ abstract contract IntegrationBase is TREXSuite {
 
     function _activeManifest(uint16 fundRecipeId, uint256 factsPacked) internal pure returns (ManifestCore memory m) {
         m.status = PolicyStatus.ACTIVE;
-        m.issuanceRecipeId = 1;
-        m.issuanceRecipeVersion = 1;
-        m.fundRecipeId = fundRecipeId;
         m.supportedEngines = ENGINES_AMM; // AMM bit → selector.validate passes for AMM
         m.factsPacked = factsPacked;
+    }
+
+    function _bindings(uint16 fundRecipeId) internal pure returns (RecipeBinding[] memory bindings) {
+        bindings = new RecipeBinding[](fundRecipeId == 0 ? 1 : 2);
+        bindings[0] = RecipeBinding(1, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        if (fundRecipeId != 0) {
+            bindings[1] = RecipeBinding(fundRecipeId, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
+        }
     }
 
     // --- actor setup ------------------------------------------------------
@@ -428,13 +448,19 @@ abstract contract IntegrationBase is TREXSuite {
 /// @dev Test-only settable acquisition-time source for the Lockup (C-01-v1)
 ///      element's injected CR-3 seam. Mirrors the unit-test helper.
 contract MockAcquisitionSource is IAcquisitionSource {
-    mapping(bytes32 => uint64) internal _acquiredAt;
+    mapping(bytes32 => AcquisitionSnapshot) internal _snapshots;
 
     function setAcquiredAt(address holder, address asset, uint64 ts) external {
-        _acquiredAt[keccak256(abi.encode(holder, asset))] = ts;
+        _snapshots[keccak256(abi.encode(holder, asset))] = AcquisitionSnapshot({
+            clockStart: ts,
+            observedAt: uint64(block.timestamp),
+            expiresAt: type(uint64).max,
+            sourceRef: keccak256("integration-fixture"),
+            status: AcquisitionStatus.VALID
+        });
     }
 
-    function acquiredAt(address holder, address asset) external view override returns (uint64) {
-        return _acquiredAt[keccak256(abi.encode(holder, asset))];
+    function acquisitionOf(address holder, address asset) external view override returns (AcquisitionSnapshot memory) {
+        return _snapshots[keccak256(abi.encode(holder, asset))];
     }
 }

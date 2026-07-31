@@ -12,6 +12,8 @@ import {
     ComplianceDecision,
     ManifestCore,
     PolicyStatus,
+    RecipeBinding,
+    RecipeBindingMode,
     Statefulness
 } from "../types/ComplianceTypes.sol";
 import {DecisionHashLib} from "../libraries/DecisionHashLib.sol";
@@ -19,41 +21,47 @@ import {ReasonCodes} from "../libraries/ReasonCodes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Governed} from "../auth/Governed.sol";
 
-/// @dev Multi-recipe cumulative-AND compliance engine. Resolves every ACTIVE
-///      side in a context, collects applicable recipes, unions their required
-///      elements, and ANDs every element's check. Any side that is neither
-///      ACTIVE nor explicitly UNREGULATED fails closed.
+/// @notice Bounded RecipeBinding evaluator for both sides of a pair.
+/// @dev REQUIRED bindings compose as AND. PATH_OPTION bindings compose as OR
+///      inside a pathGroupId and as AND across groups. FLAG_ONLY failures are
+///      surfaced in flagsBitmap without changing the blocking verdict.
 contract ComplianceEngine is IComplianceEngine, Governed {
-    struct ElementAccumulator {
-        bytes32[] ids;
-        address[] tokens;
-        uint16[] contributingRecipeIds;
+    uint256 public constant MAX_RECIPE_BINDINGS = 8;
+    uint256 public constant MAX_ELEMENTS_PER_RECIPE = 32;
+
+    struct EvaluationState {
+        bool allowed;
+        bytes32 reasonCode;
+        uint8 reasonPriority;
+        uint256 flagsBitmap;
+    }
+
+    struct PathState {
+        uint16[] ids;
+        bool[] passed;
+        bytes32[] reasonCodes;
+        uint8[] priorities;
         uint256 count;
     }
 
-    struct ActivePairState {
-        ManifestCore manifestIn;
-        ManifestCore manifestOut;
-        uint256 elementCapacity;
-        uint256 allowedVenueTypes;
-        uint64 policyVersion;
-        bytes32 policyId;
-        ElementAccumulator elements;
+    struct ElementAccumulator {
+        bytes32[] ids;
+        address[] tokens;
+        uint256 count;
+    }
+
+    struct CommitPathState {
+        uint16[] ids;
+        uint256[] selected;
+        uint8[] priorities;
+        uint256 count;
     }
 
     ITokenPolicyRegistry public immutable policyReg;
     IElementRegistry public immutable elementReg;
     IRecipeRegistry public immutable recipeReg;
-
-    /// @dev The sole authorized caller of `commit` (the post-trade write path).
-    ///      Set once by the owner after the router is deployed (the router takes
-    ///      the engine in its constructor, so the engine cannot know it at
-    ///      construction time). Gating `commit` enforces spec §6: runtime counters
-    ///      are written only via engine commit driven by the router, never forged
-    ///      directly by an operator/EOA.
     address public router;
 
-    /// @dev `commit` mutates stateful elements; only the router may drive it.
     modifier onlyRouter() {
         if (msg.sender != router) revert Errors.NotAuthorized();
         _;
@@ -65,56 +73,21 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         recipeReg = recipeReg_;
     }
 
-    /// @dev One-time/owner-gated router wiring. Concrete-only (not on
-    ///      IComplianceEngine): `evaluate`/`commit` signatures are unchanged.
     function setRouter(address r) external onlyOwner {
         router = r;
     }
 
-    // ---------------------------------------------------------------------
-    // Regulated-token evaluation rule (two-sided, documented, DEFAULT-DENY):
-    // We read BOTH sides' status and decide the pair outcome fail-closed. Each
-    // side is checked against a POSITIVE ALLOWLIST — it must be either:
-    //   * UNREGULATED → explicitly declared out-of-scope (quote/cash), or
-    //   * ACTIVE      → an operator-approved manifest.
-    // ANY other status — UNKNOWN (never registered / no inferred UNREGULATED),
-    // SUSPENDED (kill switch), PROPOSED (declared but not yet approved), RETIRED
-    // (terminal), and any member appended to PolicyStatus in the future — fails
-    // closed. Enumerating the permitted states rather than the rejected ones is
-    // what keeps a newly-added status fail-closed by default instead of silently
-    // slipping through a gap in a reject list.
-    // Once both sides are permitted:
-    //   * BOTH UNREGULATED → pass through (fast path).
-    //   * At least one ACTIVE → every ACTIVE side's manifest/recipes are
-    //     evaluated against the full context. Regulated-regulated pairs combine
-    //     both sides rather than choosing one.
-    // This selection is inlined in `evaluate` (see below); status reads are done
-    // once there for both sides.
-    // ---------------------------------------------------------------------
     function evaluate(ComplianceContext calldata ctx) external view override returns (ComplianceDecision memory) {
         PolicyStatus statusIn = policyReg.statusOf(ctx.tokenIn);
         PolicyStatus statusOut = policyReg.statusOf(ctx.tokenOut);
-
-        // (1) Default-deny: each side must be on the positive allowlist
-        //     {UNREGULATED, ACTIVE}. Anything else fails closed, reporting the
-        //     offending side's own status in the reason code (tokenIn first).
-        if (!_isPermitted(statusIn)) {
-            return _rejectPolicy(ctx, statusIn);
-        }
-        if (!_isPermitted(statusOut)) {
-            return _rejectPolicy(ctx, statusOut);
-        }
-        // (2) Both sides ∈ {UNREGULATED, ACTIVE}.
-        //     Both UNREGULATED → fast path pass-through.
-        if (statusOut == PolicyStatus.UNREGULATED && statusIn == PolicyStatus.UNREGULATED) {
+        if (!_isPermitted(statusIn)) return _rejectPolicy(ctx, statusIn);
+        if (!_isPermitted(statusOut)) return _rejectPolicy(ctx, statusOut);
+        if (statusIn == PolicyStatus.UNREGULATED && statusOut == PolicyStatus.UNREGULATED) {
             return _passThrough(ctx);
         }
         return _evaluateActivePair(ctx, statusIn, statusOut);
     }
 
-    /// @dev Positive allowlist for a trade side: only an explicitly out-of-scope
-    ///      (UNREGULATED) or operator-approved (ACTIVE) manifest may trade. Every
-    ///      other status — present or future — is denied by omission.
     function _isPermitted(PolicyStatus status) private pure returns (bool) {
         return status == PolicyStatus.UNREGULATED || status == PolicyStatus.ACTIVE;
     }
@@ -122,162 +95,207 @@ contract ComplianceEngine is IComplianceEngine, Governed {
     function _evaluateActivePair(ComplianceContext calldata ctx, PolicyStatus statusIn, PolicyStatus statusOut)
         internal
         view
-        returns (ComplianceDecision memory d)
+        returns (ComplianceDecision memory)
     {
-        ActivePairState memory s;
-        s.allowedVenueTypes = type(uint256).max;
+        EvaluationState memory state;
+        state.allowed = true;
+        uint256 allowedVenueTypes = type(uint256).max;
+        uint64 policyVersion;
+        bytes32 policyId;
+        uint256 bindingOffset;
 
         if (statusIn == PolicyStatus.ACTIVE) {
-            s.manifestIn = policyReg.manifestOf(ctx.tokenIn);
-            s.elementCapacity += _maxElements(s.manifestIn);
-            s.allowedVenueTypes &= uint256(s.manifestIn.supportedEngines);
-            s.policyVersion = _max64(s.policyVersion, s.manifestIn.issuanceRecipeVersion);
-            s.policyId = _accumulatePolicyId(s.policyId, ctx.tokenIn, s.manifestIn);
+            ManifestCore memory manifestIn = policyReg.manifestOf(ctx.tokenIn);
+            RecipeBinding[] memory bindingsIn = policyReg.recipeBindingsOf(ctx.tokenIn);
+            allowedVenueTypes &= uint256(manifestIn.supportedEngines);
+            policyVersion = _max64(policyVersion, policyReg.manifestVersionOf(ctx.tokenIn));
+            policyId = _accumulatePolicyId(policyId, ctx.tokenIn, manifestIn, bindingsIn);
+            _evaluateBindings(ctx, ctx.tokenIn, manifestIn, bindingsIn, bindingOffset, state);
+            bindingOffset += bindingsIn.length;
         }
         if (statusOut == PolicyStatus.ACTIVE) {
-            s.manifestOut = policyReg.manifestOf(ctx.tokenOut);
-            s.elementCapacity += _maxElements(s.manifestOut);
-            s.allowedVenueTypes &= uint256(s.manifestOut.supportedEngines);
-            s.policyVersion = _max64(s.policyVersion, s.manifestOut.issuanceRecipeVersion);
-            s.policyId = _accumulatePolicyId(s.policyId, ctx.tokenOut, s.manifestOut);
+            ManifestCore memory manifestOut = policyReg.manifestOf(ctx.tokenOut);
+            RecipeBinding[] memory bindingsOut = policyReg.recipeBindingsOf(ctx.tokenOut);
+            allowedVenueTypes &= uint256(manifestOut.supportedEngines);
+            policyVersion = _max64(policyVersion, policyReg.manifestVersionOf(ctx.tokenOut));
+            policyId = _accumulatePolicyId(policyId, ctx.tokenOut, manifestOut, bindingsOut);
+            _evaluateBindings(ctx, ctx.tokenOut, manifestOut, bindingsOut, bindingOffset, state);
         }
 
-        s.elements = _newAccumulator(s.elementCapacity);
-
-        if (statusIn == PolicyStatus.ACTIVE) {
-            _appendApplicableElements(ctx, ctx.tokenIn, s.manifestIn, s.elements);
-        }
-        if (statusOut == PolicyStatus.ACTIVE) {
-            _appendApplicableElements(ctx, ctx.tokenOut, s.manifestOut, s.elements);
-        }
-
-        (bool allowed, bytes32 reasonCode) = _runChecks(ctx, s.elements);
-
-        return _buildDecision(ctx, s.policyId, s.policyVersion, s.allowedVenueTypes, allowed, reasonCode);
+        return _buildDecision(
+            ctx,
+            policyId,
+            policyVersion,
+            _singleRegulatedToken(ctx, statusIn, statusOut),
+            allowedVenueTypes,
+            state.allowed,
+            state.reasonCode,
+            state.flagsBitmap
+        );
     }
 
-    /// @dev Resolve recipes → union/dedup their required elements. coverageScope
-    ///      subtraction omitted in skeleton (no bit→elementId map).
-    function _appendApplicableElements(
+    function _evaluateBindings(
         ComplianceContext calldata ctx,
         address token,
-        ManifestCore memory m,
-        ElementAccumulator memory elements
+        ManifestCore memory manifest,
+        RecipeBinding[] memory bindings,
+        uint256 bindingOffset,
+        EvaluationState memory state
     ) internal view {
-        bytes memory recipeContext = abi.encode(m.factsPacked, ctx);
-        uint16[2] memory candidates = [m.issuanceRecipeId, m.fundRecipeId];
-        for (uint256 c = 0; c < candidates.length; c++) {
-            uint16 rid = candidates[c];
-            if (rid == 0) {
-                if (c == 0) revert Errors.RecipeNotRegistered(rid);
-                continue; // fundRecipeId 0 = absent
+        if (bindings.length == 0) revert Errors.InvalidRecipeBinding();
+        if (bindings.length > MAX_RECIPE_BINDINGS) {
+            revert Errors.TooManyRecipeBindings(bindings.length, MAX_RECIPE_BINDINGS);
+        }
+        PathState memory paths;
+        paths.ids = new uint16[](bindings.length);
+        paths.passed = new bool[](bindings.length);
+        paths.reasonCodes = new bytes32[](bindings.length);
+        paths.priorities = new uint8[](bindings.length);
+
+        bytes memory recipeContext = abi.encode(manifest.factsPacked, ctx);
+        for (uint256 i = 0; i < bindings.length; i++) {
+            RecipeBinding memory binding = bindings[i];
+            (bool applicable, bool passed, bytes32 reasonCode) = _evaluateRecipe(ctx, token, binding, recipeContext);
+
+            if (binding.mode == RecipeBindingMode.FLAG_ONLY) {
+                if (applicable && !passed) state.flagsBitmap |= uint256(1) << (bindingOffset + i);
+                continue;
             }
-            address recipeAddr = recipeReg.recipeOf(rid);
-            if (recipeAddr == address(0)) revert Errors.RecipeNotRegistered(rid);
-            _appendRecipeElements(IRecipe(recipeAddr), recipeContext, token, rid, elements);
+            if (binding.mode == RecipeBindingMode.REQUIRED_BLOCKING) {
+                if (applicable && !passed) _selectFailure(state, reasonCode, binding.priority);
+                continue;
+            }
+
+            uint256 pathIndex = _pathIndex(paths, binding.pathGroupId);
+            if (applicable && passed) paths.passed[pathIndex] = true;
+            if (applicable && !passed) {
+                (paths.reasonCodes[pathIndex], paths.priorities[pathIndex]) = _preferredFailure(
+                    paths.reasonCodes[pathIndex], paths.priorities[pathIndex], reasonCode, binding.priority
+                );
+            }
+        }
+
+        for (uint256 i = 0; i < paths.count; i++) {
+            if (paths.passed[i]) continue;
+            bytes32 reasonCode = paths.reasonCodes[i];
+            if (reasonCode == bytes32(0)) reasonCode = ReasonCodes.encode(0, bytes32("PATH"), paths.ids[i]);
+            _selectFailure(state, reasonCode, paths.priorities[i]);
         }
     }
 
-    function _appendRecipeElements(
-        IRecipe recipe,
-        bytes memory recipeContext,
+    function _evaluateRecipe(
+        ComplianceContext calldata ctx,
         address token,
-        uint16 rid,
-        ElementAccumulator memory elements
-    ) internal view {
-        if (!recipe.isApplicable(recipeContext)) return;
-        bytes32[] memory required = recipe.requiredElements();
-        for (uint256 i = 0; i < required.length; i++) {
-            bytes32 elementId = required[i];
-            if (!_seenForToken(elements, elementId, token)) {
-                elements.ids[elements.count] = elementId;
-                elements.tokens[elements.count] = token;
-                elements.contributingRecipeIds[elements.count] = rid;
-                elements.count++;
-            }
+        RecipeBinding memory binding,
+        bytes memory recipeContext
+    ) internal view returns (bool applicable, bool passed, bytes32 reasonCode) {
+        address recipeAddress = recipeReg.recipeOf(binding.recipeId);
+        if (recipeAddress == address(0)) revert Errors.RecipeNotRegistered(binding.recipeId);
+        IRecipe recipe = IRecipe(recipeAddress);
+        uint16 actualVersion = recipe.version();
+        if (actualVersion != binding.recipeVersion) {
+            revert Errors.RecipeVersionMismatch(binding.recipeId, binding.recipeVersion, actualVersion);
         }
+        applicable = recipe.isApplicable(recipeContext);
+        if (!applicable) return (false, true, bytes32(0));
+
+        return _checkRequiredElements(ctx, token, binding.recipeId, recipe.requiredElements());
     }
 
-    /// @dev Cumulative AND across every unique element. First failure stops.
-    function _runChecks(ComplianceContext calldata ctx, ElementAccumulator memory elements)
-        internal
-        view
-        returns (bool allowed, bytes32 reasonCode)
-    {
-        bytes memory elementContext = abi.encode(ctx);
-        for (uint256 i = 0; i < elements.count; i++) {
-            address token = elements.tokens[i];
-            // RWA-side amount: amountOut when the regulated token is tokenOut,
-            // else amountIn. This is the amount of the regulated asset moving.
-            uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
-            address el = elementReg.elementOf(elements.ids[i]);
-            if (el == address(0)) revert Errors.ElementNotRegistered(elements.ids[i]);
-            (bool passed,) = IComplianceElement(el).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext);
-            if (!passed) {
-                return (false, ReasonCodes.encode(elements.contributingRecipeIds[i], elements.ids[i], 1));
-            }
+    function _checkRequiredElements(
+        ComplianceContext calldata ctx,
+        address token,
+        uint16 recipeId,
+        bytes32[] memory required
+    ) private view returns (bool applicable, bool passed, bytes32 reasonCode) {
+        if (required.length > MAX_ELEMENTS_PER_RECIPE) {
+            revert Errors.TooManyRecipeElements(recipeId, required.length, MAX_ELEMENTS_PER_RECIPE);
         }
-        return (true, bytes32(0));
+        bytes memory elementContext = abi.encode(ctx);
+        uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
+        for (uint256 i = 0; i < required.length; i++) {
+            address element = elementReg.elementOf(required[i]);
+            if (element == address(0)) revert Errors.ElementNotRegistered(required[i]);
+            (bool elementPassed,) =
+                IComplianceElement(element).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext);
+            if (!elementPassed) return (true, false, ReasonCodes.encode(recipeId, required[i], 1));
+        }
+        return (true, true, bytes32(0));
+    }
+
+    function _pathIndex(PathState memory paths, uint16 pathGroupId) private pure returns (uint256) {
+        for (uint256 i = 0; i < paths.count; i++) {
+            if (paths.ids[i] == pathGroupId) return i;
+        }
+        uint256 index = paths.count;
+        paths.ids[index] = pathGroupId;
+        paths.count++;
+        return index;
+    }
+
+    function _selectFailure(EvaluationState memory state, bytes32 reasonCode, uint8 priority) private pure {
+        state.allowed = false;
+        (state.reasonCode, state.reasonPriority) =
+            _preferredFailure(state.reasonCode, state.reasonPriority, reasonCode, priority);
+    }
+
+    function _preferredFailure(bytes32 current, uint8 currentPriority, bytes32 candidate, uint8 candidatePriority)
+        private
+        pure
+        returns (bytes32, uint8)
+    {
+        if (
+            current == bytes32(0) || candidatePriority > currentPriority
+                || (candidatePriority == currentPriority && uint256(candidate) < uint256(current))
+        ) return (candidate, candidatePriority);
+        return (current, currentPriority);
     }
 
     function _buildDecision(
         ComplianceContext calldata ctx,
         bytes32 policyId,
         uint64 policyVersion,
+        address maxAmountToken,
         uint256 allowedVenueTypes,
         bool allowed,
-        bytes32 reasonCode
+        bytes32 reasonCode,
+        uint256 flagsBitmap
     ) internal view returns (ComplianceDecision memory d) {
         d.allowed = allowed;
-        // policyId derivation remains a SKELETON PLACEHOLDER, but it now binds
-        // every ACTIVE side included in this pair-level decision rather than
-        // choosing only one side. A real implementation still needs the full
-        // versioned policy-set derivation.
         d.policyId = policyId;
         d.policyVersion = policyVersion;
         d.validUntil = uint64(block.timestamp + 1 days);
-        d.maxAmount = type(uint256).max; // skeleton: no quantitative cap
-        // Map supported-engine bits → VenueType bits. Skeleton 1:1 mapping:
-        // engine bit i corresponds to VenueType bit i (AMM=0, ORDER_BOOK=1, RFQ=2).
+        d.maxAmount = type(uint256).max;
+        d.maxAmountToken = maxAmountToken;
         d.allowedVenueTypes = allowedVenueTypes;
-        d.allowedVenuesHash = bytes32(0); // 0 = any registered venue (skeleton)
         d.reasonCode = reasonCode;
-        d.reliedClaims = bytes32(0); // mock
-        // decisionHash is a FORWARD-LOOKING SEAM, not the live replay guard. The
-        // router calls engine.evaluate(ctx) fresh on every execute and never
-        // stores or verifies a decision, so REUSE IS STRUCTURALLY IMPOSSIBLE; the
-        // live replay guard is the per-caller `usedNonce` nonce gate in the
-        // router. decisionHash (and Errors.DecisionMismatch/DecisionExpired) exist
-        // for a future flow where a signed/pre-computed decision is passed in and
-        // verified against a recompute. Kept intentionally; do not remove.
+        d.flagsBitmap = flagsBitmap;
         d.decisionHash = _hash(ctx, d);
     }
 
-    /// @dev Compute decisionHash from the assembled decision. Isolated to keep
-    ///      stack depth low (avoids spilling many locals at the call site).
-    ///      NOTE: the hash binds INPUTS ONLY — the context plus the decision's
-    ///      parameters (maxAmount, allowedVenueTypes, allowedVenuesHash,
-    ///      policyVersion, validUntil). It deliberately does NOT cover the
-    ///      outcome (allowed / reasonCode). It is a context-replay guard, not an
-    ///      attestation of the verdict: the same inputs must hash the same way
-    ///      regardless of whether the trade was allowed or rejected.
     function _hash(ComplianceContext calldata ctx, ComplianceDecision memory d) private pure returns (bytes32) {
         return DecisionHashLib.compute(
-            ctx, d.maxAmount, d.allowedVenueTypes, d.allowedVenuesHash, d.policyVersion, d.validUntil
+            ctx, d.maxAmount, d.maxAmountToken, d.allowedVenueTypes, d.allowedVenuesHash, d.policyVersion, d.validUntil
         );
     }
 
     function _passThrough(ComplianceContext calldata ctx) internal view returns (ComplianceDecision memory d) {
         d.allowed = true;
-        d.policyId = bytes32(0);
-        d.policyVersion = 0;
         d.validUntil = uint64(block.timestamp + 1 days);
         d.maxAmount = type(uint256).max;
-        d.allowedVenueTypes = type(uint256).max; // permissive default for unregulated
-        d.allowedVenuesHash = bytes32(0);
-        d.reasonCode = bytes32(0);
-        d.reliedClaims = bytes32(0);
+        d.allowedVenueTypes = type(uint256).max;
         d.decisionHash = _hash(ctx, d);
+    }
+
+    function _singleRegulatedToken(ComplianceContext calldata ctx, PolicyStatus statusIn, PolicyStatus statusOut)
+        private
+        pure
+        returns (address)
+    {
+        bool tokenInActive = statusIn == PolicyStatus.ACTIVE;
+        bool tokenOutActive = statusOut == PolicyStatus.ACTIVE;
+        if (tokenInActive == tokenOutActive) return address(0);
+        return tokenInActive ? ctx.tokenIn : ctx.tokenOut;
     }
 
     function _rejectPolicy(ComplianceContext calldata ctx, PolicyStatus status)
@@ -285,107 +303,169 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         view
         returns (ComplianceDecision memory d)
     {
-        d.allowed = false;
         d.reasonCode = ReasonCodes.encode(0, bytes32("POLICY"), uint32(status));
         d.validUntil = uint64(block.timestamp + 1 days);
-        d.maxAmount = 0;
-        d.allowedVenueTypes = 0;
-        d.allowedVenuesHash = bytes32(0);
-        d.reliedClaims = bytes32(0);
         d.decisionHash = _hash(ctx, d);
     }
 
-    /// @dev commit: post-trade hook. Recompute applicable element set; for each
-    ///      STATEFUL element call onTransfer(seller, buyer, rwaAmount).
-    ///      onlyRouter: this is the authenticated runtime-counter write path
-    ///      (spec §6). Only the wired router may record post-trade state; an
-    ///      EOA/operator cannot forge surveillance counters by calling commit.
     function commit(ComplianceContext calldata ctx) external override onlyRouter {
-        // STATEFUL post-trade hooks run for every ACTIVE regulated side; a
-        // non-ACTIVE side (SUSPENDED/UNKNOWN/PROPOSED/RETIRED) or both-UNREGULATED
-        // has nothing to commit. NO mirror of evaluate's default-deny gate is
-        // needed here: `commit` is reachable ONLY after the router's own
-        // `engine.evaluate(ctx)` returned allowed (it reverts ComplianceRejected
-        // otherwise), so any pair that would fail the allowlist never reaches
-        // this path. The final `statusIn/Out == ACTIVE` guards below are what
-        // actually decide which sides get committed.
         PolicyStatus statusIn = policyReg.statusOf(ctx.tokenIn);
         PolicyStatus statusOut = policyReg.statusOf(ctx.tokenOut);
-        if (statusIn == PolicyStatus.SUSPENDED || statusOut == PolicyStatus.SUSPENDED) return;
-        if (statusIn == PolicyStatus.UNKNOWN || statusOut == PolicyStatus.UNKNOWN) return;
-        if (statusIn != PolicyStatus.ACTIVE && statusOut != PolicyStatus.ACTIVE) {
-            return;
-        }
+        if (!_isPermitted(statusIn) || !_isPermitted(statusOut)) return;
 
-        if (statusIn == PolicyStatus.ACTIVE) {
-            _commitActiveSide(ctx, ctx.tokenIn, policyReg.manifestOf(ctx.tokenIn));
-        }
-        if (statusOut == PolicyStatus.ACTIVE) {
-            _commitActiveSide(ctx, ctx.tokenOut, policyReg.manifestOf(ctx.tokenOut));
-        }
-    }
-
-    function _commitActiveSide(ComplianceContext calldata ctx, address token, ManifestCore memory m) internal {
-        uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
-
-        uint256 cap = _maxElements(m);
-        ElementAccumulator memory elements = _newAccumulator(cap);
-        _appendApplicableElements(ctx, token, m, elements);
+        ElementAccumulator memory elements = _newAccumulator();
+        if (statusIn == PolicyStatus.ACTIVE) _collectCommitElements(ctx, ctx.tokenIn, elements);
+        if (statusOut == PolicyStatus.ACTIVE) _collectCommitElements(ctx, ctx.tokenOut, elements);
 
         for (uint256 i = 0; i < elements.count; i++) {
-            address el = elementReg.elementOf(elements.ids[i]);
-            if (el == address(0)) revert Errors.ElementNotRegistered(elements.ids[i]);
-            if (IComplianceElement(el).elementMetadata().statefulness == Statefulness.STATEFUL) {
-                IStatefulElement(el).onTransfer(ctx.seller, ctx.buyer, rwaAmount);
+            address element = elementReg.elementOf(elements.ids[i]);
+            if (IComplianceElement(element).elementMetadata().statefulness == Statefulness.STATEFUL) {
+                bool isOutput = elements.tokens[i] == ctx.tokenOut;
+                uint256 rwaAmount = isOutput ? ctx.amountOut : ctx.amountIn;
+                // `buyer` is the screened subject, not an unconditional token
+                // recipient. For tokenOut the regulated asset moves
+                // seller→buyer; for tokenIn it moves buyer→seller.
+                IStatefulElement(element)
+                    .onTransfer(isOutput ? ctx.seller : ctx.buyer, isOutput ? ctx.buyer : ctx.seller, rwaAmount);
             }
         }
     }
 
-    // ---- helpers ----
+    function _collectCommitElements(ComplianceContext calldata ctx, address token, ElementAccumulator memory elements)
+        internal
+        view
+    {
+        ManifestCore memory manifest = policyReg.manifestOf(token);
+        RecipeBinding[] memory bindings = policyReg.recipeBindingsOf(token);
+        if (bindings.length == 0) revert Errors.InvalidRecipeBinding();
+        if (bindings.length > MAX_RECIPE_BINDINGS) {
+            revert Errors.TooManyRecipeBindings(bindings.length, MAX_RECIPE_BINDINGS);
+        }
+        bytes memory recipeContext = abi.encode(manifest.factsPacked, ctx);
+        CommitPathState memory paths;
+        paths.ids = new uint16[](bindings.length);
+        paths.selected = new uint256[](bindings.length);
+        paths.priorities = new uint8[](bindings.length);
 
-    function _newAccumulator(uint256 capacity) private pure returns (ElementAccumulator memory elements) {
-        elements.ids = new bytes32[](capacity);
-        elements.tokens = new address[](capacity);
-        elements.contributingRecipeIds = new uint16[](capacity);
+        for (uint256 i = 0; i < bindings.length; i++) {
+            RecipeBinding memory binding = bindings[i];
+            IRecipe recipe = _validatedRecipe(binding);
+            if (!recipe.isApplicable(recipeContext)) continue;
+
+            if (binding.mode == RecipeBindingMode.PATH_OPTION) {
+                (, bool passed,) = _checkRequiredElements(ctx, token, binding.recipeId, recipe.requiredElements());
+                if (passed) _selectCommitPath(paths, bindings, i);
+                continue;
+            }
+
+            // FLAG_ONLY is observational by contract: neither its pre-trade
+            // verdict nor a stateful post-trade hook may roll back settlement.
+            // Non-blocking observations must use the emitted flags/event stream
+            // rather than the trade-critical commit path.
+            if (binding.mode == RecipeBindingMode.FLAG_ONLY) continue;
+
+            _appendRecipeElements(elements, token, binding.recipeId, recipe.requiredElements());
+        }
+
+        for (uint256 i = 0; i < paths.count; i++) {
+            uint256 selected = paths.selected[i];
+            // A successful blocking evaluation guarantees one passing option
+            // for every applicable path group. Keep commit fail-closed if that
+            // invariant is ever broken by an incompatible caller or upgrade.
+            if (selected == 0) revert Errors.InvalidRecipeBinding();
+            IRecipe recipe = _validatedRecipe(bindings[selected - 1]);
+            _appendRecipeElements(elements, token, bindings[selected - 1].recipeId, recipe.requiredElements());
+        }
     }
 
-    function _seenForToken(ElementAccumulator memory elements, bytes32 id, address token) private pure returns (bool) {
+    function _validatedRecipe(RecipeBinding memory binding) private view returns (IRecipe recipe) {
+        address recipeAddress = recipeReg.recipeOf(binding.recipeId);
+        if (recipeAddress == address(0)) revert Errors.RecipeNotRegistered(binding.recipeId);
+        recipe = IRecipe(recipeAddress);
+        uint16 actualVersion = recipe.version();
+        if (actualVersion != binding.recipeVersion) {
+            revert Errors.RecipeVersionMismatch(binding.recipeId, binding.recipeVersion, actualVersion);
+        }
+    }
+
+    function _selectCommitPath(CommitPathState memory paths, RecipeBinding[] memory bindings, uint256 candidateIndex)
+        private
+        pure
+    {
+        RecipeBinding memory candidate = bindings[candidateIndex];
+        uint256 pathIndex = _commitPathIndex(paths, candidate.pathGroupId);
+        uint256 selected = paths.selected[pathIndex];
+        if (
+            selected == 0 || candidate.priority > paths.priorities[pathIndex]
+                || (candidate.priority == paths.priorities[pathIndex]
+                    && candidate.recipeId < bindings[selected - 1].recipeId)
+        ) {
+            paths.selected[pathIndex] = candidateIndex + 1;
+            paths.priorities[pathIndex] = candidate.priority;
+        }
+    }
+
+    function _commitPathIndex(CommitPathState memory paths, uint16 pathGroupId) private pure returns (uint256) {
+        for (uint256 i = 0; i < paths.count; i++) {
+            if (paths.ids[i] == pathGroupId) return i;
+        }
+        uint256 index = paths.count;
+        paths.ids[index] = pathGroupId;
+        paths.count++;
+        return index;
+    }
+
+    function _appendRecipeElements(
+        ElementAccumulator memory elements,
+        address token,
+        uint16 recipeId,
+        bytes32[] memory required
+    ) private pure {
+        if (required.length > MAX_ELEMENTS_PER_RECIPE) {
+            revert Errors.TooManyRecipeElements(recipeId, required.length, MAX_ELEMENTS_PER_RECIPE);
+        }
+        for (uint256 i = 0; i < required.length; i++) {
+            if (!_seen(elements, required[i], token)) {
+                elements.ids[elements.count] = required[i];
+                elements.tokens[elements.count] = token;
+                elements.count++;
+            }
+        }
+    }
+
+    function _newAccumulator() private pure returns (ElementAccumulator memory elements) {
+        uint256 capacity = 2 * MAX_RECIPE_BINDINGS * MAX_ELEMENTS_PER_RECIPE;
+        elements.ids = new bytes32[](capacity);
+        elements.tokens = new address[](capacity);
+    }
+
+    function _seen(ElementAccumulator memory elements, bytes32 id, address token) private pure returns (bool) {
         for (uint256 i = 0; i < elements.count; i++) {
             if (elements.ids[i] == id && elements.tokens[i] == token) return true;
         }
         return false;
     }
 
-    function _accumulatePolicyId(bytes32 acc, address token, ManifestCore memory m) private pure returns (bytes32) {
+    function _accumulatePolicyId(
+        bytes32 acc,
+        address token,
+        ManifestCore memory manifest,
+        RecipeBinding[] memory bindings
+    ) private pure returns (bytes32) {
         return keccak256(
             abi.encode(
                 acc,
                 token,
-                m.issuanceRecipeId,
-                m.issuanceRecipeVersion,
-                m.fundRecipeId,
-                m.supportedEngines,
-                m.factsPacked,
-                m.coverageScope,
-                m.fullManifestHash
+                keccak256(abi.encode(bindings)),
+                manifest.supportedEngines,
+                manifest.factsPacked,
+                manifest.coverageScope,
+                manifest.fullManifestHash
             )
         );
     }
 
     function _max64(uint64 a, uint64 b) private pure returns (uint64) {
         return a >= b ? a : b;
-    }
-
-    /// @dev Upper bound on distinct elements: sum of required-element counts of
-    ///      all candidate recipes. We don't know counts statically, so use a
-    ///      generous fixed cap; dedup keeps the live count correct.
-    ///      FAIL-CLOSED INVARIANT: if the union of required elements ever exceeds
-    ///      this cap, `elementIds[count] = ...` in `_applicableElements` reverts
-    ///      with an array out-of-bounds panic. That is intentional — it never
-    ///      silently drops a required check. A future maintainer MUST NOT add a
-    ///      `count < cap` guard around the write: truncating the element set
-    ///      would let a trade skip a required compliance check (fail-open).
-    function _maxElements(ManifestCore memory) private pure returns (uint256) {
-        return 32;
     }
 }

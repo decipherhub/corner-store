@@ -16,27 +16,38 @@
 - Uniswap v3 vendored deployment profile 분리와 단위 테스트
 - Foundry product scaffold와 공통 type/error/event/interface
 - Element/Recipe registry와 illustrative compliance elements/recipes
-- Token policy registry와 cumulative multi-Recipe evaluation
+- Token policy registry와 bounded RecipeBinding(required/path/flag) evaluation
 - generic ExecutionRouter, VenueRegistry, VenueSelector와 공통 Adapter interface
 - AMM reference adapter와 RFQ v1 reference settlement adapter
+- pinned canonical Uniswap v3 factory/pool CREATE2, liquidity callback와
+  Router-protected ERC-3643 buy/sell integration test
 - RFQ quote signer SDK, local MVP backend와 CLI/Router settlement flow
 - `buidl-like`/`reg-d` profile별 live Anvil deployment, Toolkit preflight/checkpoint와
   protected AMM/RFQ E2E
 - versioned Toolkit config, validation/simulation, deploy/test/onboard/checkpoint와
   multisig proposal handoff
 - Element/Recipe/Adapter/provider template metadata와 required-input validation
+- versioned RFQ pricing/risk/signer/nonce capability contract, shared conformance
+  suite와 reference/existing-backend scaffold
 - read-only Operator API, finality-aware/file-backed event index와 safe
   multisig-oriented dashboard
+- central global/asset/venue pause enforcement와 delayed unpause, versioned
+  Manifest history 및 delayed semantic update control plane
+- provider-neutral compliance data SDK, attested acquisition snapshot과
+  hash-chain rejection/surveillance audit foundation
 - Foundry unit/integration tests와 전체 developer/operator service 및 vendored
   deploy-v3를 검증하는 repository-wide GitHub Actions gate
 
 남은 주요 작업:
 
-- production Asset Compliance Manifest lifecycle/schema/proposal/activation
+- canonical recipe-key alias와 per-element enforcement override compiler
 - production legal Element 기준과 승인된 operator 입력 모델
-- acquisition/lot data source와 holding-period Recipe 활성화 조건
-- RFQ production signer custody, persistent nonce, pricing/inventory와 partial-fill 정책
-- 실제 Uniswap v3 pool을 사용하는 AMM deployment/E2E
+- 실제 Securitize/TA provider adapter, production WORM/indexer와 amount-specific
+  lot allocation 정책
+- ADR-009 기준 RFQ maker authorizer, durable nonce/idempotency, production
+  pricing/inventory-risk와 endpoint hardening 구현
+- partial fill은 새 quote/adapter version 설계 이후 구현
+- production Uniswap v3 pool/LP onboarding과 unified deployment orchestration
 - Order Book matching/custody/surveillance 모델
 - production TLS, secret rotation, 실제 multisig provider와 live RPC
   finality/recovery 운영
@@ -57,7 +68,8 @@ flowchart LR
 
 1. mock ERC-3643 자산에 `ACTIVE` Manifest를 등록한다.
 2. transaction context에 따라 복수 Recipe가 활성화된다.
-3. Element 합집합이 cumulative AND로 평가된다.
+3. required Recipe는 cumulative AND, 명시된 path option은 group OR로 평가되고
+   non-blocking finding은 flag로 분리된다.
 4. 허용된 engine의 Adapter로만 실행된다.
 5. Corner Store 또는 ERC-3643 거부 시 전체 settlement가 원자적으로 실패한다.
 6. 명시적 `UNREGULATED` 일반 ERC-20 public path에는 4-Layer 보장이 없고,
@@ -143,8 +155,8 @@ IElement 최초 확정 전에 stateful Element commit hook을 결정한다.
 
 자산별 규제·engine binding과 cumulative multi-Recipe evaluation을 구현한다.
 
-Status: cumulative evaluation and token policy registry are implemented for the
-reference proof; full production Manifest lifecycle/schema remains open.
+Status: bounded RecipeBinding evaluation, validated lifecycle, monotonic
+history/version과 timelocked semantic update control plane이 구현됨.
 
 ### Deliverables
 
@@ -153,7 +165,8 @@ reference proof; full production Manifest lifecycle/schema remains open.
 - Recipe set, resale path, supported engine과 version binding
 - issuer-side coverage representation
 - applicable Recipe identification
-- Element union/deduplication과 cumulative AND
+- REQUIRED AND, path-group OR/group 간 AND와 FLAG_ONLY finding
+- selected-path stateful commit와 duplicate Element commit 방지
 - structured `ComplianceDecision`
 - preview/evaluate API와 audit events
 
@@ -161,7 +174,8 @@ reference proof; full production Manifest lifecycle/schema remains open.
 
 - 한 Manifest에 복수 Recipe를 binding할 수 있다.
 - transaction context에 따라 Recipe subset이 활성화된다.
-- 모든 applicable Recipe의 활성 Element가 cumulative AND로 평가된다.
+- 모든 applicable required Recipe가 AND로 평가되고 각 path group은 하나 이상의
+  통과 경로를 요구하며 FLAG_ONLY 실패는 실행을 막지 않는다.
 - duplicate Element 최적화가 결과 의미를 바꾸지 않는다.
 - decision이 actor, asset, amount, engine/venue, Manifest version, nonce와 expiry에
   바인딩된다.
@@ -172,14 +186,16 @@ reference proof; full production Manifest lifecycle/schema remains open.
   자산이 있으면 양쪽 regulated Manifest의 applicable Recipe를 합쳐 평가한다.
 - full off-chain manifest hash와 on-chain core의 version 변경이 추적된다.
 
-### Blocking Design Decisions
+### Design Decisions
 
-1. Rule 144 holding period를 위한 acquisition/lot data source
+1. acquisition/lot source와 reject audit seam은 ADR-008/D012로 결정되고 DATA-001
+   foundation으로 구현되었다.
 2. Manifest scope: token 또는 token×venue
-3. Recipe set와 issuer coverage encoding
-4. reject audit trail
+3. issuer coverage encoding
+4. canonical recipe-key alias와 per-element enforcement override compiler
 
-acquisition data가 필요한 Recipe는 data source가 결정되기 전 활성화하지 않는다.
+실제 Rule 144 production 활성화는 provider API, lot allocation과 운영 저장소가
+검증될 때까지 보류한다.
 
 ## Phase 3 — Execution Integration Kit
 
@@ -225,8 +241,9 @@ Corner Store reference DEX의 구체 Venue는 공통 SDK/Router 기반 위에서
 
 ### 4A. Uniswap v3 AMM
 
-Status: Router-protected reference adapter와 MockPool 기반 live E2E는 구현됨.
-실제 Uniswap v3 pool deployment/E2E는 후속 작업이다.
+Status: Router-protected reference adapter, MockPool live demo와 pinned canonical
+Uniswap v3 core factory/pool integration E2E가 구현됨. production pool/LP onboarding과
+unified deploy command는 후속 작업이다.
 
 Deliverables:
 
@@ -255,7 +272,8 @@ Blockers:
 ### 4B. RFQ
 
 Status: v1 reference settlement, backend SDK and local MVP demo backend
-implemented; production dealer and custody decisions remain open.
+implemented. ADR-009 accepted the production dealer/settlement baseline;
+implementation prerequisites remain.
 
 Deliverables:
 
@@ -273,10 +291,12 @@ Completion:
 - Manifest/Recipe 또는 operator 변경이 fill에 반영된다.
 - signed quote와 request amount가 정확히 일치한다.
 
-Blockers:
+Production implementation prerequisites:
 
-- custody와 partial fill 모델
-- production signer custody, persistent nonce와 pricing/inventory policy
+- ADR-009 maker-authorizer와 regulated-quantity cap migration (완료: #65)
+- durable nonce/idempotency와 external signer integration
+- production pricing/inventory-risk, auth/audit/monitoring implementation
+- partial fill은 새 quote/adapter version의 별도 설계·검토
 
 ### 4C. Order Book
 
@@ -307,6 +327,10 @@ SDK와 reference DEX를 반복 배포하고 Manifest/권한 상태를 검증 가
 Status: reference/demo Toolkit, checkpoint/proposal handoff, Operator API/indexer,
 dashboard, metrics와 incident runbook은 구현됨. production hosting, key custody,
 실제 multisig provider와 chain별 recovery 정책은 후속 작업이다.
+
+RFQ integration Toolkit은 core SDK와 reference app을 분리하고 선택형 Compose
+export를 제공한다. production module의 운영 품질과 secret custody는 integrator
+책임이며 conformance 통과만으로 인증되지 않는다.
 
 ### Deliverables
 
@@ -346,25 +370,25 @@ Reference/demo evidence:
 
 가까운 후속 이슈:
 
-1. `design(rfq): remaining production RFQ policy` — custody, partial fill, signer,
-   nonce, pricing/inventory와 operator 책임.
-2. `feat(compliance): production Asset Compliance Manifest lifecycle/schema 구현`
-3. `design(compliance): acquisition/lot data source와 holding-period Recipe 활성화 조건 결정`
-4. `feat(amm): real Uniswap v3 pool deployment와 protected E2E 연결`
-5. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
-6. `ops(production): TLS, secret rotation, 실제 multisig provider와 live RPC
+1. `#66 feat(rfq): add durable nonce/idempotency reference adapter`
+2. `#67 feat(rfq): add production module audit envelope and service hardening`
+3. `feat(compliance): RecipeBinding 기반 production Asset Compliance Manifest schema/migration`
+4. `feat(compliance): verified TA provider adapter와 amount-specific lot allocation`
+5. `feat(amm): production pool/LP onboarding과 unified deployment 연결`
+6. `feat(orderbook): matching/custody/surveillance 모델 결정 후 Order Book adapter 구현`
+7. `ops(production): TLS, secret rotation, 실제 multisig provider와 live RPC
    finality/recovery 구현`
-7. `security: medium warning budget, independent analysis와 production review`
+8. `security: medium warning budget, independent analysis와 production review`
 
 ## Decision Backlog
 
 | 결정 | 영향 Phase | 결정 전 기본값 |
 | --- | --- | --- |
-| acquisition/lot source | 2 | 해당 holding-period Recipe 비활성 |
-| Element commit hook | 1 | stateful Element 구현 보류 |
+| production TA provider/API | 2 | mock provider + conservative snapshot만 사용 |
+| amount-specific lot allocation | 2 | 모든 current lot가 mature해야 통과 |
 | Manifest scope | 2 | 결정 전 external API와 storage 확정 금지 |
 | Manifest 공개 범위 | 2, 5 | full document는 off-chain, 공개 필드는 미정 |
-| reject audit trail | 2, 5 | 방식 확정 전 production claim 금지 |
+| production WORM/retention provider | 2, 5 | local tamper-evident log만 사용 |
 | initial engine/scenario | 4 | 법률 검토된 illustrative scenario만 활성 |
 | production operator/governance | 5 | test-only admin, production 배포 금지 |
 

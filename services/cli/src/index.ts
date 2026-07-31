@@ -14,8 +14,50 @@ program
   .option("--rpc <url>", "JSON-RPC endpoint", "http://127.0.0.1:8545")
   .option("--artifact <path>", "deployment artifact JSON (defaults to <repo>/deployments/anvil-e2e.json)")
   .option("--config <path>", "versioned Toolkit config JSON")
+  .option("--contracts <path>", "Corner Store contract source/bundle override")
   .option("--account <n>", "Anvil mnemonic account index 0-9")
   .option("--key <hex>", "explicit private key (overrides --account)");
+
+program
+  .command("create")
+  .description("create a standalone Corner Store integration project")
+  .argument("<target>", "new output directory")
+  .option("--mode <mode>", "library-only | reference-service | existing-backend", "library-only")
+  .option("--docker", "include optional Dockerfile and Compose reference deployment")
+  .option("--sdk <specifier>", "npm dependency specifier for @corner-store/rfq-service")
+  .option("--cli <specifier>", "npm dependency specifier for @corner-store/cli")
+  .action(run((target, opts) => cmd.cmdCreate(target, opts)));
+
+program
+  .command("init")
+  .description("create a versioned Corner Store config")
+  .argument("[path]", "output JSON path", "corner-store.config.json")
+  .action(run((path) => cmd.cmdToolkitInit(path)));
+
+program
+  .command("doctor")
+  .description("diagnose Node, Foundry, config, contract bundle, artifact, and optional Docker")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, _opts, command) => cmd.cmdDoctor(path, command.optsWithGlobals())));
+
+program
+  .command("deploy")
+  .description("plan or execute a standalone deployment; Docker is not required")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .option("--broadcast", "submit deployment transactions (otherwise dry-run)")
+  .action(run((path, opts, command) => cmd.cmdToolkitDeploy(path, {...command.optsWithGlobals(), broadcast: opts.broadcast})));
+
+program
+  .command("verify")
+  .description("verify config and deployment artifact bindings")
+  .argument("[path]", "config JSON path", "corner-store.config.json")
+  .action(run((path, _opts, command) => cmd.cmdVerify(path, command.optsWithGlobals())));
+
+program
+  .command("test-module")
+  .description("run the public RFQ module conformance gate")
+  .argument("<path>", "built CommonJS file exporting modules and fixture")
+  .action(run((path) => cmd.cmdTestModule(path)));
 
 program
   .command("toolkit-init")
@@ -89,6 +131,52 @@ program
   .command("toolkit-test")
   .description("run the repository-wide deterministic Toolkit and contract verification")
   .action(run(() => cmd.cmdToolkitTest()));
+
+program
+  .command("toolkit-scaffold-rfq")
+  .description("scaffold a reference RFQ service or an adapter for an existing backend")
+  .argument("<target>", "new output directory")
+  .requiredOption("--mode <mode>", "reference-service | existing-backend")
+  .option("--docker", "include optional Dockerfile and Compose reference deployment")
+  .option("--sdk <specifier>", "npm dependency specifier for @corner-store/rfq-service")
+  .option("--cli <specifier>", "npm dependency specifier for @corner-store/cli")
+  .action(run((target, opts) => cmd.cmdToolkitScaffoldRFQ(target, opts)));
+
+program
+  .command("production-source-hash")
+  .description("compute the deterministic hash of the production contract bundle")
+  .action(run((_opts, command) => cmd.cmdProductionSourceHash(command.optsWithGlobals())));
+
+program
+  .command("production-plan")
+  .description("render a signer-free production deployment plan")
+  .argument("[path]", "production config JSON path", "corner-store.production.json")
+  .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
+  .action(run((path, opts, command) => cmd.cmdProductionPlan(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
+
+program
+  .command("production-preflight")
+  .description("fail-closed RPC preflight for chain, Safe proxy, and optional ERC-3643 technical wiring")
+  .argument("[path]", "production config JSON path", "corner-store.production.json")
+  .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
+  .action(run((path, opts, command) => cmd.cmdProductionPreflight(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
+
+program
+  .command("production-deploy")
+  .description("run the production Foundry deploy script with frozen evidence and an external signer")
+  .argument("[path]", "production config JSON path", "corner-store.production.json")
+  .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
+  .option("--ledger", "use Foundry Ledger signer")
+  .option("--account <name>", "use a Foundry keystore/account signer")
+  .requiredOption("--confirm <text>", "must equal production-deploy")
+  .action(run((path, opts, command) => cmd.cmdProductionDeploy(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl, ledger: opts.ledger, account: opts.account, confirm: opts.confirm})));
+
+program
+  .command("production-verify")
+  .description("verify production deployment artifact and on-chain core bindings")
+  .argument("[path]", "production config JSON path", "corner-store.production.json")
+  .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
+  .action(run((path, opts, command) => cmd.cmdProductionVerify(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
 
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.

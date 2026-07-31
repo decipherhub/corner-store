@@ -46,6 +46,7 @@ export class FileEventIndex implements EventStore {
   }
 
   list(): IndexedEvent[] {
+    if (existsSync(this.path)) this.events = JSON.parse(readFileSync(this.path, "utf8")).events ?? [];
     return [...this.events];
   }
 }
@@ -53,6 +54,7 @@ export class FileEventIndex implements EventStore {
 export interface OperatorApiOptions {
   configPath: string;
   artifactPath?: string;
+  manifestPath?: string;
   eventsPath?: string;
   index?: EventStore;
   authToken?: string;
@@ -61,6 +63,9 @@ export interface OperatorApiOptions {
 export function createOperatorApi(options: OperatorApiOptions): Server {
   const config = loadConfig(options.configPath);
   const artifact = options.artifactPath ? JSON.parse(readFileSync(options.artifactPath, "utf8")) : undefined;
+  const manifest = options.manifestPath && existsSync(options.manifestPath)
+    ? JSON.parse(readFileSync(options.manifestPath, "utf8"))
+    : undefined;
   const index = options.index ?? (options.eventsPath ? new FileEventIndex(options.eventsPath) : new EventIndex());
   const metrics = {requests: 0, unauthorized: 0};
 
@@ -77,7 +82,8 @@ export function createOperatorApi(options: OperatorApiOptions): Server {
     if (path === "/metrics") return sendMetrics(res, metrics.requests, metrics.unauthorized, index.list().length);
     if (path === "/api/v1/config") return send(res, 200, sanitizeConfig(config));
     if (path === "/api/v1/deployment") return send(res, 200, artifact ?? {configured: false});
-    if (path === "/api/v1/events") return send(res, 200, {events: index.list(), source: "in-memory-index"});
+    if (path === "/api/v1/manifest") return send(res, 200, manifest ?? {configured: false});
+    if (path === "/api/v1/events") return send(res, 200, {events: index.list(), source: options.eventsPath ? "file-index" : "in-memory-index"});
     return send(res, 404, {error: "not found"});
   });
 }

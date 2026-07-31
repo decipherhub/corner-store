@@ -33,6 +33,7 @@ export interface Artifact {
   investor: string;
   jurisdiction: string;
   maker: string;
+  makerAuthorizer: string;
   operatorReg: string;
   policyReg: string;
   pool: string;
@@ -54,6 +55,7 @@ export interface GlobalOpts {
   config?: string;
   account?: string;
   key?: string;
+  contracts?: string;
 }
 
 // Walk up from `start` looking for a foundry.toml (the repo root marker).

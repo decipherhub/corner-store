@@ -1,10 +1,28 @@
 {
   "name": "@corner-store/toolkit",
   "version": "0.1.0",
-  "main": "dist/src/config.js",
-  "types": "dist/src/config.d.ts",
-  "private": true,
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "license": "GPL-3.0-or-later",
+  "files": [
+    "dist/src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "require": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/decipherhub/corner-store.git",
+    "directory": "services/toolkit"
+  },
   "description": "Versioned configuration and validation primitives for Corner Store deployments.",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node dist/test/smoke.js"

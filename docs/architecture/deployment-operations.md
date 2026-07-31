@@ -31,6 +31,12 @@ Corner Store 프로필 호출 API는 실제 AMM 통합 배포 소비자가 생�
 기존 upstream CLI 동작은 유지하고 상위 코드가 내부 migration 파일을 직접 조합하지
 않도록 최소 public boundary를 제공한다.
 
+Production core deployment tooling and its operating runbook are defined in
+[`docs/deployment-production.md`](../deployment-production.md). That runbook is
+the source of truth for ERC-3643 onboarding evidence, Safe owner/threshold
+verification, external signer boundaries, legal-approved policy packages,
+multisig review, activation order and monitoring evidence.
+
 ## Deployment Sequence
 
 1. network, chain ID, signer, dependency, final owner preflight
@@ -44,6 +50,10 @@ Corner Store 프로필 호출 API는 실제 AMM 통합 배포 소비자가 생�
 9. immutable manifest 확정
 
 owner-only 설정과 검증이 끝나기 전에 ownership을 이전하지 않는다.
+현재 reference wiring은 `TokenPolicyRegistry`와 `VenueRegistry` ownership을
+`CornerStoreFactory`로 이전하고, Factory owner를 외부 governance 경계로 사용한다.
+따라서 Manifest resume/update 예약은 Factory forwarding API를 통해야 하며,
+operator는 timelock 뒤 registry에서 실행만 담당한다.
 
 ## Deployment Manifest Requirements
 
@@ -136,6 +146,31 @@ orchestrator다. 기본 실행은 dry-run이며 `--broadcast`가 없으면 RPC m
 하지 않는다. 이 경계는 production signer custody, confirmation/finality 정책과
 ownership handoff를 reference demo와 분리한다.
 
+Production mutation must not be initiated from a browser. The browser may review
+configuration, dry-run evidence, proposal payloads and monitoring state, but
+production broadcast must use an approved external signer or Safe-style
+multisig workflow. Before signing, operators verify the Safe address, expected
+owner count `M`, threshold `N`, owner list, chain ID, payload target addresses
+and calldata.
+
+Production core activation also requires issuer-owned ERC-3643/ONCHAINID
+onboarding evidence and a legal-approved Element/Recipe/Asset Compliance
+Manifest package. Demo scenarios, mock identities, illustrative recipes and
+local fixed-rate RFQ fixtures are not production activation evidence.
+
+Venue, maker, signer and inventory activation happen after bytecode, owner,
+role, Manifest hash and venue registry verification. Maker settlement account
+approval, signer authorization and inventory/allowance readiness are separate
+checks; RFQ signer custody and production risk modules remain outside the
+reference demo boundary.
+
+RFQ backend 통합은 별도 schema-v1 integration manifest로 관리한다. manifest는
+reference service 또는 existing-backend mode와 pricing/risk/signer/nonce module
+ID, 필요한 environment variable **이름**만 기록한다. secret 값은 기록하지 않는다.
+`toolkit-scaffold-rfq`는 이 계약에서 source/config와 선택형 Docker Compose를
+생성하며 기존 디렉터리를 덮어쓰지 않는다. Docker는 reference export일 뿐 core
+SDK나 RFQ runtime의 필수 경계가 아니다.
+
 Wave-2 illustrative elements는 기본 demo 배포의 컴파일 그래프와 실행 범위를
 불필요하게 키우지 않도록 `tools/deploy-wave2/DeployWave2Elements.s.sol`에서 opt-in으로 배포한다.
 이 script는 `ELEMENT_REGISTRY`, `COMPLIANCE_ENGINE`, `IDENTITY_ELEMENT`,
@@ -145,7 +180,7 @@ Wave-2 illustrative elements는 기본 demo 배포의 컴파일 그래프와 실
 ## Open Decisions
 
 - production chain과 confirmation 정책
-- 실제 multisig provider, signer custody와 emergency role assignment
+- 실제 Safe/multisig provider, signer custody와 emergency role assignment
 - upgradeability
 - production source verification, indexer rewind/replay와 disaster recovery
 
@@ -155,3 +190,4 @@ Wave-2 illustrative elements는 기본 demo 배포의 컴파일 그래프와 실
 - [`UPSTREAM.md`](../../tools/deploy-v3/UPSTREAM.md)
 - [`ROADMAP.md` - Deployment and Operations](../ROADMAP.md#phase-5--deployment-and-operations)
 - [`Incident Response Runbook`](../operations/incident-response.md)
+- [`Production Deployment Runbook`](../deployment-production.md)

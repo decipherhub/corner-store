@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 
 import {IntegrationBase} from "./IntegrationBase.sol";
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
-import {ManifestCore} from "../../src/types/ComplianceTypes.sol";
+import {ManifestCore, RecipeBinding, RecipeBindingMode} from "../../src/types/ComplianceTypes.sol";
 import {Events} from "../../src/libraries/Events.sol";
 import {ReasonCodes} from "../../src/libraries/ReasonCodes.sol";
 
@@ -26,12 +26,13 @@ contract SurveillanceTest is IntegrationBase {
         recipeReg.registerRecipe(7, 1, address(r));
 
         ManifestCore memory m = _activeManifest(0, 0);
-        m.issuanceRecipeId = 7;
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         // deployStack already left rwaToken ACTIVE; re-pointing the issuance recipe
         // goes through the terminal-then-reissue path (retire -> register ->
         // approve) since re-register over ACTIVE reverts by design.
         policyReg.retireManifest(address(rwaToken), bytes32("REISSUE"));
-        policyReg.registerManifest(address(rwaToken), m);
+        policyReg.registerManifest(address(rwaToken), m, bindings);
         policyReg.approveManifest(address(rwaToken));
     }
 

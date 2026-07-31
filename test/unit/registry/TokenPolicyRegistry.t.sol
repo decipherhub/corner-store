@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 
 import {Test} from "forge-std/Test.sol";
 import {TokenPolicyRegistry} from "../../../src/registry/TokenPolicyRegistry.sol";
-import {ManifestCore, PolicyStatus} from "../../../src/types/ComplianceTypes.sol";
+import {ManifestCore, PolicyStatus, RecipeBinding, RecipeBindingMode} from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 import {Events} from "../../../src/libraries/Events.sol";
 
@@ -29,6 +29,11 @@ contract TokenPolicyRegistryTest is Test {
         m.declaredBy = owner;
     }
 
+    function _bindings() internal pure returns (RecipeBinding[] memory bindings) {
+        bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+    }
+
     /// @dev Drive a token to ACTIVE the legal way (register -> approve).
     function _activate(address t) internal {
         reg.registerManifest(t, _manifest());
@@ -47,7 +52,7 @@ contract TokenPolicyRegistryTest is Test {
     function test_register_lands_PROPOSED_ignoring_caller_status() public {
         ManifestCore memory m = _manifest(); // m.status == ACTIVE on purpose
         vm.expectEmit(true, false, false, true);
-        emit Events.ManifestRegistered(token, m.issuanceRecipeId, owner);
+        emit Events.ManifestRegistered(token, keccak256(abi.encode(_bindings())), owner);
         reg.registerManifest(token, m);
 
         ManifestCore memory got = reg.manifestOf(token);
@@ -57,6 +62,8 @@ contract TokenPolicyRegistryTest is Test {
         assertEq(got.declaredBy, owner, "declaredBy = register caller");
         assertEq(got.approvedBy, address(0), "not yet approved");
         assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.PROPOSED));
+        assertEq(reg.manifestVersionOf(token), 1, "first semantic version");
+        assertNotEq(reg.manifestHistoryHashOf(token), bytes32(0), "history anchored");
     }
 
     function test_register_records_caller_as_declaredBy() public {
@@ -85,13 +92,51 @@ contract TokenPolicyRegistryTest is Test {
         assertEq(reg.manifestOf(token).approvedBy, operator, "approvedBy = approve caller");
     }
 
-    function test_approve_reverts_when_recipe_set_empty() public {
-        ManifestCore memory m = _manifest();
-        m.issuanceRecipeId = 0; // empty recipe set -> not approvable
-        reg.registerManifest(token, m);
-        vm.prank(operator);
-        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeNotRegistered.selector, uint16(0)));
-        reg.approveManifest(token);
+    function test_register_reverts_when_recipe_set_empty() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](0);
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_rejects_oversized_binding_plan() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](reg.MAX_RECIPE_BINDINGS() + 1);
+        for (uint256 i = 0; i < bindings.length; i++) {
+            bindings[i] =
+                RecipeBinding(uint16(i + 1), 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, uint8(bindings.length - i));
+        }
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.TooManyRecipeBindings.selector, bindings.length, reg.MAX_RECIPE_BINDINGS())
+        );
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_rejects_duplicate_recipe_binding() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[1] = RecipeBinding(7, 1, RecipeBindingMode.FLAG_ONLY, 0, 10);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DuplicateRecipeBinding.selector, uint16(7)));
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_rejects_path_without_group() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.PATH_OPTION, 0, 100);
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_rejects_flagOnly_plan_without_blocking_gate() public {
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.FLAG_ONLY, 0, 10);
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+    }
+
+    function test_register_stores_recipeBindings() public {
+        RecipeBinding[] memory expected = _bindings();
+        reg.registerManifest(token, _manifest(), expected);
+        RecipeBinding[] memory actual = reg.recipeBindingsOf(token);
+        assertEq(keccak256(abi.encode(actual)), keccak256(abi.encode(expected)));
     }
 
     function test_approve_reverts_for_non_operator() public {
@@ -115,13 +160,31 @@ contract TokenPolicyRegistryTest is Test {
 
     function test_resume_SUSPENDED_to_ACTIVE() public {
         _activate(token);
-        vm.startPrank(operator);
+        vm.prank(operator);
         reg.suspendManifest(token, bytes32("HALT"));
+        reg.scheduleManifestResume(token, bytes32("RECOVERED"));
+        vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
+        vm.startPrank(operator);
         vm.expectEmit(true, false, false, true);
-        emit Events.ManifestStatusChanged(token, PolicyStatus.ACTIVE, bytes32(0));
+        emit Events.ManifestStatusChanged(token, PolicyStatus.ACTIVE, bytes32("RECOVERED"));
         reg.resumeManifest(token);
         vm.stopPrank();
         assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.ACTIVE));
+    }
+
+    function test_resume_requiresScheduleAndDelay() public {
+        _activate(token);
+        vm.prank(operator);
+        reg.suspendManifest(token, bytes32("HALT"));
+
+        vm.prank(operator);
+        vm.expectRevert(Errors.PendingActionNotFound.selector);
+        reg.resumeManifest(token);
+
+        reg.scheduleManifestResume(token, bytes32("RECOVERED"));
+        vm.prank(operator);
+        vm.expectPartialRevert(Errors.TimelockNotReady.selector);
+        reg.resumeManifest(token);
     }
 
     function test_suspend_reverts_for_non_operator() public {
@@ -138,6 +201,28 @@ contract TokenPolicyRegistryTest is Test {
         vm.prank(stranger);
         vm.expectRevert(Errors.NotAuthorized.selector);
         reg.resumeManifest(token);
+    }
+
+    function test_resume_schedule_reverts_for_non_owner() public {
+        _activate(token);
+        vm.prank(operator);
+        reg.suspendManifest(token, bytes32("HALT"));
+        vm.prank(operator);
+        vm.expectRevert("Ownable: caller is not the owner");
+        reg.scheduleManifestResume(token, bytes32("RECOVERED"));
+    }
+
+    function test_resume_cancelInvalidatesPendingResume() public {
+        _activate(token);
+        vm.prank(operator);
+        reg.suspendManifest(token, bytes32("HALT"));
+        reg.scheduleManifestResume(token, bytes32("RECOVERED"));
+        reg.cancelManifestResume(token);
+        vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
+        vm.prank(operator);
+        vm.expectRevert(Errors.PendingActionNotFound.selector);
+        reg.resumeManifest(token);
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.SUSPENDED));
     }
 
     // --- retire -----------------------------------------------------------
@@ -178,6 +263,7 @@ contract TokenPolicyRegistryTest is Test {
         reg.registerManifest(token, _manifest());
         assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.PROPOSED));
         assertEq(reg.manifestOf(token).approvedBy, address(0), "approver cleared on re-register");
+        assertEq(reg.manifestVersionOf(token), 2, "reissue increments semantic version");
     }
 
     function test_reregister_from_PROPOSED_reverts() public {
@@ -397,6 +483,135 @@ contract TokenPolicyRegistryTest is Test {
         reg.registerManifest(token, _manifest());
         vm.prank(stranger);
         vm.expectRevert(Errors.NotAuthorized.selector);
+        reg.setFact(token, 0x0F);
+    }
+
+    // --- delayed semantic update -----------------------------------------
+
+    function test_manifestUpdate_activatesAfterDelayAndIncrementsVersion() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        reg.registerManifest(token, initial);
+        vm.prank(operator);
+        reg.approveManifest(token);
+        bytes32 historyBefore = reg.manifestHistoryHashOf(token);
+
+        ManifestCore memory next = initial;
+        next.issuanceRecipeVersion = 2;
+        next.fullManifestHash = keccak256("manifest-v2");
+        reg.scheduleManifestUpdate(token, next, bytes32("REGULATORY_UPDATE"));
+
+        (,, uint64 effectiveTime, bytes32 reasonCode) = reg.pendingManifestUpdateOf(token);
+        assertEq(reasonCode, bytes32("REGULATORY_UPDATE"));
+        vm.prank(operator);
+        vm.expectPartialRevert(Errors.TimelockNotReady.selector);
+        reg.activateManifestUpdate(token);
+
+        vm.warp(effectiveTime);
+        vm.prank(operator);
+        reg.activateManifestUpdate(token);
+
+        assertEq(reg.manifestVersionOf(token), 2);
+        assertEq(reg.manifestOf(token).fullManifestHash, next.fullManifestHash);
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.ACTIVE));
+        assertNotEq(reg.manifestHistoryHashOf(token), historyBefore);
+    }
+
+    function test_manifestUpdate_changesBindingsOnlyAfterActivation() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        RecipeBinding[] memory oldBindings = _bindings();
+        reg.registerManifest(token, initial, oldBindings);
+        vm.prank(operator);
+        reg.approveManifest(token);
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        RecipeBinding[] memory nextBindings = new RecipeBinding[](2);
+        nextBindings[0] = oldBindings[0];
+        nextBindings[1] = RecipeBinding(8, 2, RecipeBindingMode.FLAG_ONLY, 0, 10);
+        reg.scheduleManifestUpdate(token, next, nextBindings, bytes32("BINDING_UPDATE"));
+
+        assertEq(keccak256(abi.encode(reg.recipeBindingsOf(token))), keccak256(abi.encode(oldBindings)));
+        (, RecipeBinding[] memory pending, uint64 effectiveTime,) = reg.pendingManifestUpdateOf(token);
+        assertEq(keccak256(abi.encode(pending)), keccak256(abi.encode(nextBindings)));
+
+        vm.warp(effectiveTime);
+        vm.prank(operator);
+        reg.activateManifestUpdate(token);
+        assertEq(keccak256(abi.encode(reg.recipeBindingsOf(token))), keccak256(abi.encode(nextBindings)));
+        assertEq(reg.manifestVersionOf(token), 2);
+    }
+
+    function test_manifestUpdate_preservesSuspendedState() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        reg.registerManifest(token, initial);
+        vm.startPrank(operator);
+        reg.approveManifest(token);
+        reg.suspendManifest(token, bytes32("INCIDENT"));
+        vm.stopPrank();
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+        vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
+        vm.prank(operator);
+        reg.activateManifestUpdate(token);
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.SUSPENDED));
+    }
+
+    function test_manifestUpdate_rejectsMissingOrUnchangedHash() public {
+        _activate(token);
+        ManifestCore memory next = _manifest();
+        vm.expectRevert(Errors.InvalidManifestHash.selector);
+        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+    }
+
+    function test_manifestUpdate_scheduleRevertsForNonOwner() public {
+        _activate(token);
+        ManifestCore memory next = _manifest();
+        next.fullManifestHash = keccak256("manifest-v2");
+        vm.prank(operator);
+        vm.expectRevert("Ownable: caller is not the owner");
+        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+    }
+
+    function test_manifestUpdate_cancelPreservesManifestAndVersion() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        bytes32 initialHash = initial.fullManifestHash;
+        reg.registerManifest(token, initial);
+        vm.prank(operator);
+        reg.approveManifest(token);
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+        reg.cancelManifestUpdate(token);
+        vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
+        vm.prank(operator);
+        vm.expectRevert(Errors.PendingActionNotFound.selector);
+        reg.activateManifestUpdate(token);
+
+        assertEq(reg.manifestVersionOf(token), 1);
+        assertEq(reg.manifestOf(token).fullManifestHash, initialHash);
+        assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.ACTIVE));
+    }
+
+    function test_setFact_revertsWhenActive_toPreventTimelockBypass() public {
+        _activate(token);
+        vm.prank(operator);
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
+        reg.setFact(token, 0x0F);
+    }
+
+    function test_setFact_revertsWhenRetired_toPreserveHistory() public {
+        _activate(token);
+        vm.prank(operator);
+        reg.retireManifest(token, bytes32("EOL"));
+        vm.prank(operator);
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
         reg.setFact(token, 0x0F);
     }
 }

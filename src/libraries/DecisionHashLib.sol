@@ -7,6 +7,7 @@ library DecisionHashLib {
     function compute(
         ComplianceContext memory c,
         uint256 maxAmount,
+        address maxAmountToken,
         uint256 allowedVenueTypes,
         bytes32 allowedVenuesHash,
         uint64 policyVersion,
@@ -14,7 +15,15 @@ library DecisionHashLib {
     ) internal pure returns (bytes32) {
         bytes memory trade = abi.encode(c.initiator, c.buyer, c.seller, c.tokenIn, c.tokenOut, c.amountIn, c.amountOut);
         bytes memory execution = abi.encode(
-            c.venueType, c.venue, c.flowType, maxAmount, allowedVenueTypes, allowedVenuesHash, policyVersion, validUntil
+            c.venueType,
+            c.venue,
+            c.flowType,
+            maxAmount,
+            maxAmountToken,
+            allowedVenueTypes,
+            allowedVenuesHash,
+            policyVersion,
+            validUntil
         );
         return keccak256(bytes.concat(trade, execution));
     }

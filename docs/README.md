@@ -14,6 +14,13 @@
 | [`ROADMAP.md`](./ROADMAP.md)                         | 구현 순서, 완료 조건, blocker | Current    |
 | [`testing.md`](./testing.md)                         | 테스트와 완료 기준            | Current    |
 | [`demo.md`](./demo.md)                               | live Anvil E2E / demo runbook | Current    |
+| [`rfq-demo-guide.md`](./rfq-demo-guide.md)           | RFQ-first MVP presenter guide | Current    |
+| [`showcase-runbook.md`](./showcase-runbook.md)       | production-core → local DEX handoff | Current |
+| [`sdk-integration.md`](./sdk-integration.md)         | modular SDK·scaffold·conformance | Current |
+| [`deployment-studio.md`](./deployment-studio.md)     | local reference execution + production preflight/plan Studio | Current |
+| [`deployment-production.md`](./deployment-production.md) | production deployment runbook | Current |
+| [`testnet-deployment.md`](./testnet-deployment.md)       | public testnet RFQ reference deployment | Current |
+| [`product-specs/production-rfq-policy.md`](./product-specs/production-rfq-policy.md) | production RFQ 운영·구현 계약 | Current |
 | [`operations/incident-response.md`](./operations/incident-response.md) | 사고 대응·복구 runbook | Current |
 | [`security.md`](./security.md)                       | 보안 규칙                     | Current    |
 | [`rfq-threat-model.md`](./rfq-threat-model.md)       | RFQ venue 위협 모델           | Current    |
@@ -29,6 +36,8 @@ Uniswap v3 배포 도구의 실제 포함 범위와 의존성은
 - 컴포넌트 책임, trust boundary, 불변성: `architecture/`
 - 구현 순서와 완료 판단: `ROADMAP.md`
 - vendored 배포 도구의 구성: `tools/deploy-v3/CORNER_STORE_PROFILE.md`
+- production deployment sequence, Safe/external signer, ERC-3643 onboarding and
+  activation evidence: `deployment-production.md`
 - feature 상태와 세션 진행: `FEATURES.md`, `PROGRESS.md`
 - 결정 이유와 품질 상태: `DECISIONS.md`, `QUALITY.md`
 

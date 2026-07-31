@@ -1,4 +1,4 @@
-import {mkdtempSync} from "fs";
+import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
 import {createServer} from "http";
 import {tmpdir} from "os";
 import {join} from "path";
@@ -12,6 +12,13 @@ import {
 } from "../src/assetProfiles";
 import {decodeReason, encodeReason, tableSize} from "../src/reason";
 import {
+  copyDeploymentArtifact,
+  doctor,
+  isNodeVersionSupported,
+  prepareDeploymentRuntime,
+  resolveContractSource
+} from "../src/product";
+import {
   RFQ_QUOTE_TYPES,
   RFQQuoteService,
   WalletTypedDataSigner,
@@ -21,6 +28,7 @@ import {
   rfqDomain,
   writeQuoteFile
 } from "../src/rfq";
+import {cmdProductionDeploy, cmdProductionPlan} from "../src/commands";
 
 const CHAIN_ID = 31337;
 const RFQ_VERIFYING_CONTRACT = "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0";
@@ -53,6 +61,112 @@ const D01_DIRECT_CODE3 = "0x944f96138687357570c74d60495e55251602230e456018945bdf
 const F03_DIRECT_CODE2 = "0x5d92032bfc7789d5259fa504825a7aee201b62bfb2f705423901f179444eb22a";
 
 async function main() {
+  assert(isNodeVersionSupported("18.0.0"), "Node 18 is supported");
+  assert(isNodeVersionSupported("v24.4.1"), "newer Node releases are supported");
+  assert(!isNodeVersionSupported("16.20.1"), "Node 16 is rejected");
+  assert(!isNodeVersionSupported("invalid"), "invalid Node versions are rejected");
+
+  const productRoot = mkdtempSync(join(tmpdir(), "corner-store-product-"));
+  const contractSource = join(productRoot, "contracts");
+  const consumerRoot = join(productRoot, "consumer");
+  for (const path of [
+    "src",
+    "script",
+    "test/fixtures",
+    "test/mocks",
+    "lib/openzeppelin-contracts/contracts",
+    "lib/openzeppelin-contracts-upgradeable/contracts",
+    "lib/solidity/contracts",
+    "lib/ERC-3643/contracts",
+    "lib/forge-std/src"
+  ]) {
+    mkdirSync(join(contractSource, path), {recursive: true});
+    writeFileSync(join(contractSource, path, ".fixture"), path);
+  }
+  writeFileSync(join(contractSource, "foundry.toml"), "[profile.default]\n");
+  writeFileSync(join(contractSource, "remappings.txt"), "");
+  writeFileSync(join(contractSource, "script/DeployStack.s.sol"), "contract DeployStack {}\n");
+  writeFileSync(join(contractSource, "secret.txt"), "must not be copied");
+  mkdirSync(consumerRoot);
+  writeFileSync(join(consumerRoot, "corner-store.scenario.json"), '{"schemaVersion":2}\n');
+  assert(resolveContractSource(undefined, contractSource) === contractSource, "explicit contract source resolves");
+  const invalidDoctor = doctor("missing-config.json", undefined, contractSource);
+  assert(!invalidDoctor.ready, "doctor fails readiness for a missing config");
+  assert(
+    invalidDoctor.checks.some((check) => check.name === "node") &&
+      invalidDoctor.checks.some((check) => check.name === "config" && !check.pass),
+    "doctor reports all prerequisites alongside config failure"
+  );
+  const runtime = prepareDeploymentRuntime(consumerRoot, contractSource);
+  assert(existsSync(join(runtime, "src/.fixture")), "runtime copies required product sources");
+  assert(!existsSync(join(runtime, "secret.txt")), "runtime excludes unrelated source-root files");
+  assert(
+    readFileSync(join(runtime, "deployments/anvil-e2e-scenario.json"), "utf8").includes('"schemaVersion":2'),
+    "runtime installs the consumer scenario"
+  );
+  writeFileSync(join(runtime, "deployments/anvil-e2e.json"), '{"router":"0x1"}\n');
+  const copiedArtifact = copyDeploymentArtifact(runtime, consumerRoot, "deployments/result.json");
+  assert(existsSync(copiedArtifact), "deployment artifact is copied back to the consumer project");
+
+  const productionConfigPath = join(consumerRoot, "corner-store.production.json");
+  writeFileSync(productionConfigPath, `${JSON.stringify({
+    schemaVersion: 1,
+    network: {
+      name: "mainnet",
+      chainId: 1,
+      rpcUrl: "https://rpc.example",
+      approvedRpcHosts: ["rpc.example", "secure-rpc.example"]
+    },
+    release: {sourceCommit: "a".repeat(40), contractsHash: `sha256:${"b".repeat(64)}`},
+    deploymentId: "mainnet-core-1",
+    deployer: "0x4444444444444444444444444444444444444444",
+    operator: "0x5555555555555555555555555555555555555555",
+    venues: {amm: true, rfq: true},
+    safe: {
+      address: "0x8888888888888888888888888888888888888888",
+      expectedOwners: [
+        "0x1111111111111111111111111111111111111111",
+        "0x2222222222222222222222222222222222222222"
+      ],
+      threshold: 2,
+      expectedSingleton: "0x7777777777777777777777777777777777777777",
+      proxyCodeHash: `0x${"aa".repeat(32)}`
+    },
+    deployment: {
+      artifact: "deployments/production-core.json",
+      evidence: "deployments/production-evidence.json"
+    }
+  }, null, 2)}\n`);
+  const previousCwd = process.cwd();
+  process.chdir(consumerRoot);
+  try {
+    const previousLog = console.log;
+    let planOutput = "";
+    console.log = (value?: any) => { planOutput += String(value); };
+    try {
+      cmdProductionPlan("corner-store.production.json", {rpcUrl: "https://secure-rpc.example"});
+    } finally {
+      console.log = previousLog;
+    }
+    assert(planOutput.includes("CORNER_STORE_DEPLOYER=0x4444444444444444444444444444444444444444"), "production-plan includes deployer env");
+    assert(planOutput.includes("CORNER_STORE_GOVERNANCE=0x8888888888888888888888888888888888888888"), "production-plan includes Safe env");
+    assert(planOutput.includes("CORNER_STORE_ENABLE_AMM=1") && planOutput.includes("CORNER_STORE_ENABLE_RFQ=1"), "production-plan includes venue env");
+    assert(planOutput.includes("--sender 0x4444444444444444444444444444444444444444"), "production-plan includes explicit sender");
+    assert(planOutput.includes("https://secure-rpc.example"), "production-plan supports explicit RPC runtime override");
+    assert(!planOutput.includes("--ledger") && !planOutput.includes("--account"), "production-plan is signer-free");
+    assertThrows(() => cmdProductionPlan("corner-store.production.json", {key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"}), "production-plan rejects raw key");
+    await assertRejects(
+      () => cmdProductionDeploy("corner-store.production.json", {ledger: true, confirm: "wrong"}),
+      "production-deploy requires explicit confirmation before RPC preflight"
+    );
+    await assertRejects(
+      () => cmdProductionDeploy("corner-store.production.json", {ledger: true, confirm: "production-deploy"}),
+      "production-deploy requires frozen dry-run/fork evidence before RPC preflight"
+    );
+  } finally {
+    process.chdir(previousCwd);
+  }
+
   // --- asset profile selection -------------------------------------------
   assert(resolveAssetProfile() === "buidl-like", "BUIDL-like is the default asset profile");
   assert(resolveAssetProfile("reg-d") === "reg-d", "Reg D asset profile is selectable");
@@ -70,7 +184,16 @@ async function main() {
     "a deployed BUIDL-like asset cannot be rebound to weaker Reg D policy"
   );
   const buidl = assetProfileBinding("buidl-like");
-  assert(buidl.fundRecipeId === 3 && buidl.factsPacked === 1n, "BUIDL-like Recipe/facts binding");
+  assert(
+    JSON.stringify(buidl.bindings) === JSON.stringify([[1, 2, 0, 0, 100], [3, 1, 0, 0, 90]]) &&
+      buidl.factsPacked === 1n,
+    "BUIDL-like RecipeBinding[]/facts binding"
+  );
+  const regD = assetProfileBinding("reg-d");
+  assert(
+    JSON.stringify(regD.bindings) === JSON.stringify([[1, 2, 0, 0, 100]]) && regD.factsPacked === 0n,
+    "Reg D uses a single RecipeBinding[] without fund mirror behavior"
+  );
   assert(
     buidl.fullManifestHash === "0xdcf411c4cfd970828531bfbaa85d4e6f833b6fb731a32add099081e4eea5b7c9",
     "BUIDL-like Manifest hash matches the Solidity profile"
@@ -203,6 +326,15 @@ function assert(cond: boolean, msg: string) {
 function assertThrows(fn: () => unknown, msg: string) {
   try {
     fn();
+  } catch {
+    return;
+  }
+  throw new Error(`assertion failed: ${msg}`);
+}
+
+async function assertRejects(fn: () => Promise<unknown>, msg: string) {
+  try {
+    await fn();
   } catch {
     return;
   }

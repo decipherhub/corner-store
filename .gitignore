@@ -5,6 +5,7 @@ broadcast/
 services/rfq/dist/
 services/rfq/node_modules/
 services/cli/dist/
+services/cli/bundle/
 services/cli/node_modules/
 services/rfq-demo-backend/dist/
 services/rfq-demo-backend/node_modules/
@@ -12,4 +13,15 @@ services/toolkit/dist/
 services/toolkit/node_modules/
 services/operator-api/dist/
 services/operator-api/node_modules/
-deployments/
+services/deployment-studio/dist/
+services/deployment-studio/node_modules/
+services/compliance-data/dist/
+services/compliance-data/node_modules/
+services/testnet-rfq-demo/dist/
+services/testnet-rfq-demo/node_modules/
+tools/deploy-v3/node_modules
+.corner-store/
+deployments/*
+!deployments/public/
+!deployments/public/**
+.env.testnet

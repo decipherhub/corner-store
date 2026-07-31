@@ -43,9 +43,64 @@ cd services/rfq-demo-backend && npm ci && npm test
 cd services/cli && npm ci && npm test
 ```
 
-Backend smoke는 ephemeral HTTP server의 health/quote API, fixed-rate pricing,
-maker signature, monotonic nonce와 numeric amount 거부를 검증한다. CLI smoke는
-backend quote request path와 기존 quote-file/서명 검증 경로를 함께 검증한다.
+Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
+API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
+거부를 검증한다. CLI smoke는 backend quote request path와 기존
+quote-file/서명 검증 경로를 함께 검증한다.
+
+Standalone SDK integration smoke:
+
+```sh
+cd services/toolkit
+npm test
+```
+
+Toolkit smoke는 unified `create`가 생성하는 `library-only`,
+`reference-service`, `existing-backend` 세 mode의 manifest, `.env.example`,
+vendored `vendor/rfq-service`, optional Docker files, overwrite refusal과
+standalone package scripts(`doctor`, `deploy`, `verify`, `test:module`)를
+검증한다. SDK-002 문서 또는 packaging 변경에서는 CLI help, `doctor`, dry-run
+`deploy`, `verify`/preflight와 `test-module` command path도 별도로 확인한다.
+
+Generated consumer projects should keep this local gate:
+
+```sh
+npm test
+```
+
+생성된 프로젝트의 `npm test`는 TypeScript build 후
+`corner-store test-module dist/module-conformance.js`를 실행한다. 이 conformance
+gate는 custom RFQ pricing/risk/signer/nonce module set이 SDK contract를 만족하는지
+검사한다. Signer는 65-byte 형식뿐 아니라 EIP-712 payload에서 configured maker로
+복구되어야 한다. 이 gate는 production pricing 품질이나 signer custody를 인증하지
+않는다.
+
+Compliance data SDK smoke test:
+
+```sh
+cd services/compliance-data
+npm ci
+npm test
+```
+
+TA lot lineage/완납 clock, conservative snapshot, broken-lineage fail-closed,
+idempotent person-group commit, rolling volume/holder counts와 hash-chain 변조 탐지를
+검증한다.
+
+Deployment Studio smoke test:
+
+```sh
+cd services/deployment-studio
+npm ci
+npm test
+```
+
+Studio smoke는 workspace path confinement, Toolkit/integration validation,
+secret-shaped scenario key rejection, HttpOnly session mutation guard,
+operator-injected broadcast guard, server-side doctor/dry-run evidence,
+deploy progress, artifact/verify/activation/handoff와 UI wiring을 검증한다.
+검증 상태는 재시작 후 유지되며 config/integration/scenario/artifact hash가
+바뀌면 보수적으로 무효화되어야 한다.
 
 Vendored deploy tool 테스트:
 
@@ -59,7 +114,10 @@ yarn test
 Foundry integration tests는 mock/ERC-3643 fixture를 사용해 regulated swap,
 multi-Recipe, surveillance, emergency pause와 invariant path를 검증한다.
 `tools/deploy-v3`의 Corner Store profile은 unit test로 구성과 순서를 검증하며,
-과거 수동 Anvil 배포 검증 기록은 `tools/deploy-v3/CORNER_STORE_PROFILE.md`에 있다.
+canonical Uniswap v3 integration test는 같은 pinned package artifact로 factory와
+pool을 배포해 CREATE2, mint/swap callback과 실제 ERC-3643 transfer를 검증한다.
+따라서 fresh checkout에서는 `tools/deploy-v3`의 `yarn install --frozen-lockfile`이
+먼저 필요하며 `scripts/check.sh`가 이를 자동 bootstrap한다.
 
 자동화된 live Anvil deployment/E2E는 `scripts/e2e-anvil.sh`로 제공된다(아래 E2E
 Tests 및 `docs/demo.md` 참조).
@@ -86,7 +144,7 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패
-- 여러 Recipe의 cumulative AND와 중복 Element 실행 의미
+- RecipeBinding의 REQUIRED/PATH/FLAG truth table과 stateful commit 중복 방지
 - Manifest lifecycle, version과 supported engine binding
 - ERC-3643 transfer 거부의 원자적 실패
 - 지원 Router 경로와 직접 venue 호출의 보장 차이
@@ -96,7 +154,22 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - Adapter 등록·교체·중단 시 Router와 compliance policy 불변성
 - `buidl-like | reg-d` asset profile 선택과 동일한 protected execution path
 - backend-signed quote의 CLI 요청과 Router/RFQAdapter settlement
+- backend/UI 매수(결제 자산→RWA)와 매도(RWA→결제 자산)의 실제 양방향 settlement
+- 매도 후 taker RWA 감소와 결제 자산 증가
 - backend quote 발급 후 maker revoke 시 fill-time 거부
+- RFQAdapter 직접 호출의 status `0` receipt와 RWA/결제 자산 잔액 불변
+- quote 이후 maker revoke 거부의 실패 receipt와 잔액 불변
+- 적격 A/B와 비적격 wallet fixture의 실제 QP pre-check
+- 비적격 taker-bound signed quote의 Router fill-time compliance 거부
+- quote 이후 QP claim 만료 거부의 reasonCode, 실패 receipt와 잔액 불변
+- Admin QP fixture 변경과 원상복구
+- scenario JSON에서 wallet/표시값/최소금액/시간 조건 주입
+- scenario JSON에서 Anvil account, 초기 investor/maker/pool 물량, 양방향 기본
+  거래량, TTL과 mock pricing 주입
+- 배포 artifact의 scenario hash와 backend 입력 일치 검증
+- quote 발급 당시 적격인 투자자의 QP freshness 만료
+- 아직 TTL이 남은 동일 quote의 Router fill-time `FAIL_QP_CLAIM_EXPIRED` 거부
+- temporal scenario 후 injected baseline QP 상태 복원
 
 ### Integrated Check
 
@@ -106,9 +179,18 @@ scripts/check.sh
 
 이 명령은 현재 저장소에서 지원하는 format, lint, build와 test를 순서대로 실행한다.
 현재 포함 범위는 Foundry fmt/lint/build/test, RFQ SDK·demo backend·CLI·Toolkit,
-Operator API/dashboard smoke, vendored deploy-v3 test와 whitespace check다. GitHub
+generated standalone consumer smoke, Compliance Data SDK,
+Deployment Studio, Operator API/dashboard smoke, vendored deploy-v3 test와 whitespace check다. GitHub
 Actions도 동일한 스크립트를 실행한다. Node 서비스는 lockfile 기반 `npm ci`를
 사용하고, vendored deploy-v3는 `yarn.lock` 기반 설치 후 테스트한다.
+
+RFQ SDK smoke는 reference와 custom pricing/risk/signer/nonce 세트에 동일
+conformance contract를 적용한다. 이 suite는 capability, base-unit quote,
+typed-data binding, expiry, module 호출 순서, risk fail-closed, signature shape와
+maker-scoped monotonic nonce를 검사한다. Toolkit smoke는 두 scaffold mode,
+overwrite 거부, environment-name-only manifest와 secret-free `.env.example`을
+검증한다. Fresh directory integration check는 vendored SDK에 prebuilt `dist`가
+없는 상태에서 두 scaffold의 `npm install && npm test`를 실행한다.
 
 ## Manual Verification
 

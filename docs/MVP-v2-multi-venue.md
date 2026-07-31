@@ -252,7 +252,7 @@ request
   -> 양쪽 자산의 Manifest facts와 transaction context로 applicable Recipes 식별
   -> Recipe별 Element reference를 합집합으로 구성
   -> 중복 Element는 동일 context에서 한 번만 평가
-  -> 활성 Element를 cumulative AND로 검사
+  -> RecipeBinding mode에 따라 required AND / path-group OR / flag-only로 검사
   -> 허용 engine, venue, amount, version을 decision에 binding
   -> 등록된 Adapter 실행
   -> ERC-3643 transfer enforcement
@@ -303,14 +303,15 @@ Router와 ComplianceEngine의 정확한 함수 분리는 구현 단계에서 정
 ```solidity
 struct ComplianceDecision {
     bool allowed;
-    bytes32 manifestId;
-    uint64 manifestVersion;
-    bytes32 appliedRecipesHash;
+    bytes32 policyId;
+    uint64 policyVersion;
     uint64 validUntil;
     uint256 maxAmount;
     uint256 allowedVenueTypes;
     bytes32 allowedVenuesHash;
     bytes32 reasonCode;
+    bytes32 reliedClaims;
+    uint256 flagsBitmap;
     bytes32 decisionHash;
 }
 ```

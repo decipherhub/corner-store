@@ -13,6 +13,7 @@ This is feature `E2E-001` (see `FEATURES.md`).
 ```sh
 scripts/e2e-anvil.sh            # BUIDL-like default: scenarios + backend/CLI RFQ flow
 scripts/e2e-anvil.sh --profile reg-d
+scripts/e2e-anvil.sh --mode rfq # concise mock TA → SDK/CLI → backend RFQ walkthrough
 scripts/e2e-anvil.sh --port 8600
 scripts/e2e-anvil.sh --keep     # leave Anvil running afterwards (attach a UI / continue interactively)
 ```
@@ -21,6 +22,12 @@ scripts/e2e-anvil.sh --keep     # leave Anvil running afterwards (attach a UI / 
 - Exit code is non-zero if any scenario fails (`DemoScenarios` reverts).
 - `--keep` prints the Anvil/backend PIDs and leaves both processes up; stop them
   with the printed `kill <pid>` commands.
+- With `--keep`, the runner restores the maker after proving the revoked-maker
+  rejection, so the next RFQ quote can be settled interactively without reset.
+- `--mode rfq` skips the AMM, lifecycle and surveillance walkthrough. It keeps
+  the MVP path focused on a mock-TA-seeded investor receiving a backend-signed
+  RFQ quote, settling through `ExecutionRouter → RFQAdapter`, and rejecting the
+  same flow after the maker is revoked.
 
 Under the hood the runner executes two forge scripts and one backend/CLI stage:
 
@@ -105,15 +112,17 @@ REAL, genuinely enforced on-chain:
 
 MOCK / illustrative (documented seams):
 
-- The AMM venue is the in-repo `MockPool` (1:1 rate), **not** a real Uniswap v3
-  pool. A real Uniswap v3 pool deployment is a separate follow-up: the vendored
-  `tools/deploy-v3` infrastructure is kept isolated (vendor-isolation rule) and
-  the demo does not depend on it. See `tools/deploy-v3/CORNER_STORE_PROFILE.md`.
+- The fast interactive demo intentionally uses the deterministic in-repo
+  `MockPool` (1:1 rate). Canonical Uniswap v3 factory/pool behavior is separately
+  automated in `test/integration/RealUniswapV3.t.sol`, while the vendored
+  `tools/deploy-v3` infrastructure remains isolated. A unified deployment command
+  for both stacks is still a follow-up. See `tools/deploy-v3/CORNER_STORE_PROFILE.md`.
 - Element data sources (OFAC / ONCHAINID claims / ERC-165 / EDGAR) are
-  operator-settable mocks, and the C-01 Rule 144 lockup reads an injected
-  acquisition-time source. These illustrative wirings and the manifest lifecycle
+  operator-settable mocks, and the C-01 Rule 144 lockup reads an injected,
+  expiring `AttestedAcquisitionSource` snapshot seeded from mock TA data. These
+  illustrative wirings and the manifest lifecycle
   design are recorded in `DECISIONS.md` **D008** (9-element recipe, operator-gated
-  setters, fixture acquisition source) and **D009** (manifest lifecycle state
+  setters, provider-neutral mock acquisition snapshot) and **D009** (manifest lifecycle state
   machine, engine positive-allowlist default-deny, factory register→approve).
 - `QUOTE` is a plain `MockERC20` tagged `UNREGULATED` (out-of-scope cash leg).
 
@@ -157,6 +166,14 @@ Backend는 quote를 가격 산정·서명할 뿐이다. maker revoke, Manifest s
 Element 실패가 있으면 동일한 signed quote라도 Router fill 시점의 최신 compliance로
 거부된다. 자세한 API와 production 교체 지점은
 `services/rfq-demo-backend/README.md`를 참고한다.
+
+대시보드에서는 **매수**와 **매도**를 선택할 수 있다.
+
+- 매수: 투자자 `qUSD → maker`, maker `RWA → 투자자`
+- 매도: 투자자 `RWA → maker`, maker `qUSD → 투자자`
+
+fresh demo 배포는 두 방향의 inventory와 allowance를 모두 준비하므로 어느 방향을
+먼저 실행해도 된다. Portfolio에서 두 토큰의 실제 반대 방향 잔액 변화를 확인한다.
 
 ## Related
 

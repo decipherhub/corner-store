@@ -201,5 +201,21 @@ RFQ backend responsibilities remain split:
 ## Follow-up boundary
 
 Further RFQ work must be split from this demo application: production pricing,
-signer custody, persistent nonce storage, inventory/risk controls, authentication,
-rate limiting, monitoring, partial fill and custody policy remain separate features.
+signer integration, persistent nonce storage, inventory/risk controls, authentication,
+rate limiting과 monitoring은 ADR-009를 따르는 별도 implementation feature다.
+partial fill은 새 quote/adapter version 전까지 v1에서 허용하지 않는다.
+
+## Phase 4 — Modular integration toolkit
+
+Status: implemented by `SDK-001`.
+
+- pricing, risk, signer and nonce modules declare versioned capabilities.
+- reference and custom module sets run the same conformance suite.
+- CLI scaffolds a minimal reference service or an existing-backend composition.
+- generated configuration lists secret environment variable names but contains
+  no secret values.
+- Docker Compose is an optional reference export, not a required deployment
+  architecture.
+
+Hosted dealer operation, production pricing/inventory, signer custody and
+Kubernetes remain outside this phase.
