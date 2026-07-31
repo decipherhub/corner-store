@@ -43,6 +43,7 @@ reference execution adapters including AMM and RFQ settlement paths.
 - [`docs/MVP-v2-multi-venue.md`](./docs/MVP-v2-multi-venue.md): current product scope
 - [`docs/architecture/README.md`](./docs/architecture/README.md): responsibility boundaries
 - [`docs/ROADMAP.md`](./docs/ROADMAP.md): implementation phases and completion criteria
+- [`howtodeploy.md`](./howtodeploy.md): GIWA Sepolia testnet deployment quickstart
 - [`tools/deploy-v3/UPSTREAM.md`](./tools/deploy-v3/UPSTREAM.md): vendored upstream provenance
 
 ## Tech Stack
