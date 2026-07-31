@@ -7,6 +7,142 @@ const MODULE_PRESETS = {
   signerModule: new Set(["integrator.signer"]),
   nonceModule: new Set(["corner-store.in-memory-nonce", "integrator.nonce"])
 };
+const KO_TEXT = {
+  "Deployment Studio": "배포 스튜디오",
+  "Local control surface": "로컬 제어 화면",
+  "Project mode": "프로젝트 방식",
+  "Create the integration shell": "통합 프로젝트 골격 생성",
+  "Target & config": "대상 및 설정",
+  "Reference or production core": "레퍼런스 또는 프로덕션 코어",
+  "Doctor": "환경 점검",
+  "Required environment checks": "필수 실행 환경 확인",
+  "Deployment plan": "배포 계획",
+  "Dry-run or production export": "Dry-run 또는 프로덕션 계획 내보내기",
+  "Demo deploy": "데모 배포",
+  "Operator-allowed target only": "운영자가 허용한 대상만",
+  "Artifact & verify": "Artifact 및 검증",
+  "Address source of truth": "주소의 단일 기준",
+  "Activation": "활성화",
+  "Operations handoff": "운영 환경 연결",
+  "Connecting": "연결 중",
+  "Local workspace": "로컬 작업 공간",
+  "Configuration → evidence → operation": "설정 → 검증 근거 → 운영",
+  "Build a regulated DEX from the real Corner Store workflow.": "Corner Store의 실제 흐름으로 규제 자산 DEX를 구성합니다.",
+  "Current project": "현재 프로젝트",
+  "No project": "프로젝트 없음",
+  "Runtime constraints": "실행 환경 제한",
+  "Operator policy is injected when the local control service starts.": "로컬 제어 서비스가 시작될 때 운영 정책이 주입됩니다.",
+  "Direct deploy": "직접 배포",
+  "Demo allowlist only": "허용된 데모 대상만",
+  "Production core": "프로덕션 코어",
+  "Preflight and plan export only": "사전 점검 및 계획 내보내기만",
+  "Secrets": "비밀정보",
+  "Browser prohibited": "브라우저 입력 금지",
+  "01 / Project mode": "01 / 프로젝트 방식",
+  "Choose how Corner Store enters your stack": "Corner Store를 어떤 방식으로 도입할지 선택합니다",
+  "Not created": "생성되지 않음",
+  "Library only": "라이브러리만 사용",
+  "Import Corner Store modules inside a service you build.": "직접 개발한 서비스 안에서 Corner Store 모듈을 가져와 사용합니다.",
+  "You own the HTTP and runtime boundary": "HTTP 및 실행 환경을 직접 구성",
+  "Reference service": "레퍼런스 서비스",
+  "Generate a minimal RFQ HTTP service, then replace modules.": "최소 RFQ HTTP 서비스를 생성한 뒤 필요한 모듈을 교체합니다.",
+  "Fastest runnable starting point": "가장 빠르게 실행 가능한 시작점",
+  "Existing backend": "기존 백엔드 연결",
+  "Connect Corner Store modules to an API you already operate.": "운영 중인 API에 Corner Store 모듈을 연결합니다.",
+  "Keep your current service boundary": "현재 서비스 구조 유지",
+  "Project name": "프로젝트 이름",
+  "Include optional Docker reference": "선택적 Docker 예제 포함",
+  "Create integration project": "통합 프로젝트 생성",
+  "02 / Target & configuration": "02 / 대상 및 설정",
+  "Bind the JSON contracts the CLI actually consumes": "CLI가 실제로 사용하는 JSON 설정을 연결합니다",
+  "Save reference configuration": "레퍼런스 설정 저장",
+  "Reference deploy": "레퍼런스 배포",
+  "Local/demo stack, guarded Anvil broadcast remains available after doctor and dry-run.": "로컬/데모 스택입니다. 환경 점검과 dry-run 이후 Anvil 배포가 허용됩니다.",
+  "Save config, run production-preflight, preview and export production-plan. No browser broadcast or signing.": "설정을 저장하고 프로덕션 사전 점검과 계획 내보내기를 수행합니다. 브라우저 배포와 서명은 지원하지 않습니다.",
+  "Network target": "대상 네트워크",
+  "RPC URL": "RPC 주소",
+  "Asset profile": "자산 프로필",
+  "Artifact path": "Artifact 경로",
+  "Execution venues": "거래 실행 방식",
+  "Order Book · not implemented": "Order Book · 미구현",
+  "Operator role label": "Operator 역할 이름",
+  "Investor fixture label": "투자자 테스트 역할 이름",
+  "Maker role label": "Maker 역할 이름",
+  "Governance label": "Governance 역할 이름",
+  "Required approvals": "필요 승인 수",
+  "Reference account boundary": "레퍼런스 계정 범위",
+  "Pricing module": "가격 산정 모듈",
+  "Risk module": "리스크 모듈",
+  "Signer module": "서명 모듈",
+  "Nonce module": "Nonce 모듈",
+  "Module contract, not package discovery": "모듈 계약 설정이며 패키지 검색 기능이 아닙니다",
+  "Demo fixtures": "데모 테스트 데이터",
+  "Inspect demo JSON": "데모 JSON 확인",
+  "Browser broadcast": "브라우저 배포",
+  "Browser signing": "브라우저 서명",
+  "Secret fields": "비밀정보 필드",
+  "Disabled": "비활성화",
+  "Rejected": "거부",
+  "Network name": "네트워크 이름",
+  "Actual chainId": "실제 chainId",
+  "Runtime RPC": "실행 RPC",
+  "Approved RPC hosts": "허용된 RPC 호스트",
+  "Release source commit": "검토된 소스 커밋",
+  "Contract bundle SHA-256": "컨트랙트 번들 SHA-256",
+  "Deployment ID": "배포 ID",
+  "Deployer address": "배포자 주소",
+  "Operator address": "Operator 주소",
+  "Evidence path": "검증 근거 경로",
+  "Existing Safe": "기존 Safe",
+  "Expected Safe singleton": "예상 Safe singleton",
+  "Safe proxy code hash": "Safe proxy 코드 해시",
+  "Threshold N": "승인 기준 N",
+  "Production venues": "프로덕션 거래 실행 방식",
+  "Expected owner list M": "예상 owner 목록 M",
+  "Existing ERC-3643 token": "기존 ERC-3643 토큰",
+  "Save production config": "프로덕션 설정 저장",
+  "Run production preflight": "프로덕션 사전 점검 실행",
+  "Generate production plan": "프로덕션 계획 생성",
+  "Export plan JSON": "계획 JSON 내보내기",
+  "03 / Doctor": "03 / 환경 점검",
+  "Prove the local toolchain before planning a deployment": "배포 계획 전에 로컬 도구가 준비됐는지 확인합니다",
+  "Run doctor": "환경 점검 실행",
+  "Create a project, then run the required environment checks.": "프로젝트를 생성한 뒤 필수 환경 점검을 실행하세요.",
+  "04 / Deployment plan": "04 / 배포 계획",
+  "Review the exact read-only Foundry command": "실행될 읽기 전용 Foundry 명령을 검토합니다",
+  "Generate dry-run": "Dry-run 생성",
+  "The plan combines CLI output with the saved configuration.": "저장된 설정과 CLI 출력을 조합해 계획을 표시합니다.",
+  "05 / Demo deployment": "05 / 데모 배포",
+  "Broadcast only when the operator policy allows the target": "운영 정책이 허용한 대상에만 트랜잭션을 전송합니다",
+  "Deploy reference stack": "레퍼런스 스택 배포",
+  "Doctor ready": "환경 점검 완료",
+  "Dry-run reviewed": "Dry-run 검토 완료",
+  "Operator-allowed demo RPC": "운영자가 허용한 데모 RPC",
+  "No browser secrets": "브라우저 비밀정보 없음",
+  "06 / Artifact & verify": "06 / Artifact 및 검증",
+  "Turn deployment output into operational evidence": "배포 결과를 운영 가능한 검증 근거로 만듭니다",
+  "Verify artifact": "Artifact 검증",
+  "Verification has not run.": "아직 검증하지 않았습니다.",
+  "The deployment artifact will appear here as the address source of truth.": "배포가 끝나면 주소의 단일 기준인 artifact가 여기에 표시됩니다.",
+  "07 / Activation": "07 / 활성화",
+  "Run the DEX demo on this exact deployment": "이 배포본을 그대로 사용해 DEX 데모를 실행합니다",
+  "Start DEX demo": "DEX 데모 시작",
+  "Open DEX": "DEX 열기",
+  "Stop DEX": "DEX 종료",
+  "Artifact-bound runtime": "Artifact에 연결된 실행 환경",
+  "Manual evidence checklist": "수동 검토 체크리스트",
+  "Maker approval reviewed": "Maker 승인 검토",
+  "Signer authorization reviewed": "Signer 권한 검토",
+  "Inventory and allowances reviewed": "재고와 allowance 검토",
+  "Router smoke settlement observed": "Router 시험 체결 확인",
+  "Governance handoff reviewed": "Governance 권한 인계 검토",
+  "DEX handoff locked": "DEX 연결 잠김",
+  "Verify the artifact before starting services with this deployment.": "이 배포본으로 서비스를 시작하기 전에 artifact를 검증하세요.",
+  "Context guide": "도움말",
+  "How this option is used": "이 옵션의 사용 방법"
+};
+const originalTextNodes = [];
+let currentLanguage = "en";
 const HELP_CONTENT = {
   "library-only": {
     title: "Library only는 언제 사용하나요?",
@@ -150,8 +286,10 @@ const HELP_CONTENT = {
 const state = {
   project: "",
   snapshot: null,
+  configReady: false,
   doctorReady: false,
   planReady: false,
+  deploymentReady: false,
   verified: false,
   productionPreflightReady: false,
   productionPlan: null,
@@ -162,15 +300,18 @@ const state = {
   dexRuntime: null
 };
 
-document.addEventListener("DOMContentLoaded", boot);
+if (typeof document !== "undefined") {
+  document.addEventListener("DOMContentLoaded", boot);
+}
 
 async function boot() {
+  initializeLanguage();
   bindControls();
   setDeploymentTarget(document.querySelector('input[name="deploymentTarget"]:checked').value);
   try {
     const health = await api("/api/v1/health");
     $("apiLed").classList.add("is-pass");
-    $("apiStatus").textContent = "Local API ready";
+    $("apiStatus").textContent = tr("Local API ready", "로컬 API 준비 완료");
     $("workspacePath").textContent = health.workspaceRoot;
     state.runtime = health.runtime;
     setNetworkTarget(health.runtime.broadcastNetwork);
@@ -178,9 +319,47 @@ async function boot() {
     $("broadcastPolicy").textContent = `${health.runtime.broadcastNetwork} · ${health.runtime.allowedRpcHosts.join(", ")}`;
     await loadProjects();
   } catch (error) {
-    $("apiStatus").textContent = "Local API unavailable";
+    $("apiStatus").textContent = tr("Local API unavailable", "로컬 API에 연결할 수 없음");
     message("projectMessage", error.message, true);
   }
+}
+
+function initializeLanguage() {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const value = node.nodeValue ?? "";
+    if (value.trim() && !node.parentElement?.closest("script, style")) {
+      originalTextNodes.push({node, value});
+    }
+  }
+  currentLanguage = localStorage.getItem("corner-store-studio-language") === "en" ? "en" : "ko";
+  $("languageToggle").onclick = () => {
+    currentLanguage = currentLanguage === "ko" ? "en" : "ko";
+    localStorage.setItem("corner-store-studio-language", currentLanguage);
+    applyLanguage();
+  };
+  applyLanguage();
+}
+
+function applyLanguage() {
+  document.documentElement.lang = currentLanguage;
+  for (const {node, value} of originalTextNodes) {
+    const trimmed = value.trim();
+    const translated = currentLanguage === "ko" ? KO_TEXT[trimmed] : undefined;
+    node.nodeValue = translated
+      ? value.replace(trimmed, translated)
+      : value;
+  }
+  $("languageToggle").textContent = currentLanguage === "ko" ? "English" : "한국어";
+  $("languageToggle").setAttribute(
+    "aria-label",
+    currentLanguage === "ko" ? "영어로 전환" : "Switch to Korean"
+  );
+}
+
+function tr(english, korean) {
+  return currentLanguage === "ko" ? korean : english;
 }
 
 function bindControls() {
@@ -261,20 +440,29 @@ function bindControls() {
 }
 
 function invalidatePlan() {
+  state.configReady = false;
   state.doctorReady = false;
   state.planReady = false;
+  state.deploymentReady = false;
+  state.verified = false;
   state.plan = null;
   $("doctorChecks").className = "check-list empty-state";
-  $("doctorChecks").textContent = "Configuration changed. Save it, then run doctor again.";
+  $("doctorChecks").textContent = tr(
+    "Configuration changed. Save it, then run doctor again.",
+    "설정이 변경되었습니다. 저장한 뒤 환경 점검을 다시 실행하세요."
+  );
   $("planReview").className = "plan-review empty-state";
-  $("planReview").textContent = "Configuration or RPC changed. Generate a new dry-run before deployment.";
+  $("planReview").textContent = tr(
+    "Configuration or RPC changed. Generate a new dry-run before deployment.",
+    "설정 또는 RPC가 변경되었습니다. 배포 전에 dry-run을 다시 생성하세요."
+  );
   refreshDeployGate();
 }
 
 async function loadProjects() {
   const result = await api("/api/v1/projects");
   const selector = $("projectSelector");
-  selector.innerHTML = '<option value="">No project</option>';
+  selector.innerHTML = `<option value="">${tr("No project", "프로젝트 없음")}</option>`;
   result.projects.forEach((project) => selector.add(new Option(project.name, project.name)));
   const requested = localStorage.getItem("corner-store-studio-project");
   const selected = result.projects.find((item) => item.name === requested)?.name ?? result.projects[0]?.name;
@@ -289,14 +477,16 @@ async function selectProject(name) {
   const snapshot = await api(`/api/v1/projects/${encodeURIComponent(name)}`);
   state.project = name;
   state.snapshot = snapshot;
+  state.configReady = false;
   state.doctorReady = false;
   state.planReady = false;
-  state.verified = snapshot.activation?.artifactVerified === true;
+  state.deploymentReady = false;
+  state.verified = false;
   localStorage.setItem("corner-store-studio-project", name);
   hydrate(snapshot);
   setProjectControls(true);
-  $("projectState").textContent = "Configured";
-  message("projectMessage", `Loaded ${name}.`, false);
+  $("projectState").textContent = tr("Configured", "설정됨");
+  message("projectMessage", tr(`Loaded ${name}.`, `${name} 프로젝트를 불러왔습니다.`), false);
   await refreshArtifact();
   await refreshHandoff();
   refreshDeployGate();
@@ -305,7 +495,7 @@ async function selectProject(name) {
 
 async function createProject() {
   const mode = document.querySelector('input[name="mode"]:checked').value;
-  setBusy($("createProject"), true, "Creating…");
+  setBusy($("createProject"), true, tr("Creating…", "생성 중…"));
   try {
     const result = await api("/api/v1/projects", {
       method: "POST",
@@ -321,7 +511,7 @@ async function createProject() {
   } catch (error) {
     message("projectMessage", error.message, true);
   } finally {
-    setBusy($("createProject"), false, "Create integration project");
+    setBusy($("createProject"), false, tr("Create integration project", "통합 프로젝트 생성"));
   }
 }
 
@@ -435,9 +625,14 @@ async function saveConfig() {
     await api(`/api/v1/projects/${encodeURIComponent(state.project)}/scenario`, {method: "PUT", body: scenario});
     state.doctorReady = false;
     state.planReady = false;
+    state.configReady = true;
+    state.deploymentReady = false;
     state.verified = false;
     state.snapshot = await api(`/api/v1/projects/${encodeURIComponent(state.project)}`);
-    message("configMessage", "Saved the three versioned project files.", false);
+    message("configMessage", tr(
+      "Saved the three versioned project files.",
+      "세 개의 버전 관리 프로젝트 파일을 저장했습니다."
+    ), false);
     await refreshHandoff();
     refreshDeployGate();
   } catch (error) {
@@ -551,7 +746,7 @@ function renderProductionPreflight(result) {
       <span class="status-led ${check.pass ? "is-pass" : ""}"></span>
       <b>${escapeHtml(check.name)}</b>
       <span>${escapeHtml(check.detail ?? "")}</span>
-      <em>${check.required === false ? "optional" : "required"}</em>
+      <em>${check.required === false ? tr("optional", "선택") : tr("required", "필수")}</em>
     </div>`).join("");
 }
 
@@ -651,8 +846,14 @@ function updateNetworkNote() {
   const network = selectedNetwork();
   const direct = isDirectDemoTarget(network);
   $("networkModeNote").textContent = direct
-    ? `${network} matches the operator-injected direct demo deployment policy.`
-    : `${network || "Custom target"} is available for configuration and dry-run review; direct Studio broadcast remains disabled.`;
+    ? tr(
+      `${network} matches the operator-injected direct demo deployment policy.`,
+      `${network} 네트워크는 운영자가 허용한 직접 데모 배포 정책과 일치합니다.`
+    )
+    : tr(
+      `${network || "Custom target"} is available for configuration and dry-run review; direct Studio broadcast remains disabled.`,
+      `${network || "사용자 지정 대상"}은 설정과 dry-run 검토만 가능하며 Studio 직접 배포는 비활성화됩니다.`
+    );
 }
 
 function isDirectDemoTarget(network) {
@@ -689,7 +890,7 @@ function openContextHelp(topic) {
 }
 
 async function runDoctor() {
-  setBusy($("runDoctor"), true, "Checking…");
+  setBusy($("runDoctor"), true, tr("Checking…", "확인 중…"));
   try {
     const result = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/doctor`, {method: "POST"});
     state.doctorReady = result.ready === true;
@@ -700,7 +901,7 @@ async function runDoctor() {
     $("doctorChecks").className = "check-list empty-state";
     $("doctorChecks").textContent = error.message;
   } finally {
-    setBusy($("runDoctor"), false, "Run doctor");
+    setBusy($("runDoctor"), false, tr("Run doctor", "환경 점검 실행"));
   }
 }
 
@@ -711,12 +912,12 @@ function renderChecks(checks) {
       <span class="status-led ${check.pass ? "is-pass" : ""}"></span>
       <b>${escapeHtml(check.name)}</b>
       <span>${escapeHtml(check.detail)}</span>
-      <em>${check.required ? "required" : "optional"}</em>
+      <em>${check.required ? tr("required", "필수") : tr("optional", "선택")}</em>
     </div>`).join("");
 }
 
 async function reviewPlan() {
-  setBusy($("reviewPlan"), true, "Planning…");
+  setBusy($("reviewPlan"), true, tr("Planning…", "계획 생성 중…"));
   try {
     const result = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/deploy/plan`, {
       method: "POST", body: {rpcUrl: $("rpcUrl").value.trim()}
@@ -730,7 +931,7 @@ async function reviewPlan() {
     $("planReview").className = "plan-review empty-state";
     $("planReview").textContent = error.message;
   } finally {
-    setBusy($("reviewPlan"), false, "Generate dry-run");
+    setBusy($("reviewPlan"), false, tr("Generate dry-run", "Dry-run 생성"));
   }
 }
 
@@ -738,14 +939,14 @@ function renderPlan(plan) {
   $("planReview").className = "plan-review";
   $("planReview").innerHTML = `
     <div class="plan-grid">
-      <div><span>Profile</span><strong>${escapeHtml(plan.profile)}</strong></div>
-      <div><span>Network</span><strong>${escapeHtml(plan.config.deployment.network)}</strong></div>
+      <div><span>${tr("Profile", "프로필")}</span><strong>${escapeHtml(plan.profile)}</strong></div>
+      <div><span>${tr("Network", "네트워크")}</span><strong>${escapeHtml(plan.config.deployment.network)}</strong></div>
       <div><span>RPC</span><strong>${escapeHtml(plan.rpcUrl)}</strong></div>
       <div><span>Artifact</span><strong>${escapeHtml(plan.artifactPath)}</strong></div>
-      <div><span>RFQ</span><strong>${plan.config.venues.rfq ? "enabled" : "disabled"}</strong></div>
-      <div><span>AMM</span><strong>${plan.config.venues.amm ? "enabled" : "disabled"}</strong></div>
-      <div><span>Contracts</span><strong>${escapeHtml(plan.contractSource ?? "bundled")}</strong></div>
-      <div><span>Mutation</span><strong>dry-run only</strong></div>
+      <div><span>RFQ</span><strong>${plan.config.venues.rfq ? tr("enabled", "활성화") : tr("disabled", "비활성화")}</strong></div>
+      <div><span>AMM</span><strong>${plan.config.venues.amm ? tr("enabled", "활성화") : tr("disabled", "비활성화")}</strong></div>
+      <div><span>${tr("Contracts", "컨트랙트")}</span><strong>${escapeHtml(plan.contractSource ?? "bundled")}</strong></div>
+      <div><span>${tr("Mutation", "상태 변경")}</span><strong>${tr("dry-run only", "dry-run 전용")}</strong></div>
     </div>
     <div class="command-block">${escapeHtml(plan.command ?? "No command returned")}</div>`;
 }
@@ -754,26 +955,31 @@ function refreshDeployGate() {
   const allowed = state.runtime &&
     isDirectDemoTarget(selectedNetwork()) &&
     isAllowedRpc($("rpcUrl").value, state.runtime.allowedRpcHosts);
+  $("runDoctor").disabled = !(state.project && state.configReady);
+  $("reviewPlan").disabled = !(state.project && state.doctorReady);
   $("gateDoctor").classList.toggle("is-pass", state.doctorReady);
   $("gatePlan").classList.toggle("is-pass", state.planReady);
   $("gateNetwork").classList.toggle("is-pass", allowed);
   $("gateNetworkLabel").textContent = allowed
-    ? "Operator broadcast policy matched"
-    : "Requires the Anvil demo profile and an operator-allowlisted RPC host";
+    ? tr("Operator broadcast policy matched", "운영자 배포 정책 일치")
+    : tr(
+      "Requires the Anvil demo profile and an operator-allowlisted RPC host",
+      "Anvil 데모 프로필과 운영자가 허용한 RPC 호스트가 필요합니다"
+    );
   $("deployDemo").disabled = !(state.project && state.doctorReady && state.planReady && allowed);
   updateWorkflowState();
 }
 
 function updateWorkflowState() {
-  const completed = {
+  const completed = workflowCompletion({
     project: Boolean(state.project),
-    config: Boolean(state.project),
-    doctor: state.doctorReady,
-    plan: state.planReady,
-    deploy: Boolean(state.artifact),
-    artifact: state.verified,
-    activation: state.verified
-  };
+    configReady: state.configReady,
+    doctorReady: state.doctorReady,
+    planReady: state.planReady,
+    deploymentReady: state.deploymentReady,
+    verified: state.verified,
+    activationReady: state.dexRuntime?.state === "running"
+  });
   const order = ["project", "config", "doctor", "plan", "deploy", "artifact", "activation"];
   let previousComplete = true;
   for (const stage of order) {
@@ -783,6 +989,26 @@ function updateWorkflowState() {
     step.classList.toggle("is-blocked", !completed[stage] && !previousComplete);
     previousComplete = previousComplete && completed[stage];
   }
+}
+
+function workflowCompletion(value) {
+  const order = ["project", "config", "doctor", "plan", "deploy", "artifact", "activation"];
+  const evidence = {
+    project: Boolean(value.project),
+    config: value.configReady === true,
+    doctor: value.doctorReady === true,
+    plan: value.planReady === true,
+    deploy: value.deploymentReady === true,
+    artifact: value.verified === true,
+    activation: value.activationReady === true
+  };
+  const completed = {};
+  let prerequisitesComplete = true;
+  for (const stage of order) {
+    completed[stage] = prerequisitesComplete && evidence[stage];
+    prerequisitesComplete = completed[stage];
+  }
+  return completed;
 }
 
 function isAllowedRpc(value, allowedHosts) {
@@ -795,8 +1021,14 @@ function isAllowedRpc(value, allowedHosts) {
 }
 
 async function deployDemo() {
-  setBusy($("deployDemo"), true, "Deploying…");
-  $("deployLog").textContent = "$ Starting guarded local reference deployment…\n";
+  state.deploymentReady = false;
+  state.verified = false;
+  updateWorkflowState();
+  setBusy($("deployDemo"), true, tr("Deploying…", "배포 중…"));
+  $("deployLog").textContent = tr(
+    "$ Starting guarded local reference deployment…\n",
+    "$ 보호된 로컬 레퍼런스 배포를 시작합니다…\n"
+  );
   try {
     const result = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/deploy`, {
       method: "POST", body: {rpcUrl: $("rpcUrl").value.trim()}
@@ -810,9 +1042,14 @@ async function deployDemo() {
     stream.addEventListener("done", async (event) => {
       const job = JSON.parse(event.data);
       stream.close();
-      setBusy($("deployDemo"), false, "Deploy reference stack");
+      setBusy($("deployDemo"), false, tr("Deploy reference stack", "레퍼런스 스택 배포"));
       if (job.status === "succeeded") {
-        $("deployLog").textContent += "Artifact ready for verification.\n";
+        state.deploymentReady = true;
+        state.verified = false;
+        $("deployLog").textContent += tr(
+          "Artifact ready for verification.\n",
+          "Artifact 검증 준비가 완료되었습니다.\n"
+        );
         await refreshArtifact();
         await runDoctor();
         $("verifyArtifact").disabled = false;
@@ -822,11 +1059,11 @@ async function deployDemo() {
     });
     stream.onerror = () => {
       stream.close();
-      setBusy($("deployDemo"), false, "Deploy reference stack");
+      setBusy($("deployDemo"), false, tr("Deploy reference stack", "레퍼런스 스택 배포"));
     };
   } catch (error) {
     $("deployLog").textContent += `BLOCKED: ${error.message}\n`;
-    setBusy($("deployDemo"), false, "Deploy reference stack");
+    setBusy($("deployDemo"), false, tr("Deploy reference stack", "레퍼런스 스택 배포"));
   }
 }
 
@@ -835,12 +1072,15 @@ async function refreshArtifact() {
   try {
     state.artifact = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/artifact`);
     renderArtifact(state.artifact);
-    $("verifyArtifact").disabled = false;
+    $("verifyArtifact").disabled = !state.deploymentReady;
     updateWorkflowState();
   } catch {
     state.artifact = null;
     $("artifactViewer").className = "artifact-grid empty-state";
-    $("artifactViewer").textContent = "The deployment artifact will appear here as the address source of truth.";
+    $("artifactViewer").textContent = tr(
+      "The deployment artifact will appear here as the address source of truth.",
+      "배포가 끝나면 주소의 단일 기준인 artifact가 여기에 표시됩니다."
+    );
     $("verifyArtifact").disabled = true;
     updateWorkflowState();
   }
@@ -857,22 +1097,26 @@ function renderArtifact(artifact) {
 }
 
 async function verifyArtifact() {
-  setBusy($("verifyArtifact"), true, "Verifying…");
+  setBusy($("verifyArtifact"), true, tr("Verifying…", "검증 중…"));
   try {
     const result = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/verify`, {method: "POST"});
     state.verified = result.ready === true;
     $("verifySummary").className = `verify-summary ${state.verified ? "is-pass" : ""}`;
     $("verifySummary").textContent = state.verified
-      ? `Basic artifact verification passed · ${(result.checks ?? []).length} bindings checked`
-      : "Artifact verification failed.";
+      ? tr(
+        `Basic artifact verification passed · ${(result.checks ?? []).length} bindings checked`,
+        `기본 artifact 검증 통과 · ${(result.checks ?? []).length}개 연결 확인`
+      )
+      : tr("Artifact verification failed.", "Artifact 검증에 실패했습니다.");
     await refreshHandoff();
     updateWorkflowState();
   } catch (error) {
     state.verified = false;
     $("verifySummary").className = "verify-summary";
     $("verifySummary").textContent = error.message;
+    updateWorkflowState();
   } finally {
-    setBusy($("verifyArtifact"), false, "Verify artifact");
+    setBusy($("verifyArtifact"), false, tr("Verify artifact", "Artifact 검증"));
   }
 }
 
@@ -891,20 +1135,23 @@ async function refreshHandoff() {
   state.operationsUrl = handoff.url;
   state.dexRuntime = handoff.runtime ?? {state: "stopped"};
   const running = handoff.running === true;
-  $("startDexDemo").disabled = !handoff.enabled || running;
+  $("startDexDemo").disabled = !handoff.enabled || !state.verified || running;
   $("openOperations").disabled = !running;
   $("stopDexDemo").disabled = !running;
   $("handoffMessage").className = `handoff-card ${running ? "is-ready" : ""}`;
   $("handoffMessage").innerHTML = running
-    ? `<strong>DEX running on verified deployment</strong><span>${escapeHtml(handoff.url)} · ${escapeHtml(state.artifact?.router ?? "Router from artifact")}</span>`
+    ? `<strong>${tr("DEX running on verified deployment", "검증된 배포본으로 DEX 실행 중")}</strong><span>${escapeHtml(handoff.url)} · ${escapeHtml(state.artifact?.router ?? "Router from artifact")}</span>`
     : handoff.enabled
-      ? "<strong>Verified deployment ready</strong><span>Start the DEX demo to launch all services with this exact artifact and RPC. No redeployment occurs.</span>"
-      : `<strong>DEX handoff locked</strong><span>${escapeHtml(handoff.reason)}</span>`;
+      ? `<strong>${tr("Verified deployment ready", "검증된 배포본 준비 완료")}</strong><span>${tr(
+        "Start the DEX demo to launch all services with this exact artifact and RPC. No redeployment occurs.",
+        "이 artifact와 RPC로 모든 서비스를 실행하려면 DEX 데모를 시작하세요. 컨트랙트를 다시 배포하지 않습니다."
+      )}</span>`
+      : `<strong>${tr("DEX handoff locked", "DEX 연결 잠김")}</strong><span>${escapeHtml(handoff.reason)}</span>`;
   updateWorkflowState();
 }
 
 async function startDexDemo() {
-  setBusy($("startDexDemo"), true, "Starting DEX…");
+  setBusy($("startDexDemo"), true, tr("Starting DEX…", "DEX 시작 중…"));
   let started = false;
   try {
     state.dexRuntime = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/runtime/start`, {
@@ -914,15 +1161,15 @@ async function startDexDemo() {
     started = true;
   } catch (error) {
     $("handoffMessage").className = "handoff-card";
-    $("handoffMessage").innerHTML = `<strong>DEX start failed</strong><span>${escapeHtml(error.message)}</span>`;
+    $("handoffMessage").innerHTML = `<strong>${tr("DEX start failed", "DEX 시작 실패")}</strong><span>${escapeHtml(error.message)}</span>`;
   } finally {
-    setBusy($("startDexDemo"), false, "Start DEX demo");
+    setBusy($("startDexDemo"), false, tr("Start DEX demo", "DEX 데모 시작"));
     if (started) await refreshHandoff();
   }
 }
 
 async function stopDexDemo() {
-  setBusy($("stopDexDemo"), true, "Stopping…");
+  setBusy($("stopDexDemo"), true, tr("Stopping…", "종료 중…"));
   let stopped = false;
   try {
     state.dexRuntime = await api(`/api/v1/projects/${encodeURIComponent(state.project)}/runtime/stop`, {
@@ -932,9 +1179,9 @@ async function stopDexDemo() {
     stopped = true;
   } catch (error) {
     $("handoffMessage").className = "handoff-card";
-    $("handoffMessage").innerHTML = `<strong>DEX stop failed</strong><span>${escapeHtml(error.message)}</span>`;
+    $("handoffMessage").innerHTML = `<strong>${tr("DEX stop failed", "DEX 종료 실패")}</strong><span>${escapeHtml(error.message)}</span>`;
   } finally {
-    setBusy($("stopDexDemo"), false, "Stop DEX");
+    setBusy($("stopDexDemo"), false, tr("Stop DEX", "DEX 종료"));
     if (stopped) await refreshHandoff();
   }
 }
@@ -967,4 +1214,8 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[character]);
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {workflowCompletion};
 }
