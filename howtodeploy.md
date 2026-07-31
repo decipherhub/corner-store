@@ -148,6 +148,7 @@ ls -la .env.testnet.example scripts/deploy-testnet-rfq.sh
 ```dotenv
 RPC_URL=https://sepolia-rpc.giwa.io
 CHAIN_ID=91342
+BLOCKSCOUT_API_URL=https://sepolia-explorer.giwa.io/api
 
 # cast wallet address --account corner-store-giwa 결과
 CORNER_STORE_TESTNET_DEPLOYER=0x...
@@ -259,10 +260,15 @@ scripts/deploy-testnet-rfq.sh \
   --rpc-url "$RPC_URL" \
   --chain-id "$CHAIN_ID" \
   --account corner-store-giwa \
-  --broadcast
+  --broadcast \
+  --verify \
+  --verifier blockscout \
+  --verifier-url "$BLOCKSCOUT_API_URL"
 ```
 
-Foundry가 keystore 비밀번호를 요청하면 3번 단계에서 설정한 비밀번호를 입력한다.
+GIWA 공식 Foundry 가이드의 Blockscout API endpoint를 사용해 배포와 source
+verification을 함께 수행한다. Foundry가 keystore 비밀번호를 요청하면 3번
+단계에서 설정한 비밀번호를 입력한다.
 스크립트는 다음을 자동으로 수행한다.
 
 1. GIWA Chain ID 재확인
