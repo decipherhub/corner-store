@@ -15,8 +15,10 @@ RFQ settlement에 한정한 actor, asset, trust boundary와 threat/mitigation을
   경로에 한정)의 RFQ 구체화이며, 별도 예외를 만들지 않는다.
 - production 책임과 migration 기준은 ADR-009와
   `docs/product-specs/production-rfq-policy.md`에서 정한다. maker authorizer와
-  regulated-quantity cap binding은 구현됐고, durable nonce/idempotency coordinator boundary는 SDK reference로 추가됐고, production
-  pricing/risk와 endpoint hardening은 후속 범위다.
+  regulated-quantity cap binding은 구현됐고, durable nonce/idempotency coordinator
+  boundary와 production-separable RFQ host hardening boundary가 reference로
+  추가됐다. HA storage, live pricing/risk, custody, TLS/proxy, WORM audit와
+  security/legal review는 production operator 범위다.
 - partial fill은 현 Adapter 범위 밖이며 새 quote/adapter version 전까지 허용하지
   않는다.
 
@@ -69,8 +71,10 @@ RFQ settlement에 한정한 actor, asset, trust boundary와 threat/mitigation을
 | Operator key compromise | D011 governance separation + ADR-009 immediate tightening; vendor key custody는 operator 책임 | residual |
 | Quote signer compromise/rotation | delayed delegate addition + fill-time current authorization + immediate revoke | mitigated |
 | Multi-instance nonce collision | `RFQQuoteCoordinator` + `QuoteCoordinatorStore` contract and single-host file reference demonstrate atomic nonce/idempotency/inventory lease; HA production must replace the store with transactional DB semantics | reference implemented; production adapter required |
-| Stale pricing/inventory dependency | coordinator preserves pricing/risk-before-reserve ordering and fail-closed store/signature checks; production freshness envelope remains operator module responsibility | partially implemented |
+| Stale pricing/inventory dependency | `services/rfq-host` requires pricing/risk `snapshotId`, `version`, `observedAt`, `validUntil` and availability before nonce/signing; live module quality remains operator responsibility | reference implemented; production modules required |
 | Partial-fill accounting/replay ambiguity | v1은 exact full-fill만 허용; 새 adapter version 전까지 비활성 | mitigated by scope |
+| Authenticated taker spoofing | RFQ host authenticator returns exact taker claim and rejects body mismatch with 403 before quote issuance | reference implemented; production auth provider required |
+| Endpoint abuse / secret leakage | RFQ host enforces request-size cap, hashed-principal rate limit, PII-free audit and bounded metrics; raw bearer/idempotency/signer refs are excluded | reference implemented; production limiter/audit required |
 
 각 mitigation의 구현 위치:
 
@@ -103,3 +107,18 @@ RFQ settlement에 한정한 actor, asset, trust boundary와 threat/mitigation을
   통제한다.
 - **Incident response**: 이상 징후 시 operator가 `OperatorRegistry`를 통해 venue를
   정지하고 필요한 maker approval을 취소한다.
+
+
+### RFQ-005 implementation note
+
+The repository now includes `services/rfq-host`, a hardened HTTP boundary around
+the durable coordinator. It validates request size/JSON/schema, binds an
+authenticated taker claim, rate-limits by hashed principal, calls
+`quoteWithEvidence()` so actual pricing/risk module freshness is validated and
+persisted before nonce reservation, rejects fresh risk `decision: rejected` with
+a stable public reason, revalidates RESERVED replay evidence before signing,
+fails closed on signer call/verification and strict audit persistence failures,
+and emits PII-free audit/metrics/incident
+events. The included adapters are reference/test implementations only; production
+operators must provide real auth, shared limiter, WORM audit, incident routing,
+TLS/proxy and live pricing/risk modules.

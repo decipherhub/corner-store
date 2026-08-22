@@ -95,6 +95,25 @@ Durable records intentionally store hashes for idempotency keys and signer key
 references. Do not write raw bearer tokens, identity documents, customer PII or
 secrets to this store or to logs. Partial fill remains out of scope for RFQ v1.
 
+Production hosts should call `quoteWithEvidence(intent, strictFreshnessPolicy)`.
+That strict API validates the actual pricing result and actual risk decision
+returned inside the coordinator call, persists their freshness evidence, and
+returns it with a replay indicator. Existing signed idempotent records replay
+without repricing, rerisking or re-signing. Existing RESERVED records revalidate
+persisted evidence before signing; stale/missing/future/unavailable evidence
+revokes the reservation and releases its lease without reusing the nonce. Fresh
+risk `decision: rejected` is exposed as stable `RISK_REJECTED`; raw operator risk
+reasons must not be logged or audited.
+
+## Production host boundary
+
+For HTTP endpoint hardening, use the separate `services/rfq-host` package. It
+wraps `RFQQuoteCoordinator.quoteWithEvidence()` with auth, exact taker binding,
+request-size caps, hashed-principal rate limiting, strict validation of the
+actual pricing/risk evidence persisted by the coordinator, strict PII-free audit,
+bounded metrics and incident hooks. It deliberately remains separate from
+`services/rfq-demo-backend`, which is local Anvil demo infrastructure only.
+
 ## Replace for production
 
 The reference components are intentionally local/demo-only:

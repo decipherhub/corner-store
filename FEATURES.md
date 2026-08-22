@@ -10,6 +10,57 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## RFQ-005 — Production RFQ Host Hardening
+
+### Behavior
+
+- RFQ production HTTP hosting is separated into `services/rfq-host` instead of
+  turning the local Anvil demo backend into a production server. The host wraps
+  the durable `RFQQuoteCoordinator` and leaves pricing, risk, signer custody,
+  transactional storage, TLS termination and WORM audit infrastructure as
+  operator-owned replacement ports.
+- `/rfq/quote` validates request size, JSON and schema before authentication. An
+  authenticator port returns a principal and exact taker claim, and the host
+  binds that normalized taker to the body `taker`; missing/invalid auth returns
+  401 and mismatches return 403 without storing raw auth material.
+- Rate limiting is a replaceable port with a bounded in-memory reference
+  implementation. Limiter keys use hashed principals, and 429 responses include
+  `Retry-After`. Oversized requests return 413.
+- The host calls coordinator `quoteWithEvidence()`, so the actual pricing result
+  and actual risk decision returned inside the durable quote call must carry
+  `snapshotId`, `version`, `observedAt`, `validUntil` and availability. Missing,
+  stale, future-skewed or unavailable metadata fails closed before nonce
+  reservation or signing, and idempotent replay returns persisted evidence
+  without provider recall or re-signing. A strict replay of an existing RESERVED
+  record revalidates persisted evidence before signing; stale/missing/future/
+  unavailable evidence revokes the reservation, releases the lease and burns the
+  nonce. Fresh risk `decision: rejected` returns a stable risk rejection before
+  reserve/sign without exposing raw risk reason.
+- Signer verification failures, stale/unavailable dependencies, auth abuse,
+  rate limits and audit sink failures trigger a bounded best-effort incident
+  hook. Strict audit is enabled by default and quote issuance fails closed if
+  PII-free audit persistence fails.
+- Audit events contain hashed principal/request/idempotency identifiers, persisted
+  actual coordinator module/snapshot/version metadata, timestamps and on-chain
+  identifiers only;
+  raw bearer tokens, raw idempotency keys, raw request bodies, signer refs and
+  stack traces are excluded. Metrics labels are bounded and do not include
+  principals or addresses.
+- `/health` exposes only generic service status. Non-loopback public bind is
+  refused unless the operator explicitly acknowledges external TLS/trusted-proxy
+  termination.
+
+### Verification
+
+- `npm test --prefix services/rfq`
+- `npm test --prefix services/rfq-host`
+- `npm test --prefix services/rfq-demo-backend`
+- `git diff --check`
+
+### State
+
+passing
+
 ## RFQ-004 — Durable Quote Coordinator
 
 ### Behavior

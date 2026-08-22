@@ -8,9 +8,11 @@ import {
   Hex,
   InventoryRiskCheck,
   PricingProvider,
+  RFQFreshnessEvidence,
   RFQPriceRequest,
   RFQQuote,
   RFQQuoteIntent,
+  RFQRiskDecision,
   RFQTypedData,
   SignedRFQQuote,
   TypedDataSigner
@@ -24,6 +26,23 @@ const crypto = require("crypto");
 
 const DEFAULT_TTL_SECONDS = 60;
 const DEFAULT_CONFIRMATIONS = 12;
+const DEFAULT_FUTURE_SKEW_SECONDS = 5;
+
+export type RFQCoordinatorErrorCode =
+  | "IDEMPOTENCY_CONFLICT"
+  | "STRICT_EVIDENCE_REQUIRED"
+  | "PRICING_FRESHNESS_INVALID"
+  | "RISK_FRESHNESS_INVALID"
+  | "RISK_REJECTED"
+  | "SIGNER_CALL_FAILED"
+  | "SIGNER_SIGNATURE_INVALID";
+
+export class RFQCoordinatorError extends Error {
+  constructor(readonly code: RFQCoordinatorErrorCode, message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = "RFQCoordinatorError";
+  }
+}
 
 export type QuoteLifecycleState =
   | "RECEIVED"
@@ -77,6 +96,7 @@ export interface QuoteCoordinatorRecord {
   updatedAt: number;
   pricingSnapshotId?: string;
   moduleVersions?: Record<string, string>;
+  productionEvidence?: RFQProductionEvidence;
   signerKeyRefHash?: string;
   riskDecision: "passed" | "rejected";
   releaseReason?: "sign-failed" | "expired" | "revoke" | "filled" | "cancelled";
@@ -92,6 +112,27 @@ export interface PiiFreeQuoteRequest {
   amountIn: string;
   venue: Address;
   ttlSeconds: number;
+}
+
+export interface RFQModuleFreshnessEvidence extends RFQFreshnessEvidence {
+  module: "pricing" | "risk";
+}
+
+export interface RFQProductionEvidence {
+  pricing: RFQModuleFreshnessEvidence;
+  risk: RFQModuleFreshnessEvidence;
+}
+
+export interface StrictFreshnessPolicy {
+  now?: number;
+  futureSkewSeconds?: number;
+}
+
+export interface QuoteWithEvidenceResult {
+  signedQuote: SignedRFQQuote;
+  record: QuoteCoordinatorRecord;
+  evidence?: RFQProductionEvidence;
+  replayed: boolean;
 }
 
 export interface QuoteNonceScope {
@@ -128,6 +169,7 @@ export interface ReserveQuoteInput {
   createdAt: number;
   pricingSnapshotId?: string;
   moduleVersions?: Record<string, string>;
+  productionEvidence?: RFQProductionEvidence;
 }
 
 export interface ReserveQuoteResult {
@@ -214,13 +256,22 @@ export class RFQQuoteCoordinator {
   }
 
   async quote(intent: QuoteCoordinatorIntent): Promise<SignedRFQQuote> {
+    const result = await this.issueQuote(intent);
+    return result.signedQuote;
+  }
+
+  async quoteWithEvidence(intent: QuoteCoordinatorIntent, policy: StrictFreshnessPolicy = {}): Promise<QuoteWithEvidenceResult> {
+    return this.issueQuote(intent, policy);
+  }
+
+  private async issueQuote(intent: QuoteCoordinatorIntent, strictPolicy?: StrictFreshnessPolicy): Promise<QuoteWithEvidenceResult> {
     const normalized = this.normalizeIntent(intent);
     const now = await this.timestamp();
     const requestHash = hashCanonical(normalized);
     const idempotencyKeyHash = hashSecret(intent.idempotencyKey, "idempotencyKey");
     const scope = this.scope();
     const existing = await this.config.store.getByIdempotencyKeyHash(scope, idempotencyKeyHash);
-    if (existing) return this.responseOrResumeExisting(existing, requestHash);
+    if (existing) return this.responseOrResumeExisting(existing, requestHash, strictPolicy);
 
     const priceRequest: RFQPriceRequest = {
       maker: this.maker,
@@ -232,7 +283,8 @@ export class RFQQuoteCoordinator {
     };
     const priced = await this.config.pricing.price(priceRequest);
     const amountOut = toPositiveUintString(priced.amountOut, "amountOut");
-    await this.config.riskCheck.check(priceRequest, {amountOut});
+    const riskDecision = await this.config.riskCheck.check(priceRequest, {amountOut});
+    const productionEvidence = strictPolicy ? validateProductionEvidence(priced, riskDecision, strictPolicy.now ?? now, strictPolicy.futureSkewSeconds ?? DEFAULT_FUTURE_SKEW_SECONDS) : undefined;
 
     const reserve = await this.config.store.reserveOrReturnExisting({
       scope,
@@ -248,9 +300,10 @@ export class RFQQuoteCoordinator {
       reservationExpiresAt: now + normalized.ttlSeconds,
       createdAt: now,
       pricingSnapshotId: pricingSnapshotId(priced),
-      moduleVersions: this.config.moduleVersions
+      moduleVersions: this.config.moduleVersions,
+      productionEvidence
     });
-    if (reserve.existing) return this.responseOrResumeExisting(reserve.record, requestHash);
+    if (reserve.existing) return this.responseOrResumeExisting(reserve.record, requestHash, strictPolicy);
     return this.signReservedRecord(reserve.record, requestHash, idempotencyKeyHash);
   }
 
@@ -304,11 +357,25 @@ export class RFQQuoteCoordinator {
     };
   }
 
-  private async responseOrResumeExisting(record: QuoteCoordinatorRecord, requestHash: string): Promise<SignedRFQQuote> {
-    if (record.requestHash !== requestHash) throw new Error("idempotency key conflict: request hash differs");
-    if (record.signedQuote) return record.signedQuote;
+  private async responseOrResumeExisting(record: QuoteCoordinatorRecord, requestHash: string, strictPolicy?: StrictFreshnessPolicy): Promise<QuoteWithEvidenceResult> {
+    if (record.requestHash !== requestHash) throw new RFQCoordinatorError("IDEMPOTENCY_CONFLICT", "idempotency key conflict: request hash differs");
+    if (record.signedQuote) {
+      if (strictPolicy && !record.productionEvidence) {
+        throw new RFQCoordinatorError("STRICT_EVIDENCE_REQUIRED", "strict RFQ quote replay requires persisted production evidence");
+      }
+      return {signedQuote: record.signedQuote, record, evidence: record.productionEvidence, replayed: true};
+    }
     if (record.state === "RESERVED") {
       const now = await this.timestamp();
+      if (strictPolicy) {
+        try {
+          revalidateProductionEvidence(record.productionEvidence, strictPolicy.now ?? now, strictPolicy.futureSkewSeconds ?? DEFAULT_FUTURE_SKEW_SECONDS);
+        } catch (error) {
+          if (record.nonce) await this.config.store.revoke({scope: this.scope(), nonce: record.nonce, now});
+          throw error;
+        }
+      }
+
       if (!record.inventoryLease || record.inventoryLease.released || record.inventoryLease.expiresAt <= now) {
         if (record.nonce) await this.config.store.expire({scope: this.scope(), nonce: record.nonce, now});
         throw new Error("idempotent quote reservation is expired or released");
@@ -323,8 +390,8 @@ export class RFQQuoteCoordinator {
     record: QuoteCoordinatorRecord,
     requestHash: string,
     idempotencyKeyHash: string
-  ): Promise<SignedRFQQuote> {
-    if (record.requestHash !== requestHash) throw new Error("idempotency key conflict: request hash differs");
+  ): Promise<QuoteWithEvidenceResult> {
+    if (record.requestHash !== requestHash) throw new RFQCoordinatorError("IDEMPOTENCY_CONFLICT", "idempotency key conflict: request hash differs");
     if (record.state !== "RESERVED" || !record.nonce || !record.inventoryLease || record.inventoryLease.released) {
       throw new Error(`quote reservation is not signable in state ${record.state}`);
     }
@@ -346,8 +413,17 @@ export class RFQQuoteCoordinator {
     };
     const data = typedData(domain(this.chainId, this.verifyingContract), quote);
     try {
-      const signature = assertHex(await this.config.signer.signTypedData(data), "signature");
-      await this.verifySignature(data, signature);
+      let signature: Hex;
+      try {
+        signature = assertHex(await this.config.signer.signTypedData(data), "signature");
+      } catch (error) {
+        throw new RFQCoordinatorError("SIGNER_CALL_FAILED", "external signer failed", error);
+      }
+      try {
+        await this.verifySignature(data, signature);
+      } catch (error) {
+        throw error instanceof RFQCoordinatorError ? error : new RFQCoordinatorError("SIGNER_SIGNATURE_INVALID", "signer returned a signature that failed local verification", error);
+      }
       const signedQuote = {quote, signature, typedData: data};
       const quoteHash = hashCanonical({quote, domain: data.domain});
       const signedRecord = await this.config.store.markSigned({
@@ -362,7 +438,7 @@ export class RFQQuoteCoordinator {
       if (signedRecord.state !== "PUBLISHED" || signedRecord.quoteHash !== quoteHash || !signedRecord.signedQuote) {
         throw new Error(`quote publish failed from state ${signedRecord.state}`);
       }
-      return signedRecord.signedQuote;
+      return {signedQuote: signedRecord.signedQuote, record: signedRecord, evidence: signedRecord.productionEvidence, replayed: false};
     } catch (error: any) {
       await this.config.store.markSignFailed({
         scope: this.scope(),
@@ -382,7 +458,7 @@ export class RFQQuoteCoordinator {
   private async verifySignature(data: RFQTypedData, signature: Hex): Promise<void> {
     if (this.config.verifySignature) return this.config.verifySignature(data, signature, this.maker);
     const recovered = verifyTypedData(data.domain, data.types, data.message, signature).toLowerCase();
-    if (recovered !== this.maker) throw new Error("signer returned a signature that does not recover the maker");
+    if (recovered !== this.maker) throw new RFQCoordinatorError("SIGNER_SIGNATURE_INVALID", "signer returned a signature that does not recover the maker");
   }
 
   private async timestamp(): Promise<number> {
@@ -459,6 +535,7 @@ export class LocalFileQuoteCoordinatorStore implements QuoteCoordinatorStore {
         updatedAt: input.createdAt,
         pricingSnapshotId: input.pricingSnapshotId,
         moduleVersions: input.moduleVersions,
+        productionEvidence: input.productionEvidence,
         riskDecision: "passed",
         stateHistory: [
           {state: "RECEIVED", at: input.createdAt},
@@ -697,6 +774,54 @@ function stableJson(value: unknown): string {
     return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+function requireProductionEvidence(record: QuoteCoordinatorRecord): RFQProductionEvidence {
+  if (record.productionEvidence) return record.productionEvidence;
+  throw new RFQCoordinatorError("STRICT_EVIDENCE_REQUIRED", "strict RFQ quote requires persisted production evidence");
+}
+
+function validateProductionEvidence(price: unknown, risk: void | RFQRiskDecision, now: number, futureSkewSeconds: number): RFQProductionEvidence {
+  const evidence = {
+    pricing: validateModuleFreshness("pricing", price, now, futureSkewSeconds),
+    risk: validateModuleFreshness("risk", risk, now, futureSkewSeconds)
+  };
+  if (risk && typeof risk === "object" && risk.decision === "rejected") {
+    // Stable public code only; do not propagate raw operator risk reason.
+    throw new RFQCoordinatorError("RISK_REJECTED", "risk rejected");
+  }
+  return evidence;
+}
+
+function revalidateProductionEvidence(evidence: RFQProductionEvidence | undefined, now: number, futureSkewSeconds: number): RFQProductionEvidence {
+  if (!evidence) throw new RFQCoordinatorError("STRICT_EVIDENCE_REQUIRED", "strict RFQ quote reservation requires persisted production evidence");
+  return {
+    pricing: validateModuleFreshness("pricing", evidence.pricing, now, futureSkewSeconds),
+    risk: validateModuleFreshness("risk", evidence.risk, now, futureSkewSeconds)
+  };
+}
+
+function validateModuleFreshness(module: "pricing" | "risk", value: unknown, now: number, futureSkewSeconds: number): RFQModuleFreshnessEvidence {
+  const code = module === "pricing" ? "PRICING_FRESHNESS_INVALID" : "RISK_FRESHNESS_INVALID";
+  if (!value || typeof value !== "object") throw new RFQCoordinatorError(code, `${module} freshness metadata missing`);
+  const candidate = value as Partial<RFQFreshnessEvidence>;
+  if (!candidate.snapshotId || !candidate.version) throw new RFQCoordinatorError(code, `${module} freshness metadata missing`);
+  if (candidate.available !== true) throw new RFQCoordinatorError(code, `${module} dependency unavailable`);
+  const observedAt = candidate.observedAt;
+  const validUntil = candidate.validUntil;
+  if (typeof observedAt !== "number" || typeof validUntil !== "number" || !Number.isSafeInteger(observedAt) || !Number.isSafeInteger(validUntil)) {
+    throw new RFQCoordinatorError(code, `${module} freshness timestamps invalid`);
+  }
+  if (observedAt > now + futureSkewSeconds) throw new RFQCoordinatorError(code, `${module} snapshot is from the future`);
+  if (validUntil <= now) throw new RFQCoordinatorError(code, `${module} dependency stale`);
+  return {
+    module,
+    snapshotId: candidate.snapshotId,
+    version: candidate.version,
+    observedAt,
+    validUntil,
+    available: true
+  };
 }
 
 function pricingSnapshotId(priced: unknown): string | undefined {

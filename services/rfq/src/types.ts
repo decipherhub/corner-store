@@ -84,7 +84,15 @@ export interface RFQPriceRequest {
   venue: Address;
 }
 
-export interface RFQPrice {
+export interface RFQFreshnessEvidence {
+  snapshotId: string;
+  version: string;
+  observedAt: number;
+  validUntil: number;
+  available: boolean;
+}
+
+export interface RFQPrice extends Partial<RFQFreshnessEvidence> {
   amountOut: UintLike;
 }
 
@@ -92,8 +100,13 @@ export interface PricingProvider {
   price(request: RFQPriceRequest): Promise<RFQPrice> | RFQPrice;
 }
 
+export interface RFQRiskDecision extends Partial<RFQFreshnessEvidence> {
+  decision?: "passed" | "rejected";
+  reason?: string;
+}
+
 export interface InventoryRiskCheck {
-  check(request: RFQPriceRequest, price: { amountOut: string }): Promise<void> | void;
+  check(request: RFQPriceRequest, price: { amountOut: string }): Promise<void | RFQRiskDecision> | void | RFQRiskDecision;
 }
 
 export interface RFQServiceConfig {

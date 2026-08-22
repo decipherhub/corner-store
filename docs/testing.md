@@ -43,6 +43,21 @@ cd services/rfq-demo-backend && npm ci && npm test
 cd services/cli && npm ci && npm test
 ```
 
+RFQ production host hardening smoke test:
+
+```sh
+cd services/rfq-host && npm ci && npm test
+```
+
+Host smoke는 인증 401/403, malformed/oversize/Content-Length 413,
+hashed-principal rate limit 429, limiter capacity principal-spray 방어, 실제
+coordinator pricing/risk evidence freshness fail-closed, fresh risk rejection 422,
+RESERVED replay evidence 재검증/terminal release, signer call/verification
+failure, strict audit failure 후 같은 quote/no-resign retry, incident-hook
+failure isolation, PII-free audit redaction, bounded metrics, successful quote와
+idempotent replay를 검증한다.
+
+
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
 API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
 거부를 검증한다. CLI smoke는 backend quote request path와 기존

@@ -15,6 +15,23 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `RFQ-005 — Production RFQ Host Hardening`: `services/rfq-host`를 새
+  production-separable HTTP host boundary로 추가했다. local Anvil demo backend는
+  그대로 두고, host는 request-size/JSON/schema validation, authenticator port와
+  exact taker binding, hashed-principal rate limit, pricing/risk freshness gate,
+  durable coordinator issuance, strict PII-free audit, bounded metrics와
+  incident hook을 순서대로 적용한다. stale/missing/future/unavailable
+  pricing·risk dependency는 nonce reservation과 signer 호출 전에 fail-closed하며,
+  external signer verification failure와 audit sink failure는 quote response를
+  내지 않고 incident로 기록한다. `/health`는 secret/config를 노출하지 않고,
+  public bind는 operator TLS/trusted-proxy acknowledgement 없이는 거부한다.
+  검증: baseline 및 final `npm test --prefix services/rfq`,
+  `npm test --prefix services/rfq-host`, `npm test --prefix services/rfq-demo-backend`,
+  `git diff --check` 통과. E2E는 기존 untracked `deployments/` 보호를 위해
+  이 feature 범위에서 실행하지 않았다. `scripts/check.sh`는 이 stacked 작업에서
+  known unrelated Solidity formatting gate가 있어 실행하지 않았고, RFQ hardening과
+  무관한 Solidity 파일은 수정하지 않았다.
+
 - `RFQ-004 — Durable Quote Coordinator`: `services/rfq`에 production-separable
   `RFQQuoteCoordinator`와 `QuoteCoordinatorStore` 포트를 추가했다. coordinator는
   pricing/risk가 통과한 뒤에만 `(chainId, adapter, maker)` scope nonce와

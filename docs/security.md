@@ -137,13 +137,19 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   nonce-scoped cancel로 활성화되었다. 위협 모델, actor/asset/trust boundary와
   threat table은 `docs/rfq-threat-model.md`를 기준으로 한다.
 - production RFQ는 ADR-009와 `docs/product-specs/production-rfq-policy.md`를
-  따른다. maker-authorizer, durable nonce/idempotency와 production risk module
-  구현 전에는 reference service를 production으로 활성화하지 않는다.
+  따른다. `services/rfq-host`는 demo backend와 분리된 host hardening boundary를
+  제공하지만 production activation에는 operator-owned HA store, signer custody,
+  shared limiter, WORM audit, TLS/proxy와 live pricing/risk freshness integration이
+  필요하다.
 - partial fill은 새 quote/adapter version과 별도 accounting/replay 검증 전까지
   활성화하지 않는다.
 
 ## Logging
 
+- RFQ host audit events must hash principals, request bodies and idempotency keys;
+  they must not store raw bearer tokens, raw idempotency keys, signer refs, raw
+  request bodies, PII or stack traces. Metrics labels must stay bounded and must
+  not contain principals or addresses.
 - 민감한 identity 자료와 법률 문서를 온체인 event나 일반 로그에 기록하지 않는다.
 - audit event에는 필요한 식별자와 상태 변경만 남긴다.
 - 성공한 regulated evaluation은 Manifest version과 applied Recipe set을 추적할 수

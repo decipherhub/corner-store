@@ -14,13 +14,14 @@ import {
   pricingModule,
   RFQ_DOMAIN_NAME,
   RFQ_DOMAIN_VERSION,
+  RFQCoordinatorError,
   RFQQuoteCoordinator,
   RFQQuoteService,
   riskModule,
   runRFQModuleConformance,
   signerModule
 } from "../src";
-import {RFQQuoteRequest, RFQTypedData, TypedDataSigner, InventoryRiskCheck, RFQPriceRequest} from "../src/types";
+import {RFQQuoteRequest, RFQTypedData, TypedDataSigner, InventoryRiskCheck, RFQPriceRequest, RFQPrice, RFQRiskDecision} from "../src/types";
 
 const MAKER = "0x1000000000000000000000000000000000000001";
 const TAKER = "0x2000000000000000000000000000000000000002";
@@ -437,6 +438,8 @@ async function durableCoordinatorSmoke() {
   await crashAfterReserveResumeSmoke(maker, makerWallet);
   await duplicateResumePublishesOneQuoteSmoke(maker);
   await staleLockAndCreateRaceSmoke(maker);
+  await strictFreshnessEvidenceSmoke(maker, makerWallet);
+  await typedSignerErrorSmoke(maker);
 
   const durableState = JSON.parse(fs.readFileSync(filePath, "utf8"));
   const firstRecord = durableState.records.find((record: any) => record.nonce === first.quote.nonce);
@@ -446,6 +449,207 @@ async function durableCoordinatorSmoke() {
   );
   const raw = JSON.stringify(durableState);
   assert(!raw.includes("same-key") && !raw.includes("kms://local-test-key"), "durable audit stores hashes not raw idempotency keys or signer refs");
+}
+
+
+async function strictFreshnessEvidenceSmoke(maker: `0x${string}`, makerWallet: Wallet) {
+  const now = 1_700_600_000;
+  const filePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-evidence-")), "store.json");
+  const store = () => new LocalFileQuoteCoordinatorStore({
+    filePath,
+    inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "100"}]
+  });
+  let pricingCalls = 0;
+  let riskCalls = 0;
+  let signerCalls = 0;
+  const coordinator = () => new RFQQuoteCoordinator({
+    chainId: 31337,
+    verifyingContract: ADAPTER,
+    maker,
+    signer: {signTypedData: (typedData: RFQTypedData) => {
+      signerCalls += 1;
+      return makerWallet.signTypedData(typedData.domain, typedData.types, typedData.message) as Promise<`0x${string}`>;
+    }},
+    pricing: {price: (): RFQPrice => {
+      pricingCalls += 1;
+      return {amountOut: "10", snapshotId: `pricing-${pricingCalls}`, version: "price-v1", observedAt: now - 1, validUntil: now + 60, available: true};
+    }},
+    riskCheck: {check: (): RFQRiskDecision => {
+      riskCalls += 1;
+      return {decision: "passed", snapshotId: `risk-${riskCalls}`, version: "risk-v1", observedAt: now - 1, validUntil: now + 60, available: true};
+    }},
+    store: store(),
+    now: () => now,
+    verifySignature: () => undefined
+  });
+  const first = await coordinator().quoteWithEvidence({...durableIntent("strict-evidence"), amountIn: "10"}, {now});
+  assert(first.evidence?.pricing.snapshotId === "pricing-1" && first.evidence.risk.snapshotId === "risk-1", "strict quote returns actual pricing/risk evidence");
+  const state = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  assert(state.records[0].productionEvidence.pricing.snapshotId === first.evidence?.pricing.snapshotId, "pricing evidence is durably persisted from actual call");
+  assert(state.records[0].productionEvidence.risk.snapshotId === first.evidence?.risk.snapshotId, "risk evidence is durably persisted from actual call");
+  const replay = await coordinator().quoteWithEvidence({...durableIntent("strict-evidence"), amountIn: "10"}, {now});
+  assert(replay.replayed === true && replay.evidence?.pricing.snapshotId === "pricing-1", "idempotent strict replay returns persisted evidence");
+  assert(pricingCalls === 1 && riskCalls === 1 && signerCalls === 1, "strict replay does not reprice, rerisk or resign");
+
+  const stalePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-stale-")), "store.json");
+  const staleSigner = new CaptureSigner();
+  await assertRejects(
+    () => new RFQQuoteCoordinator({
+      chainId: 31337,
+      verifyingContract: ADAPTER,
+      maker,
+      signer: staleSigner,
+      pricing: {price: () => ({amountOut: "1", snapshotId: "stale-price", version: "price-v1", observedAt: now - 100, validUntil: now - 1, available: true})},
+      riskCheck: {check: () => ({decision: "passed", snapshotId: "risk", version: "risk-v1", observedAt: now - 1, validUntil: now + 60, available: true})},
+      store: new LocalFileQuoteCoordinatorStore({filePath: stalePath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]}),
+      now: () => now
+    }).quoteWithEvidence({...durableIntent("stale-price"), amountIn: "1"}, {now}),
+    "stale pricing strict freshness"
+  );
+  assert(staleSigner.calls === 0 && JSON.parse(fs.readFileSync(stalePath, "utf8")).records.length === 0, "stale strict evidence fails before nonce/signing");
+
+  const riskRejectedPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-risk-rejected-")), "store.json");
+  const riskRejectedSigner = new CaptureSigner();
+  try {
+    await new RFQQuoteCoordinator({
+      chainId: 31337,
+      verifyingContract: ADAPTER,
+      maker,
+      signer: riskRejectedSigner,
+      pricing: {price: () => ({amountOut: "1", snapshotId: "price", version: "price-v1", observedAt: now - 1, validUntil: now + 60, available: true})},
+      riskCheck: {check: () => ({decision: "rejected", reason: "raw desk private reason", snapshotId: "risk", version: "risk-v1", observedAt: now - 1, validUntil: now + 60, available: true})},
+      store: new LocalFileQuoteCoordinatorStore({filePath: riskRejectedPath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]}),
+      now: () => now
+    }).quoteWithEvidence({...durableIntent("risk-rejected-strict"), amountIn: "1"}, {now});
+    throw new Error("risk rejected expected");
+  } catch (error) {
+    assert(error instanceof RFQCoordinatorError && error.code === "RISK_REJECTED", "fresh risk rejection uses stable typed code");
+  }
+  assert(riskRejectedSigner.calls === 0 && JSON.parse(fs.readFileSync(riskRejectedPath, "utf8")).records.length === 0, "risk rejected does not reserve nonce or call signer");
+
+  await strictReservedReplayEvidenceSmoke(maker, makerWallet);
+
+  const legacyPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-legacy-")), "store.json");
+  const legacyStore = () => new LocalFileQuoteCoordinatorStore({filePath: legacyPath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]});
+  const legacyIntent = {...durableIntent("legacy-no-evidence"), amountIn: "1"};
+  const request = {taker: legacyIntent.taker, tokenIn: legacyIntent.tokenIn, tokenOut: legacyIntent.tokenOut, amountIn: legacyIntent.amountIn, venue: legacyIntent.venue, ttlSeconds: legacyIntent.ttlSeconds};
+  const scope = {chainId: 31337, adapter: ADAPTER.toLowerCase() as `0x${string}`, maker: maker.toLowerCase() as `0x${string}`};
+  const sourceSignedQuote = await coordinator().quote({...durableIntent("tmp-sign"), amountIn: "1"});
+  const signedQuote = {
+    ...sourceSignedQuote,
+    quote: {...sourceSignedQuote.quote, nonce: "1", expiry: now + 60, amountIn: "1", amountOut: "1"},
+    typedData: {...sourceSignedQuote.typedData, message: {...sourceSignedQuote.typedData.message, nonce: "1", expiry: now + 60, amountIn: "1", amountOut: "1"}}
+  };
+  await legacyStore().reserveOrReturnExisting({
+    scope,
+    idempotencyKeyHash: hashCanonical({value: "legacy-no-evidence"}),
+    requestHash: hashCanonical(request),
+    request,
+    inventoryDelta: {maker: maker.toLowerCase() as `0x${string}`, token: TOKEN_OUT as `0x${string}`, venue: VENUE as `0x${string}`, amount: "1"},
+    reservationExpiresAt: now + 60,
+    createdAt: now
+  });
+  await legacyStore().markSigned({scope, idempotencyKeyHash: hashCanonical({value: "legacy-no-evidence"}), requestHash: hashCanonical(request), signedQuote, quoteHash: hashCanonical({quote: signedQuote.quote, domain: signedQuote.typedData.domain}), now});
+  await assertRejects(
+    () => new RFQQuoteCoordinator({
+      chainId: 31337, verifyingContract: ADAPTER, maker, signer: {signTypedData: (typedData: RFQTypedData) => makerWallet.signTypedData(typedData.domain, typedData.types, typedData.message) as Promise<`0x${string}`>},
+      pricing: {price: () => ({amountOut: "999", snapshotId: "new", version: "v", observedAt: now, validUntil: now + 1, available: true})},
+      riskCheck: {check: () => ({decision: "passed", snapshotId: "new", version: "v", observedAt: now, validUntil: now + 1, available: true})},
+      store: legacyStore(), now: () => now
+    }).quoteWithEvidence(legacyIntent, {now}),
+    "legacy replay without evidence fails strict host"
+  );
+}
+
+async function typedSignerErrorSmoke(maker: `0x${string}`) {
+  const now = 1_700_700_000;
+  const filePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-signer-error-")), "store.json");
+  const coordinator = new RFQQuoteCoordinator({
+    chainId: 31337,
+    verifyingContract: ADAPTER,
+    maker,
+    signer: {signTypedData: async () => { throw new Error("KMS timeout"); }},
+    pricing: {price: () => ({amountOut: "1", snapshotId: "price", version: "price-v1", observedAt: now, validUntil: now + 60, available: true})},
+    riskCheck: {check: () => ({decision: "passed", snapshotId: "risk", version: "risk-v1", observedAt: now, validUntil: now + 60, available: true})},
+    store: new LocalFileQuoteCoordinatorStore({filePath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]}),
+    now: () => now
+  });
+  try {
+    await coordinator.quoteWithEvidence({...durableIntent("kms-timeout"), amountIn: "1"}, {now});
+    throw new Error("typed signer error expected");
+  } catch (error) {
+    assert(error instanceof RFQCoordinatorError && error.code === "SIGNER_CALL_FAILED", "signer throw is wrapped with stable code");
+  }
+}
+
+
+async function strictReservedReplayEvidenceSmoke(maker: `0x${string}`, makerWallet: Wallet) {
+  const reserveTime = 1_700_800_000;
+  const scope = {chainId: 31337, adapter: ADAPTER.toLowerCase() as `0x${string}`, maker: maker.toLowerCase() as `0x${string}`};
+  const baseEvidence = {
+    pricing: {module: "pricing" as const, snapshotId: "price-reserve", version: "price-v1", observedAt: reserveTime, validUntil: reserveTime + 10, available: true},
+    risk: {module: "risk" as const, snapshotId: "risk-reserve", version: "risk-v1", observedAt: reserveTime, validUntil: reserveTime + 10, available: true}
+  };
+
+  const stalePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-reserved-stale-")), "store.json");
+  const staleStore = () => new LocalFileQuoteCoordinatorStore({filePath: stalePath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]});
+  const staleIntent = {...durableIntent("reserved-stale-evidence"), amountIn: "1"};
+  const staleRequest = {taker: staleIntent.taker, tokenIn: staleIntent.tokenIn, tokenOut: staleIntent.tokenOut, amountIn: staleIntent.amountIn, venue: staleIntent.venue, ttlSeconds: staleIntent.ttlSeconds};
+  await staleStore().reserveOrReturnExisting({
+    scope,
+    idempotencyKeyHash: hashCanonical({value: staleIntent.idempotencyKey}),
+    requestHash: hashCanonical(staleRequest),
+    request: staleRequest,
+    inventoryDelta: {maker: maker.toLowerCase() as `0x${string}`, token: TOKEN_OUT as `0x${string}`, venue: VENUE as `0x${string}`, amount: "1"},
+    reservationExpiresAt: reserveTime + 60,
+    createdAt: reserveTime,
+    productionEvidence: baseEvidence
+  });
+  const staleSigner = new CaptureSigner();
+  await assertRejects(
+    () => new RFQQuoteCoordinator({
+      chainId: 31337, verifyingContract: ADAPTER, maker, signer: staleSigner,
+      pricing: {price: () => ({amountOut: "999", snapshotId: "unused", version: "unused", observedAt: reserveTime, validUntil: reserveTime + 100, available: true})},
+      riskCheck: {check: () => ({decision: "passed", snapshotId: "unused", version: "unused", observedAt: reserveTime, validUntil: reserveTime + 100, available: true})},
+      store: staleStore(), now: () => reserveTime + 11
+    }).quoteWithEvidence(staleIntent, {now: reserveTime + 11}),
+    "reserved stale evidence fails strict replay"
+  );
+  const staleRecord = await staleStore().getByIdempotencyKeyHash(scope, hashCanonical({value: staleIntent.idempotencyKey}));
+  assert(staleSigner.calls === 0, "stale reserved replay does not call signer");
+  assert(staleRecord?.state === "REVOKED" && staleRecord.inventoryLease?.released === true && staleRecord.inventoryLease.releaseReason === "revoke", "stale reserved replay terminalizes and releases lease exactly once");
+  await assertRejects(
+    () => new RFQQuoteCoordinator({chainId: 31337, verifyingContract: ADAPTER, maker, signer: staleSigner, pricing: {price: () => ({amountOut: "1"})}, riskCheck: new NoopInventoryRiskCheck(), store: staleStore(), now: () => reserveTime + 12}).quoteWithEvidence(staleIntent, {now: reserveTime + 12}),
+    "terminal stale reserved retry remains closed"
+  );
+  assert(staleSigner.calls === 0, "subsequent terminal retry still does not sign");
+
+  const freshPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-reserved-fresh-")), "store.json");
+  const freshStore = () => new LocalFileQuoteCoordinatorStore({filePath: freshPath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]});
+  const freshIntent = {...durableIntent("reserved-fresh-evidence"), amountIn: "1"};
+  const freshRequest = {taker: freshIntent.taker, tokenIn: freshIntent.tokenIn, tokenOut: freshIntent.tokenOut, amountIn: freshIntent.amountIn, venue: freshIntent.venue, ttlSeconds: freshIntent.ttlSeconds};
+  await freshStore().reserveOrReturnExisting({
+    scope,
+    idempotencyKeyHash: hashCanonical({value: freshIntent.idempotencyKey}),
+    requestHash: hashCanonical(freshRequest),
+    request: freshRequest,
+    inventoryDelta: {maker: maker.toLowerCase() as `0x${string}`, token: TOKEN_OUT as `0x${string}`, venue: VENUE as `0x${string}`, amount: "1"},
+    reservationExpiresAt: reserveTime + 60,
+    createdAt: reserveTime,
+    productionEvidence: {
+      pricing: {...baseEvidence.pricing, validUntil: reserveTime + 100},
+      risk: {...baseEvidence.risk, validUntil: reserveTime + 100}
+    }
+  });
+  let freshSignerCalls = 0;
+  const fresh = await new RFQQuoteCoordinator({
+    chainId: 31337, verifyingContract: ADAPTER, maker,
+    signer: {signTypedData: (typedData: RFQTypedData) => { freshSignerCalls += 1; return makerWallet.signTypedData(typedData.domain, typedData.types, typedData.message) as Promise<`0x${string}`>; }},
+    pricing: {price: () => { throw new Error("should not reprice reserved retry"); }},
+    riskCheck: {check: () => { throw new Error("should not rerisk reserved retry"); }},
+    store: freshStore(), now: () => reserveTime + 1
+  }).quoteWithEvidence(freshIntent, {now: reserveTime + 1});
+  assert(fresh.signedQuote.quote.nonce === "1" && freshSignerCalls === 1 && fresh.evidence?.pricing.snapshotId === "price-reserve", "fresh reserved strict replay resumes with persisted evidence");
 }
 
 async function signerLatencyExpiryAndRevokeSmoke(maker: `0x${string}`, makerWallet: Wallet) {
