@@ -99,8 +99,12 @@ npm test
 ```
 
 TA lot lineage/완납 clock, conservative snapshot, broken-lineage fail-closed,
-idempotent person-group commit, rolling volume/holder counts와 hash-chain 변조 탐지를
-검증한다.
+idempotent person-group commit, rolling volume/holder counts, hash-chain 변조 탐지와
+provider-neutral TA/KYC evidence refresh conformance를 검증한다. KYC suite는 exact
+subject/identity/asset binding, provider outage/timeout/malformed request·result/stale/future fail-closed,
+revoked/ineligible/sanctions handling, deterministic evidence hash, replay/conflict,
+recursive PII/unknown schema rejection, PII-free audit/error output, strict audit-before-publish fail-closed, production store return revalidation, bounded incident hook failure and
+"no cached success on outage" behavior를 포함한다.
 
 Deployment Studio smoke test:
 

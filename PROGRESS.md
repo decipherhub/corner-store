@@ -15,6 +15,22 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DATA-002 — Provider-Neutral TA/KYC Evidence`: `services/compliance-data`에
+  provider-neutral TA/KYC evidence coordinator와 replaceable store port를 추가했다.
+  요청/결과는 subject, optional ONCHAINID identity, asset, request/evidence hashes와
+  bounded provider/status/fact fields만 사용하며 raw name/email/document/SSN/provider
+  subject/webhook payload는 core I/O·snapshot·audit에 저장하지 않는다. coordinator는
+  provider result의 exact binding, freshness/future skew, explicit revoke/ineligible,
+  sanctions/KYC facts와 provider timeout을 fail-closed로 검증하고 canonical domain-separated evidenceHash를
+  계산한다. eligible snapshot은 strict success audit이 성공한 뒤에만 store에 publish하고 store 반환값을 재검증한다. provider outage/timeout/malformed request·result/stale/future/mismatch/revoked/ineligible/
+  conflict/audit failure는 eligible materialization을 반환하지 않으며 cached last-good
+  snapshot으로 outage를 숨기지 않는다. `InMemoryKycEvidenceStore`는 single-process
+  reference/conformance store로 idempotent replay, same-assessment conflict, newer/revoked
+  monotonic semantics를 검증하며 production HA/WORM/claim-write adapter는 operator 교체
+  지점으로 남겼다. 검증: `npm test --prefix services/compliance-data`,
+  `git diff --check` 통과. E2E는 이 provider-boundary feature 범위가 아니어서 실행하지
+  않았다.
+
 - `RFQ-005 — Production RFQ Host Hardening`: `services/rfq-host`를 새
   production-separable HTTP host boundary로 추가했다. local Anvil demo backend는
   그대로 두고, host는 request-size/JSON/schema validation, authenticator port와

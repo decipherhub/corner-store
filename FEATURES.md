@@ -1149,6 +1149,54 @@ passing
 - `src/compliance/elements/Lockup.sol`
 - `test/unit/compliance/AcquisitionSource.t.sol`
 
+
+## DATA-002 — Provider-Neutral TA/KYC Evidence
+
+### Behavior
+
+- `services/compliance-data` exposes a provider-neutral TA/KYC evidence boundary without
+  hardcoding Securitize or another vendor API. Operator adapters supply provider results;
+  Corner Store core accepts only subject/identity/asset bindings and PII-free hashes.
+- `KycEvidenceCoordinator` validates exact taker/identity/asset binding, exact request/result/fact schemas, bounded provider IDs,
+  schema versions, assessment/source evidence hashes, provider timeout, freshness/future skew and explicit
+  `ACTIVE | REVOKED | INELIGIBLE` status before materializing evidence.
+- Canonical `evidenceHash` is domain-separated over normalized provider/schema,
+  subject/identity/asset, facts, timestamps, status and source hash. Any fact, revocation or
+  lineage change changes the hash.
+- Provider outage/timeout, malformed or missing fields, stale/future data, binding mismatch,
+  sanctions hit, non-verified KYC, ineligible/revoked status, missing/failed strict success audit,
+  store mismatch/conflict all fail closed and never return eligible materialization. Cached last-good evidence
+  is not used to hide refresh outages.
+- `InMemoryKycEvidenceStore` is a reference/conformance store only; production deployments must
+  replace it with transactional durable/HA storage. It enforces idempotent replay,
+  same-assessment conflict detection and monotonic protection so older active evidence cannot
+  overwrite newer or revoked evidence.
+- Audit and incident hooks use PII-free hashes, bounded status/reason codes and on-chain IDs
+  only. Strict success audit runs before eligible store publish; store failure after success audit adds a fail audit/incident. Failure-audit and incident-hook errors are bounded/non-recursive.
+- ERC-3643/ONCHAINID remains an external trust boundary: the output is evidence for an
+  issuer/TA-approved adapter, not direct claim issuance or registry writes.
+
+### Verification
+
+- `npm test --prefix services/compliance-data`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Implements the D012/PD-4 provider-neutral boundary; no new vendor compatibility decision was
+  introduced.
+- Existing mock TA and local demo flows are unchanged.
+
+### Related Files
+
+- `services/compliance-data/src/kyc.ts`
+- `services/compliance-data/test/smoke.ts`
+- `services/compliance-data/README.md`
+
 ## MANIFEST-002 — RecipeBinding Manifest Migration
 
 ### Behavior
