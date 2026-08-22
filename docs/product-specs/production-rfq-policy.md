@@ -278,8 +278,8 @@ The operator owns retention, access control and WORM export.
 
 ## Migration Sequence
 
-1. Implement durable nonce/idempotency reference adapter and hostile concurrency tests.
-2. Add external signer adapter contract and local signature verification.
+1. Implement durable nonce/idempotency reference adapter and hostile concurrency tests. **Implemented by RFQ-004 for the SDK/reference coordinator boundary; HA production must still provide a transactional DB store.**
+2. Add external signer adapter contract and local signature verification. **Local signature verification implemented by RFQ-004 for direct-maker EIP-712; production authorizer-specific verification remains operator integration work.**
 3. Add versioned `IMakerAuthorizer` and migrate RFQ Adapter without changing v1 quote fields.
 4. Fix Router regulated-quantity cap before enabling finite caps.
 5. Add production pricing/risk metadata envelope and audit record.
@@ -287,3 +287,14 @@ The operator owns retention, access control and WORM export.
 7. Perform independent security and legal/operator review.
 
 Partial fill starts only after this sequence and uses a new quote/adapter version.
+
+
+### RFQ-004 implementation note
+
+The SDK now exports `RFQQuoteCoordinator`, `QuoteCoordinatorStore` and
+`LocalFileQuoteCoordinatorStore`. The coordinator implements the atomic
+reserve/sign/persist lifecycle expected by this policy while preserving the
+existing lightweight SDK and demo backend behavior. The file-backed store is a
+reference/single-host adapter only; production readiness for HA deployment
+requires replacing it with an operator-owned transactional DB implementation and
+feeding `observeSettlement`/`reconcile` from a production chain indexer.

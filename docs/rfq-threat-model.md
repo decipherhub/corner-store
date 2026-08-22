@@ -15,7 +15,7 @@ RFQ settlement에 한정한 actor, asset, trust boundary와 threat/mitigation을
   경로에 한정)의 RFQ 구체화이며, 별도 예외를 만들지 않는다.
 - production 책임과 migration 기준은 ADR-009와
   `docs/product-specs/production-rfq-policy.md`에서 정한다. maker authorizer와
-  regulated-quantity cap binding은 구현됐고, durable nonce, production
+  regulated-quantity cap binding은 구현됐고, durable nonce/idempotency coordinator boundary는 SDK reference로 추가됐고, production
   pricing/risk와 endpoint hardening은 후속 범위다.
 - partial fill은 현 Adapter 범위 밖이며 새 quote/adapter version 전까지 허용하지
   않는다.
@@ -68,8 +68,8 @@ RFQ settlement에 한정한 actor, asset, trust boundary와 threat/mitigation을
 | Malicious/re-entrant token contract | `SafeERC20` + router `nonReentrant` + regulated asset는 upstream manifest로 gating | partially mitigated |
 | Operator key compromise | D011 governance separation + ADR-009 immediate tightening; vendor key custody는 operator 책임 | residual |
 | Quote signer compromise/rotation | delayed delegate addition + fill-time current authorization + immediate revoke | mitigated |
-| Multi-instance nonce collision | ADR-009는 maker-scoped atomic durable allocation과 idempotency를 요구 | specified, not implemented |
-| Stale pricing/inventory dependency | production module은 signer 호출 전에 fail-closed해야 함 | specified, not implemented |
+| Multi-instance nonce collision | `RFQQuoteCoordinator` + `QuoteCoordinatorStore` contract and single-host file reference demonstrate atomic nonce/idempotency/inventory lease; HA production must replace the store with transactional DB semantics | reference implemented; production adapter required |
+| Stale pricing/inventory dependency | coordinator preserves pricing/risk-before-reserve ordering and fail-closed store/signature checks; production freshness envelope remains operator module responsibility | partially implemented |
 | Partial-fill accounting/replay ambiguity | v1은 exact full-fill만 허용; 새 adapter version 전까지 비활성 | mitigated by scope |
 
 각 mitigation의 구현 위치:

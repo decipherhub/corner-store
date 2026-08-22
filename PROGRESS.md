@@ -15,6 +15,22 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `RFQ-004 — Durable Quote Coordinator`: `services/rfq`에 production-separable
+  `RFQQuoteCoordinator`와 `QuoteCoordinatorStore` 포트를 추가했다. coordinator는
+  pricing/risk가 통과한 뒤에만 `(chainId, adapter, maker)` scope nonce와
+  idempotency/request hash, maker outgoing inventory lease를 원자적으로 예약하고,
+  external signer 결과를 로컬 EIP-712 검증 후 durable record에 저장한다. 같은
+  idempotency key+request는 service restart/new coordinator instance 이후에도 같은
+  signed quote를 반환하고, 다른 request hash는 conflict로 거부된다. signer failure,
+  expiry, revoke, finalized fill/cancel은 lease를 정확히 한 번 해제하며 nonce gap은
+  허용하되 재사용하지 않는다. fill/cancel observation은 block/hash를 기록하고
+  configured finality 이후 terminal 처리하며, reorg는 observed 상태를 `PUBLISHED`로
+  되돌리고 lease를 유지한다. durable record에는 raw idempotency key나 signer ref를
+  저장하지 않는다. 함께 추가한 `LocalFileQuoteCoordinatorStore`는 Node built-ins 기반
+  reference/single-host file adapter이며 production HA는 동일 포트를 operator
+  transactional DB와 indexer/reconciliation worker로 구현해야 한다. 검증: baseline 및
+  final `npm test --prefix services/rfq` 통과, `git diff --check` 통과.
+
 - `STUDIO-002 — Localized Evidence-Gated Workflow`: Deployment Studio의 기본
   언어를 한국어로 제공하고 English 전환 선택을 유지한다. 설정 저장부터 Doctor,
   계획, 배포, Artifact 검증, DEX 실행까지 실제 evidence와 선행 단계가 모두

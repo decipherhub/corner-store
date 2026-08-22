@@ -9,6 +9,40 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+
+## RFQ-004 — Durable Quote Coordinator
+
+### Behavior
+
+- RFQ SDK는 기존 demo-friendly quote service를 유지하면서 production 서비스가 교체해
+  구현할 수 있는 `QuoteCoordinatorStore` 포트와 `RFQQuoteCoordinator` 경계를 제공한다.
+- coordinator는 `(chainId, adapter/verifyingContract, maker)` scope에서 nonce를
+  원자적으로 증가시키고, idempotency key hash와 request hash를 durable record에
+  저장한다. 같은 key+request는 재시작 후에도 같은 signed quote를 반환하며, 같은
+  key의 다른 request는 fail-closed conflict로 거부한다.
+- pricing/risk rejection은 nonce와 inventory reservation 전에 종료된다. 새 firm quote는
+  nonce, idempotency record와 maker outgoing token inventory lease를 하나의 store
+  transaction에서 예약한다. signer 실패, 만료, revoke, finalized fill/cancel은 lease를
+  정확히 한 번 해제하고 nonce는 재사용하지 않는다.
+- local/single-host reference file store는 Node built-ins만 사용해 restart persistence,
+  lock 기반 cross-instance atomicity, concurrent over-reservation 방지를 시연한다. HA
+  production은 같은 포트를 operator transactional DB/queue/indexer로 구현해야 한다.
+- coordinator는 external signer가 반환한 EIP-712 signature를 로컬에서 검증한 뒤에만
+  응답하고, idempotency key와 signer key ref는 durable audit record에 raw value가 아닌
+  hash로 저장한다.
+- fill/cancel observation은 transaction hash, block number/hash를 기록하고 configured
+  confirmation depth 이후 terminal 상태로 확정한다. reorg/noncanonical block은 observed
+  상태를 `PUBLISHED`로 되돌리고 lease를 유지한다. Partial fill은 계속 비지원이다.
+
+### Verification
+
+- `npm test --prefix services/rfq`
+- `git diff --check`
+
+### State
+
+passing
+
 ## STUDIO-002 — Localized Evidence-Gated Workflow
 
 ### Behavior
