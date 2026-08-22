@@ -10,6 +10,48 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## DEPLOY-003 — Production ERC-3643 Asset Onboarding
+
+### Behavior
+
+- Production onboarding is separated from local Anvil/demo `toolkit-onboard` and
+  from core deployment. A versioned `corner-store.production-onboarding.json`
+  declares the exact existing ERC-3643 token, IdentityRegistry/Compliance wiring,
+  Corner Store registries/adapters, PII-free legal package hash, Elements, Recipes,
+  Manifest, RecipeBinding[], governance Safe metadata, explicit operator executor,
+  active venues, RFQ makers, signer delegates and read-only inventory requirements.
+- The Toolkit validates the onboarding file with exact-object schemas, rejects
+  unknown fields, duplicate addresses/ids, unsupported codeHash keys, signer-secret
+  shaped fields, raw contact PII and incoherent RFQ/inventory relationships.
+- `production-onboarding-plan` renders deterministic Element/Recipe/Manifest,
+  venue, maker, signer schedule and owner-only delayed signer execution calldata plus Safe-compatible unsigned drafts.
+  It uses collision-free stage IDs, partitions Safe-owner and operator-authority
+  drafts, includes Safe/required approval/proposal identity on Safe drafts and
+  explicit executor/proposal identity on operator drafts, separates governance-owner/governance-delayed/operator
+  authority, refuses output overwrite, and never signs, broadcasts, transfers
+  tokens or generates ERC-20 approvals. Inventory appears as a read-only
+  verification dependency before service open.
+- `production-onboarding-verify` uses RPC read calls only and fails closed on
+  unavailable or mismatched ERC-3643 wiring, Identity Registry dependencies,
+  Element/Recipe registrations, Manifest hash/fields/bindings, ACTIVE Manifest
+  declarer/approver, governance Safe ownership of safe-owner targets, global/asset/venue pause gates, venue config, TokenPolicyRegistry/RFQAdapter operator authorization, maker approval,
+  signer delegate activation and inventory balance/allowance minima. Pending signer
+  authorization is reported but is not production-ready.
+- Example onboarding JSON is syntactically valid but uses obvious placeholder
+  non-live addresses/hashes; issuer/legal/TA evidence remains an external trust
+  boundary and cannot be inferred from a token address.
+
+### Verification
+
+- `npm test --prefix services/toolkit`
+- `npm test --prefix services/cli`
+- `git diff --check`
+
+### State
+
+passing
+
+
 ## RFQ-005 — Production RFQ Host Hardening
 
 ### Behavior

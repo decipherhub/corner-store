@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "chainId": 42161,
+  "configHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifactHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "legalPackageHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "governance": {
+    "safe": "0x8888888888888888888888888888888888888888",
+    "requiredApprovals": 2,
+    "operatorExecutor": "0x5555555555555555555555555555555555555555"
+  },
+  "addresses": {
+    "token": "0x1000000000000000000000000000000000000001",
+    "identityRegistry": "0x1000000000000000000000000000000000000002",
+    "compliance": "0x1000000000000000000000000000000000000003",
+    "topicsRegistry": "0x1000000000000000000000000000000000000004",
+    "issuersRegistry": "0x1000000000000000000000000000000000000005",
+    "identityStorage": "0x1000000000000000000000000000000000000006",
+    "elementRegistry": "0x1000000000000000000000000000000000000007",
+    "recipeRegistry": "0x1000000000000000000000000000000000000008",
+    "tokenPolicyRegistry": "0x1000000000000000000000000000000000000009",
+    "operatorRegistry": "0x1000000000000000000000000000000000000010",
+    "venueRegistry": "0x1000000000000000000000000000000000000011",
+    "rfqAdapter": "0x1000000000000000000000000000000000000012",
+    "makerAuthorizer": "0x1000000000000000000000000000000000000013"
+  },
+  "codeHashes": {
+    "token": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "elements": [
+    {
+      "elementId": "0x0101010101010101010101010101010101010101010101010101010101010101",
+      "implementation": "0x2000000000000000000000000000000000000001"
+    }
+  ],
+  "recipes": [
+    {
+      "recipeId": 1,
+      "version": 2,
+      "implementation": "0x2000000000000000000000000000000000000002"
+    }
+  ],
+  "manifest": {
+    "issuanceRecipeId": 1,
+    "issuanceRecipeVersion": 2,
+    "fundRecipeId": 0,
+    "enabledResalePaths": 1,
+    "supportedEngines": 5,
+    "stateScopeId": 7,
+    "factsPacked": "1",
+    "coverageScope": "3",
+    "fullManifestHash": "0x0202020202020202020202020202020202020202020202020202020202020202"
+  },
+  "recipeBindings": [
+    {
+      "recipeId": 1,
+      "recipeVersion": 2,
+      "mode": "REQUIRED_BLOCKING",
+      "pathGroupId": 0,
+      "priority": 100
+    }
+  ],
+  "venues": [
+    {
+      "venue": "0x3000000000000000000000000000000000000001",
+      "venueType": "RFQ",
+      "adapter": "0x1000000000000000000000000000000000000012",
+      "target": "0x3000000000000000000000000000000000000002",
+      "operator": "0x5555555555555555555555555555555555555555",
+      "custody": "NONE",
+      "active": true
+    }
+  ],
+  "rfq": {
+    "makers": [
+      {
+        "maker": "0x4000000000000000000000000000000000000001",
+        "approved": true
+      }
+    ],
+    "signerDelegates": [
+      {
+        "maker": "0x4000000000000000000000000000000000000001",
+        "delegate": "0x4000000000000000000000000000000000000002",
+        "reasonHash": "0x0303030303030303030303030303030303030303030303030303030303030303"
+      }
+    ]
+  },
+  "inventory": [
+    {
+      "token": "0x1000000000000000000000000000000000000001",
+      "holder": "0x4000000000000000000000000000000000000001",
+      "spender": "0x1000000000000000000000000000000000000012",
+      "minBalance": "1000000000000000000000",
+      "minAllowance": "1000000000000000000000",
+      "riskEvidenceHash": "0x0404040404040404040404040404040404040404040404040404040404040404"
+    }
+  ]
+}

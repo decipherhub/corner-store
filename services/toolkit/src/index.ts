@@ -8,3 +8,5 @@ export * from "./production";
 export * from "./proposal";
 export * from "./scaffold";
 export * from "./templates";
+
+export * from "./production-onboarding";

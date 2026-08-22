@@ -1,4 +1,12 @@
 import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
+
+import {keccak256} from "ethers";
+import {
+  createProductionOnboardingPlan,
+  productionOnboardingInterfaces,
+  validateProductionOnboardingConfig,
+  verifyProductionOnboarding
+} from "../src/production-onboarding";
 import {tmpdir} from "os";
 import {join} from "path";
 import {defaultConfig, enabledEngineSpec, loadConfig, simulateConfig, validateConfig, writeDefaultConfig} from "../src/config";
@@ -18,6 +26,19 @@ import {
 import {toSafeTransactionDraft} from "../src/multisig";
 import {defaultIntegrationManifest, validateIntegrationManifest} from "../src/integration";
 import {scaffoldRFQIntegration} from "../src/scaffold";
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message);
+}
+
+function assertThrows(fn: () => void, message: string): void {
+  try {
+    fn();
+    throw new Error(`${message}: accepted`);
+  } catch (err: any) {
+    if (String(err.message).includes(": accepted")) throw err;
+  }
+}
 
 const dir = mkdtempSync(join(tmpdir(), "corner-store-toolkit-"));
 const path = join(dir, "corner-store.config.json");
@@ -176,6 +197,179 @@ try {
   if (!err.message.includes("signer secrets")) throw err;
 }
 
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+
+const onboardingConfig = validateProductionOnboardingConfig({
+  schemaVersion: 1,
+  chainId: 1,
+  configHash: productionConfigHash(productionConfig),
+  artifactHash: `sha256:${"c".repeat(64)}`,
+  legalPackageHash: `sha256:${"d".repeat(64)}`,
+  governance: {safe: "0x8888888888888888888888888888888888888888", requiredApprovals: 2, operatorExecutor: "0x5555555555555555555555555555555555555555"},
+  addresses: {
+    token: "0x1000000000000000000000000000000000000001",
+    identityRegistry: "0x1000000000000000000000000000000000000002",
+    compliance: "0x1000000000000000000000000000000000000003",
+    topicsRegistry: "0x1000000000000000000000000000000000000004",
+    issuersRegistry: "0x1000000000000000000000000000000000000005",
+    identityStorage: "0x1000000000000000000000000000000000000006",
+    elementRegistry: "0x1000000000000000000000000000000000000007",
+    recipeRegistry: "0x1000000000000000000000000000000000000008",
+    tokenPolicyRegistry: "0x1000000000000000000000000000000000000009",
+    operatorRegistry: "0x1000000000000000000000000000000000000013",
+    venueRegistry: "0x1000000000000000000000000000000000000010",
+    rfqAdapter: "0x1000000000000000000000000000000000000011",
+    makerAuthorizer: "0x1000000000000000000000000000000000000012"
+  },
+  codeHashes: {token: keccak256("0x6000")},
+  elements: [{elementId: `0x${"01".repeat(32)}`, implementation: "0x2000000000000000000000000000000000000001"}],
+  recipes: [{recipeId: 1, version: 2, implementation: "0x2000000000000000000000000000000000000002"}],
+  manifest: {
+    issuanceRecipeId: 1,
+    issuanceRecipeVersion: 2,
+    fundRecipeId: 0,
+    enabledResalePaths: 1,
+    supportedEngines: 5,
+    stateScopeId: 7,
+    factsPacked: "1",
+    coverageScope: "3",
+    fullManifestHash: `0x${"02".repeat(32)}`
+  },
+  recipeBindings: [{recipeId: 1, recipeVersion: 2, mode: "REQUIRED_BLOCKING", pathGroupId: 0, priority: 100}],
+  venues: [{
+    venue: "0x3000000000000000000000000000000000000001",
+    venueType: "RFQ",
+    adapter: "0x1000000000000000000000000000000000000011",
+    target: "0x3000000000000000000000000000000000000002",
+    operator: "0x5555555555555555555555555555555555555555",
+    custody: "NONE",
+    active: true
+  }],
+  rfq: {
+    makers: [{maker: "0x4000000000000000000000000000000000000001", approved: true}],
+    signerDelegates: [{maker: "0x4000000000000000000000000000000000000001", delegate: "0x4000000000000000000000000000000000000002", reasonHash: `0x${"03".repeat(32)}`}]
+  },
+  inventory: [{
+    token: "0x1000000000000000000000000000000000000001",
+    holder: "0x4000000000000000000000000000000000000001",
+    spender: "0x1000000000000000000000000000000000000011",
+    minBalance: "100",
+    minAllowance: "50",
+    riskEvidenceHash: `0x${"04".repeat(32)}`
+  }]
+});
+const onboardingPlan = createProductionOnboardingPlan(onboardingConfig, "2026-08-23T00:00:00.000Z");
+const onboardingPlanRepeat = createProductionOnboardingPlan(onboardingConfig, "2026-08-24T00:00:00.000Z");
+assert(onboardingPlan.onboardingHash === onboardingPlanRepeat.onboardingHash, "onboarding hash is deterministic across render time");
+assert(onboardingPlan.transactions.map((t) => t.id).join(",") === "element-1-359577154d98,recipe-1-v2,manifest-register,manifest-approve,venue-1,maker-1,signer-1-schedule,signer-1-execute,inventory-1-verify", "onboarding stage order is deterministic");
+assert(onboardingPlan.safeTransactions.every((tx) => tx.authority === "safe-owner" && tx.origin === "corner-store-toolkit" && tx.operation === 0 && tx.value === "0"), "Safe onboarding drafts are safe-owner unsigned calls");
+assert(onboardingPlan.operatorTransactions.every((tx) => tx.authority === "operator" && tx.origin === "corner-store-toolkit" && tx.executor === onboardingConfig.governance.operatorExecutor && tx.operation === 0 && tx.value === "0"), "operator onboarding drafts are explicit-executor unsigned calls");
+assert(!onboardingPlan.safeTransactions.some((tx) => tx.id === "manifest-approve" || tx.id.startsWith("maker-")), "operator authority steps are excluded from Safe drafts");
+assert(onboardingPlan.operatorTransactions.map((tx) => tx.id).join(",") === "manifest-approve,maker-1", "operator transactions exclude owner-only delayed signer execution");
+assert(onboardingPlan.safeTransactions.every((tx) => tx.chainId === 1 && tx.safe === onboardingConfig.governance.safe && tx.requiredApprovals === 2 && tx.proposalId.startsWith("onboarding-") && tx.proposalId.length === 75 && tx.expectedArtifactHash === onboardingConfig.artifactHash && tx.legalPackageHash === onboardingConfig.legalPackageHash && tx.onboardingHash === onboardingPlan.onboardingHash), "Safe onboarding drafts carry governance and identity metadata");
+assert(new Set(onboardingPlan.safeTransactions.map((tx) => tx.proposalId)).size === onboardingPlan.safeTransactions.length, "Safe proposal IDs are collision-safe per transaction");
+assert(new Set(onboardingPlan.operatorTransactions.map((tx) => tx.proposalId)).size === onboardingPlan.operatorTransactions.length, "operator proposal IDs are collision-safe per transaction");
+assert(onboardingPlan.safeTransactions[0].proposalId === onboardingPlanRepeat.safeTransactions[0].proposalId, "Safe proposal IDs are independent of generatedAt");
+assert(onboardingPlan.operatorTransactions[0].proposalId === onboardingPlanRepeat.operatorTransactions[0].proposalId, "operator proposal IDs are independent of generatedAt");
+assert(onboardingPlan.transactions.some((tx) => tx.id === "signer-1-execute" && tx.dependsOn.includes("signer-1-schedule") && tx.earliestExecution), "signer owner execution is delay-gated");
+assert(onboardingPlan.inventoryRequirements.length === 1 && !onboardingPlan.transactions.some((tx) => /approve\(|transfer/i.test(tx.description + tx.data)), "inventory activation is read-only");
+const ifaces = productionOnboardingInterfaces();
+const decodedElement = ifaces.ELEMENT_REGISTRY.decodeFunctionData("registerElement", onboardingPlan.transactions[0].data);
+assert(decodedElement[0] === onboardingConfig.elements[0].elementId && decodedElement[1] === onboardingConfig.elements[0].implementation, "element calldata decodes");
+const decodedRecipe = ifaces.RECIPE_REGISTRY.decodeFunctionData("registerRecipe", onboardingPlan.transactions[1].data);
+assert(Number(decodedRecipe[0]) === 1 && Number(decodedRecipe[1]) === 2, "recipe calldata decodes");
+const decodedManifest = ifaces.POLICY_REGISTRY.decodeFunctionData("registerManifest", onboardingPlan.transactions[2].data);
+assert(decodedManifest[0] === onboardingConfig.addresses.token && decodedManifest[2].length === 1, "manifest calldata decodes with binding");
+const decodedVenue = ifaces.VENUE_REGISTRY.decodeFunctionData("registerVenue", onboardingPlan.transactions[4].data);
+assert(decodedVenue[0] === onboardingConfig.venues![0].venue && Number(decodedVenue[1][0]) === 2, "venue calldata decodes");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, elements: [...onboardingConfig.elements, onboardingConfig.elements[0]]}), "duplicate element rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, legalPackageHash: "mailto:alice@example.com"}), "PII/invalid legal evidence rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, rfq: {...onboardingConfig.rfq, signerPrivateKey: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"}}), "secret fields rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, addresses: {...onboardingConfig.addresses, compliance: onboardingConfig.addresses.identityRegistry}}), "duplicate addresses rejected");
+
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, venues: undefined as any}), "venues are required");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, venues: []}), "empty venues rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, venues: onboardingConfig.venues.map((venue) => ({...venue, active: false}))}), "at least one active venue required");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, inventory: undefined as any}), "inventory is required");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, inventory: []}), "empty inventory rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, rfq: undefined as any}), "active RFQ requires rfq config");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, rfq: {...onboardingConfig.rfq, makers: [{maker: "0x4000000000000000000000000000000000000001", approved: false}]}}), "active RFQ requires approved maker");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, rfq: {...onboardingConfig.rfq, signerDelegates: []}}), "active RFQ requires signer delegate");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, rfq: {...onboardingConfig.rfq, signerDelegates: [{maker: "0x4000000000000000000000000000000000000003", delegate: "0x4000000000000000000000000000000000000004", reasonHash: `0x${"05".repeat(32)}`}]}}), "signer delegate maker must be approved");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, inventory: [{...onboardingConfig.inventory[0], holder: "0x4000000000000000000000000000000000000003"}]}), "active RFQ requires inventory for approved maker");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, venues: onboardingConfig.venues.map((venue) => ({...venue, venueType: "AMM"})), rfq: onboardingConfig.rfq}), "rfq config rejected without RFQ venue");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, governance: {...onboardingConfig.governance, requiredApprovals: 0}}), "invalid governance requiredApprovals rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, governance: {...onboardingConfig.governance, operatorExecutor: "0x0000000000000000000000000000000000000000"}}), "invalid governance operatorExecutor rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, governance: {...onboardingConfig.governance, extra: true} as any}), "unknown governance field rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, codeHashes: {...onboardingConfig.codeHashes, unknownAddress: `0x${"06".repeat(32)}`}}), "unsupported codeHashes key rejected");
+const ammOnlyConfig = validateProductionOnboardingConfig({
+  ...onboardingConfig,
+  venues: [{...onboardingConfig.venues[0], venueType: "AMM", adapter: "0x5000000000000000000000000000000000000001"}],
+  rfq: undefined,
+  inventory: [{...onboardingConfig.inventory[0], holder: "0x5000000000000000000000000000000000000002", spender: "0x5000000000000000000000000000000000000001"}],
+  addresses: {...onboardingConfig.addresses, rfqAdapter: undefined, makerAuthorizer: undefined}
+});
+assert(createProductionOnboardingPlan(ammOnlyConfig).transactions.some((tx) => tx.id === "inventory-1-verify"), "AMM-only coherent mode still requires read-only inventory verification");
+const calls: string[] = [];
+const okReader = {
+  async chainId() { return 1; },
+  async getCode(address: string) { return address === onboardingConfig.addresses.token ? "0x6000" : "0x6001"; },
+  async call(_address: string, _abi: string[], fn: string, args: unknown[] = []) {
+    calls.push(fn);
+    if (fn === "identityRegistry") return onboardingConfig.addresses.identityRegistry;
+    if (fn === "compliance") return onboardingConfig.addresses.compliance;
+    if (fn === "topicsRegistry") return onboardingConfig.addresses.topicsRegistry;
+    if (fn === "issuersRegistry") return onboardingConfig.addresses.issuersRegistry;
+    if (fn === "identityStorage") return onboardingConfig.addresses.identityStorage;
+    if (fn === "isGlobalPaused") return false;
+    if (fn === "isAssetSuspended") return false;
+    if (fn === "isVenueSuspended") return false;
+    if (fn === "owner") return onboardingConfig.governance.safe;
+    if (fn === "isOperator") return true;
+    if (fn === "elementOf") return onboardingConfig.elements[0].implementation;
+    if (fn === "recipeOf") return onboardingConfig.recipes[0].implementation;
+    if (fn === "statusOf") return 2;
+    if (fn === "manifestOf") return [2, 1, 2, 0, 1, 5, 7, 1n, 3n, onboardingConfig.manifest.fullManifestHash, "0x8888888888888888888888888888888888888888", "0x5555555555555555555555555555555555555555"];
+    if (fn === "recipeBindingsOf") return [[1, 2, 0, 0, 100]];
+    if (fn === "venueOf") return [2, onboardingConfig.venues![0].adapter, onboardingConfig.venues![0].target, onboardingConfig.venues![0].operator, 0, true];
+    if (fn === "approvedMaker") return true;
+    if (fn === "isDelegate") return true;
+    if (fn === "pendingDelegateReadyAt") return 0n;
+    throw new Error(`unexpected call ${fn}`);
+  },
+  async balanceOf() { calls.push("balanceOf"); return 100n; },
+  async allowance() { calls.push("allowance"); return 50n; }
+};
+const onboardingVerificationPromise = verifyProductionOnboarding(onboardingConfig, okReader).then((onboardingVerify) => {
+  assert(onboardingVerify.ready, `onboarding verifier should pass: ${JSON.stringify(onboardingVerify.checks)}`);
+  assert(calls.includes("balanceOf") && calls.includes("allowance") && !calls.some((name) => name === "approve" || name === "transfer"), "inventory verifier only reads balance/allowance");
+  const ownerMismatchReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "owner" && address === onboardingConfig.addresses.venueRegistry) return "0x9999999999999999999999999999999999999999"; return okReader.call(address, abi, fn, args); }};
+  return verifyProductionOnboarding(onboardingConfig, ownerMismatchReader);
+}).then((ownerMismatchVerify) => {
+  assert(!ownerMismatchVerify.ready && ownerMismatchVerify.checks.some((check) => check.name === "owner-venue-registry" && !check.pass), "safe-owner target owner mismatch fails closed");
+  const ownerUnavailableReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "owner" && address === onboardingConfig.addresses.makerAuthorizer) throw new Error("owner unavailable"); return okReader.call(address, abi, fn, args); }};
+  return verifyProductionOnboarding(onboardingConfig, ownerUnavailableReader);
+}).then((ownerUnavailableVerify) => {
+  assert(!ownerUnavailableVerify.ready && ownerUnavailableVerify.checks.some((check) => check.name === "owner-maker-authorizer" && !check.pass), "safe-owner target owner unavailable fails closed");
+  const operatorMismatchReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "isOperator" && address === onboardingConfig.addresses.rfqAdapter) return false; return okReader.call(address, abi, fn, args); }};
+  return verifyProductionOnboarding(onboardingConfig, operatorMismatchReader);
+}).then((operatorMismatchVerify) => {
+  assert(!operatorMismatchVerify.ready && operatorMismatchVerify.checks.some((check) => check.name === "rfq-adapter-operator" && !check.pass), "RFQ operator role mismatch fails closed");
+  const operatorUnavailableReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "isOperator" && address === onboardingConfig.addresses.tokenPolicyRegistry) throw new Error("operator role unavailable"); return okReader.call(address, abi, fn, args); }};
+  return verifyProductionOnboarding(onboardingConfig, operatorUnavailableReader);
+}).then((operatorUnavailableVerify) => {
+  assert(!operatorUnavailableVerify.ready && operatorUnavailableVerify.checks.some((check) => check.name === "token-policy-operator" && !check.pass), "token policy operator role unavailable fails closed");
+  const pendingReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "isDelegate") return false; if (fn === "pendingDelegateReadyAt") return 123n; return okReader.call(address, abi, fn, args); }};
+  return verifyProductionOnboarding(onboardingConfig, pendingReader);
+}).then((pendingVerify) => {
+  assert(!pendingVerify.ready && pendingVerify.checks.some((check) => check.name === "signer-1-active" && !check.pass) && pendingVerify.checks.some((check) => check.name === "signer-1-pending" && !check.pass), "pending signer is reported but not ready");
+  const badReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "identityRegistry") throw new Error("rpc unavailable"); return okReader.call(address, abi, fn, args); }};
+  return verifyProductionOnboarding(onboardingConfig, badReader);
+}).then((badVerify) => {
+  assert(!badVerify.ready && badVerify.checks.some((check) => check.name === "erc3643-identity-registry" && !check.pass), "onboarding verifier fails closed on unavailable reads");
+});
+
+
 const referenceTarget = join(dir, "reference-rfq");
 const reference = scaffoldRFQIntegration(referenceTarget, {
   mode: "reference-service",
@@ -257,4 +451,9 @@ try {
 } catch (err: any) {
   if (!err.message.includes("environment variable")) throw err;
 }
-console.log("corner-store toolkit smoke ok");
+onboardingVerificationPromise.then(() => {
+  console.log("corner-store toolkit smoke ok");
+}).catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

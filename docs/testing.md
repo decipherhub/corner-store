@@ -60,8 +60,10 @@ idempotent replay를 검증한다.
 
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
 API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
-거부를 검증한다. CLI smoke는 backend quote request path와 기존
-quote-file/서명 검증 경로를 함께 검증한다.
+거부를 검증한다. CLI smoke는 backend quote request path, 기존 quote-file/서명
+검증 경로, `production-onboarding-plan --out` immutable export/overwrite
+refusal and `production-onboarding-verify` fail-closed nonzero behavior를 함께
+검증한다.
 
 Standalone SDK integration smoke:
 
@@ -74,8 +76,15 @@ Toolkit smoke는 unified `create`가 생성하는 `library-only`,
 `reference-service`, `existing-backend` 세 mode의 manifest, `.env.example`,
 vendored `vendor/rfq-service`, optional Docker files, overwrite refusal과
 standalone package scripts(`doctor`, `deploy`, `verify`, `test:module`)를
-검증한다. SDK-002 문서 또는 packaging 변경에서는 CLI help, `doctor`, dry-run
-`deploy`, `verify`/preflight와 `test-module` command path도 별도로 확인한다.
+검증한다. Production onboarding smoke는 exact schema/unknown-field rejection,
+PII/secret rejection, deterministic Element/Recipe/Manifest/Venue/RFQ calldata,
+Safe/operator draft governance/proposal metadata, authority partition, explicit
+operator executor metadata, safe-owner target owner checks, stage dependency including governance-delayed signer execution, mandatory active venue/inventory
+gates, RFQ activation coherence, AMM-only coherent mode, read-only
+inventory stage, ACTIVE Manifest field verification, pause gate verification and
+pending-vs-active signer and safe-owner target owner mismatch/unavailable and operator role mismatch/unavailable fail-closed behavior를 포함한다. SDK-002 문서 또는 packaging 변경에서는 CLI help, `doctor`,
+dry-run `deploy`, `verify`/preflight와 `test-module` command path도 별도로
+확인한다.
 
 Generated consumer projects should keep this local gate:
 

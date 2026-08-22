@@ -15,6 +15,33 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DEPLOY-003 — Production ERC-3643 Asset Onboarding`: production core deployment과
+  local Anvil demo onboarding을 분리한 production-only asset onboarding Toolkit/CLI
+  surface를 추가했다. `corner-store.production-onboarding.json`은 exact schema로
+  ERC-3643 token→IdentityRegistry→Compliance wiring, Identity Registry dependency,
+  Corner Store registry/adapter/operator addresses, legalPackageHash, Element/Recipe/
+  Manifest/RecipeBinding, governance Safe metadata, explicit operator executor,
+  active venue, RFQ maker/signer delegate and read-only inventory requirements를 받는다. Validator는 unknown fields,
+  duplicate ids/addresses, unsupported codeHashes key, PII/secret shaped input,
+  omitted/empty venue or inventory, active RFQ venue without approved maker/signer
+  delegate/approved-maker inventory, RFQ config without RFQ venue를 fail-closed한다.
+  `production-onboarding-plan`은 deterministic calldata와 Safe-owner/operator-authority
+  drafts를 분리한다. Safe drafts에는 Safe/required approval/proposal identity가,
+  operator drafts에는 explicit executor/proposal identity가 포함되며 immutable output으로
+  쓰고 governance-owner/governance-delayed/operator authority를 분리하고 transfer/approval/
+  broadcast를 생성하지 않는다.
+  `production-onboarding-verify`는 injected reader/JsonRpcProvider로 ERC-3643 wiring,
+  code hash, registry state, exact Manifest hash/fields/bindings, ACTIVE
+  declaredBy/approvedBy, governance Safe ownership of safe-owner targets, global/asset/venue pause gates, TokenPolicyRegistry/RFQAdapter operator executor
+  authorization, maker approval, active signer and inventory balance/allowance를
+  read-only 검증한다. Pending signer는
+  detail로 보고하지만 ready가 아니다. 검증: `npm test --prefix services/toolkit`,
+  `npm test --prefix services/cli`, production onboarding example validation,
+  `git diff --check` 통과. `scripts/check.sh`는 실행했으나 known pre-existing
+  Solidity formatting blocker(`script/DeployProductionCore.s.sol`,
+  `script/DemoScenarios.s.sol`)에서 실패했다. Anvil E2E는 기존 untracked
+  `deployments/` 보호를 위해 이 slice에서 실행하지 않았다.
+
 - `DATA-002 — Provider-Neutral TA/KYC Evidence`: `services/compliance-data`에
   provider-neutral TA/KYC evidence coordinator와 replaceable store port를 추가했다.
   요청/결과는 subject, optional ONCHAINID identity, asset, request/evidence hashes와

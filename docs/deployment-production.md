@@ -166,10 +166,39 @@ claims. Those require issuer/TA evidence and separate Safe-reviewed onboarding:
 8. run a compliant settlement and expected-rejection smoke test before opening
    user access.
 
-The current Toolkit validates production core configuration and can package
-generic governance proposal envelopes, but it does not yet generate the full
-ERC-3643 onboarding calldata sequence. It also cannot infer legal requirements
-from a token address. The issuer/legal-approved mapping and reviewed onboarding
+The Toolkit now accepts an explicit, versioned production onboarding file such
+as
+[`services/toolkit/examples/corner-store.production-onboarding.json`](../services/toolkit/examples/corner-store.production-onboarding.json).
+It generates deterministic calldata and Safe-compatible unsigned drafts for the
+reviewed Element, Recipe, Manifest, venue, maker and signer activation sequence.
+The onboarding config must include governance Safe metadata (`safe` and bounded
+`requiredApprovals`), an explicit `operatorExecutor`, at least one active
+venue and at least one read-only inventory requirement. Active RFQ venues additionally require an approved maker,
+a signer delegate for an approved maker and inventory for an approved maker:
+
+```sh
+corner-store production-onboarding-plan corner-store.production-onboarding.json --out safe-onboarding.json
+corner-store production-onboarding-verify corner-store.production-onboarding.json --rpc-url https://approved-rpc.example
+```
+
+The plan command creates an immutable JSON output and refuses to overwrite an
+existing file. Safe-owner drafts are restricted to `authority == safe-owner` and carry `chainId`,
+`safe`, `requiredApprovals`, a deterministic `proposalId`, `expectedArtifactHash`,
+`legalPackageHash` and the stable onboarding identity hash. Operator-authority
+steps are exported separately as `operatorTransactions` with `chainId`, explicit
+`executor`, deterministic `proposalId`, artifact/legal/onboarding identity and a
+label; the tool does not assume the Safe is an operator. It never signs, submits, broadcasts, transfers
+assets or generates ERC-20 approvals. Inventory activation is represented as a read-only verification
+stage that checks balance, allowance and PII-free risk evidence before service
+open. The verify command reads chain state through RPC and fails closed on any
+unavailable or mismatched value: ERC-3643 token wiring, Identity Registry
+dependencies, governance Safe ownership of safe-owner targets, registered Elements/Recipes, exact Manifest hash/fields/bindings,
+ACTIVE Manifest with non-zero declarer/approver, global/asset/venue pause gates,
+venue config, maker approval, active signer delegate and inventory minima. A
+pending signer delay is reported but is not considered ready.
+
+The tool still cannot infer legal requirements from a token address. The issuer/
+legal-approved mapping, PII-free evidence hashes and reviewed onboarding
 transactions are required deployment inputs.
 
 ## Deployment Flow
@@ -188,24 +217,26 @@ transactions are required deployment inputs.
    release `sourceCommit` and `contractsHash`, successful dry-run chain ID, successful fork
    simulation chain ID/block and review timestamp. `production-deploy` rejects
    missing, stale or mismatched evidence.
-8. Build multisig payloads for policy, asset and venue activation.
-9. Review payload target addresses, calldata, nonce, chain ID, config hash and
-   artifact hash.
-10. Execute the core deployment through an external Foundry signer. The script's
+8. Generate immutable onboarding Safe drafts with `production-onboarding-plan`;
+   review target addresses, calldata, stage dependencies, chain ID, Safe address,
+   operator executor, required approvals, deterministic proposal IDs, config hash,
+   artifact hash, legal package hash and onboarding hash.
+9. Execute the core deployment through an external Foundry signer. The script's
    final deployment phase hands all governed contracts to the preflighted Safe;
    it activates no asset or venue.
-11. Verify bytecode, owners, roles and complete Router/Engine bindings against
+10. Verify bytecode, owners, roles and complete Router/Engine bindings against
     the production artifact. Verification compares each deployed runtime
     bytecode hash with the hash written by the reviewed deployment script.
-12. Prepare and execute separate Safe proposals for the legal-approved policy,
-    existing ERC-3643 asset and venue activation.
-13. Verify registry state, Manifest hash and venue
-    registration on-chain.
-14. Activate legal-approved Manifest, then activate venue, maker, signer and
-    inventory in staged transactions.
-15. Start monitoring, indexer finality tracking, alert routing and incident
+11. Execute the reviewed Safe/operator onboarding transactions in order:
+    Element/Recipe registration, Manifest registration, Manifest approval, venue
+    registration, RFQ maker approval, signer scheduling and owner-only delayed signer execution.
+12. Wait the signer authorization delay before executing the signer activation
+    transaction; pending authorization is not production-ready.
+13. Run `production-onboarding-verify` and stop on any failed read, mismatch,
+    safe-owner target owner mismatch, missing operator role, pause/suspension or inventory minimum failure.
+14. Start monitoring, indexer finality tracking, alert routing and incident
     response readiness.
-16. Record immutable deployment evidence and update the production manifest.
+15. Record immutable deployment evidence and update the production manifest.
 
 The evidence file has this minimum shape:
 
@@ -268,7 +299,8 @@ trade flow.
    and allowance evidence exists.
 6. Signer activation: signer is authorized under the maker authorizer policy and
    linked to the maker account.
-7. Inventory activation: maker inventory, approvals and risk limits are set
+7. Inventory activation: maker inventory and allowances are set by the maker/
+   operator outside this tool, then verified read-only with risk-evidence hashes
    before accepting production RFQ requests.
 8. Monitoring activation: event ingestion, finality policy, alerting and
    incident contacts are live before user-facing enablement.
@@ -308,15 +340,16 @@ claim that any mainnet deployment has passed.
 
 ## Remaining Production Integrations
 
-The repository now supplies fail-closed core deployment tooling, but a real
-launch still needs organization-specific implementations and evidence:
+The repository now supplies fail-closed core deployment and ERC-3643 asset
+onboarding plan/verify tooling, but a real launch still needs organization-
+specific implementations and evidence:
 
 1. Safe creation or adoption, owner verification and an approved `N-of-M`
    governance policy;
 2. issuer/TA confirmation of claim topics, trusted issuers, investor ONCHAINID
    claims, expiry and revocation behavior;
-3. a legal-approved Element → Recipe → Manifest package and Safe transaction
-   calldata for the exact token;
+3. a legal-approved Element → Recipe → Manifest package and reviewed
+   `production-onboarding-plan` Safe drafts for the exact token;
 4. production RFQ pricing, risk, durable maker-scoped nonce, signer custody,
    inventory and allowance controls;
 5. target-chain fork simulation, explorer source verification and deployment
