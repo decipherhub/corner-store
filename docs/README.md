@@ -18,6 +18,7 @@
 | [`rfq-demo-guide.md`](./rfq-demo-guide.md)           | RFQ-first MVP presenter guide | Current    |
 | [`showcase-runbook.md`](./showcase-runbook.md)       | production-core → local DEX handoff | Current |
 | [`sdk-integration.md`](./sdk-integration.md)         | modular SDK·scaffold·conformance | Current |
+| [`sdk-versioning.md`](./sdk-versioning.md)           | package semver·release·migration policy | Current |
 | [`deployment-studio.md`](./deployment-studio.md)     | local reference execution + production preflight/plan Studio | Current |
 | [`deployment-production.md`](./deployment-production.md) | production deployment runbook | Current |
 | [`testnet-deployment.md`](./testnet-deployment.md)       | public testnet RFQ reference deployment | Current |

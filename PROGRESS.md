@@ -15,6 +15,19 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `SDK-003 — Publishable Package Release Contract`: CLI, Toolkit과 RFQ SDK를
+  독립 npm tarball로 build/pack하고 Node 20 clean temporary projects에 설치하는
+  release gate를 완성했다. Toolkit packed export/config simulation, generated
+  RFQ module conformance, packaged CLI doctor/deploy dry-run과 contract bundle
+  Foundry build를 repository-relative package resolution 없이 검증한다. SemVer,
+  npm version과 persisted schema/capability version의 분리, release/rollback 및
+  immutable on-chain version migration 절차를 `docs/sdk-versioning.md`에 기록했다.
+  검증: Toolkit/RFQ/CLI package tests pass; Node 20
+  `scripts/sdk-product-smoke.sh` pass; Node 16 doctor fail-closed 확인;
+  `git diff --check` pass. `scripts/check.sh`는 실행했으나 G006과 무관한 기존
+  formatting drift(`script/DeployProductionCore.s.sol`,
+  `script/DemoScenarios.s.sol`)에서 중단됐다.
+
 - `CORE-005 — Compliance Core Production Hardening`: Compliance Core registry
   semantics were hardened for production onboarding. Element registration is now
   immutable per `elementId`, pins metadata/version hashes and records default

@@ -86,7 +86,9 @@ gates, RFQ activation coherence, AMM-only coherent mode, read-only
 inventory stage, ACTIVE Manifest field verification, pause gate verification and
 pending-vs-active signer and safe-owner target owner mismatch/unavailable and operator role mismatch/unavailable fail-closed behavior를 포함한다. SDK-002 문서 또는 packaging 변경에서는 CLI help, `doctor`,
 dry-run `deploy`, `verify`/preflight와 `test-module` command path도 별도로
-확인한다.
+확인한다. `scripts/sdk-product-smoke.sh`는 CLI, Toolkit과 RFQ package를 모두
+tarball로 pack한 뒤 clean temporary project에 설치해야 하며 Toolkit public export,
+generated RFQ conformance, CLI doctor/deploy와 packaged contract build를 검증한다.
 
 Generated consumer projects should keep this local gate:
 

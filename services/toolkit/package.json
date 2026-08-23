@@ -5,7 +5,8 @@
   "types": "dist/src/index.d.ts",
   "license": "GPL-3.0-or-later",
   "files": [
-    "dist/src"
+    "dist/src",
+    "README.md"
   ],
   "exports": {
     ".": {
@@ -25,6 +26,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
     "test": "npm run build && node dist/test/smoke.js"
   },
   "devDependencies": {

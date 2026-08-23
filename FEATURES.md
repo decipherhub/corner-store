@@ -1725,6 +1725,36 @@ passing
 - completed plan: `docs/exec-plans/completed/SDK-002-standalone-integration-workflow.md`
 - production durable nonce와 service hardening은 #66/#67 module로 유지한다.
 
+## SDK-003 — Publishable Package Release Contract
+
+### Behavior
+
+- CLI, Toolkit과 RFQ SDK를 각각 npm tarball로 build/pack하고 저장소 밖 clean
+  project에서 설치한다.
+- Toolkit의 public CommonJS/types export와 기본 config simulation을 packed artifact
+  기준으로 검증한다.
+- package SemVer, schema/capability version 분리, release gate와 rollback 가능한
+  migration 절차를 문서화한다.
+- generated project의 RFQ conformance, CLI doctor/deploy dry-run과 packaged contract
+  build가 repository-relative package resolution 없이 통과해야 한다.
+
+### Verification
+
+- `npm test --prefix services/toolkit`
+- `npm test --prefix services/rfq`
+- `npm test --prefix services/cli`
+- `scripts/sdk-product-smoke.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- production npm registry publish와 release credential 사용은 이 저장소 검증 범위
+  밖이며, PR merge 후 별도 release 권한으로 수행한다.
+
 ## STUDIO-001 — Local Deployment Studio
 
 ### Behavior

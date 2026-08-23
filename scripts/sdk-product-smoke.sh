@@ -24,8 +24,13 @@ CLI_TARBALL_NAME=$(
   cd "$ROOT_DIR"
   npm pack ./services/cli --pack-destination "$PACK_DIR" --silent | tail -n 1
 )
+TOOLKIT_TARBALL_NAME=$(
+  cd "$ROOT_DIR"
+  npm pack ./services/toolkit --pack-destination "$PACK_DIR" --silent | tail -n 1
+)
 RFQ_TARBALL="$PACK_DIR/$RFQ_TARBALL_NAME"
 CLI_TARBALL="$PACK_DIR/$CLI_TARBALL_NAME"
+TOOLKIT_TARBALL="$PACK_DIR/$TOOLKIT_TARBALL_NAME"
 
 node "$ROOT_DIR/services/cli/dist/cli/src/index.js" create "$LOCAL_TARGET_DIR" \
   --mode library-only \
@@ -39,7 +44,8 @@ node "$ROOT_DIR/services/cli/dist/cli/src/index.js" create "$LOCAL_TARGET_DIR" \
 (
   cd "$BOOT_DIR"
   npm init -y >/dev/null
-  npm install --prefer-offline --silent "$CLI_TARBALL"
+  npm install --prefer-offline --silent "$CLI_TARBALL" "$TOOLKIT_TARBALL"
+  node -e 'const t = require("@corner-store/toolkit"); const c = t.validateConfig(t.defaultConfig()); if (c.schemaVersion !== t.TOOLKIT_SCHEMA_VERSION || t.simulateConfig(c).venues.length === 0) process.exit(1)'
   ./node_modules/.bin/corner-store create "$TARGET_DIR" \
     --mode library-only \
     --sdk "file:$RFQ_TARBALL" \
