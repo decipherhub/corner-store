@@ -62,8 +62,10 @@ Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quot
 API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
 거부를 검증한다. CLI smoke는 backend quote request path, 기존 quote-file/서명
 검증 경로, `production-onboarding-plan --out` immutable export/overwrite
-refusal and `production-onboarding-verify` fail-closed nonzero behavior를 함께
-검증한다.
+refusal, v2 canonical recipe alias/key derivation, compiled plan replay,
+strengthen-only override rejection, legacy v1 plan acceptance,
+`production-onboarding-verify` fail-closed mismatch behavior and exact nonzero
+Element reason decode를 함께 검증한다.
 
 Standalone SDK integration smoke:
 

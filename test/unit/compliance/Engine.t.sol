@@ -34,6 +34,7 @@ import {
     Decidability,
     ObligationTiming,
     Statefulness,
+    EnforcementAction,
     VenueType,
     FlowType
 } from "../../../src/types/ComplianceTypes.sol";
@@ -73,7 +74,7 @@ contract EngineTest is Test {
     function setUp() public {
         elementReg = new ElementRegistry();
         recipeReg = new RecipeRegistry();
-        policyReg = new TokenPolicyRegistry();
+        policyReg = new TokenPolicyRegistry(recipeReg, elementReg);
 
         sanctions = new Sanctions();
         accredited = new AccreditedInvestor();
@@ -177,7 +178,7 @@ contract EngineTest is Test {
     function _registerSingleElementRecipe(uint16 recipeId, bytes32 elementId) internal {
         bytes32[] memory elements = new bytes32[](1);
         elements[0] = elementId;
-        recipeReg.registerRecipe(recipeId, 1, address(new UnregisteredElementRecipe(elements)));
+        recipeReg.registerRecipe(recipeId, 1, address(new UnregisteredElementRecipe(recipeId, elements)));
     }
 
     function _registerRWA(uint16 fundRecipeId, uint256 factsPacked) internal {
@@ -386,11 +387,47 @@ contract EngineTest is Test {
         engine.commit(_ctxBuy());
     }
 
+    function test_detailed_nonzero_element_reason_is_preserved_exactly() public {
+        bytes32 elementId = bytes32("F-DETAIL-v1");
+        bytes32 exactReason = keccak256("provider-specific-reason");
+        elementReg.registerElement(elementId, address(new FailingElement(elementId, exactReason)));
+        _registerSingleElementRecipe(9, elementId);
+        _registerBindings(_singleBinding(9, 1));
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertFalse(d.allowed);
+        assertEq(d.reasonCode, exactReason);
+    }
+
+    function test_zero_element_reason_uses_legacy_fallback() public {
+        bytes32 elementId = bytes32("F-ZERO-v1");
+        elementReg.registerElement(elementId, address(new FailingElement(elementId, bytes32(0))));
+        _registerSingleElementRecipe(10, elementId);
+        _registerBindings(_singleBinding(10, 1));
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertFalse(d.allowed);
+        assertEq(d.reasonCode, keccak256(abi.encode(uint16(10), elementId, uint32(1))));
+    }
+
+    function test_elementLevelFlagOnly_in_requiredBinding_setsBit_without_blocking_or_commit() public {
+        bytes32 elementId = bytes32("F-ELEMFLAG-v1");
+        elementReg.registerElement(
+            elementId, address(new FailingStatefulFlagElement(elementId)), EnforcementAction.FLAG_ONLY
+        );
+        _registerSingleElementRecipe(11, elementId);
+        _registerBindings(_singleBinding(11, 1));
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertTrue(d.allowed);
+        assertEq(d.flagsBitmap, 1);
+        engine.commit(_ctxBuy());
+    }
+
     function test_recipeVersionMismatch_failsClosed() public {
         RecipeBinding[] memory bindings = _singleBinding(2, 2);
-        _registerBindings(bindings);
-        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeVersionMismatch.selector, uint16(2), uint16(2), uint16(1)));
-        engine.evaluate(_ctxBuy());
+        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeNotRegistered.selector, uint16(2)));
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), bindings);
     }
 
     function test_oversizedRecipeElementSet_failsClosedWithoutTruncation() public {
@@ -398,15 +435,13 @@ contract EngineTest is Test {
         for (uint256 i = 0; i < elements.length; i++) {
             elements[i] = bytes32(i + 1);
         }
-        recipeReg.registerRecipe(3, 1, address(new UnregisteredElementRecipe(elements)));
-        _registerBindings(_singleBinding(3, 1));
-
+        UnregisteredElementRecipe oversized = new UnregisteredElementRecipe(3, elements);
         vm.expectRevert(
             abi.encodeWithSelector(
                 Errors.TooManyRecipeElements.selector, uint16(3), elements.length, engine.MAX_ELEMENTS_PER_RECIPE()
             )
         );
-        engine.evaluate(_ctxBuy());
+        recipeReg.registerRecipe(3, 1, address(oversized));
     }
 
     function test_unknown_token_fails_closed() public {
@@ -520,26 +555,18 @@ contract EngineTest is Test {
         // Recipe 3 references an element id that is not registered.
         bytes32[] memory missing = new bytes32[](1);
         missing[0] = bytes32("Z-99-v1");
-        UnregisteredElementRecipe bad = new UnregisteredElementRecipe(missing);
+        UnregisteredElementRecipe bad = new UnregisteredElementRecipe(3, missing);
         recipeReg.registerRecipe(3, 1, address(bad));
 
         ManifestCore memory m = _activeManifest(0, 0);
-        policyReg.registerManifest(RWA, m, _singleBinding(3, 1));
-        policyReg.approveManifest(RWA);
-        _registerCashUnregulated();
-
         vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, bytes32("Z-99-v1")));
-        engine.evaluate(_ctxBuy());
+        policyReg.registerManifest(RWA, m, _singleBinding(3, 1));
     }
 
     function test_missing_issuance_recipe_reverts() public {
         ManifestCore memory m = _activeManifest(0, 0);
-        policyReg.registerManifest(RWA, m, _singleBinding(77, 1));
-        policyReg.approveManifest(RWA);
-        _registerCashUnregulated();
-
         vm.expectRevert(abi.encodeWithSelector(Errors.RecipeNotRegistered.selector, uint16(77)));
-        engine.evaluate(_ctxBuy());
+        policyReg.registerManifest(RWA, m, _singleBinding(77, 1));
     }
 
     function test_regulated_regulated_pair_evaluates_both_sides() public {
@@ -565,7 +592,7 @@ contract EngineTest is Test {
         bytes32[] memory els = new bytes32[](2);
         els[0] = bytes32("A-03-v1");
         els[1] = bytes32("F-02-v1");
-        UnregisteredElementRecipe surveilRecipe = new UnregisteredElementRecipe(els);
+        UnregisteredElementRecipe surveilRecipe = new UnregisteredElementRecipe(4, els);
         recipeReg.registerRecipe(4, 1, address(surveilRecipe));
 
         ManifestCore memory m = _activeManifest(0, 0);
@@ -586,10 +613,8 @@ contract EngineTest is Test {
     }
 
     function test_commit_pathOption_updatesOnlyDeterministicallySelectedPath() public {
-        SurveillanceFlag lowerPriority = new SurveillanceFlag();
-        SurveillanceFlag higherPriority = new SurveillanceFlag();
-        lowerPriority.setEngine(address(engine));
-        higherPriority.setEngine(address(engine));
+        ParamStatefulElement lowerPriority = new ParamStatefulElement(bytes32("F-PATH-A"));
+        ParamStatefulElement higherPriority = new ParamStatefulElement(bytes32("F-PATH-B"));
         elementReg.registerElement(bytes32("F-PATH-A"), address(lowerPriority));
         elementReg.registerElement(bytes32("F-PATH-B"), address(higherPriority));
         _registerSingleElementRecipe(3, bytes32("F-PATH-A"));
@@ -671,7 +696,7 @@ contract EngineTest is Test {
     function test_dedup_shared_element_across_recipes() public {
         bytes32[] memory overlap = new bytes32[](1);
         overlap[0] = bytes32("A-01-v1"); // shared with RegD506c's sanctions element
-        UnregisteredElementRecipe shared = new UnregisteredElementRecipe(overlap);
+        UnregisteredElementRecipe shared = new UnregisteredElementRecipe(5, overlap);
         recipeReg.registerRecipe(5, 1, address(shared));
 
         // issuance=RegD506c (1), fund=overlapping recipe (5), applicable regardless of facts.
@@ -721,18 +746,13 @@ contract EngineTest is Test {
     // injection seam. Register Lockup (C-01-v1) wired to a MockAcquisitionSource and a
     // recipe that requires it. Before lockup elapses → reject; after warp → allow.
     function test_lockup_through_engine_time_gated() public {
-        uint64 lockupSeconds = 365 days;
+        uint64 lockupSeconds = LOCKUP_SECONDS;
         uint64 acquiredAt = uint64(block.timestamp);
-
-        MockAcquisitionSource acqSource = new MockAcquisitionSource();
         acqSource.setAcquiredAt(BUYER, RWA, acquiredAt);
-
-        Lockup lockup = new Lockup(address(acqSource), lockupSeconds);
-        elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
 
         bytes32[] memory els = new bytes32[](1);
         els[0] = bytes32("C-01-v1");
-        UnregisteredElementRecipe lockupRecipe = new UnregisteredElementRecipe(els);
+        UnregisteredElementRecipe lockupRecipe = new UnregisteredElementRecipe(6, els);
         recipeReg.registerRecipe(6, 1, address(lockupRecipe));
 
         ManifestCore memory m = _activeManifest(0, 0);
@@ -750,6 +770,60 @@ contract EngineTest is Test {
         ComplianceDecision memory dAfter = engine.evaluate(_ctxBuy());
         assertTrue(dAfter.allowed, "lockup elapsed must allow");
         assertEq(dAfter.reasonCode, bytes32(0));
+    }
+}
+
+contract FailingElement is IComplianceElement {
+    bytes32 internal immutable _id;
+    bytes32 internal immutable _reason;
+
+    constructor(bytes32 id_, bytes32 reason_) {
+        _id = id_;
+        _reason = reason_;
+    }
+
+    function check(address, address, address, uint256, bytes calldata) external view returns (bool, bytes32) {
+        return (false, _reason);
+    }
+
+    function elementMetadata() external view returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: _id,
+            category: ElementCategory.CONDUCT_MONITORING,
+            version: "failing-v1",
+            temporal: TemporalNature.REALTIME,
+            decidability: Decidability.MONITORING_BASED,
+            timing: ObligationTiming.AT_TRADE_GATE,
+            statefulness: Statefulness.STATELESS
+        });
+    }
+}
+
+contract FailingStatefulFlagElement is IStatefulElement {
+    bytes32 internal immutable _id;
+
+    constructor(bytes32 id_) {
+        _id = id_;
+    }
+
+    function check(address, address, address, uint256, bytes calldata) external pure returns (bool, bytes32) {
+        return (false, bytes32("FLAG"));
+    }
+
+    function elementMetadata() external view returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: _id,
+            category: ElementCategory.CONDUCT_MONITORING,
+            version: "flag-stateful-v1",
+            temporal: TemporalNature.CUMULATIVE,
+            decidability: Decidability.MONITORING_BASED,
+            timing: ObligationTiming.EX_POST_TRIGGER,
+            statefulness: Statefulness.STATEFUL
+        });
+    }
+
+    function onTransfer(address, address, uint256) external pure {
+        revert("FLAG_ONLY_ELEMENT_HOOK_MUST_NOT_RUN");
     }
 }
 
@@ -777,6 +851,35 @@ contract RevertingStatefulElement is IStatefulElement {
 
     function onTransfer(address, address, uint256) external pure override {
         revert("FLAG_ONLY_HOOK_MUST_NOT_RUN");
+    }
+}
+
+contract ParamStatefulElement is IStatefulElement {
+    bytes32 internal immutable _id;
+    uint256 public transferCount;
+
+    constructor(bytes32 id_) {
+        _id = id_;
+    }
+
+    function check(address, address, address, uint256, bytes calldata) external pure override returns (bool, bytes32) {
+        return (true, bytes32(0));
+    }
+
+    function elementMetadata() external view override returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: _id,
+            category: ElementCategory.CONDUCT_MONITORING,
+            version: "param-stateful-v1",
+            temporal: TemporalNature.CUMULATIVE,
+            decidability: Decidability.DETERMINISTIC,
+            timing: ObligationTiming.EX_POST_TRIGGER,
+            statefulness: Statefulness.STATEFUL
+        });
+    }
+
+    function onTransfer(address, address, uint256) external override {
+        transferCount++;
     }
 }
 
@@ -834,14 +937,16 @@ contract MockAcquisitionSource is IAcquisitionSource {
 
 /// @dev Test-only recipe with a configurable required-element list, always applicable.
 contract UnregisteredElementRecipe {
+    uint16 internal immutable _recipeId;
     bytes32[] internal _elements;
 
-    constructor(bytes32[] memory elements) {
+    constructor(uint16 recipeId_, bytes32[] memory elements) {
+        _recipeId = recipeId_;
         _elements = elements;
     }
 
-    function recipeId() external pure returns (uint16) {
-        return 99;
+    function recipeId() external view returns (uint16) {
+        return _recipeId;
     }
 
     function version() external pure returns (uint16) {

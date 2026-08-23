@@ -151,13 +151,15 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   생성하지 않는다.
 - onboarding config는 exact schema를 사용하고 unknown field, signer-secret shaped
   key/value, raw contact PII와 중복 address/key를 fail-closed한다. Governance Safe, bounded required approvals,
-  explicit operator executor, at least one active venue and at least
-  one inventory requirement are mandatory. Active RFQ venues additionally require approved maker,
+  explicit operator executor, canonical recipe alias/key commitments, immutable
+  Element default actions, bounded strengthen-only overrides, at least one active venue and at least
+  one inventory requirement are mandatory for production v2. Active RFQ venues additionally require approved maker,
   signer delegate and approved-maker inventory evidence. Legal/TA evidence는 PII-free
   hash로만 참조한다.
 - `production-onboarding-verify`는 ERC-3643 token→IdentityRegistry→Compliance
-  wiring, Identity Registry dependencies, Element/Recipe registry state, exact
-  Manifest hash/fields/bindings, global/asset/venue pause gates, maker approval,
+  wiring, Identity Registry dependencies, Element/Recipe registry state, recipe
+  alias/key mapping, Element default actions/version hashes, exact Manifest
+  hash/fields/bindings, compiled plan hash/rules, global/asset/venue pause gates, maker approval,
   governance Safe ownership of safe-owner targets, active signer delegate,
   operator executor authorization on TokenPolicyRegistry and RFQAdapter, and inventory balance/allowance minimum을 read-only로 확인한다. Unavailable RPC/read mismatch, safe-owner target owner mismatch, pending signer authorization, paused
   global/asset/venue state or missing inventory evidence is not production-ready.

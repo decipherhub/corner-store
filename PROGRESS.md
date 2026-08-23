@@ -15,6 +15,35 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `CORE-005 — Compliance Core Production Hardening`: Compliance Core registry
+  semantics were hardened for production onboarding. Element registration is now
+  immutable per `elementId`, pins metadata/version hashes and records default
+  enforcement action. Recipe registration accepts canonical normalized aliases,
+  stores version-independent `recipeKey` commitments, preserves immutable legacy
+  numeric aliases and rejects collisions/overwrites. `TokenPolicyRegistry`
+  compiles bounded per-binding Element enforcement rules at registration/update
+  time and rejects normal onboarding overrides that weaken an Element's default
+  action; `FORCE_FLAG_ONLY` remains limited to Elements that default to
+  `FLAG_ONLY`. Engine rejection now preserves exact nonzero Element reason codes
+  and only falls back to recipe-scoped code `1` for zero reasons. Toolkit/CLI
+  production onboarding v2 now validates alias/key derivation, default actions,
+  bounded overrides and compiled plan commitments, emits additive v2 calldata,
+  and verifies alias/key, default action and compiled-plan state fail-closed while
+  legacy v1 configs/calldata remain accepted. 검증: targeted registry tests 86
+  pass, Engine tests 37 pass, RegD integration tests 6 pass, full
+  `forge test --offline` 870/870 pass, `npm test --prefix services/toolkit`
+  pass, `npm test --prefix services/cli` pass, isolated `/tmp` full
+  `scripts/check.sh` pass(after formatting only the pre-existing
+  `script/DeployProductionCore.s.sol` and `script/DemoScenarios.s.sol` drift in
+  the copy and running fresh `npm ci` for copied stale `node_modules`; this full
+  check was before the final Solidity-only bijection guard and post-fix full
+  `forge test --offline` 870/870 passed), full Anvil E2E `buidl-like` and
+  `reg-d` pass with 7/7 scenarios and RFQ flows, and
+  `git diff --check` pass. Original-tree `scripts/check.sh` remains blocked by
+  pre-existing formatting drift in `script/DeployProductionCore.s.sol` and
+  `script/DemoScenarios.s.sol`; `DemoScenarios` contains only the scoped G005
+  reason-contract edit and was not broad-formatted in the original tree.
+
 - `DEPLOY-003 — Production ERC-3643 Asset Onboarding`: production core deployment과
   local Anvil demo onboarding을 분리한 production-only asset onboarding Toolkit/CLI
   surface를 추가했다. `corner-store.production-onboarding.json`은 exact schema로

@@ -307,10 +307,11 @@ async function main() {
   // Wave-2b: direct element-level (recipeId 0) codes decode to the doc-name
   // from that element's header table — this is the reasonCode actually
   // returned by an element's own `check()` / thrown via `ComplianceRejected`
-  // (e.g. D-01 HolderCount.onTransfer), unlike the engine-propagated verdict
-  // which today always carries code 1.
+  // (e.g. D-01 HolderCount.onTransfer). G005 engine/CLI propagation preserves
+  // this exact nonzero element reason; code 1 is only the zero-reason fallback.
   const sanctionsClaim = decodeReason(A01_DIRECT_CODE4);
   assert(sanctionsClaim.label.includes("FAIL_NO_SANCTIONS_CLAIM"), "decodes A-01 direct code 4");
+  assert(A01_DIRECT_CODE4 !== encodeReason(1, "A-01-v1", 1), "direct element reason is not fabricated recipe-scoped code 1");
   const holderCap = decodeReason(D01_DIRECT_CODE3);
   assert(holderCap.label.includes("HOLDER_CAP_3C1_100"), "decodes D-01 direct code 3");
   // Wave-3: a monitoring element's audit-surface code still decodes to its
@@ -382,12 +383,13 @@ async function main() {
   const tampered = recoverMaker(round.quote, tamperedSig);
   assert(!tampered.ok, "quote-inspect FAILs a tampered signature");
 
-  // --- reason-decode regression: the recipe-aware per-element code `check`
-  //     reports for a failed element must resolve in the reason table. --------
+  // --- reason-decode regression: zero element reasons still fall back to the
+  //     recipe-aware generic code-1 path, but exact direct codes decode too. ---
   assert(
     decodeReason(encodeReason(1, "A-02-v1", 1)).label.includes("Jurisdiction"),
-    "check per-element reason decodes (recipe 1 / A-02-v1 -> Jurisdiction)"
+    "fallback per-element reason decodes (recipe 1 / A-02-v1 -> Jurisdiction)"
   );
+  assert(decodeReason(A01_DIRECT_CODE4).label.includes("FAIL_NO_SANCTIONS_CLAIM"), "exact non-1 element reason decodes");
 
   console.log("corner-store CLI smoke ok");
 }

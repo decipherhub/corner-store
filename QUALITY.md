@@ -2,15 +2,15 @@
 
 | Module | Grade | Reason | Required Improvement |
 | --- | --- | --- | --- |
-| Product documentation | B+ | SDK/reference DEX, 4-Layer, RecipeBinding Manifest, RFQ와 production ERC-3643 onboarding runbook/CLI 흐름이 정합함 | production RFQ/OrderBook 운영 evidence와 법률 승인 기준 보강 |
+| Product documentation | A- | SDK/reference DEX, 4-Layer, immutable Element/Recipe versioning, compiled RecipeBinding Manifest, RFQ와 production ERC-3643 onboarding runbook/CLI 흐름이 정합함 | production RFQ/OrderBook 운영 evidence와 법률 승인 기준 보강 |
 | Harness / agent workflow | B | HE-001, DOC-001, RFQ-001 상태·검증 이력이 존재함 | PR/CI 결과와 feature state 지속 동기화 |
-| Product Solidity | B | bounded RecipeBinding Manifest, lifecycle/history, Compliance Core, Router, hardened AMM/RFQ adapter가 컴파일·테스트됨 | production custody/partial fill, LP onboarding과 OrderBook 미구현 |
+| Product Solidity | B+ | immutable Element/Recipe registration, canonical recipeKey aliasing, bounded compiled enforcement plans, lifecycle/history, Compliance Core, Router, hardened AMM/RFQ adapter가 컴파일·테스트됨 | production custody/partial fill, LP onboarding과 OrderBook 미구현 |
 | Foundry tests | B | unit/integration, canonical Uniswap v3 callback, RFQ failure path와 live Anvil E2E 존재 | 추가 adversarial/security tests |
 | Compliance data SDK | A- | Provider-neutral acquisition, audit, person-group state and TA/KYC evidence coordinator have smoke/conformance coverage with PII-free fail-closed behavior | Replace reference in-memory KYC store with operator transactional HA/WORM storage and audited provider adapters |
 | RFQ reference service / host | A- | EIP-712 SDK, module conformance, local demo HTTP API/CLI, durable coordinator/reference file store와 별도 production host hardening smoke가 존재함 | HA transactional coordinator store, production signer custody, shared limiter/WORM audit/TLS 운영 통합 필요 |
 | `tools/deploy-v3` | B | profile 단위 테스트와 pinned core artifact integration 존재 | unified production deployment orchestration 추가 |
 | CI / static analysis | B | GitHub Actions와 local check가 동일한 repository-wide gate를 실행해 Foundry, 서비스 smoke, dashboard와 deploy-v3를 검증함 | medium warning budget과 독립 보안 분석 도입 |
-| Security documentation | B+ | trust boundary, direct venue boundary, RFQ hardening and production onboarding no-broadcast/no-inventory-mutation verifier semantics를 문서화함 | production custody/incident runbook과 external audit checklist 보강 |
+| Security documentation | A- | trust boundary, direct venue boundary, strengthen-only compiled enforcement, exact reason propagation, RFQ hardening and production onboarding no-broadcast/no-inventory-mutation verifier semantics를 문서화함 | production custody/incident runbook과 external audit checklist 보강 |
 
 ## Grade Guide
 

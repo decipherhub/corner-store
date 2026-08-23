@@ -8,7 +8,6 @@ import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
 import {VenueType} from "../../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../../src/types/VenueTypes.sol";
 import {Errors} from "../../src/libraries/Errors.sol";
-import {ReasonCodes} from "../../src/libraries/ReasonCodes.sol";
 
 interface ICanonicalUniswapV3Factory {
     function createPool(address tokenA, address tokenB, uint24 fee) external returns (address pool);
@@ -109,12 +108,11 @@ contract RealUniswapV3Test is IntegrationBase {
         uint256 poolRwaBefore = rwaToken.balanceOf(realPool);
         ExecutionRequest memory req = _realPoolBuyRequest(alice, 100 ether);
 
-        vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Errors.ComplianceRejected.selector, ReasonCodes.encode(1, bytes32("A-03-v1"), uint32(1))
-            )
+        (, bytes32 reason) = accredited.check(
+            req.context.buyer, req.context.seller, req.context.tokenOut, req.context.amountOut, abi.encode(req.context)
         );
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ComplianceRejected.selector, reason));
         router.execute(req);
 
         assertEq(quote.balanceOf(realPool), poolQuoteBefore, "rejected trade cannot pay pool");

@@ -10,6 +10,55 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## CORE-005 — Compliance Core Production Hardening
+
+### Behavior
+
+- Element registrations are immutable per `bytes32 elementId`, pin implementation
+  metadata/version hashes and store a default enforcement action for compiled
+  manifest plans.
+- Recipe registration now supports canonical normalized aliases, domain-separated
+  `bytes32 recipeKey` derivation and legacy numeric aliases without dynamic
+  runtime alias lookup. Alias/key collisions and version overwrite attempts are
+  rejected.
+- `TokenPolicyRegistry` compiles bounded per-binding Element enforcement rules at
+  manifest registration/update time. Normal onboarding is strengthen-only:
+  `FLAG_ONLY < OPERATOR_REVIEW < BLOCK`; `FORCE_FLAG_ONLY` is accepted only for
+  Elements whose immutable default is already `FLAG_ONLY`.
+- The Engine evaluates compiled plans and propagates an Element's exact nonzero
+  `reasonCode`; recipe-scoped code `1` is only the fallback when an Element
+  returns zero.
+- Production onboarding Toolkit/CLI support v2 canonical recipe alias/key,
+  Element default enforcement, bounded overrides, compiled plan commitments and
+  dual-mode verification while preserving legacy v1 configs/calldata ordering.
+
+### Verification
+
+- `npm test --prefix services/toolkit`
+- `npm test --prefix services/cli`
+- Targeted Forge registry tests: 86 passed
+- Targeted Engine tests: 37 passed
+- Targeted RegD integration tests: 6 passed
+- Full `forge test --offline`: 870/870 passed
+- Isolated `/tmp` full `scripts/check.sh`: passed after formatting only the
+  pre-existing `script/DeployProductionCore.s.sol` and
+  `script/DemoScenarios.s.sol` drift in the copy and running fresh `npm ci` for
+  copied stale `node_modules`; this full check was before the final
+  Solidity-only bijection guard, and post-fix full `forge test --offline`
+  870/870 passed
+- Full Anvil E2E: `buidl-like` and `reg-d` passed with 7/7 scenarios and RFQ
+  flows
+- Original-tree `scripts/check.sh` remains blocked by pre-existing formatting
+  drift in `script/DeployProductionCore.s.sol` and `script/DemoScenarios.s.sol`.
+  `DemoScenarios` has only the scoped G005 reason-contract edit here and was not
+  broad-formatted.
+- `git diff --check`
+
+### State
+
+passing
+
+
 ## DEPLOY-003 — Production ERC-3643 Asset Onboarding
 
 ### Behavior

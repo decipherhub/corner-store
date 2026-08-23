@@ -48,7 +48,8 @@ abstract contract ProductionCoreDeployer {
 
         deployed.elementReg = address(new ElementRegistry());
         deployed.recipeReg = address(new RecipeRegistry());
-        deployed.policyReg = address(new TokenPolicyRegistry());
+        deployed.policyReg =
+            address(new TokenPolicyRegistry(RecipeRegistry(deployed.recipeReg), ElementRegistry(deployed.elementReg)));
         deployed.operatorReg = address(new OperatorRegistry());
         deployed.engine = address(
             new ComplianceEngine(

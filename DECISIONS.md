@@ -832,3 +832,72 @@ Production deployment is a separate operations workflow:
 - `docs/deployment-studio.md`
 - `FEATURES.md`
 - `PROGRESS.md`
+
+## D017 — Compliance Core uses immutable versioned policy objects and compiled enforcement
+
+Date: 2026-08-23
+
+### Context
+
+Production asset onboarding needs stable references to legal-approved Elements,
+Recipes and Manifest bindings. Mutable registry overwrites, ambiguous aliases,
+trade-time override resolution or fabricated generic reason codes would make Safe
+review and post-deployment reconciliation unreliable.
+
+### Decision
+
+1. Element registration is immutable for a given `bytes32 elementId`. The registry
+   stores the implementation, metadata hash, version hash and default enforcement
+   action at registration time.
+2. Recipe registration is immutable per `(recipeKey, version)`. The canonical
+   `recipeKey` is derived as `keccak256(abi.encode(RECIPE_KEY_DOMAIN,
+   aliasHash))`, where `RECIPE_KEY_DOMAIN = keccak256("corner-store.recipe-key.v1")`
+   and Toolkit aliases are ASCII-normalized before hashing. The canonical recipe
+   family is bijective with its legacy numeric `recipeId`: neither
+   `recipeId -> recipeKey` nor `recipeKey -> recipeId` may be rebound, and all
+   later versions under the same key continue to use the first registered
+   `recipeId`.
+3. `TokenPolicyRegistry` compiles Element rules when a Manifest is registered or
+   semantically updated. Runtime evaluation consumes the compiled binding plan and
+   does not perform unbounded alias or override resolution.
+4. Normal onboarding may only strengthen enforcement (`FLAG_ONLY <
+   OPERATOR_REVIEW < BLOCK`). `FORCE_FLAG_ONLY` is not a downgrade escape hatch;
+   it is valid only when the Element's immutable default is already `FLAG_ONLY`.
+5. Compliance rejection should preserve an Element's exact nonzero reason code.
+   Recipe-scoped code `1` is retained only as a fallback for Elements that return
+   `bytes32(0)` on failure.
+6. Production Toolkit/CLI v2 onboarding exports canonical alias/key commitments,
+   compiled plan hashes and bounded override calldata, while legacy v1 input and
+   numeric `recipeId` compatibility remain accepted for existing demos.
+
+### Alternatives Considered
+
+- Mutable in-place Element or Recipe updates: rejected because reviewed Safe
+  payloads and signed quotes could silently point at different policy code.
+- Use raw human-readable aliases in runtime paths: rejected because normalization
+  and collision handling must be resolved before activation.
+- Permit downgrade overrides during normal onboarding: rejected because a token
+  onboarding file should not weaken a legal-approved Element default outside a
+  separate governance process.
+- Always report recipe-scoped generic code `1`: rejected because Elements already
+  expose more precise rejection taxonomies needed for audit and operator support.
+
+### Consequences
+
+- New production onboarding should use v2 alias/key and compiled-plan fields.
+- Existing local Anvil/demo v1 configs continue to work through legacy numeric
+  aliases, but v1 artifacts are compatibility inputs, not production approval.
+- Legal approval, ERC-3643/ONCHAINID issuer wiring and TA/KYC provider evidence
+  remain external trust boundaries; compiled plan hashes prove only technical
+  binding consistency.
+
+### Related Files
+
+- `src/registry/ElementRegistry.sol`
+- `src/registry/RecipeRegistry.sol`
+- `src/registry/TokenPolicyRegistry.sol`
+- `src/compliance/ComplianceEngine.sol`
+- `services/toolkit/src/production-onboarding.ts`
+- `services/cli/src/commands.ts`
+- `docs/architecture/asset-manifest.md`
+- `docs/architecture/compliance-policy.md`

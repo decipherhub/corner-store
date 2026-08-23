@@ -116,8 +116,8 @@ struct ComplianceDecision {
 - 하나 이상의 regulated 자산이 있으면 모든 regulated Manifest의 applicable
   Recipe를 합쳐 평가한다.
 - `ACTIVE` Manifest의 invalid reference나 unsupported engine은 거부한다.
-- decision은 actor, token, amount, venue, Manifest version, nonce와 expiry에
-  바인딩된다.
+- decision은 actor, token, amount, venue, Manifest version, canonical recipe key,
+  compiled Element enforcement plan, nonce와 expiry에 바인딩된다.
 - preview decision을 settlement 권한으로 사용하지 않는다.
 - settlement 직전에 최신 Manifest와 actor/operator 상태를 평가한다.
 - ERC-3643 transfer 실패를 성공으로 변환하지 않는다.
@@ -128,6 +128,13 @@ struct ComplianceDecision {
 - Element/Recipe/Manifest/Operator 이름 기반 4-Layer를 사용한다.
 - Recipe는 법률효과 하나를 표현한다.
 - registry-backed bounded `RecipeBinding[]`를 사용한다.
+- Recipe는 canonical `bytes32 recipeKey`와 immutable `(recipeKey, version)`으로
+  등록하며 legacy numeric id는 compatibility alias로만 유지한다.
+- Element default enforcement와 onboarding override는 registration/update 시점에
+  bounded compiled plan으로 고정한다. 일반 onboarding은 strengthen-only이며
+  `FORCE_FLAG_ONLY` downgrade는 허용하지 않는다.
+- Element가 nonzero reasonCode를 반환하면 Engine/CLI가 그 값을 그대로 전달한다.
+  zero reason만 recipe-scoped generic code `1`로 fallback한다.
 - Asset Manifest가 기존 single Recipe mapping/Token Policy 역할을 확장한다.
 - 온체인은 검증·게이팅·집행, 오프체인은 재량 판단·민감 정보·대량 연산을 맡는다.
 - 발행 측 사실은 coverage delta 방식으로 재사용한다.
@@ -137,7 +144,6 @@ struct ComplianceDecision {
 
 ## Open Decisions
 
-- canonical recipe key alias와 per-element enforcement override compiler
 - issuer coverage encoding
 - production TA API/authorization, amount-specific lot allocation
 - production WORM/retention과 surveillance hosting

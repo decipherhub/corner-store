@@ -44,6 +44,36 @@ enum RecipeBindingMode {
     FLAG_ONLY
 }
 
+// Element-level enforcement action compiled at manifest registration/update
+// time. Numeric order is load-bearing for strengthen-only comparisons:
+// FLAG_ONLY < OPERATOR_REVIEW < BLOCK. OPERATOR_REVIEW is blocking in v1.
+enum EnforcementAction {
+    FLAG_ONLY,
+    OPERATOR_REVIEW,
+    BLOCK
+}
+
+// Governance-supplied override modes. USE_ELEMENT_DEFAULT is a no-op marker;
+// ESCALATE_* may only strengthen a member element's default; FORCE_FLAG_ONLY
+// is allowed only for elements whose immutable default is already FLAG_ONLY.
+enum EnforcementOverrideMode {
+    USE_ELEMENT_DEFAULT,
+    ESCALATE_TO_OPERATOR_REVIEW,
+    ESCALATE_TO_BLOCK,
+    FORCE_FLAG_ONLY
+}
+
+struct ElementEnforcementOverride {
+    uint8 bindingIndex;
+    bytes32 elementId;
+    EnforcementOverrideMode mode;
+}
+
+struct CompiledElementRule {
+    bytes32 elementId;
+    EnforcementAction action;
+}
+
 struct RecipeBinding {
     uint16 recipeId;
     uint16 recipeVersion;

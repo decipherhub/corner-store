@@ -1,13 +1,18 @@
 import {createHash} from "crypto";
 import {readFileSync} from "fs";
 import {resolve} from "path";
-import {Interface, keccak256} from "ethers";
+import {AbiCoder, Interface, keccak256, toUtf8Bytes} from "ethers";
 
-export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 1;
+export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 2;
+export const MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION = 1;
 export const POLICY_STATUS = {UNKNOWN: 0, UNREGULATED: 1, ACTIVE: 2, SUSPENDED: 3, PROPOSED: 4, RETIRED: 5} as const;
 export const VENUE_TYPE = {AMM: 0, ORDER_BOOK: 1, RFQ: 2} as const;
 export const CUSTODY_MODEL = {NONE: 0, POOL: 1, ESCROW: 2, OPERATOR: 3} as const;
 export const RECIPE_BINDING_MODE = {REQUIRED_BLOCKING: 0, PATH_OPTION: 1, FLAG_ONLY: 2} as const;
+export const ENFORCEMENT_ACTION = {FLAG_ONLY: 0, OPERATOR_REVIEW: 1, BLOCK: 2} as const;
+export const ENFORCEMENT_OVERRIDE_MODE = {USE_ELEMENT_DEFAULT: 0, ESCALATE_TO_OPERATOR_REVIEW: 1, ESCALATE_TO_BLOCK: 2, FORCE_FLAG_ONLY: 3} as const;
+export const MAX_ENFORCEMENT_OVERRIDES = 256;
+export const RECIPE_KEY_DOMAIN = keccak256(toUtf8Bytes("corner-store.recipe-key.v1"));
 
 type GovernanceStage = "governance-owner" | "operator" | "governance-delayed" | "verification";
 
@@ -34,16 +39,36 @@ export interface ProductionOnboardingConfig {
     makerAuthorizer?: string;
   };
   codeHashes?: Record<string, string>;
-  elements: {elementId: string; implementation: string}[];
-  recipes: {recipeId: number; version: number; implementation: string}[];
+  elements: ElementInput[];
+  recipes: RecipeInput[];
   manifest: ManifestInput;
   recipeBindings: RecipeBindingInput[];
+  enforcementOverrides?: ElementEnforcementOverrideInput[];
   venues: VenueInput[];
   rfq?: {
     makers?: {maker: string; approved: boolean}[];
     signerDelegates?: {maker: string; delegate: string; reasonHash: string}[];
   };
   inventory: InventoryRequirement[];
+}
+
+export interface ElementInput {
+  elementId: string;
+  implementation: string;
+  defaultAction?: keyof typeof ENFORCEMENT_ACTION | number;
+  versionHash?: string;
+  metadataHash?: string;
+}
+
+export interface RecipeInput {
+  recipeId: number;
+  version: number;
+  implementation: string;
+  alias?: string;
+  normalizedAlias?: string;
+  aliasHash?: string;
+  recipeKey?: string;
+  requiredElements?: string[];
 }
 
 export interface ManifestInput {
@@ -64,6 +89,12 @@ export interface RecipeBindingInput {
   mode: keyof typeof RECIPE_BINDING_MODE | number;
   pathGroupId: number;
   priority: number;
+}
+
+export interface ElementEnforcementOverrideInput {
+  bindingIndex: number;
+  elementId: string;
+  mode: keyof typeof ENFORCEMENT_OVERRIDE_MODE | number;
 }
 
 export interface VenueInput {
@@ -100,7 +131,7 @@ export interface OnboardingTx {
 
 export interface ProductionOnboardingPlan {
   schema: "corner-store-production-onboarding";
-  schemaVersion: 1;
+  schemaVersion: number;
   chainId: number;
   configHash: string;
   artifactHash: string;
@@ -110,8 +141,23 @@ export interface ProductionOnboardingPlan {
   warnings: string[];
   transactions: OnboardingTx[];
   inventoryRequirements: InventoryRequirement[];
+  recipeKeyCommitments?: RecipeKeyCommitment[];
+  compiledPlan?: CompiledPlanCommitment;
   safeTransactions: SafeOnboardingTransaction[];
   operatorTransactions: OperatorOnboardingTransaction[];
+}
+
+export interface RecipeKeyCommitment {
+  recipeId: number;
+  version: number;
+  normalizedAlias: string;
+  aliasHash: string;
+  recipeKey: string;
+}
+
+export interface CompiledPlanCommitment {
+  compiledPlanHash: string;
+  bindings: {bindingIndex: number; recipeId: number; recipeVersion: number; recipeKey: string; bindingPlanHash: string; rules: {elementId: string; action: string; actionValue: number}[]}[];
 }
 
 export interface SafeOnboardingTransaction extends OnboardingTx {
@@ -154,15 +200,38 @@ const SHA256 = /^sha256:[0-9a-f]{64}$/;
 const SECRET_KEY = /(private_?key|mnemonic|seed|secret|signer_?secret|signer_?key|raw_?key|passport|ssn|dob|birth|email|phone|name|addressLine)/i;
 const SECRET_VALUE = /^0x[0-9a-fA-F]{64}$/;
 const UINT256_MAX = (1n << 256n) - 1n;
+const coder = AbiCoder.defaultAbiCoder();
 
-const ELEMENT_REGISTRY = new Interface(["function registerElement(bytes32 elementId,address element)", "function elementOf(bytes32 elementId) view returns (address)"]);
-const RECIPE_REGISTRY = new Interface(["function registerRecipe(uint16 recipeId,uint16 version,address recipe)", "function recipeOf(uint16 recipeId) view returns (address)"]);
+const ELEMENT_REGISTRY = new Interface([
+  "function registerElement(bytes32 elementId,address element)",
+  "function registerElement(bytes32 elementId,address element,uint8 defaultAction)",
+  "function elementOf(bytes32 elementId) view returns (address)",
+  "function metadataHashOf(bytes32 elementId) view returns (bytes32)",
+  "function versionHashOf(bytes32 elementId) view returns (bytes32)",
+  "function defaultActionOf(bytes32 elementId) view returns (uint8)"
+]);
+const RECIPE_REGISTRY = new Interface([
+  "function registerRecipe(uint16 recipeId,uint16 version,address recipe)",
+  "function registerRecipe(bytes32 aliasHash,bytes32 recipeKey,uint16 recipeId,uint16 version,address recipe)",
+  "function recipeOf(uint16 recipeId) view returns (address)",
+  "function recipeOf(uint16 recipeId,uint16 version) view returns (address)",
+  "function recipeOf(bytes32 recipeKey,uint16 version) view returns (address)",
+  "function recipeKeyOf(uint16 recipeId) view returns (bytes32)",
+  "function recipeKeyOfAlias(bytes32 aliasHash) view returns (bytes32)",
+  "function aliasHashOf(bytes32 recipeKey) view returns (bytes32)",
+  "function deriveRecipeKey(bytes32 aliasHash) pure returns (bytes32)"
+]);
 const POLICY_REGISTRY = new Interface([
   "function registerManifest(address token,tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) m,tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings)",
+  "function registerManifest(address token,tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) m,tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings,tuple(uint8 bindingIndex,bytes32 elementId,uint8 mode)[] overrides)",
   "function approveManifest(address token)",
   "function manifestOf(address token) view returns (tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy))",
   "function recipeBindingsOf(address token) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[])",
-  "function statusOf(address token) view returns (uint8)"
+  "function statusOf(address token) view returns (uint8)",
+  "function compiledPlanHashOf(address token) view returns (bytes32)",
+  "function compiledBindingCountOf(address token) view returns (uint256)",
+  "function compiledBindingOf(address token,uint256 index) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority) binding,bytes32 recipeKey,bytes32 bindingPlanHash)",
+  "function compiledRulesOf(address token,uint256 bindingIndex) view returns (tuple(bytes32 elementId,uint8 action)[])"
 ]);
 const VENUE_REGISTRY = new Interface([
   "function registerVenue(address venue,tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active) cfg)",
@@ -202,9 +271,10 @@ export function loadProductionOnboardingConfig(path: string): ProductionOnboardi
 export function validateProductionOnboardingConfig(value: unknown): ProductionOnboardingConfig {
   rejectUnsafeEvidence(value, "onboarding");
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("production onboarding config must be an object");
-  assertKnownKeys(value, ["schemaVersion", "chainId", "configHash", "artifactHash", "legalPackageHash", "governance", "addresses", "codeHashes", "elements", "recipes", "manifest", "recipeBindings", "venues", "rfq", "inventory"], "onboarding");
+  assertKnownKeys(value, ["schemaVersion", "chainId", "configHash", "artifactHash", "legalPackageHash", "governance", "addresses", "codeHashes", "elements", "recipes", "manifest", "recipeBindings", "enforcementOverrides", "venues", "rfq", "inventory"], "onboarding");
   const c = value as Partial<ProductionOnboardingConfig>;
-  if (c.schemaVersion !== PRODUCTION_ONBOARDING_SCHEMA_VERSION) throw new Error(`schemaVersion must be ${PRODUCTION_ONBOARDING_SCHEMA_VERSION}`);
+  if (c.schemaVersion !== MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION && c.schemaVersion !== PRODUCTION_ONBOARDING_SCHEMA_VERSION) throw new Error(`schemaVersion must be ${MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION} or ${PRODUCTION_ONBOARDING_SCHEMA_VERSION}`);
+  const v2 = isV2Onboarding(c);
   if (!Number.isSafeInteger(c.chainId) || Number(c.chainId) <= 0) throw new Error("chainId must be a positive integer");
   if (!isSha(c.configHash)) throw new Error("configHash must be a sha256 hash");
   if (!isSha(c.artifactHash)) throw new Error("artifactHash must be a sha256 hash");
@@ -233,23 +303,52 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   if (!Array.isArray(c.elements) || c.elements.length === 0) throw new Error("elements must contain at least one element");
   const elementIds = new Set<string>();
   for (const [index, element] of c.elements.entries()) {
-    assertKnownKeys(element, ["elementId", "implementation"], `elements[${index}]`);
+    assertKnownKeys(element, ["elementId", "implementation", "defaultAction", "versionHash", "metadataHash"], `elements[${index}]`);
     if (!isHash32(element?.elementId)) throw new Error(`elements[${index}].elementId must be bytes32`);
     if (!isAddress(element?.implementation)) throw new Error(`elements[${index}].implementation must be a non-zero address`);
+    if (element.defaultAction !== undefined) enumValue(element.defaultAction, ENFORCEMENT_ACTION, `elements[${index}].defaultAction`);
+    if (v2 && element.defaultAction === undefined) throw new Error(`elements[${index}].defaultAction is required for schemaVersion 2 onboarding`);
+    if (!v2 && (element.defaultAction !== undefined || element.versionHash !== undefined || element.metadataHash !== undefined)) throw new Error("schemaVersion 1 elements must not include v2 enforcement/version fields");
+    if (element.versionHash !== undefined && !isHash32(element.versionHash)) throw new Error(`elements[${index}].versionHash must be bytes32`);
+    if (element.metadataHash !== undefined && !isHash32(element.metadataHash)) throw new Error(`elements[${index}].metadataHash must be bytes32`);
     const key = element.elementId.toLowerCase();
     if (elementIds.has(key)) throw new Error("elements must not contain duplicate elementId values");
     elementIds.add(key);
   }
   if (!Array.isArray(c.recipes) || c.recipes.length === 0) throw new Error("recipes must contain at least one recipe");
   const recipeIds = new Set<number>();
+  const aliasHashes = new Set<string>();
+  const recipeKeys = new Set<string>();
   for (const [index, recipe] of c.recipes.entries()) {
-    assertKnownKeys(recipe, ["recipeId", "version", "implementation"], `recipes[${index}]`);
+    assertKnownKeys(recipe, ["recipeId", "version", "implementation", "alias", "normalizedAlias", "aliasHash", "recipeKey", "requiredElements"], `recipes[${index}]`);
     validateUint(recipe?.recipeId, 16, `recipes[${index}].recipeId`);
     validateUint(recipe?.version, 16, `recipes[${index}].version`);
     if (recipe.recipeId === 0 || recipe.version === 0) throw new Error(`recipes[${index}] recipeId/version must be non-zero`);
     if (!isAddress(recipe.implementation)) throw new Error(`recipes[${index}].implementation must be a non-zero address`);
     if (recipeIds.has(recipe.recipeId)) throw new Error("recipes must not contain duplicate recipeId values");
     recipeIds.add(recipe.recipeId);
+    if (v2) {
+      if (typeof recipe.alias !== "string") throw new Error(`recipes[${index}].alias is required for schemaVersion 2 onboarding`);
+      const normalizedAlias = normalizeRecipeAlias(recipe.alias);
+      if (recipe.normalizedAlias !== undefined && recipe.normalizedAlias !== normalizedAlias) throw new Error(`recipes[${index}].normalizedAlias must equal canonical normalized alias`);
+      const aliasHash = recipeAliasHash(normalizedAlias);
+      const recipeKey = deriveRecipeKey(aliasHash);
+      if (recipe.aliasHash !== undefined && recipe.aliasHash.toLowerCase() !== aliasHash.toLowerCase()) throw new Error(`recipes[${index}].aliasHash does not match canonical alias`);
+      if (recipe.recipeKey !== undefined && recipe.recipeKey.toLowerCase() !== recipeKey.toLowerCase()) throw new Error(`recipes[${index}].recipeKey does not match canonical alias`);
+      if (aliasHashes.has(aliasHash.toLowerCase())) throw new Error("recipes must not contain canonical alias collisions");
+      if (recipeKeys.has(recipeKey.toLowerCase())) throw new Error("recipes must not contain duplicate recipeKey values");
+      aliasHashes.add(aliasHash.toLowerCase());
+      recipeKeys.add(recipeKey.toLowerCase());
+      if (!Array.isArray(recipe.requiredElements) || recipe.requiredElements.length === 0 || recipe.requiredElements.length > 32) throw new Error(`recipes[${index}].requiredElements must contain 1-32 element ids for schemaVersion 2 onboarding`);
+      const requiredSeen = new Set<string>();
+      for (const [elementIndex, elementId] of recipe.requiredElements.entries()) {
+        if (!isHash32(elementId)) throw new Error(`recipes[${index}].requiredElements[${elementIndex}] must be bytes32`);
+        const key = elementId.toLowerCase();
+        if (!elementIds.has(key)) throw new Error(`recipes[${index}].requiredElements[${elementIndex}] is not configured in elements`);
+        if (requiredSeen.has(key)) throw new Error(`recipes[${index}].requiredElements must not contain duplicates`);
+        requiredSeen.add(key);
+      }
+    } else if (recipe.alias !== undefined || recipe.normalizedAlias !== undefined || recipe.aliasHash !== undefined || recipe.recipeKey !== undefined || recipe.requiredElements !== undefined) throw new Error("schemaVersion 1 recipes must not include v2 canonical recipe fields");
   }
   validateManifest(c.manifest);
   if (!Array.isArray(c.recipeBindings) || c.recipeBindings.length === 0 || c.recipeBindings.length > 8) throw new Error("recipeBindings must contain 1-8 bindings");
@@ -275,6 +374,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
     }
   }
   if (!hasBlocking) throw new Error("recipeBindings must include a blocking REQUIRED_BLOCKING or PATH_OPTION binding");
+  validateOverrides(c.enforcementOverrides, c.recipeBindings, c.recipes, c.elements, v2);
   if (!Array.isArray(c.venues) || c.venues.length === 0) throw new Error("venues must contain at least one venue");
   const venueSeen = new Set<string>();
   for (const [index, venue] of c.venues.entries()) validateVenue(venue, index, venueSeen);
@@ -342,20 +442,32 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
 
 export function createProductionOnboardingPlan(config: ProductionOnboardingConfig, generatedAt = "1970-01-01T00:00:00.000Z"): ProductionOnboardingPlan {
   const selected = validateProductionOnboardingConfig(config);
+  const v2 = isV2Onboarding(selected);
+  const recipeKeyCommitments = v2 ? recipeCommitments(selected.recipes) : undefined;
+  const compiledPlan = v2 ? compilePlanCommitment(selected) : undefined;
   const txs: OnboardingTx[] = [];
   const ids = {elements: [] as string[], recipes: [] as string[], venues: [] as string[], makers: [] as string[], delegates: [] as string[]};
   for (const [index, element] of selected.elements.entries()) {
     const id = `element-${index + 1}-${digestId(element.elementId)}`;
     ids.elements.push(id);
-    txs.push(tx(id, "governance-owner", `Register compliance element ${element.elementId}`, selected.addresses.elementRegistry, ELEMENT_REGISTRY.encodeFunctionData("registerElement", [element.elementId, element.implementation]), [], "safe-owner"));
+    const data = v2
+      ? ELEMENT_REGISTRY.encodeFunctionData("registerElement(bytes32,address,uint8)", [element.elementId, element.implementation, enumValue(element.defaultAction, ENFORCEMENT_ACTION, "defaultAction")])
+      : ELEMENT_REGISTRY.encodeFunctionData("registerElement(bytes32,address)", [element.elementId, element.implementation]);
+    txs.push(tx(id, "governance-owner", `Register compliance element ${element.elementId}`, selected.addresses.elementRegistry, data, [], "safe-owner"));
   }
   for (const recipe of selected.recipes) {
     const id = `recipe-${recipe.recipeId}-v${recipe.version}`;
     ids.recipes.push(id);
-    txs.push(tx(id, "governance-owner", `Register recipe ${recipe.recipeId} v${recipe.version}`, selected.addresses.recipeRegistry, RECIPE_REGISTRY.encodeFunctionData("registerRecipe", [recipe.recipeId, recipe.version, recipe.implementation]), ids.elements, "safe-owner"));
+    const data = v2
+      ? RECIPE_REGISTRY.encodeFunctionData("registerRecipe(bytes32,bytes32,uint16,uint16,address)", [recipeAliasHash(normalizeRecipeAlias(recipe.alias!)), deriveRecipeKey(recipeAliasHash(normalizeRecipeAlias(recipe.alias!))), recipe.recipeId, recipe.version, recipe.implementation])
+      : RECIPE_REGISTRY.encodeFunctionData("registerRecipe(uint16,uint16,address)", [recipe.recipeId, recipe.version, recipe.implementation]);
+    txs.push(tx(id, "governance-owner", `Register recipe ${recipe.recipeId} v${recipe.version}${v2 ? ` alias=${normalizeRecipeAlias(recipe.alias!)}` : ""}`, selected.addresses.recipeRegistry, data, ids.elements, "safe-owner"));
   }
   const manifestId = "manifest-register";
-  txs.push(tx(manifestId, "governance-owner", "Register token manifest as PROPOSED", selected.addresses.tokenPolicyRegistry, POLICY_REGISTRY.encodeFunctionData("registerManifest", [selected.addresses.token, manifestTuple(selected.manifest), bindingTuples(selected.recipeBindings)]), ids.recipes, "safe-owner"));
+  const manifestData = v2
+    ? POLICY_REGISTRY.encodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[])", [selected.addresses.token, manifestTuple(selected.manifest), bindingTuples(selected.recipeBindings), overrideTuples(selected.enforcementOverrides ?? [])])
+    : POLICY_REGISTRY.encodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[])", [selected.addresses.token, manifestTuple(selected.manifest), bindingTuples(selected.recipeBindings)]);
+  txs.push(tx(manifestId, "governance-owner", "Register token manifest as PROPOSED", selected.addresses.tokenPolicyRegistry, manifestData, ids.recipes, "safe-owner"));
   const approveManifestId = "manifest-approve";
   txs.push(tx(approveManifestId, "operator", "Approve token manifest as ACTIVE", selected.addresses.tokenPolicyRegistry, POLICY_REGISTRY.encodeFunctionData("approveManifest", [selected.addresses.token]), [manifestId], "operator"));
   for (const [index, venue] of (selected.venues ?? []).entries()) {
@@ -379,7 +491,7 @@ export function createProductionOnboardingPlan(config: ProductionOnboardingConfi
   for (const [index, inv] of selected.inventory.entries()) {
     txs.push(tx(`inventory-${index + 1}-verify`, "verification", `Verify read-only inventory for ${inv.holder}`, inv.token, "0x", ids.makers.length > 0 ? ids.makers : [approveManifestId], "read-only"));
   }
-  const hashInput = {...selected, generatedAt: "<deterministic>"};
+  const hashInput = {...selected, recipeKeyCommitments, compiledPlan, generatedAt: "<deterministic>"};
   const onboardingHash = `sha256:${createHash("sha256").update(canonicalJson(hashInput)).digest("hex")}`;
   const safeTransactions = txs.filter((entry) => entry.authority === "safe-owner").map((entry, index) => {
     const safeTxLabel = `${String(index + 1).padStart(2, "0")}-${entry.id}`;
@@ -412,7 +524,7 @@ export function createProductionOnboardingPlan(config: ProductionOnboardingConfi
   });
   return {
     schema: "corner-store-production-onboarding",
-    schemaVersion: 1,
+    schemaVersion: selected.schemaVersion,
     chainId: selected.chainId,
     configHash: selected.configHash,
     artifactHash: selected.artifactHash,
@@ -427,6 +539,8 @@ export function createProductionOnboardingPlan(config: ProductionOnboardingConfi
     ],
     transactions: txs,
     inventoryRequirements: selected.inventory,
+    recipeKeyCommitments,
+    compiledPlan,
     safeTransactions,
     operatorTransactions
   };
@@ -463,9 +577,24 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
   }
   for (const [index, element] of selected.elements.entries()) {
     await verifyCallAddress(reader, selected.addresses.elementRegistry, ["function elementOf(bytes32) view returns (address)"], "elementOf", [element.elementId], element.implementation, `element-${index + 1}-${digestId(element.elementId)}`, check);
+    if (isV2Onboarding(selected)) {
+      await verifyCallUint(reader, selected.addresses.elementRegistry, ["function defaultActionOf(bytes32) view returns (uint8)"], "defaultActionOf", [element.elementId], enumValue(element.defaultAction, ENFORCEMENT_ACTION, "defaultAction"), `element-${index + 1}-default-action`, check);
+      if (element.versionHash) await verifyCallHash(reader, selected.addresses.elementRegistry, ["function versionHashOf(bytes32) view returns (bytes32)"], "versionHashOf", [element.elementId], element.versionHash, `element-${index + 1}-version-hash`, check);
+      if (element.metadataHash) await verifyCallHash(reader, selected.addresses.elementRegistry, ["function metadataHashOf(bytes32) view returns (bytes32)"], "metadataHashOf", [element.elementId], element.metadataHash, `element-${index + 1}-metadata-hash`, check);
+    }
   }
   for (const recipe of selected.recipes) {
-    await verifyCallAddress(reader, selected.addresses.recipeRegistry, ["function recipeOf(uint16) view returns (address)"], "recipeOf", [recipe.recipeId], recipe.implementation, `recipe-${recipe.recipeId}`, check);
+    if (isV2Onboarding(selected)) {
+      const normalizedAlias = normalizeRecipeAlias(recipe.alias!);
+      const aliasHash = recipeAliasHash(normalizedAlias);
+      const recipeKey = deriveRecipeKey(aliasHash);
+      await verifyCallHash(reader, selected.addresses.recipeRegistry, ["function recipeKeyOfAlias(bytes32) view returns (bytes32)"], "recipeKeyOfAlias", [aliasHash], recipeKey, `recipe-${recipe.recipeId}-alias-key`, check);
+      await verifyCallHash(reader, selected.addresses.recipeRegistry, ["function aliasHashOf(bytes32) view returns (bytes32)"], "aliasHashOf", [recipeKey], aliasHash, `recipe-${recipe.recipeId}-key-alias`, check);
+      await verifyCallHash(reader, selected.addresses.recipeRegistry, ["function recipeKeyOf(uint16) view returns (bytes32)"], "recipeKeyOf", [recipe.recipeId], recipeKey, `recipe-${recipe.recipeId}-legacy-key`, check);
+      await verifyCallAddress(reader, selected.addresses.recipeRegistry, ["function recipeOf(bytes32,uint16) view returns (address)"], "recipeOf", [recipeKey, recipe.version], recipe.implementation, `recipe-${recipe.recipeId}-versioned`, check);
+    } else {
+      await verifyCallAddress(reader, selected.addresses.recipeRegistry, ["function recipeOf(uint16) view returns (address)"], "recipeOf", [recipe.recipeId], recipe.implementation, `recipe-${recipe.recipeId}`, check);
+    }
   }
   try {
     const status = Number(await reader.call(selected.addresses.tokenPolicyRegistry, ["function statusOf(address) view returns (uint8)"], "statusOf", [selected.addresses.token]));
@@ -487,6 +616,7 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
     const bindings = await reader.call(selected.addresses.tokenPolicyRegistry, ["function recipeBindingsOf(address) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[])"], "recipeBindingsOf", [selected.addresses.token]);
     check("manifest-bindings", JSON.stringify(normalizeBindings(bindings)) === JSON.stringify(bindingTuples(selected.recipeBindings).map((b) => b.map(Number))), `expected=${JSON.stringify(bindingTuples(selected.recipeBindings))}; actual=${JSON.stringify(normalizeBindings(bindings))}`);
   } catch (err: any) { check("manifest-bindings", false, `unavailable: ${err.message}`); }
+  if (isV2Onboarding(selected)) await verifyCompiledPlan(selected, reader, check);
   for (const [index, venue] of (selected.venues ?? []).entries()) {
     try {
       const actual = await reader.call(selected.addresses.venueRegistry, ["function venueOf(address) view returns (tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active))"], "venueOf", [venue.venue]);
@@ -538,8 +668,120 @@ function bindingTuples(bindings: RecipeBindingInput[]): any[][] {
   return bindings.map((b) => [b.recipeId, b.recipeVersion, enumValue(b.mode, RECIPE_BINDING_MODE, "mode"), b.pathGroupId, b.priority]);
 }
 
+function overrideTuples(overrides: ElementEnforcementOverrideInput[]): any[][] {
+  return overrides.map((o) => [o.bindingIndex, o.elementId, enumValue(o.mode, ENFORCEMENT_OVERRIDE_MODE, "override.mode")]);
+}
+
 function venueTuple(v: VenueInput): any[] {
   return [enumValue(v.venueType, VENUE_TYPE, "venueType"), v.adapter, v.target, v.operator, enumValue(v.custody, CUSTODY_MODEL, "custody"), v.active];
+}
+
+export function normalizeRecipeAlias(value: string): string {
+  if (typeof value !== "string") throw new Error("recipe alias must be a string");
+  if (!/^[\x00-\x7f]*$/.test(value)) throw new Error("recipe alias must be ASCII only");
+  const normalized = value.trim().toLowerCase().replace(/[ _.]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  if (normalized.length === 0) throw new Error("recipe alias must not normalize to empty");
+  if (normalized.length > 64) throw new Error("recipe alias must be at most 64 characters after normalization");
+  if (!/^[a-z0-9-]+$/.test(normalized)) throw new Error("recipe alias must normalize to [a-z0-9-]");
+  return normalized;
+}
+
+export function recipeAliasHash(aliasOrNormalized: string): string {
+  return keccak256(toUtf8Bytes(normalizeRecipeAlias(aliasOrNormalized)));
+}
+
+export function deriveRecipeKey(aliasHash: string): string {
+  if (!isHash32(aliasHash)) throw new Error("aliasHash must be bytes32");
+  return keccak256(coder.encode(["bytes32", "bytes32"], [RECIPE_KEY_DOMAIN, aliasHash]));
+}
+
+function isV2Onboarding(config: Partial<ProductionOnboardingConfig>): boolean {
+  return config.schemaVersion === PRODUCTION_ONBOARDING_SCHEMA_VERSION;
+}
+
+function recipeCommitments(recipes: RecipeInput[]): RecipeKeyCommitment[] {
+  return recipes.map((recipe) => {
+    const normalizedAlias = normalizeRecipeAlias(recipe.alias!);
+    const aliasHash = recipeAliasHash(normalizedAlias);
+    return {recipeId: recipe.recipeId, version: recipe.version, normalizedAlias, aliasHash, recipeKey: deriveRecipeKey(aliasHash)};
+  });
+}
+
+function validateOverrides(overrides: ElementEnforcementOverrideInput[] | undefined, bindings: RecipeBindingInput[] | undefined, recipes: RecipeInput[] | undefined, elements: ElementInput[] | undefined, v2: boolean): void {
+  if (!overrides) {
+    if (v2) return;
+    return;
+  }
+  if (!v2) throw new Error("schemaVersion 1 must not include enforcementOverrides");
+  if (!Array.isArray(overrides) || overrides.length > MAX_ENFORCEMENT_OVERRIDES) throw new Error(`enforcementOverrides must contain at most ${MAX_ENFORCEMENT_OVERRIDES} entries`);
+  const byRecipe = new Map<number, RecipeInput>();
+  for (const recipe of recipes ?? []) byRecipe.set(recipe.recipeId, recipe);
+  const byElement = new Map((elements ?? []).map((element) => [element.elementId.toLowerCase(), element]));
+  const seen = new Set<string>();
+  for (const [index, override] of overrides.entries()) {
+    assertKnownKeys(override, ["bindingIndex", "elementId", "mode"], `enforcementOverrides[${index}]`);
+    validateUint(override.bindingIndex, 8, `enforcementOverrides[${index}].bindingIndex`);
+    if (!bindings || override.bindingIndex >= bindings.length) throw new Error(`enforcementOverrides[${index}].bindingIndex is out of range`);
+    if (!isHash32(override.elementId)) throw new Error(`enforcementOverrides[${index}].elementId must be bytes32`);
+    const mode = enumValue(override.mode, ENFORCEMENT_OVERRIDE_MODE, `enforcementOverrides[${index}].mode`);
+    const key = `${override.bindingIndex}:${override.elementId.toLowerCase()}`;
+    if (seen.has(key)) throw new Error("enforcementOverrides must not contain duplicate bindingIndex/elementId entries");
+    seen.add(key);
+    const binding = bindings[override.bindingIndex];
+    const recipe = byRecipe.get(binding.recipeId);
+    if (!recipe?.requiredElements?.some((elementId) => elementId.toLowerCase() === override.elementId.toLowerCase())) throw new Error(`enforcementOverrides[${index}].elementId is not required by the bound recipe`);
+    const element = byElement.get(override.elementId.toLowerCase());
+    if (!element) throw new Error(`enforcementOverrides[${index}].elementId is not configured in elements`);
+    compileAction(enumValue(element.defaultAction, ENFORCEMENT_ACTION, "defaultAction"), mode);
+  }
+}
+
+function compilePlanCommitment(config: ProductionOnboardingConfig): CompiledPlanCommitment {
+  const recipeById = new Map(config.recipes.map((recipe) => [recipe.recipeId, recipe]));
+  const elementById = new Map(config.elements.map((element) => [element.elementId.toLowerCase(), element]));
+  const overrideByBindingElement = new Map((config.enforcementOverrides ?? []).map((override) => [`${override.bindingIndex}:${override.elementId.toLowerCase()}`, override]));
+  let acc = "0x" + "00".repeat(32);
+  const bindings = config.recipeBindings.map((binding, bindingIndex) => {
+    const recipe = recipeById.get(binding.recipeId);
+    if (!recipe) throw new Error(`recipeBindings[${bindingIndex}].recipeId has no registered recipe`);
+    const aliasHash = recipeAliasHash(normalizeRecipeAlias(recipe.alias!));
+    const recipeKey = deriveRecipeKey(aliasHash);
+    const rules = recipe.requiredElements!.map((elementId) => {
+      const element = elementById.get(elementId.toLowerCase());
+      if (!element) throw new Error(`recipe ${recipe.recipeId} required element is missing from elements`);
+      const override = overrideByBindingElement.get(`${bindingIndex}:${elementId.toLowerCase()}`);
+      const actionValue = compileAction(enumValue(element.defaultAction, ENFORCEMENT_ACTION, "defaultAction"), override?.mode);
+      return {elementId, action: actionName(actionValue), actionValue};
+    });
+    const bindingTuple = bindingTuples([binding])[0];
+    const bindingPlanHash = keccak256(coder.encode(
+      ["tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)", "bytes32", "tuple(bytes32 elementId,uint8 action)[]"],
+      [bindingTuple, recipeKey, rules.map((rule) => [rule.elementId, rule.actionValue])]
+    ));
+    acc = keccak256(coder.encode(["bytes32", "bytes32"], [acc, bindingPlanHash]));
+    return {bindingIndex, recipeId: binding.recipeId, recipeVersion: binding.recipeVersion, recipeKey, bindingPlanHash, rules};
+  });
+  return {compiledPlanHash: acc, bindings};
+}
+
+function compileAction(defaultAction: number, modeValue: unknown): number {
+  if (modeValue === undefined) return defaultAction;
+  const mode = enumValue(modeValue, ENFORCEMENT_OVERRIDE_MODE, "override.mode");
+  if (mode === ENFORCEMENT_OVERRIDE_MODE.USE_ELEMENT_DEFAULT) return defaultAction;
+  if (mode === ENFORCEMENT_OVERRIDE_MODE.ESCALATE_TO_BLOCK) return ENFORCEMENT_ACTION.BLOCK;
+  if (mode === ENFORCEMENT_OVERRIDE_MODE.ESCALATE_TO_OPERATOR_REVIEW) {
+    if (defaultAction === ENFORCEMENT_ACTION.BLOCK) throw new Error("enforcementOverrides cannot loosen BLOCK to OPERATOR_REVIEW");
+    return ENFORCEMENT_ACTION.OPERATOR_REVIEW;
+  }
+  if (mode === ENFORCEMENT_OVERRIDE_MODE.FORCE_FLAG_ONLY) {
+    if (defaultAction !== ENFORCEMENT_ACTION.FLAG_ONLY) throw new Error("FORCE_FLAG_ONLY is allowed only for FLAG_ONLY default elements");
+    return ENFORCEMENT_ACTION.FLAG_ONLY;
+  }
+  throw new Error("unsupported enforcement override mode");
+}
+
+function actionName(value: number): string {
+  return Object.entries(ENFORCEMENT_ACTION).find(([, n]) => n === value)?.[0] ?? `UNKNOWN_${value}`;
 }
 
 function validateManifest(m: any): void {
@@ -640,7 +882,7 @@ function same(a: string, b: string): boolean { return a.toLowerCase() === b.toLo
 
 function rejectUnsafeEvidence(value: unknown, path: string): void {
   if (typeof value === "string") {
-    const hashLike = /(Hash|hash|elementId|reasonHash|fullManifestHash)$/.test(path) || path.includes(".codeHashes.");
+    const hashLike = /(Hash|hash|elementId|reasonHash|fullManifestHash|recipeKey)$/.test(path) || path.includes(".codeHashes.") || path.includes(".requiredElements[");
     const addressLike = ADDRESS.test(value);
     const decimalAmountLike = /\.(minBalance|minAllowance|factsPacked|coverageScope)$/.test(path);
     if (SECRET_VALUE.test(value) && !hashLike) throw new Error(`${path} must not contain signer secrets or raw private keys`);
@@ -684,6 +926,20 @@ async function verifyCallAddress(reader: OnboardingReader, to: string, abi: stri
   } catch (err: any) { check(name, false, `unavailable: ${err.message}`); }
 }
 
+async function verifyCallHash(reader: OnboardingReader, to: string, abi: string[], fn: string, args: unknown[], expected: string, name: string, check: (name: string, pass: boolean, detail: string) => void): Promise<void> {
+  try {
+    const actual = await reader.call(to, abi, fn, args);
+    check(name, String(actual).toLowerCase() === expected.toLowerCase(), `expected=${expected}; actual=${String(actual)}`);
+  } catch (err: any) { check(name, false, `unavailable: ${err.message}`); }
+}
+
+async function verifyCallUint(reader: OnboardingReader, to: string, abi: string[], fn: string, args: unknown[], expected: number, name: string, check: (name: string, pass: boolean, detail: string) => void): Promise<void> {
+  try {
+    const actual = await reader.call(to, abi, fn, args);
+    check(name, Number(actual) === expected, `expected=${expected}; actual=${String(actual)}`);
+  } catch (err: any) { check(name, false, `unavailable: ${err.message}`); }
+}
+
 async function verifyOwner(reader: OnboardingReader, to: string, expectedOwner: string, name: string, check: (name: string, pass: boolean, detail: string) => void): Promise<void> {
   try {
     const actual = await reader.call(to, OWNED, "owner", []);
@@ -703,6 +959,35 @@ async function verifyCallBool(reader: OnboardingReader, to: string, abi: string[
     const actual = await reader.call(to, abi, fn, args);
     check(name, Boolean(actual) === expected, `expected=${expected}; actual=${Boolean(actual)}`);
   } catch (err: any) { check(name, false, `unavailable: ${err.message}`); }
+}
+
+async function verifyCompiledPlan(selected: ProductionOnboardingConfig, reader: OnboardingReader, check: (name: string, pass: boolean, detail: string) => void): Promise<void> {
+  const expected = compilePlanCommitment(selected);
+  try {
+    const actual = await reader.call(selected.addresses.tokenPolicyRegistry, ["function compiledPlanHashOf(address) view returns (bytes32)"], "compiledPlanHashOf", [selected.addresses.token]);
+    check("compiled-plan-hash", String(actual).toLowerCase() === expected.compiledPlanHash.toLowerCase(), `expected=${expected.compiledPlanHash}; actual=${String(actual)}`);
+  } catch (err: any) { check("compiled-plan-hash", false, `unavailable: ${err.message}`); }
+  try {
+    const count = await reader.call(selected.addresses.tokenPolicyRegistry, ["function compiledBindingCountOf(address) view returns (uint256)"], "compiledBindingCountOf", [selected.addresses.token]);
+    check("compiled-binding-count", BigInt(count) === BigInt(expected.bindings.length), `expected=${expected.bindings.length}; actual=${String(count)}`);
+  } catch (err: any) { check("compiled-binding-count", false, `unavailable: ${err.message}`); }
+  for (const expectedBinding of expected.bindings) {
+    try {
+      const actual = await reader.call(selected.addresses.tokenPolicyRegistry, ["function compiledBindingOf(address,uint256) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority) binding,bytes32 recipeKey,bytes32 bindingPlanHash)"], "compiledBindingOf", [selected.addresses.token, expectedBinding.bindingIndex]);
+      const binding = actual.binding ?? actual[0];
+      const recipeKey = String(actual.recipeKey ?? actual[1]);
+      const bindingPlanHash = String(actual.bindingPlanHash ?? actual[2]);
+      const expectedTuple = bindingTuples([selected.recipeBindings[expectedBinding.bindingIndex]])[0].map(Number);
+      const actualTuple = [Number(binding.recipeId ?? binding[0]), Number(binding.recipeVersion ?? binding[1]), Number(binding.mode ?? binding[2]), Number(binding.pathGroupId ?? binding[3]), Number(binding.priority ?? binding[4])];
+      check(`compiled-binding-${expectedBinding.bindingIndex}`, JSON.stringify(actualTuple) === JSON.stringify(expectedTuple) && recipeKey.toLowerCase() === expectedBinding.recipeKey.toLowerCase() && bindingPlanHash.toLowerCase() === expectedBinding.bindingPlanHash.toLowerCase(), `expected=${JSON.stringify({binding: expectedTuple, recipeKey: expectedBinding.recipeKey, bindingPlanHash: expectedBinding.bindingPlanHash})}; actual=${JSON.stringify({binding: actualTuple, recipeKey, bindingPlanHash})}`);
+    } catch (err: any) { check(`compiled-binding-${expectedBinding.bindingIndex}`, false, `unavailable: ${err.message}`); }
+    try {
+      const actualRules = await reader.call(selected.addresses.tokenPolicyRegistry, ["function compiledRulesOf(address,uint256) view returns (tuple(bytes32 elementId,uint8 action)[])"], "compiledRulesOf", [selected.addresses.token, expectedBinding.bindingIndex]);
+      const normalized = Array.from(actualRules ?? []).map((rule: any) => ({elementId: String(rule.elementId ?? rule[0]).toLowerCase(), actionValue: Number(rule.action ?? rule[1])}));
+      const expectedRules = expectedBinding.rules.map((rule) => ({elementId: rule.elementId.toLowerCase(), actionValue: rule.actionValue}));
+      check(`compiled-rules-${expectedBinding.bindingIndex}`, JSON.stringify(normalized) === JSON.stringify(expectedRules), `expected=${JSON.stringify(expectedRules)}; actual=${JSON.stringify(normalized)}`);
+    } catch (err: any) { check(`compiled-rules-${expectedBinding.bindingIndex}`, false, `unavailable: ${err.message}`); }
+  }
 }
 
 function normalizeBindings(bindings: any): number[][] {

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "chainId": 42161,
   "configHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "artifactHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -30,14 +30,29 @@
   "elements": [
     {
       "elementId": "0x0101010101010101010101010101010101010101010101010101010101010101",
-      "implementation": "0x2000000000000000000000000000000000000001"
+      "implementation": "0x2000000000000000000000000000000000000001",
+      "defaultAction": "BLOCK",
+      "versionHash": "0x0505050505050505050505050505050505050505050505050505050505050505"
+    },
+    {
+      "elementId": "0x0606060606060606060606060606060606060606060606060606060606060606",
+      "implementation": "0x2000000000000000000000000000000000000003",
+      "defaultAction": "FLAG_ONLY"
     }
   ],
   "recipes": [
     {
       "recipeId": 1,
       "version": 2,
-      "implementation": "0x2000000000000000000000000000000000000002"
+      "implementation": "0x2000000000000000000000000000000000000002",
+      "alias": "reg-d-506c-issuance",
+      "normalizedAlias": "reg-d-506c-issuance",
+      "aliasHash": "0x7eb28f7537b001785db370ae13ab5e3a746fba5eef2630b6b2f85f26c39d1508",
+      "recipeKey": "0x6e6b4417d82fab6e6b22d051cbf84a0fb400898c4b6917022ec43f6cdb4aa396",
+      "requiredElements": [
+        "0x0101010101010101010101010101010101010101010101010101010101010101",
+        "0x0606060606060606060606060606060606060606060606060606060606060606"
+      ]
     }
   ],
   "manifest": {
@@ -94,6 +109,13 @@
       "minBalance": "1000000000000000000000",
       "minAllowance": "1000000000000000000000",
       "riskEvidenceHash": "0x0404040404040404040404040404040404040404040404040404040404040404"
+    }
+  ],
+  "enforcementOverrides": [
+    {
+      "bindingIndex": 0,
+      "elementId": "0x0606060606060606060606060606060606060606060606060606060606060606",
+      "mode": "ESCALATE_TO_BLOCK"
     }
   ]
 }

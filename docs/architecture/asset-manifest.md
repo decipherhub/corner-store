@@ -68,6 +68,25 @@ struct RecipeBinding {
 Element는 평가 시 다시 fail-closed로 검증한다. binding 변경은 Manifest hash 변경,
 timelock, version/history 증가를 거친 뒤에만 활성화된다.
 
+Production onboarding v2 additionally binds each numeric `recipeId` to a
+version-independent canonical `bytes32 recipeKey`. Operators review a normalized
+ASCII alias off-chain; the Toolkit hashes it to `aliasHash` and derives
+`recipeKey = keccak256(abi.encode(keccak256("corner-store.recipe-key.v1"),
+aliasHash))`. `RecipeRegistry` rejects alias/key collisions and immutable
+version overwrites. The canonical recipe family is bijective with the legacy
+numeric id: neither `recipeId -> recipeKey` nor `recipeKey -> recipeId` can be
+rebound, and the same key across later versions must keep its first registered
+`recipeId`. The legacy numeric id remains a compatibility alias for current
+demos and call sites, but production review material should quote both the
+normalized alias and the derived key.
+
+Manifest registration/update compiles per-binding Element enforcement rules from
+the immutable Element defaults and bounded overrides. Runtime evaluation uses the
+compiled plan hash/rules and does not dynamically resolve override intent. Normal
+onboarding may only strengthen enforcement (`FLAG_ONLY < OPERATOR_REVIEW <
+BLOCK`); `FORCE_FLAG_ONLY` is accepted only when the Element default is already
+`FLAG_ONLY`.
+
 `ManifestCore`의 과거 issuance/fund 필드는 ABI 전환을 위한 deprecated mirror이며
 현재 Engine, Factory와 CLI의 source of truth는 registry의 `RecipeBinding[]`다.
 
@@ -91,7 +110,8 @@ hot path에 필요한 compact core만 온체인에 둔다. 법률 문서, 심사
 
 - `ACTIVE`가 아닌 Manifest는 regulated execution을 허용하지 않는다.
 - pair 거래에서 양쪽 자산의 classification과 regulated Manifest를 누락하지 않는다.
-- Recipe set, version, engine과 scope가 decision에 바인딩된다.
+- Recipe key, version, compiled Element enforcement plan, engine과 scope가
+  decision에 바인딩된다.
 - full manifest hash가 변경되면 새로운 version 또는 명시적 update가 필요하다.
 - ACTIVE/SUSPENDED core fact를 직접 덮어써 timelock을 우회할 수 없다.
 - issuer coverage는 검증된 범위보다 넓게 해석하지 않는다.
@@ -115,4 +135,3 @@ hot path에 필요한 compact core만 온체인에 둔다. 법률 문서, 심사
 - 공개 필드와 비공개 자료의 경계
 - coverage field와 claim lookup 최적화
 - token 단위 version 변경이 기존 signed order/quote에 미치는 정책
-- canonical `bytes32 recipeKey` alias와 per-element enforcement override compiler

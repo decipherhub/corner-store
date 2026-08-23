@@ -1606,15 +1606,18 @@ export async function cmdCheck(
         continue;
       }
       try {
-        const [passed] = await new Contract(elAddr, ELEMENT_ABI, provider).check(
+        const [passed, elementReasonCode] = await new Contract(elAddr, ELEMENT_ABI, provider).check(
           buyer,
           seller,
           a.rwaToken,
           amount,
           elementContext
         );
-        // The recipe-aware reason the engine would report for THIS element.
-        const reason = passed ? undefined : decodeReason(encodeReason(rid, idStr, 1)).label;
+        // The engine now propagates an Element's exact nonzero reasonCode. Only
+        // zero element reasons fall back to the recipe-scoped code-1 generic.
+        const fallbackReason = encodeReason(rid, idStr, 1);
+        const reasonCode = String(elementReasonCode) === ZERO32 ? fallbackReason : String(elementReasonCode);
+        const reason = passed ? undefined : decodeReason(reasonCode).label;
         rows.push({id: idStr, label, assetSide, recipeId: rid, passed, reason});
       } catch (e: any) {
         rows.push({

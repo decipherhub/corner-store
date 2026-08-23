@@ -166,13 +166,17 @@ claims. Those require issuer/TA evidence and separate Safe-reviewed onboarding:
 8. run a compliant settlement and expected-rejection smoke test before opening
    user access.
 
-The Toolkit now accepts an explicit, versioned production onboarding file such
+The Toolkit accepts explicit, versioned production onboarding files. Legacy v1
+input remains accepted for local/demo compatibility; production onboarding
+should use v2 canonical policy fields such
 as
 [`services/toolkit/examples/corner-store.production-onboarding.json`](../services/toolkit/examples/corner-store.production-onboarding.json).
 It generates deterministic calldata and Safe-compatible unsigned drafts for the
 reviewed Element, Recipe, Manifest, venue, maker and signer activation sequence.
-The onboarding config must include governance Safe metadata (`safe` and bounded
-`requiredApprovals`), an explicit `operatorExecutor`, at least one active
+The v2 onboarding config must include governance Safe metadata (`safe` and bounded
+`requiredApprovals`), an explicit `operatorExecutor`, each Element's default
+enforcement action, each Recipe's normalized alias/aliasHash/recipeKey and
+required Element set, bounded strengthen-only enforcement overrides, at least one active
 venue and at least one read-only inventory requirement. Active RFQ venues additionally require an approved maker,
 a signer delegate for an approved maker and inventory for an approved maker:
 
@@ -190,9 +194,13 @@ steps are exported separately as `operatorTransactions` with `chainId`, explicit
 label; the tool does not assume the Safe is an operator. It never signs, submits, broadcasts, transfers
 assets or generates ERC-20 approvals. Inventory activation is represented as a read-only verification
 stage that checks balance, allowance and PII-free risk evidence before service
-open. The verify command reads chain state through RPC and fails closed on any
+open. V2 plans also include PII-free canonical alias/key commitments and the
+compiled plan hash/rules so reviewers can replay exactly what the runtime will
+enforce; these technical commitments do not prove legal correctness. The verify
+command reads chain state through RPC and fails closed on any
 unavailable or mismatched value: ERC-3643 token wiring, Identity Registry
-dependencies, governance Safe ownership of safe-owner targets, registered Elements/Recipes, exact Manifest hash/fields/bindings,
+dependencies, governance Safe ownership of safe-owner targets, registered Elements/Recipes, recipe alias/key mapping, Element default action/version hashes,
+exact Manifest hash/fields/bindings, compiled plan hash/rules,
 ACTIVE Manifest with non-zero declarer/approver, global/asset/venue pause gates,
 venue config, maker approval, active signer delegate and inventory minima. A
 pending signer delay is reported but is not considered ready.

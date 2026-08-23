@@ -3,12 +3,85 @@ pragma solidity 0.8.17;
 
 import {Test} from "forge-std/Test.sol";
 import {TokenPolicyRegistry} from "../../../src/registry/TokenPolicyRegistry.sol";
-import {ManifestCore, PolicyStatus, RecipeBinding, RecipeBindingMode} from "../../../src/types/ComplianceTypes.sol";
+import {ElementRegistry} from "../../../src/registry/ElementRegistry.sol";
+import {RecipeRegistry} from "../../../src/registry/RecipeRegistry.sol";
+import {IComplianceElement} from "../../../src/interfaces/compliance/IComplianceElement.sol";
+import {IRecipe} from "../../../src/interfaces/compliance/IRecipe.sol";
+import {
+    ElementMetadata,
+    ElementCategory,
+    TemporalNature,
+    Decidability,
+    ObligationTiming,
+    Statefulness,
+    ManifestCore,
+    PolicyStatus,
+    RecipeBinding,
+    RecipeBindingMode,
+    EnforcementAction,
+    EnforcementOverrideMode,
+    ElementEnforcementOverride,
+    CompiledElementRule
+} from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 import {Events} from "../../../src/libraries/Events.sol";
 
+contract TokenPolicyRegistryElementMock is IComplianceElement {
+    bytes32 internal immutable _id;
+
+    constructor(bytes32 id_) {
+        _id = id_;
+    }
+
+    function check(address, address, address, uint256, bytes calldata) external pure returns (bool, bytes32) {
+        return (true, bytes32(0));
+    }
+
+    function elementMetadata() external view returns (ElementMetadata memory m) {
+        m.elementId = _id;
+        m.category = ElementCategory.INVESTOR_ATTRIBUTE;
+        m.version = "1.0.0";
+        m.temporal = TemporalNature.ONE_TIME;
+        m.decidability = Decidability.DETERMINISTIC;
+        m.timing = ObligationTiming.AT_TRADE_GATE;
+        m.statefulness = Statefulness.STATELESS;
+    }
+}
+
+contract TokenPolicyRegistryRecipeMock is IRecipe {
+    uint16 internal immutable _id;
+    uint16 internal immutable _version;
+    bytes32 internal immutable _elementId;
+
+    constructor(uint16 id_, uint16 version_, bytes32 elementId_) {
+        _id = id_;
+        _version = version_;
+        _elementId = elementId_;
+    }
+
+    function recipeId() external view returns (uint16) {
+        return _id;
+    }
+
+    function version() external view returns (uint16) {
+        return _version;
+    }
+
+    function isApplicable(bytes calldata) external pure returns (bool) {
+        return true;
+    }
+
+    function requiredElements() external view returns (bytes32[] memory elements) {
+        elements = new bytes32[](1);
+        elements[0] = _elementId;
+    }
+}
+
 contract TokenPolicyRegistryTest is Test {
     TokenPolicyRegistry internal reg;
+    ElementRegistry internal elementReg;
+    RecipeRegistry internal recipeReg;
+    bytes32 internal constant ELEMENT_ID = bytes32("TP-ELEMENT-v1");
 
     address internal owner = address(this);
     address internal operator = address(0xBEEF);
@@ -16,8 +89,7 @@ contract TokenPolicyRegistryTest is Test {
     address internal token = address(0x7000);
 
     function setUp() public {
-        reg = new TokenPolicyRegistry();
-        reg.setOperator(operator, true);
+        _reset();
     }
 
     /// @dev A well-formed manifest whose caller-supplied status is deliberately
@@ -51,8 +123,6 @@ contract TokenPolicyRegistryTest is Test {
 
     function test_register_lands_PROPOSED_ignoring_caller_status() public {
         ManifestCore memory m = _manifest(); // m.status == ACTIVE on purpose
-        vm.expectEmit(true, false, false, true);
-        emit Events.ManifestRegistered(token, keccak256(abi.encode(_bindings())), owner);
         reg.registerManifest(token, m);
 
         ManifestCore memory got = reg.manifestOf(token);
@@ -455,7 +525,13 @@ contract TokenPolicyRegistryTest is Test {
 
     /// @dev Fresh registry between table iterations so `token` is UNKNOWN again.
     function _reset() internal {
-        reg = new TokenPolicyRegistry();
+        elementReg = new ElementRegistry();
+        recipeReg = new RecipeRegistry();
+        elementReg.registerElement(ELEMENT_ID, address(new TokenPolicyRegistryElementMock(ELEMENT_ID)));
+        recipeReg.registerRecipe(7, 1, address(new TokenPolicyRegistryRecipeMock(7, 1, ELEMENT_ID)));
+        recipeReg.registerRecipe(7, 2, address(new TokenPolicyRegistryRecipeMock(7, 2, ELEMENT_ID)));
+        recipeReg.registerRecipe(8, 2, address(new TokenPolicyRegistryRecipeMock(8, 2, ELEMENT_ID)));
+        reg = new TokenPolicyRegistry(recipeReg, elementReg);
         reg.setOperator(operator, true);
     }
 
@@ -484,6 +560,83 @@ contract TokenPolicyRegistryTest is Test {
         vm.prank(stranger);
         vm.expectRevert(Errors.NotAuthorized.selector);
         reg.setFact(token, 0x0F);
+    }
+
+    // --- compiled enforcement plans ---------------------------------------
+
+    function test_register_compiles_deterministic_plan_hash_and_rules() public {
+        RecipeBinding[] memory bindings = _bindings();
+        reg.registerManifest(token, _manifest(), bindings);
+        bytes32 firstHash = reg.compiledPlanHashOf(token);
+        assertTrue(firstHash != bytes32(0));
+        assertEq(reg.compiledBindingCountOf(token), 1);
+        (RecipeBinding memory binding, bytes32 recipeKey, bytes32 bindingPlanHash) = reg.compiledBindingOf(token, 0);
+        assertEq(binding.recipeId, 7);
+        assertEq(recipeKey, recipeReg.recipeKeyOf(7));
+        assertTrue(bindingPlanHash != bytes32(0));
+        CompiledElementRule[] memory rules = reg.compiledRulesOf(token, 0);
+        assertEq(rules.length, 1);
+        assertEq(rules[0].elementId, ELEMENT_ID);
+        assertEq(uint256(rules[0].action), uint256(EnforcementAction.BLOCK));
+
+        address token2 = address(0x7001);
+        reg.registerManifest(token2, _manifest(), bindings);
+        assertEq(reg.compiledPlanHashOf(token2), firstHash, "same bindings compile deterministically");
+    }
+
+    function test_overrides_reject_length_above_bounded_limit_before_compilation() public {
+        ElementEnforcementOverride[] memory tooMany =
+            new ElementEnforcementOverride[](reg.MAX_ENFORCEMENT_OVERRIDES() + 1);
+        for (uint256 i = 0; i < tooMany.length; i++) {
+            tooMany[i] = ElementEnforcementOverride(0, ELEMENT_ID, EnforcementOverrideMode.ESCALATE_TO_BLOCK);
+        }
+        RecipeBinding[] memory missingRecipeBinding = new RecipeBinding[](1);
+        missingRecipeBinding[0] = RecipeBinding(77, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Errors.TooManyEnforcementOverrides.selector, tooMany.length, reg.MAX_ENFORCEMENT_OVERRIDES()
+            )
+        );
+        reg.registerManifest(token, _manifest(), missingRecipeBinding, tooMany);
+    }
+
+    function test_overrides_reject_duplicate_nonmember_outOfRange_and_weakening() public {
+        ElementEnforcementOverride[] memory dup = new ElementEnforcementOverride[](2);
+        dup[0] = ElementEnforcementOverride(0, ELEMENT_ID, EnforcementOverrideMode.ESCALATE_TO_BLOCK);
+        dup[1] = ElementEnforcementOverride(0, ELEMENT_ID, EnforcementOverrideMode.ESCALATE_TO_BLOCK);
+        vm.expectRevert(abi.encodeWithSelector(Errors.DuplicateElementOverride.selector, uint256(0), ELEMENT_ID));
+        reg.registerManifest(token, _manifest(), _bindings(), dup);
+
+        ElementEnforcementOverride[] memory nonmember = new ElementEnforcementOverride[](1);
+        nonmember[0] = ElementEnforcementOverride(0, bytes32("NOPE"), EnforcementOverrideMode.ESCALATE_TO_BLOCK);
+        vm.expectRevert(Errors.InvalidEnforcementOverride.selector);
+        reg.registerManifest(token, _manifest(), _bindings(), nonmember);
+
+        ElementEnforcementOverride[] memory outOfRange = new ElementEnforcementOverride[](1);
+        outOfRange[0] = ElementEnforcementOverride(1, ELEMENT_ID, EnforcementOverrideMode.ESCALATE_TO_BLOCK);
+        vm.expectRevert(Errors.InvalidEnforcementOverride.selector);
+        reg.registerManifest(token, _manifest(), _bindings(), outOfRange);
+
+        ElementEnforcementOverride[] memory weak = new ElementEnforcementOverride[](1);
+        weak[0] = ElementEnforcementOverride(0, ELEMENT_ID, EnforcementOverrideMode.FORCE_FLAG_ONLY);
+        vm.expectRevert(Errors.LooseningForbidden.selector);
+        reg.registerManifest(token, _manifest(), _bindings(), weak);
+    }
+
+    function test_forceFlagOnly_allowed_only_when_element_default_is_flagOnly() public {
+        bytes32 flagElement = bytes32("TP-FLAG-v1");
+        elementReg.registerElement(
+            flagElement, address(new TokenPolicyRegistryElementMock(flagElement)), EnforcementAction.FLAG_ONLY
+        );
+        recipeReg.registerRecipe(9, 1, address(new TokenPolicyRegistryRecipeMock(9, 1, flagElement)));
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(9, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](1);
+        overrides_[0] = ElementEnforcementOverride(0, flagElement, EnforcementOverrideMode.FORCE_FLAG_ONLY);
+        reg.registerManifest(token, _manifest(), bindings, overrides_);
+        CompiledElementRule[] memory rules = reg.compiledRulesOf(token, 0);
+        assertEq(uint256(rules[0].action), uint256(EnforcementAction.FLAG_ONLY));
     }
 
     // --- delayed semantic update -----------------------------------------

@@ -3,7 +3,12 @@ import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
 import {keccak256} from "ethers";
 import {
   createProductionOnboardingPlan,
+  deriveRecipeKey,
+  ENFORCEMENT_ACTION,
+  MAX_ENFORCEMENT_OVERRIDES,
+  normalizeRecipeAlias,
   productionOnboardingInterfaces,
+  recipeAliasHash,
   validateProductionOnboardingConfig,
   verifyProductionOnboarding
 } from "../src/production-onboarding";
@@ -274,11 +279,11 @@ assert(onboardingPlan.operatorTransactions[0].proposalId === onboardingPlanRepea
 assert(onboardingPlan.transactions.some((tx) => tx.id === "signer-1-execute" && tx.dependsOn.includes("signer-1-schedule") && tx.earliestExecution), "signer owner execution is delay-gated");
 assert(onboardingPlan.inventoryRequirements.length === 1 && !onboardingPlan.transactions.some((tx) => /approve\(|transfer/i.test(tx.description + tx.data)), "inventory activation is read-only");
 const ifaces = productionOnboardingInterfaces();
-const decodedElement = ifaces.ELEMENT_REGISTRY.decodeFunctionData("registerElement", onboardingPlan.transactions[0].data);
+const decodedElement = ifaces.ELEMENT_REGISTRY.decodeFunctionData("registerElement(bytes32,address)", onboardingPlan.transactions[0].data);
 assert(decodedElement[0] === onboardingConfig.elements[0].elementId && decodedElement[1] === onboardingConfig.elements[0].implementation, "element calldata decodes");
-const decodedRecipe = ifaces.RECIPE_REGISTRY.decodeFunctionData("registerRecipe", onboardingPlan.transactions[1].data);
+const decodedRecipe = ifaces.RECIPE_REGISTRY.decodeFunctionData("registerRecipe(uint16,uint16,address)", onboardingPlan.transactions[1].data);
 assert(Number(decodedRecipe[0]) === 1 && Number(decodedRecipe[1]) === 2, "recipe calldata decodes");
-const decodedManifest = ifaces.POLICY_REGISTRY.decodeFunctionData("registerManifest", onboardingPlan.transactions[2].data);
+const decodedManifest = ifaces.POLICY_REGISTRY.decodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[])", onboardingPlan.transactions[2].data);
 assert(decodedManifest[0] === onboardingConfig.addresses.token && decodedManifest[2].length === 1, "manifest calldata decodes with binding");
 const decodedVenue = ifaces.VENUE_REGISTRY.decodeFunctionData("registerVenue", onboardingPlan.transactions[4].data);
 assert(decodedVenue[0] === onboardingConfig.venues![0].venue && Number(decodedVenue[1][0]) === 2, "venue calldata decodes");
@@ -302,6 +307,53 @@ assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, gove
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, governance: {...onboardingConfig.governance, operatorExecutor: "0x0000000000000000000000000000000000000000"}}), "invalid governance operatorExecutor rejected");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, governance: {...onboardingConfig.governance, extra: true} as any}), "unknown governance field rejected");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, codeHashes: {...onboardingConfig.codeHashes, unknownAddress: `0x${"06".repeat(32)}`}}), "unsupported codeHashes key rejected");
+
+// --- production onboarding v2: canonical recipe key + compiled enforcement ---
+const normalizedAlias = normalizeRecipeAlias(" Reg_D.506c Issuance ");
+assert(normalizedAlias === "reg-d-506c-issuance", "recipe alias normalization");
+const aliasHash = recipeAliasHash(normalizedAlias);
+const recipeKey = deriveRecipeKey(aliasHash);
+assert(recipeKey === deriveRecipeKey(aliasHash), "recipe key derivation is deterministic");
+assertThrows(() => normalizeRecipeAlias("규제"), "non-ASCII alias rejected");
+assertThrows(() => normalizeRecipeAlias(".".repeat(80)), "empty/too-long alias rejected");
+const onboardingConfigV2 = validateProductionOnboardingConfig({
+  ...onboardingConfig,
+  schemaVersion: 2,
+  elements: [
+    {...onboardingConfig.elements[0], defaultAction: "BLOCK", versionHash: `0x${"05".repeat(32)}`},
+    {elementId: `0x${"06".repeat(32)}`, implementation: "0x2000000000000000000000000000000000000003", defaultAction: "FLAG_ONLY"}
+  ],
+  recipes: [{
+    ...onboardingConfig.recipes[0],
+    alias: " Reg_D.506c Issuance ",
+    normalizedAlias,
+    aliasHash,
+    recipeKey,
+    requiredElements: [onboardingConfig.elements[0].elementId, `0x${"06".repeat(32)}`]
+  }],
+  enforcementOverrides: [{bindingIndex: 0, elementId: `0x${"06".repeat(32)}`, mode: "ESCALATE_TO_BLOCK"}]
+});
+const onboardingPlanV2 = createProductionOnboardingPlan(onboardingConfigV2, "2026-08-23T00:00:00.000Z");
+assert(onboardingPlanV2.schemaVersion === 2, "v2 onboarding plan carries schemaVersion");
+assert(onboardingPlanV2.recipeKeyCommitments?.[0].normalizedAlias === normalizedAlias && onboardingPlanV2.recipeKeyCommitments[0].recipeKey === recipeKey, "v2 plan records canonical recipe key commitment");
+assert(onboardingPlanV2.compiledPlan?.bindings[0].rules.map((rule) => rule.action).join(",") === "BLOCK,BLOCK", "v2 plan records compiled strengthened rules");
+assert(!JSON.stringify(onboardingPlanV2).includes("Reg_D.506c Issuance"), "v2 immutable plan stores normalized alias only");
+const decodedElementV2 = ifaces.ELEMENT_REGISTRY.decodeFunctionData("registerElement(bytes32,address,uint8)", onboardingPlanV2.transactions[0].data);
+assert(Number(decodedElementV2[2]) === ENFORCEMENT_ACTION.BLOCK, "v2 element calldata includes default action");
+const decodedRecipeV2 = ifaces.RECIPE_REGISTRY.decodeFunctionData("registerRecipe(bytes32,bytes32,uint16,uint16,address)", onboardingPlanV2.transactions[2].data);
+assert(decodedRecipeV2[0] === aliasHash && decodedRecipeV2[1] === recipeKey, "v2 recipe calldata includes canonical alias/key");
+const decodedManifestV2 = ifaces.POLICY_REGISTRY.decodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[])", onboardingPlanV2.transactions[3].data);
+assert(decodedManifestV2[3].length === 1 && Number(decodedManifestV2[3][0][2]) === 2, "v2 manifest calldata includes bounded override");
+assert(createProductionOnboardingPlan(onboardingConfig).schemaVersion === 1, "legacy plan version matches legacy calldata mode");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, elements: [{...onboardingConfig.elements[0], defaultAction: "BLOCK"}]} as any), "schemaVersion 1 rejects v2 element fields");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, recipes: [{...onboardingConfig.recipes[0], alias: "reg-d-506c-issuance"}]} as any), "schemaVersion 1 rejects v2 recipe fields");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, enforcementOverrides: []} as any), "schemaVersion 1 rejects v2 overrides");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, recipes: [{...onboardingConfigV2.recipes[0], alias: "reg_d 506c.issuance"}, {...onboardingConfigV2.recipes[0], recipeId: 2, implementation: "0x2000000000000000000000000000000000000004", alias: "REG-D-506C-ISSUANCE"}]}), "canonical alias collision rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, recipes: [{...onboardingConfigV2.recipes[0], aliasHash: `0x${"09".repeat(32)}`}] as any}), "aliasHash mismatch rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, enforcementOverrides: [{bindingIndex: 0, elementId: onboardingConfig.elements[0].elementId, mode: "FORCE_FLAG_ONLY"}]}), "loosening BLOCK override rejected locally");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, enforcementOverrides: [{bindingIndex: 8, elementId: onboardingConfig.elements[0].elementId, mode: "ESCALATE_TO_BLOCK"}]}), "out-of-range override rejected locally");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, enforcementOverrides: Array.from({length: MAX_ENFORCEMENT_OVERRIDES + 1}, () => ({bindingIndex: 0, elementId: onboardingConfigV2.elements[1].elementId, mode: "ESCALATE_TO_BLOCK"}))}), "257 overrides rejected locally");
+
 const ammOnlyConfig = validateProductionOnboardingConfig({
   ...onboardingConfig,
   venues: [{...onboardingConfig.venues[0], venueType: "AMM", adapter: "0x5000000000000000000000000000000000000001"}],
@@ -359,6 +411,46 @@ const onboardingVerificationPromise = verifyProductionOnboarding(onboardingConfi
   return verifyProductionOnboarding(onboardingConfig, operatorUnavailableReader);
 }).then((operatorUnavailableVerify) => {
   assert(!operatorUnavailableVerify.ready && operatorUnavailableVerify.checks.some((check) => check.name === "token-policy-operator" && !check.pass), "token policy operator role unavailable fails closed");
+  const expectedCompiled = onboardingPlanV2.compiledPlan!;
+  const okReaderV2 = {
+    ...okReader,
+    async call(address: string, abi: string[], fn: string, args: unknown[] = []) {
+      if (fn === "elementOf") {
+        const id = String(args[0]).toLowerCase();
+        const element = onboardingConfigV2.elements.find((entry) => entry.elementId.toLowerCase() === id);
+        return element?.implementation ?? ZERO_ADDR;
+      }
+      if (fn === "defaultActionOf") {
+        const id = String(args[0]).toLowerCase();
+        const element = onboardingConfigV2.elements.find((entry) => entry.elementId.toLowerCase() === id);
+        return element ? ENFORCEMENT_ACTION[element.defaultAction as keyof typeof ENFORCEMENT_ACTION] : 0;
+      }
+      if (fn === "versionHashOf") return onboardingConfigV2.elements[0].versionHash;
+      if (fn === "recipeOf" && args.length === 2 && String(args[0]).startsWith("0x")) return onboardingConfigV2.recipes[0].implementation;
+      if (fn === "recipeOf") return "0x20000000000000000000000000000000000000ff";
+      if (fn === "recipeKeyOfAlias") return recipeKey;
+      if (fn === "aliasHashOf") return aliasHash;
+      if (fn === "recipeKeyOf") return recipeKey;
+      if (fn === "recipeBindingsOf") return [[1, 2, 0, 0, 100]];
+      if (fn === "compiledPlanHashOf") return expectedCompiled.compiledPlanHash;
+      if (fn === "compiledBindingCountOf") return BigInt(expectedCompiled.bindings.length);
+      if (fn === "compiledBindingOf") {
+        const b = expectedCompiled.bindings[Number(args[1])];
+        return [[b.recipeId, b.recipeVersion, 0, 0, 100], b.recipeKey, b.bindingPlanHash];
+      }
+      if (fn === "compiledRulesOf") {
+        return expectedCompiled.bindings[Number(args[1])].rules.map((rule) => [rule.elementId, rule.actionValue]);
+      }
+      return okReader.call(address, abi, fn, args);
+    }
+  };
+  return verifyProductionOnboarding(onboardingConfigV2, okReaderV2);
+}).then((v2Verify) => {
+  assert(v2Verify.ready, `v2 onboarding verifier should pass: ${JSON.stringify(v2Verify.checks)}`);
+  const mismatchReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "compiledPlanHashOf") return `0x${"ff".repeat(32)}`; return (okReader as any).call(address, abi, fn, args); }};
+  return verifyProductionOnboarding(onboardingConfigV2, mismatchReader);
+}).then((v2MismatchVerify) => {
+  assert(!v2MismatchVerify.ready && v2MismatchVerify.checks.some((check) => check.name === "compiled-plan-hash" && !check.pass), "v2 compiled plan mismatch fails closed");
   const pendingReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "isDelegate") return false; if (fn === "pendingDelegateReadyAt") return 123n; return okReader.call(address, abi, fn, args); }};
   return verifyProductionOnboarding(onboardingConfig, pendingReader);
 }).then((pendingVerify) => {
