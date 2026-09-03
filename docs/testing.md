@@ -11,7 +11,9 @@ forge build
 ```
 
 Foundry high-severity production lint를 fail-closed gate로 사용한다. medium/low
-warning budget과 별도 보안 분석기는 후속 범위다.
+warning budget과 별도 보안 분석기는 후속 범위다. CI는 재현 가능한 lint/build/test
+의미를 위해 Foundry v1.7.1을 고정한다. Foundry upgrade는 새 lint rule과 formatter
+변경을 별도 PR에서 검토하고 전체 check를 통과한 뒤 반영한다.
 
 ### Unit Tests
 
