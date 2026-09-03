@@ -150,7 +150,7 @@ abstract contract IntegrationBase is TREXSuite {
         // 1. compliance registries
         elementReg = new ElementRegistry();
         recipeReg = new RecipeRegistry();
-        policyReg = new TokenPolicyRegistry();
+        policyReg = new TokenPolicyRegistry(recipeReg, elementReg);
         operatorReg = new OperatorRegistry();
         mockTA = new MockSecuritizeTA();
 

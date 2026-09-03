@@ -3,6 +3,8 @@ import {createHash} from "crypto";
 import {
   copyFileSync,
   existsSync,
+  openSync,
+  closeSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -13,7 +15,7 @@ import {
   writeFileSync
 } from "fs";
 import {tmpdir} from "os";
-import {formatEther, keccak256, NonceManager, parseEther} from "ethers";
+import {formatEther, JsonRpcProvider, keccak256, NonceManager, parseEther, Contract} from "ethers";
 
 import {dirname, relative, resolve} from "path";
 import {enabledEngineSpec, loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
@@ -32,6 +34,12 @@ import {
   validateProductionConfig
 } from "../../toolkit/src/production";
 import {scaffoldRFQIntegration} from "../../toolkit/src/scaffold";
+import {
+  OnboardingReader,
+  createProductionOnboardingPlan,
+  loadProductionOnboardingConfig,
+  verifyProductionOnboarding
+} from "../../toolkit/src/production-onboarding";
 
 import {
   ACQ_SOURCE_ABI,
@@ -67,7 +75,6 @@ import {
 } from "./config";
 import {
   AbiCoder,
-  Contract,
   Interface,
   TypedDataEncoder,
   decodeBytes32String,
@@ -318,6 +325,35 @@ export function cmdToolkitTest(): void {
   execFileSync("scripts/check.sh", [], {cwd: repoRoot, stdio: "inherit"});
 }
 
+
+export function cmdProductionOnboardingPlan(path = "corner-store.production-onboarding.json", opts: {out?: string}): void {
+  const config = loadProductionOnboardingConfig(resolve(process.cwd(), path));
+  const plan = createProductionOnboardingPlan(config, new Date().toISOString());
+  const output = opts.out ? resolve(process.cwd(), opts.out) : undefined;
+  if (output) {
+    writeImmutableJson(output, plan);
+    console.log(`production onboarding plan written to ${output}`);
+  } else {
+    console.log(JSON.stringify(plan, null, 2));
+  }
+}
+
+export async function cmdProductionOnboardingVerify(path = "corner-store.production-onboarding.json", opts: GlobalOpts & {rpcUrl?: string}): Promise<void> {
+  rejectProductionRawKey(opts);
+  const config = loadProductionOnboardingConfig(resolve(process.cwd(), path));
+  const rpcUrl = opts.rpcUrl ?? explicitlyProvidedGlobalRpc() ?? process.env.CORNER_STORE_RPC_URL;
+  if (!rpcUrl) throw new CliError("production-onboarding-verify requires --rpc-url or CORNER_STORE_RPC_URL");
+  const provider = new JsonRpcProvider(rpcUrl);
+  try {
+    const reader = new EthersOnboardingReader(provider);
+    const result = await verifyProductionOnboarding(config, reader);
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ready) process.exitCode = 1;
+  } finally {
+    provider.destroy();
+  }
+}
+
 export function cmdProductionPlan(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string}): void {
   rejectProductionRawKey(opts);
   const config = productionConfigWithRuntimeOverrides(path, opts);
@@ -440,6 +476,45 @@ export async function cmdProductionVerify(path = "corner-store.production.json",
   if (!result.ready) process.exitCode = 1;
 }
 
+
+class EthersOnboardingReader implements OnboardingReader {
+  constructor(private readonly provider: JsonRpcProvider) {}
+
+  async chainId(): Promise<number> {
+    const network = await this.provider.getNetwork();
+    return Number(network.chainId);
+  }
+
+  async getCode(address: string): Promise<string> {
+    return this.provider.getCode(address);
+  }
+
+  async call(address: string, abi: string[], functionName: string, args: unknown[] = []): Promise<any> {
+    const contract = new Contract(address, abi, this.provider);
+    return contract.getFunction(functionName)(...(args as any[]));
+  }
+
+  async balanceOf(token: string, holder: string): Promise<bigint> {
+    return new Contract(token, ["function balanceOf(address) view returns (uint256)"], this.provider).balanceOf(holder);
+  }
+
+  async allowance(token: string, owner: string, spender: string): Promise<bigint> {
+    return new Contract(token, ["function allowance(address,address) view returns (uint256)"], this.provider).allowance(owner, spender);
+  }
+}
+
+function writeImmutableJson(path: string, value: unknown): void {
+  mkdirSync(dirname(path), {recursive: true});
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "wx");
+    writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`);
+  } catch (err: any) {
+    throw new CliError(`cannot write immutable output ${path}: ${err.message}`);
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
 function productionConfigWithRuntimeOverrides(path: string, opts: GlobalOpts & {rpcUrl?: string}): ProductionConfig {
   const config = loadProductionConfig(resolve(process.cwd(), path));
   const rpcUrl = opts.rpcUrl ?? explicitlyProvidedGlobalRpc() ?? process.env.CORNER_STORE_RPC_URL;
@@ -1531,15 +1606,18 @@ export async function cmdCheck(
         continue;
       }
       try {
-        const [passed] = await new Contract(elAddr, ELEMENT_ABI, provider).check(
+        const [passed, elementReasonCode] = await new Contract(elAddr, ELEMENT_ABI, provider).check(
           buyer,
           seller,
           a.rwaToken,
           amount,
           elementContext
         );
-        // The recipe-aware reason the engine would report for THIS element.
-        const reason = passed ? undefined : decodeReason(encodeReason(rid, idStr, 1)).label;
+        // The engine now propagates an Element's exact nonzero reasonCode. Only
+        // zero element reasons fall back to the recipe-scoped code-1 generic.
+        const fallbackReason = encodeReason(rid, idStr, 1);
+        const reasonCode = String(elementReasonCode) === ZERO32 ? fallbackReason : String(elementReasonCode);
+        const reason = passed ? undefined : decodeReason(reasonCode).label;
         rows.push({id: idStr, label, assetSide, recipeId: rid, passed, reason});
       } catch (e: any) {
         rows.push({

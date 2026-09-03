@@ -28,7 +28,7 @@ import {
   rfqDomain,
   writeQuoteFile
 } from "../src/rfq";
-import {cmdProductionDeploy, cmdProductionPlan} from "../src/commands";
+import {cmdProductionDeploy, cmdProductionOnboardingPlan, cmdProductionOnboardingVerify, cmdProductionPlan} from "../src/commands";
 
 const CHAIN_ID = 31337;
 const RFQ_VERIFYING_CONTRACT = "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0";
@@ -155,6 +155,79 @@ async function main() {
     assert(planOutput.includes("https://secure-rpc.example"), "production-plan supports explicit RPC runtime override");
     assert(!planOutput.includes("--ledger") && !planOutput.includes("--account"), "production-plan is signer-free");
     assertThrows(() => cmdProductionPlan("corner-store.production.json", {key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"}), "production-plan rejects raw key");
+    const onboardingPath = join(consumerRoot, "corner-store.production-onboarding.json");
+    writeFileSync(onboardingPath, `${JSON.stringify({
+      schemaVersion: 1,
+      chainId: 1,
+      configHash: "sha256:" + "a".repeat(64),
+      artifactHash: "sha256:" + "b".repeat(64),
+      legalPackageHash: "sha256:" + "c".repeat(64),
+      governance: {safe: "0x8888888888888888888888888888888888888888", requiredApprovals: 2, operatorExecutor: "0x5555555555555555555555555555555555555555"},
+      addresses: {
+        token: "0x1000000000000000000000000000000000000001",
+        identityRegistry: "0x1000000000000000000000000000000000000002",
+        compliance: "0x1000000000000000000000000000000000000003",
+        topicsRegistry: "0x1000000000000000000000000000000000000004",
+        issuersRegistry: "0x1000000000000000000000000000000000000005",
+        identityStorage: "0x1000000000000000000000000000000000000006",
+        elementRegistry: "0x1000000000000000000000000000000000000007",
+        recipeRegistry: "0x1000000000000000000000000000000000000008",
+        tokenPolicyRegistry: "0x1000000000000000000000000000000000000009",
+        operatorRegistry: "0x1000000000000000000000000000000000000010",
+        venueRegistry: "0x1000000000000000000000000000000000000011",
+        rfqAdapter: "0x1000000000000000000000000000000000000012",
+        makerAuthorizer: "0x1000000000000000000000000000000000000013"
+      },
+      elements: [{elementId: "0x" + "01".repeat(32), implementation: "0x2000000000000000000000000000000000000001"}],
+      recipes: [{recipeId: 1, version: 2, implementation: "0x2000000000000000000000000000000000000002"}],
+      manifest: {issuanceRecipeId: 1, issuanceRecipeVersion: 2, fundRecipeId: 0, enabledResalePaths: 1, supportedEngines: 5, stateScopeId: 7, factsPacked: "1", coverageScope: "3", fullManifestHash: "0x" + "02".repeat(32)},
+      recipeBindings: [{recipeId: 1, recipeVersion: 2, mode: "REQUIRED_BLOCKING", pathGroupId: 0, priority: 100}],
+      venues: [{venue: "0x3000000000000000000000000000000000000001", venueType: "RFQ", adapter: "0x1000000000000000000000000000000000000012", target: "0x3000000000000000000000000000000000000002", operator: "0x5555555555555555555555555555555555555555", custody: "NONE", active: true}],
+      rfq: {makers: [{maker: "0x4000000000000000000000000000000000000001", approved: true}], signerDelegates: [{maker: "0x4000000000000000000000000000000000000001", delegate: "0x4000000000000000000000000000000000000002", reasonHash: "0x" + "03".repeat(32)}]},
+      inventory: [{token: "0x1000000000000000000000000000000000000001", holder: "0x4000000000000000000000000000000000000001", spender: "0x1000000000000000000000000000000000000012", minBalance: "100", minAllowance: "50", riskEvidenceHash: "0x" + "04".repeat(32)}]
+    }, null, 2)}
+`);
+    const onboardingOut = join(consumerRoot, "safe-onboarding.json");
+    let onboardingLog = "";
+    console.log = (value?: any) => { onboardingLog += String(value); };
+    try {
+      cmdProductionOnboardingPlan("corner-store.production-onboarding.json", {out: onboardingOut});
+    } finally {
+      console.log = previousLog;
+    }
+    const onboardingPlan = JSON.parse(readFileSync(onboardingOut, "utf8"));
+    assert(onboardingPlan.schema === "corner-store-production-onboarding", "production-onboarding-plan writes schema");
+    assert(onboardingPlan.safeTransactions.length === onboardingPlan.transactions.filter((tx: any) => tx.authority === "safe-owner").length && onboardingPlan.operatorTransactions.length === onboardingPlan.transactions.filter((tx: any) => tx.authority === "operator").length, "production-onboarding-plan partitions Safe and operator drafts by authority");
+    assert(onboardingLog.includes("production onboarding plan written"), "production-onboarding-plan logs immutable output path");
+    assertThrows(() => cmdProductionOnboardingPlan("corner-store.production-onboarding.json", {out: onboardingOut}), "production-onboarding-plan rejects overwrite");
+
+    const rpc = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => {
+        const parsed = JSON.parse(body || "{}");
+        const method = parsed.method;
+        const result = method === "eth_chainId" ? "0x1" : method === "eth_getCode" ? "0x" : "0x";
+        res.writeHead(200, {"content-type": "application/json"});
+        res.end(JSON.stringify({jsonrpc: "2.0", id: parsed.id, result}));
+      });
+    });
+    await new Promise<void>((resolve) => rpc.listen(0, "127.0.0.1", resolve));
+    const rpcAddress = rpc.address();
+    if (!rpcAddress || typeof rpcAddress === "string") throw new Error("onboarding RPC test server did not bind");
+    const oldExitCode = process.exitCode;
+    process.exitCode = undefined;
+    let verifyLog = "";
+    console.log = (value?: any) => { verifyLog += String(value); };
+    try {
+      await cmdProductionOnboardingVerify("corner-store.production-onboarding.json", {rpcUrl: `http://127.0.0.1:${rpcAddress.port}`});
+    } finally {
+      console.log = previousLog;
+      await new Promise<void>((resolve, reject) => rpc.close((err) => (err ? reject(err) : resolve())));
+    }
+    assert(process.exitCode === 1, "production-onboarding-verify sets nonzero on fail-closed mismatch");
+    assert(JSON.parse(verifyLog.slice(verifyLog.indexOf("{"))).ready === false, "production-onboarding-verify prints not-ready result");
+    process.exitCode = oldExitCode;
     await assertRejects(
       () => cmdProductionDeploy("corner-store.production.json", {ledger: true, confirm: "wrong"}),
       "production-deploy requires explicit confirmation before RPC preflight"
@@ -234,10 +307,11 @@ async function main() {
   // Wave-2b: direct element-level (recipeId 0) codes decode to the doc-name
   // from that element's header table — this is the reasonCode actually
   // returned by an element's own `check()` / thrown via `ComplianceRejected`
-  // (e.g. D-01 HolderCount.onTransfer), unlike the engine-propagated verdict
-  // which today always carries code 1.
+  // (e.g. D-01 HolderCount.onTransfer). G005 engine/CLI propagation preserves
+  // this exact nonzero element reason; code 1 is only the zero-reason fallback.
   const sanctionsClaim = decodeReason(A01_DIRECT_CODE4);
   assert(sanctionsClaim.label.includes("FAIL_NO_SANCTIONS_CLAIM"), "decodes A-01 direct code 4");
+  assert(A01_DIRECT_CODE4 !== encodeReason(1, "A-01-v1", 1), "direct element reason is not fabricated recipe-scoped code 1");
   const holderCap = decodeReason(D01_DIRECT_CODE3);
   assert(holderCap.label.includes("HOLDER_CAP_3C1_100"), "decodes D-01 direct code 3");
   // Wave-3: a monitoring element's audit-surface code still decodes to its
@@ -309,12 +383,13 @@ async function main() {
   const tampered = recoverMaker(round.quote, tamperedSig);
   assert(!tampered.ok, "quote-inspect FAILs a tampered signature");
 
-  // --- reason-decode regression: the recipe-aware per-element code `check`
-  //     reports for a failed element must resolve in the reason table. --------
+  // --- reason-decode regression: zero element reasons still fall back to the
+  //     recipe-aware generic code-1 path, but exact direct codes decode too. ---
   assert(
     decodeReason(encodeReason(1, "A-02-v1", 1)).label.includes("Jurisdiction"),
-    "check per-element reason decodes (recipe 1 / A-02-v1 -> Jurisdiction)"
+    "fallback per-element reason decodes (recipe 1 / A-02-v1 -> Jurisdiction)"
   );
+  assert(decodeReason(A01_DIRECT_CODE4).label.includes("FAIL_NO_SANCTIONS_CLAIM"), "exact non-1 element reason decodes");
 
   console.log("corner-store CLI smoke ok");
 }

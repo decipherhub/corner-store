@@ -57,6 +57,49 @@ Backend pre-check나 quote 발급 이후에도 claim, Manifest, maker, signer �
 
 ## Component Contracts
 
+### Production HTTP host boundary
+
+`services/rfq-host` provides the hardened host seam for production operators
+without converting `services/rfq-demo-backend` into production infrastructure.
+The request sequence is fixed:
+
+```text
+size/json/schema validation
+  → authenticator principal+taker claim
+  → exact normalized taker binding
+  → hashed-principal rate limit
+  → durable coordinator quoteWithEvidence
+    (actual pricing result + actual risk decision freshness before reserve/sign)
+  → strict PII-free audit
+  → quote response
+```
+
+Required fail-closed behavior:
+
+- missing or invalid auth returns 401; authenticated taker mismatch returns 403;
+- request body larger than the configured cap returns 413;
+- rate limit returns 429 with `Retry-After` and never keys on a raw principal;
+- the actual pricing result and actual risk decision returned inside
+  `quoteWithEvidence()` must include `snapshotId`, `version`, `observedAt`,
+  `validUntil` and availability; missing, stale, future-skewed or unavailable
+  values stop before nonce reservation and signing, while idempotent replay uses
+  persisted evidence without provider recall or re-signing; existing RESERVED
+  replay must revalidate persisted evidence before signing and terminalize/release
+  the reservation if evidence is stale, missing, future-skewed or unavailable;
+- fresh risk `decision: rejected` returns stable 422 `risk_rejected` without raw
+  reason disclosure, and signer verification failure plus strict audit
+  persistence failure do not return a quote;
+- incident hooks are best-effort and non-recursive; hook failure must not leak
+  secrets or convert a prior safe failure into success;
+- audit and metrics exclude raw bearer tokens, raw idempotency keys, signer refs,
+  raw request bodies, stack traces and unbounded principal/address labels.
+
+The reference in-memory limiter/audit/metrics/incident adapters are test doubles; the host does not accept independent host-side freshness assertions that can diverge from coordinator pricing/risk results.
+Production deployments must replace them with operator-owned shared rate-limit
+state, WORM/retention audit, bounded metrics and incident routing. TLS termination
+remains external; the host refuses public bind unless the operator explicitly
+acknowledges a trusted TLS/proxy boundary.
+
 ### Quote API boundary
 
 Client-supplied fields:
@@ -278,8 +321,8 @@ The operator owns retention, access control and WORM export.
 
 ## Migration Sequence
 
-1. Implement durable nonce/idempotency reference adapter and hostile concurrency tests.
-2. Add external signer adapter contract and local signature verification.
+1. Implement durable nonce/idempotency reference adapter and hostile concurrency tests. **Implemented by RFQ-004 for the SDK/reference coordinator boundary; HA production must still provide a transactional DB store.**
+2. Add external signer adapter contract and local signature verification. **Local signature verification implemented by RFQ-004 for direct-maker EIP-712; production authorizer-specific verification remains operator integration work.**
 3. Add versioned `IMakerAuthorizer` and migrate RFQ Adapter without changing v1 quote fields.
 4. Fix Router regulated-quantity cap before enabling finite caps.
 5. Add production pricing/risk metadata envelope and audit record.
@@ -287,3 +330,14 @@ The operator owns retention, access control and WORM export.
 7. Perform independent security and legal/operator review.
 
 Partial fill starts only after this sequence and uses a new quote/adapter version.
+
+
+### RFQ-004 implementation note
+
+The SDK now exports `RFQQuoteCoordinator`, `QuoteCoordinatorStore` and
+`LocalFileQuoteCoordinatorStore`. The coordinator implements the atomic
+reserve/sign/persist lifecycle expected by this policy while preserving the
+existing lightweight SDK and demo backend behavior. The file-backed store is a
+reference/single-host adapter only; production readiness for HA deployment
+requires replacing it with an operator-owned transactional DB implementation and
+feeding `observeSettlement`/`reconcile` from a production chain indexer.

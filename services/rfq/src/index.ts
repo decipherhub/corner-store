@@ -1,5 +1,6 @@
 export * from "./eip712";
 export * from "./conformance";
+export * from "./coordinator";
 export * from "./modules";
 export * from "./quoteService";
 export * from "./reference";

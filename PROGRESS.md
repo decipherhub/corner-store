@@ -15,6 +15,124 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `SDK-003 — Publishable Package Release Contract`: CLI, Toolkit과 RFQ SDK를
+  독립 npm tarball로 build/pack하고 Node 20 clean temporary projects에 설치하는
+  release gate를 완성했다. Toolkit packed export/config simulation, generated
+  RFQ module conformance, packaged CLI doctor/deploy dry-run과 contract bundle
+  Foundry build를 repository-relative package resolution 없이 검증한다. SemVer,
+  npm version과 persisted schema/capability version의 분리, release/rollback 및
+  immutable on-chain version migration 절차를 `docs/sdk-versioning.md`에 기록했다.
+  검증: Toolkit/RFQ/CLI package tests pass; Node 20
+  `scripts/sdk-product-smoke.sh` pass; Node 16 doctor fail-closed 확인;
+  `git diff --check` pass. `scripts/check.sh`는 실행했으나 G006과 무관한 기존
+  formatting drift(`script/DeployProductionCore.s.sol`,
+  `script/DemoScenarios.s.sol`)에서 중단됐다.
+
+- `CORE-005 — Compliance Core Production Hardening`: Compliance Core registry
+  semantics were hardened for production onboarding. Element registration is now
+  immutable per `elementId`, pins metadata/version hashes and records default
+  enforcement action. Recipe registration accepts canonical normalized aliases,
+  stores version-independent `recipeKey` commitments, preserves immutable legacy
+  numeric aliases and rejects collisions/overwrites. `TokenPolicyRegistry`
+  compiles bounded per-binding Element enforcement rules at registration/update
+  time and rejects normal onboarding overrides that weaken an Element's default
+  action; `FORCE_FLAG_ONLY` remains limited to Elements that default to
+  `FLAG_ONLY`. Engine rejection now preserves exact nonzero Element reason codes
+  and only falls back to recipe-scoped code `1` for zero reasons. Toolkit/CLI
+  production onboarding v2 now validates alias/key derivation, default actions,
+  bounded overrides and compiled plan commitments, emits additive v2 calldata,
+  and verifies alias/key, default action and compiled-plan state fail-closed while
+  legacy v1 configs/calldata remain accepted. 검증: targeted registry tests 86
+  pass, Engine tests 37 pass, RegD integration tests 6 pass, full
+  `forge test --offline` 870/870 pass, `npm test --prefix services/toolkit`
+  pass, `npm test --prefix services/cli` pass, isolated `/tmp` full
+  `scripts/check.sh` pass(after formatting only the pre-existing
+  `script/DeployProductionCore.s.sol` and `script/DemoScenarios.s.sol` drift in
+  the copy and running fresh `npm ci` for copied stale `node_modules`; this full
+  check was before the final Solidity-only bijection guard and post-fix full
+  `forge test --offline` 870/870 passed), full Anvil E2E `buidl-like` and
+  `reg-d` pass with 7/7 scenarios and RFQ flows, and
+  `git diff --check` pass. Original-tree `scripts/check.sh` remains blocked by
+  pre-existing formatting drift in `script/DeployProductionCore.s.sol` and
+  `script/DemoScenarios.s.sol`; `DemoScenarios` contains only the scoped G005
+  reason-contract edit and was not broad-formatted in the original tree.
+
+- `DEPLOY-003 — Production ERC-3643 Asset Onboarding`: production core deployment과
+  local Anvil demo onboarding을 분리한 production-only asset onboarding Toolkit/CLI
+  surface를 추가했다. `corner-store.production-onboarding.json`은 exact schema로
+  ERC-3643 token→IdentityRegistry→Compliance wiring, Identity Registry dependency,
+  Corner Store registry/adapter/operator addresses, legalPackageHash, Element/Recipe/
+  Manifest/RecipeBinding, governance Safe metadata, explicit operator executor,
+  active venue, RFQ maker/signer delegate and read-only inventory requirements를 받는다. Validator는 unknown fields,
+  duplicate ids/addresses, unsupported codeHashes key, PII/secret shaped input,
+  omitted/empty venue or inventory, active RFQ venue without approved maker/signer
+  delegate/approved-maker inventory, RFQ config without RFQ venue를 fail-closed한다.
+  `production-onboarding-plan`은 deterministic calldata와 Safe-owner/operator-authority
+  drafts를 분리한다. Safe drafts에는 Safe/required approval/proposal identity가,
+  operator drafts에는 explicit executor/proposal identity가 포함되며 immutable output으로
+  쓰고 governance-owner/governance-delayed/operator authority를 분리하고 transfer/approval/
+  broadcast를 생성하지 않는다.
+  `production-onboarding-verify`는 injected reader/JsonRpcProvider로 ERC-3643 wiring,
+  code hash, registry state, exact Manifest hash/fields/bindings, ACTIVE
+  declaredBy/approvedBy, governance Safe ownership of safe-owner targets, global/asset/venue pause gates, TokenPolicyRegistry/RFQAdapter operator executor
+  authorization, maker approval, active signer and inventory balance/allowance를
+  read-only 검증한다. Pending signer는
+  detail로 보고하지만 ready가 아니다. 검증: `npm test --prefix services/toolkit`,
+  `npm test --prefix services/cli`, production onboarding example validation,
+  `git diff --check` 통과. `scripts/check.sh`는 실행했으나 known pre-existing
+  Solidity formatting blocker(`script/DeployProductionCore.s.sol`,
+  `script/DemoScenarios.s.sol`)에서 실패했다. Anvil E2E는 기존 untracked
+  `deployments/` 보호를 위해 이 slice에서 실행하지 않았다.
+
+- `DATA-002 — Provider-Neutral TA/KYC Evidence`: `services/compliance-data`에
+  provider-neutral TA/KYC evidence coordinator와 replaceable store port를 추가했다.
+  요청/결과는 subject, optional ONCHAINID identity, asset, request/evidence hashes와
+  bounded provider/status/fact fields만 사용하며 raw name/email/document/SSN/provider
+  subject/webhook payload는 core I/O·snapshot·audit에 저장하지 않는다. coordinator는
+  provider result의 exact binding, freshness/future skew, explicit revoke/ineligible,
+  sanctions/KYC facts와 provider timeout을 fail-closed로 검증하고 canonical domain-separated evidenceHash를
+  계산한다. eligible snapshot은 strict success audit이 성공한 뒤에만 store에 publish하고 store 반환값을 재검증한다. provider outage/timeout/malformed request·result/stale/future/mismatch/revoked/ineligible/
+  conflict/audit failure는 eligible materialization을 반환하지 않으며 cached last-good
+  snapshot으로 outage를 숨기지 않는다. `InMemoryKycEvidenceStore`는 single-process
+  reference/conformance store로 idempotent replay, same-assessment conflict, newer/revoked
+  monotonic semantics를 검증하며 production HA/WORM/claim-write adapter는 operator 교체
+  지점으로 남겼다. 검증: `npm test --prefix services/compliance-data`,
+  `git diff --check` 통과. E2E는 이 provider-boundary feature 범위가 아니어서 실행하지
+  않았다.
+
+- `RFQ-005 — Production RFQ Host Hardening`: `services/rfq-host`를 새
+  production-separable HTTP host boundary로 추가했다. local Anvil demo backend는
+  그대로 두고, host는 request-size/JSON/schema validation, authenticator port와
+  exact taker binding, hashed-principal rate limit, pricing/risk freshness gate,
+  durable coordinator issuance, strict PII-free audit, bounded metrics와
+  incident hook을 순서대로 적용한다. stale/missing/future/unavailable
+  pricing·risk dependency는 nonce reservation과 signer 호출 전에 fail-closed하며,
+  external signer verification failure와 audit sink failure는 quote response를
+  내지 않고 incident로 기록한다. `/health`는 secret/config를 노출하지 않고,
+  public bind는 operator TLS/trusted-proxy acknowledgement 없이는 거부한다.
+  검증: baseline 및 final `npm test --prefix services/rfq`,
+  `npm test --prefix services/rfq-host`, `npm test --prefix services/rfq-demo-backend`,
+  `git diff --check` 통과. E2E는 기존 untracked `deployments/` 보호를 위해
+  이 feature 범위에서 실행하지 않았다. `scripts/check.sh`는 이 stacked 작업에서
+  known unrelated Solidity formatting gate가 있어 실행하지 않았고, RFQ hardening과
+  무관한 Solidity 파일은 수정하지 않았다.
+
+- `RFQ-004 — Durable Quote Coordinator`: `services/rfq`에 production-separable
+  `RFQQuoteCoordinator`와 `QuoteCoordinatorStore` 포트를 추가했다. coordinator는
+  pricing/risk가 통과한 뒤에만 `(chainId, adapter, maker)` scope nonce와
+  idempotency/request hash, maker outgoing inventory lease를 원자적으로 예약하고,
+  external signer 결과를 로컬 EIP-712 검증 후 durable record에 저장한다. 같은
+  idempotency key+request는 service restart/new coordinator instance 이후에도 같은
+  signed quote를 반환하고, 다른 request hash는 conflict로 거부된다. signer failure,
+  expiry, revoke, finalized fill/cancel은 lease를 정확히 한 번 해제하며 nonce gap은
+  허용하되 재사용하지 않는다. fill/cancel observation은 block/hash를 기록하고
+  configured finality 이후 terminal 처리하며, reorg는 observed 상태를 `PUBLISHED`로
+  되돌리고 lease를 유지한다. durable record에는 raw idempotency key나 signer ref를
+  저장하지 않는다. 함께 추가한 `LocalFileQuoteCoordinatorStore`는 Node built-ins 기반
+  reference/single-host file adapter이며 production HA는 동일 포트를 operator
+  transactional DB와 indexer/reconciliation worker로 구현해야 한다. 검증: baseline 및
+  final `npm test --prefix services/rfq` 통과, `git diff --check` 통과.
+
 - `STUDIO-002 — Localized Evidence-Gated Workflow`: Deployment Studio의 기본
   언어를 한국어로 제공하고 English 전환 선택을 유지한다. 설정 저장부터 Doctor,
   계획, 배포, Artifact 검증, DEX 실행까지 실제 evidence와 선행 단계가 모두

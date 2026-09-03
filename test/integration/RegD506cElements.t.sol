@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {IntegrationBase} from "./IntegrationBase.sol";
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
 import {Errors} from "../../src/libraries/Errors.sol";
-import {ReasonCodes} from "../../src/libraries/ReasonCodes.sol";
+import {IComplianceElement} from "../../src/interfaces/compliance/IComplianceElement.sol";
 
 /// @notice Full router-path coverage of the 9-element Reg D 506(c) recipe
 ///         (RegD506cRecipe v2) against the REAL ERC-3643 stack. A fully-attested
@@ -13,24 +13,29 @@ import {ReasonCodes} from "../../src/libraries/ReasonCodes.sol";
 ///
 /// Because {setupBuyer} + {deployStack} make every one of the nine elements pass,
 /// disabling a single attestation makes it the FIRST (and only) failing check, so
-/// the engine's cumulative-AND returns that element's reasonCode. The engine
-/// re-encodes failures as `ReasonCodes.encode(contributingRecipe, elementId, 1)`
-/// with contributingRecipe = the RWA manifest's issuance recipe id (1).
+/// the engine's cumulative-AND returns that element's own nonzero reasonCode.
+/// Only zero element reasons fall back to the legacy encoded form.
 contract RegD506cElementsTest is IntegrationBase {
     function setUp() public {
         deployStack(); // RegD506c (9 elements), no fund recipe
         fundPoolRWA(1_000 ether);
     }
 
-    /// @dev The reasonCode the engine emits for a failed check of `elementId`
-    ///      under the RegD506c issuance recipe (id 1, failure code 1).
-    function _rejectCode(bytes32 elementId) internal pure returns (bytes32) {
-        return ReasonCodes.encode(1, elementId, 1);
+    function _rejectCode(bytes32 elementId, ExecutionRequest memory req) internal view returns (bytes32 reason) {
+        (, reason) = IComplianceElement(elementReg.elementOf(elementId))
+            .check(
+                req.context.buyer,
+                req.context.seller,
+                req.context.tokenOut,
+                req.context.amountOut,
+                abi.encode(req.context)
+            );
     }
 
     function _expectRejected(bytes32 elementId, ExecutionRequest memory req) internal {
+        bytes32 reason = _rejectCode(elementId, req);
         vm.prank(req.context.buyer);
-        vm.expectRevert(abi.encodeWithSelector(Errors.ComplianceRejected.selector, _rejectCode(elementId)));
+        vm.expectRevert(abi.encodeWithSelector(Errors.ComplianceRejected.selector, reason));
         router.execute(req);
     }
 

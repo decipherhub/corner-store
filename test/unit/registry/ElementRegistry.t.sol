@@ -10,7 +10,8 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EnforcementAction
 } from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 import {Events} from "../../../src/libraries/Events.sol";
@@ -73,6 +74,26 @@ contract ElementRegistryTest is Test {
         assertEq(uint256(m.category), uint256(ElementCategory.INVESTOR_ATTRIBUTE));
         assertEq(m.version, "1.0.0");
         assertEq(uint256(m.statefulness), uint256(Statefulness.STATELESS));
+    }
+
+    function test_registerElement_is_immutable_and_stores_default_action() public {
+        reg.registerElement(ELEMENT_ID, address(element), EnforcementAction.FLAG_ONLY);
+        assertEq(uint256(reg.defaultActionOf(ELEMENT_ID)), uint256(EnforcementAction.FLAG_ONLY));
+        assertEq(reg.versionHashOf(ELEMENT_ID), keccak256(bytes("1.0.0")));
+        assertTrue(reg.metadataHashOf(ELEMENT_ID) != bytes32(0));
+
+        MockElement replacement = new MockElement(ELEMENT_ID);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ElementAlreadyRegistered.selector, ELEMENT_ID));
+        reg.registerElement(ELEMENT_ID, address(replacement));
+    }
+
+    function test_registerElement_rejects_metadata_id_mismatch_and_no_code() public {
+        MockElement mismatch = new MockElement(bytes32("OTHER"));
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidElementMetadata.selector, ELEMENT_ID));
+        reg.registerElement(ELEMENT_ID, address(mismatch));
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidElementMetadata.selector, ELEMENT_ID));
+        reg.registerElement(ELEMENT_ID, address(0xC0FFEE));
     }
 
     function test_metadataOf_reverts_when_unregistered() public {

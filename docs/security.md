@@ -137,13 +137,42 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   nonce-scoped cancel로 활성화되었다. 위협 모델, actor/asset/trust boundary와
   threat table은 `docs/rfq-threat-model.md`를 기준으로 한다.
 - production RFQ는 ADR-009와 `docs/product-specs/production-rfq-policy.md`를
-  따른다. maker-authorizer, durable nonce/idempotency와 production risk module
-  구현 전에는 reference service를 production으로 활성화하지 않는다.
+  따른다. `services/rfq-host`는 demo backend와 분리된 host hardening boundary를
+  제공하지만 production activation에는 operator-owned HA store, signer custody,
+  shared limiter, WORM audit, TLS/proxy와 live pricing/risk freshness integration이
+  필요하다.
 - partial fill은 새 quote/adapter version과 별도 accounting/replay 검증 전까지
   활성화하지 않는다.
 
+## Production Onboarding Safety
+
+- `production-onboarding-plan`은 unsigned calldata/Safe draft export 전용이다.
+  private key, Safe owner signature, broadcast, token transfer 또는 ERC-20 approval을
+  생성하지 않는다.
+- onboarding config는 exact schema를 사용하고 unknown field, signer-secret shaped
+  key/value, raw contact PII와 중복 address/key를 fail-closed한다. Governance Safe, bounded required approvals,
+  explicit operator executor, canonical recipe alias/key commitments, immutable
+  Element default actions, bounded strengthen-only overrides, at least one active venue and at least
+  one inventory requirement are mandatory for production v2. Active RFQ venues additionally require approved maker,
+  signer delegate and approved-maker inventory evidence. Legal/TA evidence는 PII-free
+  hash로만 참조한다.
+- `production-onboarding-verify`는 ERC-3643 token→IdentityRegistry→Compliance
+  wiring, Identity Registry dependencies, Element/Recipe registry state, recipe
+  alias/key mapping, Element default actions/version hashes, exact Manifest
+  hash/fields/bindings, compiled plan hash/rules, global/asset/venue pause gates, maker approval,
+  governance Safe ownership of safe-owner targets, active signer delegate,
+  operator executor authorization on TokenPolicyRegistry and RFQAdapter, and inventory balance/allowance minimum을 read-only로 확인한다. Unavailable RPC/read mismatch, safe-owner target owner mismatch, pending signer authorization, paused
+  global/asset/venue state or missing inventory evidence is not production-ready.
+- Inventory mutation은 maker/operator custody process의 책임이다. Corner Store
+  tooling은 inventory-before-service-open 조건을 plan dependency와 verifier evidence로
+  표현할 뿐 transfer/approval/custody transaction을 합성하지 않는다.
+
 ## Logging
 
+- RFQ host audit events must hash principals, request bodies and idempotency keys;
+  they must not store raw bearer tokens, raw idempotency keys, signer refs, raw
+  request bodies, PII or stack traces. Metrics labels must stay bounded and must
+  not contain principals or addresses.
 - 민감한 identity 자료와 법률 문서를 온체인 event나 일반 로그에 기록하지 않는다.
 - audit event에는 필요한 식별자와 상태 변경만 남긴다.
 - 성공한 regulated evaluation은 Manifest version과 applied Recipe set을 추적할 수

@@ -43,10 +43,29 @@ cd services/rfq-demo-backend && npm ci && npm test
 cd services/cli && npm ci && npm test
 ```
 
+RFQ production host hardening smoke test:
+
+```sh
+cd services/rfq-host && npm ci && npm test
+```
+
+Host smoke는 인증 401/403, malformed/oversize/Content-Length 413,
+hashed-principal rate limit 429, limiter capacity principal-spray 방어, 실제
+coordinator pricing/risk evidence freshness fail-closed, fresh risk rejection 422,
+RESERVED replay evidence 재검증/terminal release, signer call/verification
+failure, strict audit failure 후 같은 quote/no-resign retry, incident-hook
+failure isolation, PII-free audit redaction, bounded metrics, successful quote와
+idempotent replay를 검증한다.
+
+
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
 API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
-거부를 검증한다. CLI smoke는 backend quote request path와 기존
-quote-file/서명 검증 경로를 함께 검증한다.
+거부를 검증한다. CLI smoke는 backend quote request path, 기존 quote-file/서명
+검증 경로, `production-onboarding-plan --out` immutable export/overwrite
+refusal, v2 canonical recipe alias/key derivation, compiled plan replay,
+strengthen-only override rejection, legacy v1 plan acceptance,
+`production-onboarding-verify` fail-closed mismatch behavior and exact nonzero
+Element reason decode를 함께 검증한다.
 
 Standalone SDK integration smoke:
 
@@ -59,8 +78,17 @@ Toolkit smoke는 unified `create`가 생성하는 `library-only`,
 `reference-service`, `existing-backend` 세 mode의 manifest, `.env.example`,
 vendored `vendor/rfq-service`, optional Docker files, overwrite refusal과
 standalone package scripts(`doctor`, `deploy`, `verify`, `test:module`)를
-검증한다. SDK-002 문서 또는 packaging 변경에서는 CLI help, `doctor`, dry-run
-`deploy`, `verify`/preflight와 `test-module` command path도 별도로 확인한다.
+검증한다. Production onboarding smoke는 exact schema/unknown-field rejection,
+PII/secret rejection, deterministic Element/Recipe/Manifest/Venue/RFQ calldata,
+Safe/operator draft governance/proposal metadata, authority partition, explicit
+operator executor metadata, safe-owner target owner checks, stage dependency including governance-delayed signer execution, mandatory active venue/inventory
+gates, RFQ activation coherence, AMM-only coherent mode, read-only
+inventory stage, ACTIVE Manifest field verification, pause gate verification and
+pending-vs-active signer and safe-owner target owner mismatch/unavailable and operator role mismatch/unavailable fail-closed behavior를 포함한다. SDK-002 문서 또는 packaging 변경에서는 CLI help, `doctor`,
+dry-run `deploy`, `verify`/preflight와 `test-module` command path도 별도로
+확인한다. `scripts/sdk-product-smoke.sh`는 CLI, Toolkit과 RFQ package를 모두
+tarball로 pack한 뒤 clean temporary project에 설치해야 하며 Toolkit public export,
+generated RFQ conformance, CLI doctor/deploy와 packaged contract build를 검증한다.
 
 Generated consumer projects should keep this local gate:
 
@@ -84,8 +112,12 @@ npm test
 ```
 
 TA lot lineage/완납 clock, conservative snapshot, broken-lineage fail-closed,
-idempotent person-group commit, rolling volume/holder counts와 hash-chain 변조 탐지를
-검증한다.
+idempotent person-group commit, rolling volume/holder counts, hash-chain 변조 탐지와
+provider-neutral TA/KYC evidence refresh conformance를 검증한다. KYC suite는 exact
+subject/identity/asset binding, provider outage/timeout/malformed request·result/stale/future fail-closed,
+revoked/ineligible/sanctions handling, deterministic evidence hash, replay/conflict,
+recursive PII/unknown schema rejection, PII-free audit/error output, strict audit-before-publish fail-closed, production store return revalidation, bounded incident hook failure and
+"no cached success on outage" behavior를 포함한다.
 
 Deployment Studio smoke test:
 

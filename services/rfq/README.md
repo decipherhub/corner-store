@@ -14,13 +14,14 @@ It is **not** a production RFQ server and Corner Store does not operate a hosted
 - Provides versioned pricing/risk/signer/nonce module descriptors and capability validation.
 - Provides a common conformance suite for reference and custom module sets.
 - Provides local reference components for tests and demos.
+- Provides a production-separable durable quote coordinator boundary with a local single-host file-backed reference store.
 
 ## What the SDK does not do
 
 - No hosted backend.
 - No production market-making strategy.
 - No production signer/key custody.
-- No custody or inventory management.
+- No custody or inventory management. The coordinator only models off-chain quote inventory leases; it does not lock tokens on-chain.
 - No final compliance decision in the backend.
 - No dashboard or websocket/order discovery.
 
@@ -69,13 +70,57 @@ The returned `signedQuote` contains:
 - `signature`: maker signature.
 - `typedData`: exact EIP-712 payload that was signed.
 
+
+## Durable quote coordinator
+
+`RFQQuoteCoordinator` is the application boundary for production-style firm quote
+issuance. It sits above pricing, risk and signer modules and requires a
+`QuoteCoordinatorStore` implementation that atomically handles:
+
+- `(chainId, adapter/verifyingContract, maker)` monotonic nonce allocation;
+- idempotency key hash + request hash conflict detection;
+- maker outgoing-token inventory lease reservation;
+- persisted signed responses for lost-response retry;
+- signer-failure, expiry, revoke and finalized fill/cancel release;
+- fill/cancel observation, confirmation-depth finality and reorg rollback.
+
+The exported `LocalFileQuoteCoordinatorStore` is a **reference/single-host**
+adapter. It uses only Node built-ins and an exclusive lock directory to
+demonstrate restart persistence and hostile same-host concurrency without adding
+a database dependency. It is not an HA production store. Production operators
+must implement the same port with a transactional database or equivalent durable
+compare-and-set, plus an on-chain indexer/reconciliation worker.
+
+Durable records intentionally store hashes for idempotency keys and signer key
+references. Do not write raw bearer tokens, identity documents, customer PII or
+secrets to this store or to logs. Partial fill remains out of scope for RFQ v1.
+
+Production hosts should call `quoteWithEvidence(intent, strictFreshnessPolicy)`.
+That strict API validates the actual pricing result and actual risk decision
+returned inside the coordinator call, persists their freshness evidence, and
+returns it with a replay indicator. Existing signed idempotent records replay
+without repricing, rerisking or re-signing. Existing RESERVED records revalidate
+persisted evidence before signing; stale/missing/future/unavailable evidence
+revokes the reservation and releases its lease without reusing the nonce. Fresh
+risk `decision: rejected` is exposed as stable `RISK_REJECTED`; raw operator risk
+reasons must not be logged or audited.
+
+## Production host boundary
+
+For HTTP endpoint hardening, use the separate `services/rfq-host` package. It
+wraps `RFQQuoteCoordinator.quoteWithEvidence()` with auth, exact taker binding,
+request-size caps, hashed-principal rate limiting, strict validation of the
+actual pricing/risk evidence persisted by the coordinator, strict PII-free audit,
+bounded metrics and incident hooks. It deliberately remains separate from
+`services/rfq-demo-backend`, which is local Anvil demo infrastructure only.
+
 ## Replace for production
 
 The reference components are intentionally local/demo-only:
 
 | Component | Purpose | Production replacement |
 | --- | --- | --- |
-| `InMemoryNonceStore` | local maker-scoped monotonic nonce assignment matching `RFQAdapter.usedQuoteNonce[maker][nonce]` | DB/Redis-backed persistent nonce store |
+| `InMemoryNonceStore` | local maker-scoped monotonic nonce assignment matching `RFQAdapter.usedQuoteNonce[maker][nonce]` | DB/Redis-backed persistent nonce store, or `RFQQuoteCoordinator` with a production `QuoteCoordinatorStore` |
 | `FixedRatePricingProvider` | deterministic demo price | operator pricing engine |
 | `NoopInventoryRiskCheck` | no-op demo risk gate | inventory, exposure and maker risk checks |
 | custom `TypedDataSigner` | signing seam | KMS/HSM/custody signer |

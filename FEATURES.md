@@ -9,6 +9,182 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+
+## CORE-005 — Compliance Core Production Hardening
+
+### Behavior
+
+- Element registrations are immutable per `bytes32 elementId`, pin implementation
+  metadata/version hashes and store a default enforcement action for compiled
+  manifest plans.
+- Recipe registration now supports canonical normalized aliases, domain-separated
+  `bytes32 recipeKey` derivation and legacy numeric aliases without dynamic
+  runtime alias lookup. Alias/key collisions and version overwrite attempts are
+  rejected.
+- `TokenPolicyRegistry` compiles bounded per-binding Element enforcement rules at
+  manifest registration/update time. Normal onboarding is strengthen-only:
+  `FLAG_ONLY < OPERATOR_REVIEW < BLOCK`; `FORCE_FLAG_ONLY` is accepted only for
+  Elements whose immutable default is already `FLAG_ONLY`.
+- The Engine evaluates compiled plans and propagates an Element's exact nonzero
+  `reasonCode`; recipe-scoped code `1` is only the fallback when an Element
+  returns zero.
+- Production onboarding Toolkit/CLI support v2 canonical recipe alias/key,
+  Element default enforcement, bounded overrides, compiled plan commitments and
+  dual-mode verification while preserving legacy v1 configs/calldata ordering.
+
+### Verification
+
+- `npm test --prefix services/toolkit`
+- `npm test --prefix services/cli`
+- Targeted Forge registry tests: 86 passed
+- Targeted Engine tests: 37 passed
+- Targeted RegD integration tests: 6 passed
+- Full `forge test --offline`: 870/870 passed
+- Isolated `/tmp` full `scripts/check.sh`: passed after formatting only the
+  pre-existing `script/DeployProductionCore.s.sol` and
+  `script/DemoScenarios.s.sol` drift in the copy and running fresh `npm ci` for
+  copied stale `node_modules`; this full check was before the final
+  Solidity-only bijection guard, and post-fix full `forge test --offline`
+  870/870 passed
+- Full Anvil E2E: `buidl-like` and `reg-d` passed with 7/7 scenarios and RFQ
+  flows
+- Original-tree `scripts/check.sh` remains blocked by pre-existing formatting
+  drift in `script/DeployProductionCore.s.sol` and `script/DemoScenarios.s.sol`.
+  `DemoScenarios` has only the scoped G005 reason-contract edit here and was not
+  broad-formatted.
+- `git diff --check`
+
+### State
+
+passing
+
+
+## DEPLOY-003 — Production ERC-3643 Asset Onboarding
+
+### Behavior
+
+- Production onboarding is separated from local Anvil/demo `toolkit-onboard` and
+  from core deployment. A versioned `corner-store.production-onboarding.json`
+  declares the exact existing ERC-3643 token, IdentityRegistry/Compliance wiring,
+  Corner Store registries/adapters, PII-free legal package hash, Elements, Recipes,
+  Manifest, RecipeBinding[], governance Safe metadata, explicit operator executor,
+  active venues, RFQ makers, signer delegates and read-only inventory requirements.
+- The Toolkit validates the onboarding file with exact-object schemas, rejects
+  unknown fields, duplicate addresses/ids, unsupported codeHash keys, signer-secret
+  shaped fields, raw contact PII and incoherent RFQ/inventory relationships.
+- `production-onboarding-plan` renders deterministic Element/Recipe/Manifest,
+  venue, maker, signer schedule and owner-only delayed signer execution calldata plus Safe-compatible unsigned drafts.
+  It uses collision-free stage IDs, partitions Safe-owner and operator-authority
+  drafts, includes Safe/required approval/proposal identity on Safe drafts and
+  explicit executor/proposal identity on operator drafts, separates governance-owner/governance-delayed/operator
+  authority, refuses output overwrite, and never signs, broadcasts, transfers
+  tokens or generates ERC-20 approvals. Inventory appears as a read-only
+  verification dependency before service open.
+- `production-onboarding-verify` uses RPC read calls only and fails closed on
+  unavailable or mismatched ERC-3643 wiring, Identity Registry dependencies,
+  Element/Recipe registrations, Manifest hash/fields/bindings, ACTIVE Manifest
+  declarer/approver, governance Safe ownership of safe-owner targets, global/asset/venue pause gates, venue config, TokenPolicyRegistry/RFQAdapter operator authorization, maker approval,
+  signer delegate activation and inventory balance/allowance minima. Pending signer
+  authorization is reported but is not production-ready.
+- Example onboarding JSON is syntactically valid but uses obvious placeholder
+  non-live addresses/hashes; issuer/legal/TA evidence remains an external trust
+  boundary and cannot be inferred from a token address.
+
+### Verification
+
+- `npm test --prefix services/toolkit`
+- `npm test --prefix services/cli`
+- `git diff --check`
+
+### State
+
+passing
+
+
+## RFQ-005 — Production RFQ Host Hardening
+
+### Behavior
+
+- RFQ production HTTP hosting is separated into `services/rfq-host` instead of
+  turning the local Anvil demo backend into a production server. The host wraps
+  the durable `RFQQuoteCoordinator` and leaves pricing, risk, signer custody,
+  transactional storage, TLS termination and WORM audit infrastructure as
+  operator-owned replacement ports.
+- `/rfq/quote` validates request size, JSON and schema before authentication. An
+  authenticator port returns a principal and exact taker claim, and the host
+  binds that normalized taker to the body `taker`; missing/invalid auth returns
+  401 and mismatches return 403 without storing raw auth material.
+- Rate limiting is a replaceable port with a bounded in-memory reference
+  implementation. Limiter keys use hashed principals, and 429 responses include
+  `Retry-After`. Oversized requests return 413.
+- The host calls coordinator `quoteWithEvidence()`, so the actual pricing result
+  and actual risk decision returned inside the durable quote call must carry
+  `snapshotId`, `version`, `observedAt`, `validUntil` and availability. Missing,
+  stale, future-skewed or unavailable metadata fails closed before nonce
+  reservation or signing, and idempotent replay returns persisted evidence
+  without provider recall or re-signing. A strict replay of an existing RESERVED
+  record revalidates persisted evidence before signing; stale/missing/future/
+  unavailable evidence revokes the reservation, releases the lease and burns the
+  nonce. Fresh risk `decision: rejected` returns a stable risk rejection before
+  reserve/sign without exposing raw risk reason.
+- Signer verification failures, stale/unavailable dependencies, auth abuse,
+  rate limits and audit sink failures trigger a bounded best-effort incident
+  hook. Strict audit is enabled by default and quote issuance fails closed if
+  PII-free audit persistence fails.
+- Audit events contain hashed principal/request/idempotency identifiers, persisted
+  actual coordinator module/snapshot/version metadata, timestamps and on-chain
+  identifiers only;
+  raw bearer tokens, raw idempotency keys, raw request bodies, signer refs and
+  stack traces are excluded. Metrics labels are bounded and do not include
+  principals or addresses.
+- `/health` exposes only generic service status. Non-loopback public bind is
+  refused unless the operator explicitly acknowledges external TLS/trusted-proxy
+  termination.
+
+### Verification
+
+- `npm test --prefix services/rfq`
+- `npm test --prefix services/rfq-host`
+- `npm test --prefix services/rfq-demo-backend`
+- `git diff --check`
+
+### State
+
+passing
+
+## RFQ-004 — Durable Quote Coordinator
+
+### Behavior
+
+- RFQ SDK는 기존 demo-friendly quote service를 유지하면서 production 서비스가 교체해
+  구현할 수 있는 `QuoteCoordinatorStore` 포트와 `RFQQuoteCoordinator` 경계를 제공한다.
+- coordinator는 `(chainId, adapter/verifyingContract, maker)` scope에서 nonce를
+  원자적으로 증가시키고, idempotency key hash와 request hash를 durable record에
+  저장한다. 같은 key+request는 재시작 후에도 같은 signed quote를 반환하며, 같은
+  key의 다른 request는 fail-closed conflict로 거부한다.
+- pricing/risk rejection은 nonce와 inventory reservation 전에 종료된다. 새 firm quote는
+  nonce, idempotency record와 maker outgoing token inventory lease를 하나의 store
+  transaction에서 예약한다. signer 실패, 만료, revoke, finalized fill/cancel은 lease를
+  정확히 한 번 해제하고 nonce는 재사용하지 않는다.
+- local/single-host reference file store는 Node built-ins만 사용해 restart persistence,
+  lock 기반 cross-instance atomicity, concurrent over-reservation 방지를 시연한다. HA
+  production은 같은 포트를 operator transactional DB/queue/indexer로 구현해야 한다.
+- coordinator는 external signer가 반환한 EIP-712 signature를 로컬에서 검증한 뒤에만
+  응답하고, idempotency key와 signer key ref는 durable audit record에 raw value가 아닌
+  hash로 저장한다.
+- fill/cancel observation은 transaction hash, block number/hash를 기록하고 configured
+  confirmation depth 이후 terminal 상태로 확정한다. reorg/noncanonical block은 observed
+  상태를 `PUBLISHED`로 되돌리고 lease를 유지한다. Partial fill은 계속 비지원이다.
+
+### Verification
+
+- `npm test --prefix services/rfq`
+- `git diff --check`
+
+### State
+
+passing
+
 ## STUDIO-002 — Localized Evidence-Gated Workflow
 
 ### Behavior
@@ -1064,6 +1240,54 @@ passing
 - `src/compliance/elements/Lockup.sol`
 - `test/unit/compliance/AcquisitionSource.t.sol`
 
+
+## DATA-002 — Provider-Neutral TA/KYC Evidence
+
+### Behavior
+
+- `services/compliance-data` exposes a provider-neutral TA/KYC evidence boundary without
+  hardcoding Securitize or another vendor API. Operator adapters supply provider results;
+  Corner Store core accepts only subject/identity/asset bindings and PII-free hashes.
+- `KycEvidenceCoordinator` validates exact taker/identity/asset binding, exact request/result/fact schemas, bounded provider IDs,
+  schema versions, assessment/source evidence hashes, provider timeout, freshness/future skew and explicit
+  `ACTIVE | REVOKED | INELIGIBLE` status before materializing evidence.
+- Canonical `evidenceHash` is domain-separated over normalized provider/schema,
+  subject/identity/asset, facts, timestamps, status and source hash. Any fact, revocation or
+  lineage change changes the hash.
+- Provider outage/timeout, malformed or missing fields, stale/future data, binding mismatch,
+  sanctions hit, non-verified KYC, ineligible/revoked status, missing/failed strict success audit,
+  store mismatch/conflict all fail closed and never return eligible materialization. Cached last-good evidence
+  is not used to hide refresh outages.
+- `InMemoryKycEvidenceStore` is a reference/conformance store only; production deployments must
+  replace it with transactional durable/HA storage. It enforces idempotent replay,
+  same-assessment conflict detection and monotonic protection so older active evidence cannot
+  overwrite newer or revoked evidence.
+- Audit and incident hooks use PII-free hashes, bounded status/reason codes and on-chain IDs
+  only. Strict success audit runs before eligible store publish; store failure after success audit adds a fail audit/incident. Failure-audit and incident-hook errors are bounded/non-recursive.
+- ERC-3643/ONCHAINID remains an external trust boundary: the output is evidence for an
+  issuer/TA-approved adapter, not direct claim issuance or registry writes.
+
+### Verification
+
+- `npm test --prefix services/compliance-data`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Implements the D012/PD-4 provider-neutral boundary; no new vendor compatibility decision was
+  introduced.
+- Existing mock TA and local demo flows are unchanged.
+
+### Related Files
+
+- `services/compliance-data/src/kyc.ts`
+- `services/compliance-data/test/smoke.ts`
+- `services/compliance-data/README.md`
+
 ## MANIFEST-002 — RecipeBinding Manifest Migration
 
 ### Behavior
@@ -1500,6 +1724,36 @@ passing
 
 - completed plan: `docs/exec-plans/completed/SDK-002-standalone-integration-workflow.md`
 - production durable nonce와 service hardening은 #66/#67 module로 유지한다.
+
+## SDK-003 — Publishable Package Release Contract
+
+### Behavior
+
+- CLI, Toolkit과 RFQ SDK를 각각 npm tarball로 build/pack하고 저장소 밖 clean
+  project에서 설치한다.
+- Toolkit의 public CommonJS/types export와 기본 config simulation을 packed artifact
+  기준으로 검증한다.
+- package SemVer, schema/capability version 분리, release gate와 rollback 가능한
+  migration 절차를 문서화한다.
+- generated project의 RFQ conformance, CLI doctor/deploy dry-run과 packaged contract
+  build가 repository-relative package resolution 없이 통과해야 한다.
+
+### Verification
+
+- `npm test --prefix services/toolkit`
+- `npm test --prefix services/rfq`
+- `npm test --prefix services/cli`
+- `scripts/sdk-product-smoke.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- production npm registry publish와 release credential 사용은 이 저장소 검증 범위
+  밖이며, PR merge 후 별도 release 권한으로 수행한다.
 
 ## STUDIO-001 — Local Deployment Studio
 

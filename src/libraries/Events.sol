@@ -41,7 +41,17 @@ library Events {
     event ManifestResumeScheduled(address indexed token, bytes32 reasonCode, uint64 effectiveTime);
     event ManifestResumeCancelled(address indexed token);
     event ElementRegistered(bytes32 indexed elementId, address element);
+    event ElementRegisteredV2(
+        bytes32 indexed elementId,
+        address element,
+        bytes32 metadataHash,
+        bytes32 versionHash,
+        EnforcementAction defaultAction
+    );
     event RecipeRegistered(uint16 indexed recipeId, uint16 version, address recipe);
+    event RecipeRegisteredV2(
+        bytes32 indexed recipeKey, bytes32 indexed aliasHash, uint16 indexed recipeId, uint16 version, address recipe
+    );
     event VenueRegistered(address indexed venue, VenueType venueType, address adapter);
     event GlobalSuspended(bytes32 reasonCode);
     event AssetSuspended(address indexed token, bytes32 reasonCode);
