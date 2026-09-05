@@ -10,6 +10,63 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## PORTAL-004 — Stateful Portfolio and Asset Operations
+
+### Behavior
+
+- RFQ 체결 완료 시점에 주문 수량·가격·수수료·거래 ID를 단 한 번 저장하고,
+  동일한 browser state에서 홈 요약, 내 자산, 거래 내역과 발행사 자산 현황이
+  같은 체결 결과를 읽는다.
+- 선택한 거래 가능 자산의 반복 매수는 보유 수량과 평가액을 누적하며 새로고침·직접 화면 이동 후에도
+  localStorage 기반 demo state를 유지한다. 기존 PORTAL-003 state는 보수적으로
+  마이그레이션한다. 완료된 ABCF 체결 또는 기존 ABCF 보유 상태는 발행사 운영
+  화면에서도 해당 자산을 활성 자산으로 노출한다.
+- Figma 시드처럼 초기에는 KTB/MMF만 거래 가능하고 KLM/ABCF는 자산별 자격이
+  없으며, ABCF 자격 승인이 KLM까지 해제하지 않는다. 각 거래 가능 자산의
+  `거래하기`는 해당 자산 주문 화면과 journal로 연결된다.
+- 발행사 홈과 자산 현황에서 전체 주문을 일시정지·재개할 수 있고, 그 상태는
+  투자자 거래 목록·주문 화면에 즉시 반영되어 자격 보유 자산의 신규 quote/fill을
+  차단한다. 자격 미보유 자산은 `거래 자격 없음` 상태를 유지한다.
+- 일시정지와 재개 이력을 PII-free browser-only 운영 기록으로 표시하고 실제
+  operator API, signer, RPC 또는 온체인 pause 권한과 혼동하지 않는다.
+- 이전 demo schema에서 남은 KLM/ABCF 자격 캐시는 schema v6 전환 시 초기 미자격
+  상태로 한 번 정규화하고, 자격 없는 자산의 주문·견적·체결 직접 경로도 자산 상세로
+  fail-closed한다. 발행사 심사 완료는 catalog 노출만 활성화하며 투자자 자격을
+  자동 부여하지 않는다.
+- 투자자 `내 자산`은 Figma처럼 보유 자산과 거래 내역을 한 화면에서 표시하고,
+  `내 인증`은 인증 목록과 자격 신청 내역 탭으로 분리한다. 발행사 취득일/보유 이력
+  connector는 Figma의 한국예탁결제원·신한아이타스·직접 업로드 선택지를 사용한다.
+
+### Verification
+
+- model regression passed: exact settlement accounting, duplicate completion
+  idempotency including pending-order replay, repeated purchase accumulation,
+  legacy state migration, pause normalization and pending-order cancellation
+- product portal smoke, JavaScript syntax and `git diff --check`: passed
+- headless Chrome 1440x900 walkthrough: 19 assertions passed across buy → completion
+  → holdings/history/home/issuer metrics, pause cancellation, issuer pause → investor
+  blocked order → issuer resume; four visual checkpoints reviewed
+- Figma follow-up: fresh state keeps KLM/ABCF unavailable, KTB/MMF and qualified
+  ABCF route to their own order context, ABCF qualification does not unlock KLM,
+  KLM qualification remains asset-scoped, and issuer-visible global pause disables only
+  qualified assets; 23 Chrome assertions
+  and fresh investor/issuer 1440x900 screenshots reviewed
+- state/route regression follow-up: legacy qualification reset, unqualified direct-order
+  guard, issuer live → metrics navigation, issuer pause/resume, completion → assets,
+  acquisition provider selection and combined assets/certification layouts passed 25
+  Chrome assertions; five 1440x900 visual checkpoints reviewed against supplied PNGs
+- repository-wide `scripts/check.sh`: passed in PR CI with Foundry 870/870, all
+  service smoke tests and vendored deploy-v3 10/10
+- current tree `scripts/check.sh`: passed with Homebrew Node 24 after the two unrelated
+  pre-existing Solidity formatting drifts were temporarily formatted and restored
+- Anvil/GIWA E2E not rerun: browser-only state/UI changes do not touch contracts,
+  deployment, RPC or testnet paths
+
+### State
+
+passing
+
+
 ## PORTAL-003 — Figma Visual Parity and Stable Demo Identity
 
 ### Behavior

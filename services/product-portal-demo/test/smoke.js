@@ -23,17 +23,107 @@ function get(port, pathname) {
 
 async function run() {
   const initial = Model.initialState();
+  assert.equal(initial.schemaVersion, 6);
   assert.equal(initial.walletConnected, true);
   assert.equal(initial.walletProvider, "MetaMask");
   assert.equal(initial.certificationUploadProgress, 0);
   assert.deepEqual(initial.qualificationChecks, [true, true, true, false]);
+  assert.deepEqual(initial.qualifiedAssets, { KTB: true, MMF: true, KLMS: false, ABCF: false });
+  const initialAssets = Object.fromEntries(Model.assets(initial).map((asset) => [asset.symbol, asset]));
+  assert.equal(initialAssets.KTB.eligible, true);
+  assert.equal(initialAssets.MMF.eligible, true);
+  assert.equal(initialAssets.KLMS.eligible, false);
+  assert.equal(initialAssets.ABCF.eligible, false);
+  const migratedQualification = Model.normalizeState({
+    schemaVersion: 5,
+    investorQualified: true,
+    qualifiedAssets: { KTB: true, MMF: true, KLMS: true, ABCF: true }
+  });
+  assert.deepEqual(migratedQualification.qualifiedAssets, { KTB: true, MMF: true, KLMS: false, ABCF: false });
+  assert.equal(migratedQualification.investorQualified, false);
+  const currentQualification = Model.normalizeState({
+    schemaVersion: 6,
+    investorQualified: true,
+    qualifiedAssets: { KTB: true, MMF: true, KLMS: false, ABCF: true }
+  });
+  assert.equal(currentQualification.qualifiedAssets.ABCF, true);
   assert.equal(Model.isMinimumOrder(49), false);
   assert.equal(Model.isMinimumOrder(50), true);
+  assert.equal(Model.isMinimumOrder(9, "KTB"), false);
+  assert.equal(Model.isMinimumOrder(10, "KTB"), true);
+  assert.deepEqual(Model.portfolioSummary(initial), {
+    holdings: [
+      { symbol: "KTB", name: "국고채 토큰", unitPrice: 20000, eligible: true, minimum: "10개", minimumQuantity: 10, quantity: 1200, value: 24000000 },
+      { symbol: "MMF", name: "MMF 토큰", unitPrice: 10000, eligible: true, minimum: "10개", minimumQuantity: 10, quantity: 840, value: 8400000 }
+    ],
+    totalValue: 32400000,
+    assetCount: 2,
+    todayPurchaseValue: 0,
+    transactionCount: 2,
+    demoTradeCount: 0
+  });
+  assert.equal(Model.createPendingOrder(initial, 180), null);
+  initial.qualifiedAssets.ABCF = true;
+  initial.investorQualified = true;
+  initial.orderAmount = 180;
+  initial.pendingOrder = Model.createPendingOrder(initial, initial.orderAmount, "2026-09-05T14:21:00+09:00");
+  assert.equal(initial.pendingOrder.id, "RFQ-DEMO-1842");
+  const firstSettlement = Model.settlePendingOrder(initial, "2026-09-05T14:21:03+09:00");
+  assert.equal(firstSettlement.created, true);
+  assert.equal(firstSettlement.trade.quantity, 180);
+  assert.equal(firstSettlement.trade.fee, 18000);
+  assert.equal(firstSettlement.trade.total, 18018000);
+  assert.equal(firstSettlement.state.holdings.ABCF, 180);
+  assert.equal(firstSettlement.state.transactions.length, 3);
+  assert.equal(firstSettlement.state.issuerAssetListed, true);
+  const replaySettlement = Model.settlePendingOrder({ ...firstSettlement.state, pendingOrder: firstSettlement.trade }, "2026-09-05T14:21:04+09:00");
+  assert.equal(replaySettlement.created, false);
+  assert.equal(replaySettlement.state.holdings.ABCF, 180);
+  assert.equal(replaySettlement.state.transactions.length, 3);
+  const duplicateSettlement = Model.settlePendingOrder(firstSettlement.state, "2026-09-05T14:22:00+09:00");
+  assert.equal(duplicateSettlement.created, false);
+  assert.equal(duplicateSettlement.state.holdings.ABCF, 180);
+  assert.equal(duplicateSettlement.state.transactions.length, 3);
+  duplicateSettlement.state.pendingOrder = Model.createPendingOrder(duplicateSettlement.state, 50, "2026-09-05T14:23:00+09:00");
+  const secondSettlement = Model.settlePendingOrder(duplicateSettlement.state, "2026-09-05T14:23:03+09:00");
+  assert.equal(secondSettlement.state.holdings.ABCF, 230);
+  assert.equal(secondSettlement.state.transactions.length, 4);
+  const paused = Model.setAssetPaused(secondSettlement.state, true, "유동성 점검", "2026-09-05T14:24:00+09:00");
+  assert.equal(paused.changed, true);
+  assert.equal(paused.state.assetPaused, true);
+  assert.equal(paused.state.operationLog[0].action, "PAUSE");
+  assert.equal(Model.createPendingOrder(paused.state, 50), null);
+  const resumed = Model.setAssetPaused(paused.state, false, "점검 완료", "2026-09-05T14:25:00+09:00");
+  assert.equal(resumed.state.assetPaused, false);
+  resumed.state.selectedAsset = "KTB";
+  const ktbOrder = Model.createPendingOrder(resumed.state, 10, "2026-09-05T14:25:30+09:00");
+  assert.equal(ktbOrder.symbol, "KTB");
+  const ktbSettlement = Model.settlePendingOrder({ ...resumed.state, pendingOrder: ktbOrder }, "2026-09-05T14:25:33+09:00");
+  assert.equal(ktbSettlement.state.holdings.KTB, 1210);
+  assert.equal(Model.normalizeState(ktbSettlement.state).holdings.ABCF, 230);
+  const freshKtbState = Model.initialState();
+  freshKtbState.selectedAsset = "KTB";
+  const freshKtbOrder = Model.createPendingOrder(freshKtbState, 10, "2026-09-05T14:25:40+09:00");
+  const freshKtbSettlement = Model.settlePendingOrder({ ...freshKtbState, pendingOrder: freshKtbOrder }, "2026-09-05T14:25:43+09:00");
+  assert.equal(Model.normalizeState(freshKtbSettlement.state).holdings.ABCF, 0);
+  const orderBeforePause = Model.createPendingOrder(resumed.state, 50, "2026-09-05T14:26:00+09:00");
+  const interrupted = Model.setAssetPaused({ ...resumed.state, pendingOrder: orderBeforePause }, true, "긴급 점검", "2026-09-05T14:26:01+09:00");
+  assert.equal(interrupted.state.pendingOrder, null);
+  const migrated = Model.normalizeState({ postTrade: true });
+  assert.equal(migrated.holdings.ABCF, 180);
+  assert.equal(migrated.transactions.filter((trade) => trade.symbol === "ABCF").length, 1);
+  assert.equal(migrated.issuerAssetListed, true);
   assert.equal(Model.qualificationReady(initial), false);
   initial.qualificationChecks = [true, true, true, true];
   assert.equal(Model.qualificationReady(initial), true);
   assert.deepEqual(Model.evidenceProgress(initial), { ready: 5, total: 7 });
   assert.equal(Model.assets(initial).some((asset) => asset.symbol === "ABCF"), true);
+  assert.equal(Model.assets(initial).find((asset) => asset.symbol === "ABCF").eligible, true);
+  assert.equal(Model.assets(initial).find((asset) => asset.symbol === "KLMS").eligible, false);
+  const allPausedAssets = Model.assets({ ...initial, assetPaused: true });
+  assert.equal(allPausedAssets.find((asset) => asset.symbol === "KTB").paused, true);
+  assert.equal(allPausedAssets.find((asset) => asset.symbol === "ABCF").paused, true);
+  assert.equal(allPausedAssets.find((asset) => asset.symbol === "KLMS").paused, false);
   initial.issuerAssetListed = true;
   assert.equal(Model.assets(initial).some((asset) => asset.symbol === "ABCF"), true);
   initial.issuerAnswers = { offering: "reg-d", fund: "private-fund", investor: "contract", holding: "transfer-agent", distribution: "rule-144" };
@@ -43,7 +133,7 @@ async function run() {
   for (const marker of [
     "investor/home", "investor/trade", "investor/qualification", "investor/provider",
     "investor/upload", "investor/review", "investor/quote-loading", "investor/quote",
-    "investor/fill", "investor/complete", "investor/paused", "issuer/home", "issuer/basic",
+    "investor/fill", "investor/complete", "investor/applications", "investor/paused", "issuer/home", "issuer/basic",
     "issuer/rules", "issuer/evidence", "issuer/review", "issuer/live", "issuer/metrics"
   ]) assert.match(app, new RegExp(marker.replace("/", "\\/")));
   assert.match(app, /2500, "investor\/qualification-ready"/);
@@ -56,6 +146,7 @@ async function run() {
   assert.match(app, /"investor\/provider": investorQualification/);
   assert.doesNotMatch(app, /data-route="investor\/provider"/);
   assert.match(app, /corner-store-product-portal-demo-v3/);
+  assert.match(app, /guardedTradeRoutes\.includes\(current\) && !currentAsset\(\)\.eligible/);
   assert.match(app, /Robin/);
   assert.match(app, /0xB0B7\.\.\.91C4/);
   assert.match(app, /ABC 자산운용/);
@@ -72,8 +163,27 @@ async function run() {
   assert.match(app, /3 confirmations/);
   assert.match(app, /class="button-row completion-actions"/);
   assert.match(app, /class="receipt-action-row"/);
-  assert.match(app, /180주/);
-  assert.match(app, /18,018,000 원/);
+  assert.match(app, /investorTransactions/);
+  assert.match(app, /investor\/transactions/);
+  assert.match(app, /자격 신청 내역/);
+  assert.match(app, /보유 중인 자산과 거래 내역입니다/);
+  assert.match(app, /Model\.settlePendingOrder\(state\)/);
+  assert.match(app, /Model\.createPendingOrder\(state, state\.orderAmount\)/);
+  assert.match(app, /data-select-asset="\$\{asset\.symbol\}"/);
+  assert.match(app, /전체 주문 일시정지/);
+  assert.match(app, /일부 자산이 주문을 받지 않습니다/);
+  assert.doesNotMatch(app, /asset\.eligible \|\| state\.investorQualified/);
+  assert.match(app, /"open-pause"/);
+  assert.match(app, /"confirm-pause"/);
+  assert.match(app, /"confirm-resume"/);
+  assert.match(app, /"cancel-control"/);
+  assert.match(app, /투자자 화면의 자격 보유 자산을 한 번에 제어/);
+  assert.match(app, /const portfolio = Model\.portfolioSummary\(state\)/);
+  assert.match(app, /한국예탁결제원/);
+  assert.match(app, /신한아이타스/);
+  assert.match(app, /data-complete-evidence="acquisition"/);
+  assert.doesNotMatch(app, /Korea Trust TA/);
+  assert.match(app, /window\.addEventListener\("storage"/);
   assert.match(app, /class="asset-list"/);
   assert.match(app, /class="flow-stepper"/);
   assert.match(app, /issuerProgress\(2\)/);
@@ -93,6 +203,10 @@ async function run() {
   assert.match(css, /\.asset-list-row/);
   assert.match(css, /\.progress-card/);
   assert.match(css, /\.issuer-review-layout/);
+  assert.match(css, /\.transaction-row/);
+  assert.match(css, /\.asset-operations/);
+  assert.match(css, /\.operation-history/);
+  assert.match(css, /\.provider-guidance/);
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {

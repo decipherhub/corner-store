@@ -15,6 +15,32 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `PORTAL-004 — Stateful Portfolio and Asset Operations`: route별 hardcode 대신
+  idempotent pending-order/transaction journal과 holdings를 browser state에 추가해
+  체결 완료 즉시 홈, 내 자산, 거래 내역과 발행사 현황이 같은 수량·평가액·정산
+  결과를 읽도록 연결했다. 완료된 체결/ABCF 보유 상태는 발행사 운영 자산도
+  활성화한다. 반복 매수 누적, legacy `postTrade` migration과
+  localStorage reload를 지원한다. 후속 Figma 대조에서 자격을 자산별로 분리해 초기
+  KTB/MMF만 거래 가능하고 KLM/ABCF는 거래 불가로 고정했으며, ABCF 승인 후에도
+  KLM은 잠긴 상태를 유지한다. KTB/MMF/승인된 ABCF의 `거래하기`는 선택 자산의
+  주문·체결 journal로 연결된다. 발행사 홈과 현황에는 Figma의 주문 중지 상태를
+  만드는 전체 주문 pause/resume confirmation, PII-free 운영 이력과 same-origin tab
+  동기화를 노출했고, pause 중 pending 주문 제거 및 자격 보유 자산 quote/fill
+  fail-closed를 구현했다. 후속 회귀 수정에서 schema v5 이하의 남은 KLM/ABCF
+  qualification cache를 초기 미자격으로 정규화하고, 미자격 자산의 주문 직접 진입도
+  상세 화면으로 차단했다. 발행사 심사 완료는 ABCF catalog 노출만 수행하며 자격을
+  부여하지 않는다. `issuer/metrics`의 undefined portfolio 참조를 고쳐 심사 완료의
+  자산 현황 보기, 발행사 내 자산과 전체 주문 재개가 실제로 연결되도록 했다.
+  취득일/보유 이력 modal은 Figma의 한국예탁결제원·신한아이타스·직접 업로드로
+  교체했고, 투자자 내 자산은 보유·거래 이력을 한 화면에, 내 인증은 인증 목록·자격
+  신청 내역 탭으로 재정렬했다. model regression, portal smoke, JS syntax/whitespace,
+  기존 19개 cross-flow와 후속 Chrome 23개 assertion, 초기 거래/발행사 운영
+  1440x900 visual review가 통과했고, 이번 후속 수정의 Chrome 25개 assertion과
+  5개 1440x900 visual checkpoint도 통과했다. current tree `scripts/check.sh`도 Homebrew Node
+  24에서 Foundry 870/870, 모든 service smoke와 deploy-v3 10/10으로 통과했다.
+  두 무관한 기존 Solidity formatting drift는 검사 중 임시 포맷 후 원본으로
+  복원했다. contract/RPC/testnet 변경이 없어 Anvil/GIWA E2E는 재실행하지 않았다.
+
 - `PORTAL-003 — Figma Visual Parity and Stable Demo Identity`: 사용자가 제공한
   `figma/*.zip` 원본은 수정·stage하지 않고 `/tmp`에서만 안전하게 추출해 투자자
   19개 및 발행사 18개 PNG를 확인했다. 투자자 `Robin / 0xB0B7...91C4`와 발행사

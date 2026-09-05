@@ -11,4 +11,5 @@
 
 완료된 계획:
 
+- [`PORTAL-004-stateful-portfolio-operations.md`](./PORTAL-004-stateful-portfolio-operations.md)
 - [`PORTAL-003-figma-visual-parity.md`](./PORTAL-003-figma-visual-parity.md)
