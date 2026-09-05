@@ -23,6 +23,9 @@ function get(port, pathname) {
 
 async function run() {
   const initial = Model.initialState();
+  assert.equal(initial.walletConnected, true);
+  assert.equal(initial.walletProvider, "MetaMask");
+  assert.equal(initial.certificationUploadProgress, 0);
   assert.equal(Model.isMinimumOrder(49), false);
   assert.equal(Model.isMinimumOrder(50), true);
   assert.equal(Model.qualificationReady(initial), false);
@@ -46,9 +49,28 @@ async function run() {
   assert.match(app, /2000, "investor\/quote"/);
   assert.match(app, /state\.issuerAssetListed = true/);
   assert.match(app, /dataTransfer\.files/);
+  assert.match(app, /data-action="wallet-details"/);
+  assert.match(app, /data-wallet="WalletConnect"/);
+  assert.match(app, /Provider session KYC-0905-1842/);
+  assert.match(app, /Han River Markets/);
+  assert.match(app, /Atlas Liquidity/);
+  assert.match(app, /EIP-712 서명/);
+  assert.match(app, /inventory reserved/);
+  assert.match(app, /3 confirmations/);
+  assert.match(app, /class="button-row completion-actions"/);
+  assert.match(app, /class="receipt-action-row"/);
+  assert.match(app, /Token \/ IdentityRegistry/);
+  assert.match(app, /Safe proposal/);
+  for (const evidence of ["qualified", "highValue", "acquisition", "holders", "related", "sanctions", "distribution"]) {
+    assert.match(app, new RegExp(`key === \\\"${evidence}\\\"|\\[\\\"${evidence}\\\"`));
+  }
   assert.match(html, /<script src="\/model\.js"><\/script>/);
   assert.match(css, /url\("\/assets\/order-handle\.svg"\)/);
   assert.match(css, /width: 240px/);
+  assert.match(css, /\.button-row \{[^}]*align-items: center;[^}]*justify-content: center;/);
+  assert.match(css, /\.center-state > \.button \{[^}]*min-width: 160px;/);
+  assert.match(css, /\.center-state > \.button \+ \.button/);
+  assert.match(css, /\.completion-actions \.button \{[^}]*margin: 0;/);
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {

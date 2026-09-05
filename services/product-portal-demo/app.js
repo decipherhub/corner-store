@@ -2,11 +2,13 @@
   "use strict";
 
   const Model = window.PortalModel;
-  const STORAGE_KEY = "corner-store-product-portal-demo-v1";
+  const STORAGE_KEY = "corner-store-product-portal-demo-v2";
   const app = document.querySelector("#app");
   const toast = document.querySelector("#toast");
   let timer = null;
   let toastTimer = null;
+  let uploadTimers = [];
+  let overlay = null;
   let state = loadState();
 
   function loadState() {
@@ -71,13 +73,13 @@
         <div class="brand"><strong>Corner Store</strong>${investor ? "" : "<small>발행사 포털</small>"}</div>
         <nav aria-label="주요 메뉴">${navigation.map(([label, target, key, icon]) => navItem(label, target, active === key, icon)).join("")}</nav>
         <div class="sidebar-grow"></div>
-        <div class="demo-boundary">REFERENCE DEMO · 실제 주문/인증 없음</div>
+        <div class="demo-boundary"><span class="live-dot"></span>SANDBOX ENV · 연결 상태 정상</div>
         <a class="portal-link" href="${investor ? "#/issuer/home" : "#/investor/home"}">${investor ? "발행사 데모 열기" : "투자자 데모 열기"} ↗</a>
-        <div class="account-chip">
+        <button class="account-chip" data-action="wallet-details" aria-label="${investor ? "지갑 연결 정보" : "발행사 세션 정보"}">
           ${investor ? '<img src="/assets/robin-avatar.svg" width="28" height="28" alt="" />' : '<span class="issuer-avatar">A</span>'}
-          <span><strong>${investor ? "Robin" : "ABC 자산운용"}</strong><small>${investor ? "0xB0B7...91C4" : "Peter"}</small></span>
+          <span><strong>${investor ? (state.walletConnected ? "Robin" : "지갑 연결") : "ABC 자산운용"}</strong><small>${investor ? (state.walletConnected ? "0xB0B7...91C4" : "세션 없음") : "Peter · SSO 연결됨"}</small></span>
           <span class="chevron">▾</span>
-        </div>
+        </button>
       </aside>
       <main class="main"><div class="content">${body}</div></main>
     </div>`;
@@ -89,6 +91,21 @@
 
   function badge(label, tone = "neutral") {
     return `<span class="badge ${tone}">${label}</span>`;
+  }
+
+  function walletModal() {
+    const investor = route().startsWith("investor");
+    if (!investor) {
+      return `<div class="modal-backdrop" data-action="close-overlay"><section class="modal session-modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-overlay" aria-label="닫기">×</button><p class="eyebrow">Issuer session</p><h2>ABC 자산운용</h2><div class="connection-status"><span class="live-dot"></span><strong>Enterprise SSO 연결됨</strong><small>Peter · 발행 담당자</small></div><div class="session-grid"><span>권한</span><strong>Issuer operator</strong><span>Safe</span><strong>2 / 3 owners</strong><span>네트워크</span><strong>Ethereum</strong></div><p class="privacy-note">Sandbox session은 실제 SSO 또는 Safe에 요청하지 않습니다.</p></section></div>`;
+    }
+    if (!state.walletConnected) {
+      return `<div class="modal-backdrop" data-action="close-overlay"><section class="modal session-modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-overlay" aria-label="닫기">×</button><p class="eyebrow">Wallet</p><h2>지갑 연결</h2><p>거래에 사용할 지갑 방식을 선택하세요.</p><div class="provider-list"><button data-wallet="MetaMask"><span class="provider-mark">M</span><span><strong>MetaMask</strong><small>브라우저 지갑</small></span><span>→</span></button><button data-wallet="WalletConnect"><span class="provider-mark">W</span><span><strong>WalletConnect</strong><small>모바일 또는 QR 연결</small></span><span>→</span></button><button data-wallet="Safe"><span class="provider-mark">S</span><span><strong>Safe</strong><small>다중 서명 계정</small></span><span>→</span></button></div><p class="privacy-note">Sandbox에서는 외부 wallet provider를 호출하지 않습니다.</p></section></div>`;
+    }
+    return `<div class="modal-backdrop" data-action="close-overlay"><section class="modal session-modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-overlay" aria-label="닫기">×</button><p class="eyebrow">Wallet session</p><h2>${state.walletProvider} 연결됨</h2><div class="connection-status"><span class="live-dot"></span><strong>0xB0B7...91C4</strong><small>세션 만료까지 42분</small></div><div class="session-grid"><span>네트워크</span><strong>Ethereum</strong><span>Chain ID</span><strong>1</strong><span>서명 방식</span><strong>EIP-712</strong><span>Identity</span><strong class="positive">Verified</strong></div><div class="button-row"><button class="button secondary" data-action="switch-network">네트워크 확인</button><button class="button danger-outline" data-action="disconnect-wallet">연결 해제</button></div><p class="privacy-note">표시된 연결은 sandbox facade이며 실제 wallet 권한을 사용하지 않습니다.</p></section></div>`;
+  }
+
+  function transactionModal() {
+    return `<div class="modal-backdrop" data-action="close-overlay"><section class="modal session-modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-overlay" aria-label="닫기">×</button><p class="eyebrow">Settlement evidence</p><h2>체결 증거</h2><div class="connection-status"><span class="live-dot"></span><strong>Finalized · 3 confirmations</strong><small>Ethereum · block 22,184,102</small></div><div class="session-grid transaction-grid"><span>Transaction</span><code>0x6f82a918...c491ae</code><span>Router</span><code>0xC042...7110</code><span>Manifest</span><strong>ABCF v4</strong><span>Decision</span><strong class="positive">PASS · 5/5</strong><span>Quote</span><strong>RFQ-1842 · nonce 984102</strong></div><button class="button secondary full" data-action="copy-transaction">Transaction hash 복사</button><p class="privacy-note">Sandbox receipt이며 실제 explorer 또는 RPC의 증거가 아닙니다.</p></section></div>`;
   }
 
   function stat(label, value, detail = "") {
@@ -191,19 +208,20 @@
   function providerModal() {
     return `${investorQualification()}<div class="modal-backdrop" data-action="close-provider"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="provider-title" data-modal-panel>
       <button class="modal-close" data-action="close-provider" aria-label="닫기">×</button><p class="eyebrow">인증 1 / 2</p><h2 id="provider-title">인증기관 선택</h2><p>고액 투자자 인증을 발급할 기관을 선택하세요.</p>
-      <div class="provider-list"><button data-provider="Korea Trust"><span class="provider-mark">KT</span><span><strong>Korea Trust</strong><small>예상 처리 1–2일</small></span><span>→</span></button><button data-provider="Atlas Verify"><span class="provider-mark">AV</span><span><strong>Atlas Verify</strong><small>예상 처리 2–3일</small></span><span>→</span></button></div>
+      <div class="provider-list"><button data-provider="Korea Trust"><span class="provider-mark">KT</span><span><strong>Korea Trust</strong><small>TA 연동 정상 · 예상 처리 1–2일</small></span><span>→</span></button><button data-provider="Atlas Verify"><span class="provider-mark">AV</span><span><strong>Atlas Verify</strong><small>KYC 연동 정상 · 예상 처리 2–3일</small></span><span>→</span></button><button data-provider="Han Identity"><span class="provider-mark">HI</span><span><strong>Han Identity</strong><small>ONCHAINID 지원 · 예상 처리 1일</small></span><span>→</span></button></div>
       <p class="privacy-note">이 reference demo는 파일을 서버로 업로드하거나 PII를 저장하지 않습니다.</p>
     </section></div>`;
   }
 
   function investorUpload() {
+    const progress = state.certificationUploadProgress || 0;
     return shell("investor", "trade", `
       <button class="back" data-route="investor/qualification">← 거래 자격 신청</button>
       ${header("인증 서류 제출", `${state.provider || "선택한 인증기관"}에서 검토할 파일을 선택해 주세요`, "인증 2 / 2")}
       <section class="upload-wrap"><div class="card form-card"><div class="card-heading"><strong>증빙 파일</strong>${state.certificationFile ? badge("선택됨", "positive") : badge("필수")}</div>
-        <label class="drop-zone" id="certification-drop"><input id="certification-file" type="file" accept=".pdf,.png,.jpg,.jpeg"/><span class="upload-icon">↑</span><strong>${state.certificationFile ? escapeHtml(state.certificationFile) : "파일을 놓거나 클릭해 선택"}</strong><small>PDF, PNG, JPG · 데모에서는 파일 내용이 전송되지 않습니다</small></label>
-        <div class="upload-progress ${state.certificationFile ? "is-complete" : ""}"><span></span></div>
-        <button class="button primary" data-action="submit-certification" ${state.certificationFile ? "" : "disabled"}>인증 요청 제출</button>
+        <label class="drop-zone" id="certification-drop"><input id="certification-file" type="file" accept=".pdf,.png,.jpg,.jpeg"/><span class="upload-icon">↑</span><strong>${state.certificationFile ? "다른 파일 추가" : "파일을 놓거나 클릭해 선택"}</strong><small>PDF, PNG, JPG · 전송 전 암호화 및 악성 파일 검사를 시뮬레이션합니다</small></label>
+        <div class="file-list"><div class="file-row"><span class="file-icon">PDF</span><span><strong>identity-summary.pdf</strong><small>238 KB · 암호화됨</small></span>${badge("업로드 완료", "positive")}</div>${state.certificationFile ? `<div class="file-row"><span class="file-icon">DOC</span><span><strong>${escapeHtml(state.certificationFile)}</strong><small>${progress < 100 ? `보안 검사 및 evidence hash 생성 중 · ${progress}%` : "412 KB · evidence hash 생성됨"}</small><span class="file-progress progress-${Math.ceil(progress / 20)}"></span></span>${badge(progress < 100 ? "처리 중" : "업로드 완료", progress < 100 ? "warning" : "positive")}</div>` : ""}</div>
+        <button class="button primary" data-action="submit-certification" ${progress === 100 ? "" : "disabled"}>인증 요청 제출</button><button class="button secondary upload-cancel" data-route="investor/qualification">취소</button>
       </div></section>`);
   }
 
@@ -211,10 +229,14 @@
     return shell("investor", "trade", `<section class="center-state"><div class="spinner" aria-hidden="true"></div>${header(title, description)}<ol class="timeline">${steps.map((step, index) => `<li class="${index <= current ? "done" : ""}"><span>${index < current ? "✓" : index + 1}</span>${step}</li>`).join("")}</ol><p class="privacy-note">창을 닫아도 실제 작업이 실행되지는 않는 reference demo입니다.</p></section>`);
   }
 
+  function credentialReviewScreen() {
+    return shell("investor", "trade", `<section class="center-state review-state"><div class="spinner" aria-hidden="true"></div>${header("인증을 검토하고 있습니다", `${state.provider} 보안 채널에서 증빙 상태를 확인합니다`)}<div class="integration-panel"><div class="integration-head"><span class="live-dot"></span><strong>Provider session KYC-0905-1842</strong>${badge("암호화 연결", "positive")}</div><div class="activity-row done"><span>✓</span><strong>파일 무결성</strong><small>SHA-256 evidence hash 생성</small></div><div class="activity-row done"><span>✓</span><strong>본인 인증</strong><small>PII는 provider boundary에 유지</small></div><div class="activity-row active"><span>•••</span><strong>자격 판정</strong><small>고액 투자자 credential 발급 중</small></div></div><p class="privacy-note">Sandbox provider 응답을 재현하며 실제 개인정보나 파일을 전송하지 않습니다.</p></section>`);
+  }
+
   function qualificationReady() {
     return shell("investor", "trade", `
       ${header("인증이 완료되었습니다", "고액 투자자 인증을 거래 자격 신청에 포함할 수 있습니다")}
-      <section class="two-column"><div class="card"><div class="success-panel"><span>✓</span><h2>고액 투자자 인증</h2><p>${state.provider} · 유효기간 2027.09.05</p></div><label class="message-field"><span>검토 담당자에게 남길 말 (선택)</span><textarea id="qualification-message" placeholder="추가로 전달할 내용을 입력하세요"></textarea></label></div><aside class="side-card"><h2>신청 내용</h2>${eligibility.map(([label, ok]) => `<div class="mini-row"><span>${label}</span>${badge(ok || label === "고액투자자" ? "준비됨" : "필요", ok || label === "고액투자자" ? "positive" : "negative")}</div>`).join("")}<button class="button primary full" data-action="submit-qualification">거래 자격 신청</button></aside></section>`);
+      <section class="two-column"><div class="card"><div class="success-panel"><span>✓</span><h2>고액 투자자 인증</h2><p>${state.provider} · 유효기간 2027.09.05</p></div><div class="credential-strip"><span>Credential</span><strong>KYI-2026-09-1842</strong><span>Evidence hash</span><code>0x8a41...f20c</code><span>Issuer signature</span><strong class="positive">검증 완료</strong></div><label class="message-field"><span>검토 담당자에게 남길 말 (선택)</span><textarea id="qualification-message" placeholder="추가로 전달할 내용을 입력하세요"></textarea></label></div><aside class="side-card"><h2>신청 내용</h2>${eligibility.map(([label, ok]) => `<div class="mini-row"><span>${label}</span>${badge(ok || label === "고액투자자" ? "준비됨" : "필요", ok || label === "고액투자자" ? "positive" : "negative")}</div>`).join("")}<button class="button primary full" data-action="submit-qualification">거래 자격 신청</button></aside></section>`);
   }
 
   function qualificationApproved() {
@@ -225,8 +247,8 @@
     const valid = Model.isMinimumOrder(state.orderAmount);
     const price = Number(state.orderAmount || 0) * 100000;
     const quoteReady = stage === "quote";
-    if (stage === "loading") return loadingScreen("견적을 받고 있습니다", "복수의 딜러에게 요청을 전달했습니다", ["주문 조건 확인", "딜러 견적 요청", "최적 견적 선택"], 1);
-    if (stage === "fill") return loadingScreen("체결 중입니다", "서명된 견적과 온체인 조건을 마지막으로 확인합니다", ["견적 잠금", "컴플라이언스 확인", "자산 결제"], 1);
+    if (stage === "loading") return quoteLoadingScreen();
+    if (stage === "fill") return fillLoadingScreen();
     return shell("investor", "trade", `
       <button class="back" data-route="investor/trade">← ABC 사모 펀드 토큰</button>${header("주문하기", "딜러 견적을 받은 뒤 최종 체결합니다")}
       <section class="two-column"><div class="card form-card"><div class="card-heading"><strong>주문 수량</strong>${badge("최소 50개")}</div>
@@ -234,13 +256,21 @@
         <input class="range" id="order-range" type="range" min="0" max="500" step="10" value="${state.orderAmount}" aria-label="주문 수량"/>
         <div class="range-label"><span>0</span><span>최소 50</span><span>500</span></div>
         ${valid ? '<div class="alert success compact"><strong>주문 가능</strong><span>최소 주문 수량을 충족합니다.</span></div>' : '<div class="alert danger compact"><strong>수량 부족</strong><span>최소 50개 이상 입력해 주세요.</span></div>'}
-        ${quoteReady ? `<div class="quote-box"><div><span>도착한 최적 견적</span>${badge("15초 남음", "warning")}</div><strong>${price.toLocaleString("ko-KR")} 원</strong><small>단가 100,000원 · 딜러 Han River Markets · 수수료 포함</small></div>` : ""}
+        ${quoteReady ? `<div class="dealer-quotes"><div class="dealer-quote is-best"><span><strong>Han River Markets</strong><small>Firm · 14:36:20까지</small></span><b>100,000 원</b>${badge("최적 견적", "positive")}</div><div class="dealer-quote"><span><strong>Atlas Liquidity</strong><small>Firm · 12초 내 응답</small></span><b>100,180 원</b>${badge("검증 완료")}</div><div class="dealer-quote"><span><strong>Seoul Digital Markets</strong><small>Indicative · inventory 확인</small></span><b>100,420 원</b>${badge("참고")}</div></div><div class="quote-box"><div><span>선택된 최적 견적</span>${badge("15초 남음", "warning")}</div><strong>${price.toLocaleString("ko-KR")} 원</strong><small>Quote RFQ-1842 · nonce 984102 · 수수료 포함</small><div class="verification-line"><span>✓ EIP-712 서명</span><span>✓ taker binding</span><span>✓ inventory reserved</span></div></div>` : ""}
       </div><aside class="side-card order-summary"><h2>주문 요약</h2><div class="mini-row"><span>자산</span><strong>ABCF</strong></div><div class="mini-row"><span>수량</span><strong>${state.orderAmount}개</strong></div><div class="mini-row"><span>예상 금액</span><strong>${price.toLocaleString("ko-KR")} 원</strong></div>
-      <button class="button primary full" data-action="${quoteReady ? "accept-quote" : "request-quote"}" ${valid ? "" : "disabled"}>${quoteReady ? "이 견적으로 체결" : "견적 요청"}</button><small>견적 요청과 체결은 모두 시뮬레이션입니다.</small></aside></section>`);
+      <button class="button primary full" data-action="${quoteReady ? "accept-quote" : "request-quote"}" ${valid && state.walletConnected ? "" : "disabled"}>${!state.walletConnected ? "지갑 연결 필요" : quoteReady ? "이 견적으로 체결" : "견적 요청"}</button><small>Sandbox quote·settlement이며 실제 서명 요청은 발생하지 않습니다.</small></aside></section>`);
+  }
+
+  function quoteLoadingScreen() {
+    return shell("investor", "trade", `<section class="center-state review-state"><div class="spinner"></div>${header("견적을 받고 있습니다", "인증된 RFQ 딜러 3곳에 firm quote를 요청했습니다")}<div class="integration-panel dealer-match"><div class="activity-row done"><span>✓</span><strong>Han River Markets</strong><small>100,000원 · 서명 검증 중</small></div><div class="activity-row done"><span>✓</span><strong>Atlas Liquidity</strong><small>100,180원 · 응답 완료</small></div><div class="activity-row active"><span>•••</span><strong>Seoul Digital Markets</strong><small>inventory 확인 중</small></div><div class="matching-footer"><span>Request RFQ-1842</span><strong>taker 0xB0B7...91C4</strong></div></div><p class="privacy-note">Sandbox dealer network가 가격·risk freshness·inventory reservation을 재현합니다.</p></section>`);
+  }
+
+  function fillLoadingScreen() {
+    return shell("investor", "trade", `<section class="center-state review-state"><div class="spinner"></div>${header("체결 중입니다", "서명된 견적을 검증하고 protected Router settlement를 처리합니다")}<div class="integration-panel"><div class="activity-row done"><span>✓</span><strong>Quote signature</strong><small>EIP-712 signer 0x71D2...4A08</small></div><div class="activity-row done"><span>✓</span><strong>Compliance pre-check</strong><small>Manifest v4 · 5/5 elements PASS</small></div><div class="activity-row done"><span>✓</span><strong>Transaction submitted</strong><small>0x6f82...91ae</small></div><div class="activity-row active"><span>2/3</span><strong>Block confirmation</strong><small>finality 확인 중</small></div></div><p class="privacy-note">Sandbox RPC 결과이며 실제 트랜잭션을 broadcast하지 않습니다.</p></section>`);
   }
 
   function investorComplete() {
-    return shell("investor", "trade", `<section class="center-state"><div class="success-ring">✓</div>${header("체결이 완료되었습니다", "ABC 사모 펀드 토큰 50개가 내 자산에 반영됐습니다")}<div class="receipt"><div><span>주문 번호</span><strong>CS-ABCF-0905</strong></div><div><span>체결 금액</span><strong>5,000,000 원</strong></div><div><span>딜러</span><strong>Han River Markets</strong></div></div><div class="button-row"><button class="button primary" data-action="complete-home">홈으로</button><button class="button secondary" data-route="investor/assets">내 자산 보기</button></div></section>`);
+    return shell("investor", "trade", `<section class="center-state"><div class="success-ring">✓</div>${header("체결이 완료되었습니다", "ABC 사모 펀드 토큰 50개가 내 자산에 반영됐습니다")}<div class="receipt"><div><span>주문 번호</span><strong>CS-ABCF-0905</strong></div><div><span>체결 금액</span><strong>5,000,000 원</strong></div><div><span>딜러</span><strong>Han River Markets</strong></div><div><span>Transaction</span><code>0x6f82...91ae</code></div><div><span>Block / finality</span><strong class="positive">22,184,102 · 3/3 확인</strong></div><div class="receipt-action-row"><button class="text-button" data-action="transaction-details">체결 증거 보기</button></div></div><div class="button-row completion-actions"><button class="button primary" data-action="complete-home">홈으로</button><button class="button secondary" data-route="investor/assets">내 자산 보기</button></div></section>`);
   }
 
   function investorAssets() {
@@ -316,17 +346,36 @@
   function evidenceModal(key) {
     const item = evidenceItems.find(([itemKey]) => itemKey === key);
     if (!item) return "";
-    const [, label, mode] = item;
-    const upload = mode === "upload";
-    return `<div class="modal-backdrop" data-action="close-evidence"><section class="modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-evidence" aria-label="닫기">×</button><p class="eyebrow">필요 자료</p><h2>${label}</h2><p>${upload ? "정책 또는 명부 파일을 선택해 주세요." : "PII-free 상태 증거를 제공하는 시스템을 연결합니다."}</p>${upload ? '<label class="drop-zone compact"><input id="evidence-file" type="file"/><span class="upload-icon">↑</span><strong>파일을 놓거나 클릭해 선택</strong><small>파일 내용은 서버로 전송되지 않습니다</small></label>' : '<label class="modal-field"><span>연결 이름</span><input value="ABC 자산운용 인증 시스템" readonly/></label><label class="modal-field"><span>Evidence endpoint</span><input value="https://evidence.example.invalid/status" readonly/></label>'}<button class="button primary full" data-complete-evidence="${key}">${upload ? "업로드 완료" : "연결 확인"}</button></section></div>`;
+    const [, label] = item;
+    const content = evidenceModalContent(key);
+    return `<div class="modal-backdrop" data-action="close-evidence"><section class="modal evidence-modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-evidence" aria-label="닫기">×</button><p class="eyebrow">필요 자료 · Sandbox connector</p><h2>${label}</h2>${content}<button class="button primary full" data-complete-evidence="${key}">연결 상태 확인</button><p class="privacy-note">입력값과 파일은 외부로 전송하거나 저장하지 않습니다.</p></section></div>`;
+  }
+
+  function evidenceModalContent(key) {
+    if (key === "qualified" || key === "highValue") {
+      return `<p>인증 발급 주체와 PII-free evidence source를 설정합니다.</p><div class="radio-stack"><label><input type="radio" name="issuer-mode" checked/> 발행사가 직접 attestation</label><label><input type="radio" name="issuer-mode"/> 외부 인증기관 위임</label></div><div class="modal-field-grid"><label class="modal-field"><span>Issuer ID</span><input value="ABC-ASSET-001"/></label><label class="modal-field"><span>Credential schema</span><input value="${key === "qualified" ? "qualified-investor-v2" : "high-value-investor-v1"}"/></label></div><div class="connection-status compact"><span class="live-dot"></span><strong>Issuer key 확인됨</strong><small>마지막 동기화 14:31</small></div>`;
+    }
+    if (key === "acquisition") {
+      return `<p>취득일과 lot lineage를 제공할 Transfer Agent를 선택하세요.</p><div class="provider-list compact-list"><button><span class="provider-mark">KT</span><span><strong>Korea Trust TA</strong><small>Lot API v2 · 정상</small></span><span>●</span></button><button><span class="provider-mark">HF</span><span><strong>Han Fund Services</strong><small>SFTP evidence · 정상</small></span><span>●</span></button><button><span class="provider-mark">MA</span><span><strong>Manual Attestation</strong><small>담당자 검토 필요</small></span><span>→</span></button></div>`;
+    }
+    if (key === "holders") {
+      return `<p>현재 보유자 명부를 업로드하고 schema 검사를 실행합니다.</p><label class="drop-zone compact"><input type="file"/><span class="upload-icon">↑</span><strong>CSV 파일을 놓거나 선택</strong><small>holder ID는 브라우저 밖으로 전송되지 않습니다</small></label><div class="file-row modal-file"><span class="file-icon">CSV</span><span><strong>holders.csv</strong><small>128 rows · schema valid</small></span>${badge("검증 완료", "positive")}</div>`;
+    }
+    if (key === "related") {
+      return `<p>관계자 명단을 암호화하고 evidence hash를 생성합니다.</p><label class="drop-zone compact"><input type="file"/><span class="upload-icon">↑</span><strong>관계자 명단 추가</strong><small>CSV, XLSX</small></label><div class="file-row modal-file"><span class="file-icon">XLS</span><span><strong>related-parties.xlsx</strong><small>암호화 및 중복 검사 · 82%</small><span class="file-progress progress-4"></span></span>${badge("처리 중", "warning")}</div>`;
+    }
+    if (key === "sanctions") {
+      return `<p>제재 상태 provider와 fail-closed freshness 정책을 설정합니다.</p><div class="radio-stack"><label><input type="radio" name="sanctions-mode" checked/> 실시간 API</label><label><input type="radio" name="sanctions-mode"/> 일일 snapshot</label></div><label class="modal-field"><span>Provider</span><input value="Global Screening Sandbox" readonly/></label><label class="modal-field"><span>API credential</span><input type="password" value="" placeholder="세션 credential 입력" autocomplete="off"/></label><div class="connection-status compact"><span class="live-dot"></span><strong>Connection test PASS</strong><small>freshness 18초 · fail-closed</small></div>`;
+    }
+    return `<p>분배 제한이 적용되는 기준 기간을 설정합니다.</p><div class="modal-field-grid"><label class="modal-field"><span>시작일</span><input type="date" value="2026-09-01"/></label><label class="modal-field"><span>종료일</span><input type="date" value="2026-12-31"/></label></div><div class="radio-stack"><label><input type="radio" name="period-mode" checked/> 기간 중 양도 허용</label><label><input type="radio" name="period-mode"/> 분배 기준일 전 양도 제한</label></div><div class="connection-status compact"><span class="live-dot"></span><strong>Policy window valid</strong><small>다음 기준일 2026-12-31</small></div>`;
   }
 
   function issuerReview() {
-    return shell("issuer", "register", `<section class="center-state"><div class="spinner"></div>${header("심사가 진행 중입니다", "규칙 구성과 제출 자료를 확인하고 있습니다", "자산 등록 4 / 4")}<ol class="timeline"><li class="done"><span>✓</span>기본 정보</li><li class="done"><span>✓</span>발행 조건</li><li class="done"><span>✓</span>자료 준비</li><li class="done"><span>4</span>최종 검토</li></ol></section>`);
+    return shell("issuer", "register", `<section class="center-state review-state"><div class="spinner"></div>${header("심사가 진행 중입니다", "정책 wiring과 거래 활성화 조건을 확인하고 있습니다", "자산 등록 4 / 4")}<div class="integration-panel"><div class="activity-row done"><span>✓</span><strong>Token / IdentityRegistry</strong><small>ERC-3643 live wiring 확인</small></div><div class="activity-row done"><span>✓</span><strong>Manifest compilation</strong><small>ABCF v4 · recipe bindings 3</small></div><div class="activity-row done"><span>✓</span><strong>Safe proposal</strong><small>2/3 approvals simulated</small></div><div class="activity-row active"><span>•••</span><strong>Venue activation</strong><small>maker signer와 inventory 확인 중</small></div></div><p class="privacy-note">Sandbox preflight 결과이며 실제 Safe proposal이나 온체인 변경을 만들지 않습니다.</p></section>`);
   }
 
   function issuerLive() {
-    return shell("issuer", "register", `<section class="center-state"><div class="success-ring">✓</div>${header("거래가 시작되었습니다", "ABC 사모 펀드 토큰이 투자자 거래 목록에 공개됐습니다")}<div class="receipt"><div><span>심볼</span><strong>ABCF</strong></div><div><span>최소 주문</span><strong>50개</strong></div><div><span>상태</span><strong class="positive">거래 중</strong></div></div><button class="button primary" data-route="issuer/metrics">자산 현황 보기</button><a class="button secondary" href="#/investor/trade">투자자 화면에서 확인</a></section>`);
+    return shell("issuer", "register", `<section class="center-state"><div class="success-ring">✓</div>${header("거래가 시작되었습니다", "ABC 사모 펀드 토큰이 투자자 거래 목록에 공개됐습니다")}<div class="receipt activation-receipt"><div><span>Token / IdentityRegistry</span><strong class="positive">Verified</strong></div><div><span>Manifest</span><strong>ABCF v4 · ACTIVE</strong></div><div><span>Venue / maker</span><strong>RFQ · Han River Markets</strong></div><div><span>Signer delegate</span><code>0x71D2...4A08</code></div><div><span>Inventory</span><strong class="positive">125,000 ABCF · Ready</strong></div><div><span>Safe proposal</span><strong>CS-ABCF-0905 · Executed</strong></div></div><div class="button-row"><button class="button primary" data-route="issuer/metrics">자산 현황 보기</button><a class="button secondary" href="#/investor/trade">투자자 화면에서 확인</a></div><p class="privacy-note">모든 상태는 production onboarding UI를 재현한 sandbox fixture입니다.</p></section>`);
   }
 
   function issuerMetrics() {
@@ -350,7 +399,7 @@
     const views = {
       "investor/home": () => investorHome(false), "investor/post-trade": () => investorHome(true), "investor/trade": investorTrade,
       "investor/asset": investorAsset, "investor/qualification": investorQualification, "investor/provider": providerModal,
-      "investor/upload": investorUpload, "investor/review": () => loadingScreen("인증을 검토하고 있습니다", "선택한 인증기관이 제출 상태를 확인합니다", ["파일 확인", "인증기관 검토", "인증 발급"], 1),
+      "investor/upload": investorUpload, "investor/review": credentialReviewScreen,
       "investor/qualification-ready": qualificationReady, "investor/application-review": () => loadingScreen("거래 자격을 검토하고 있습니다", "자산 규칙과 현재 인증을 대조합니다", ["신원 확인", "인증 확인", "자산 규칙 적용"], 1),
       "investor/approved": qualificationApproved, "investor/order": () => investorOrder("order"), "investor/quote-loading": () => investorOrder("loading"),
       "investor/quote": () => investorOrder("quote"), "investor/fill": () => investorOrder("fill"), "investor/complete": investorComplete,
@@ -359,6 +408,8 @@
       "issuer/review": issuerReview, "issuer/live": issuerLive, "issuer/metrics": issuerMetrics
     };
     app.innerHTML = (views[current] || views["investor/home"])();
+    if (overlay === "wallet") app.insertAdjacentHTML("beforeend", walletModal());
+    if (overlay === "transaction") app.insertAdjacentHTML("beforeend", transactionModal());
     const range = document.querySelector("#order-range");
     if (range) range.style.setProperty("--range-progress", `${Math.min(100, state.orderAmount / 5)}%`);
     document.title = `${current.startsWith("issuer") ? "발행사" : "투자자"} · Corner Store`;
@@ -386,6 +437,16 @@
       return go("investor/upload");
     }
 
+    const wallet = event.target.closest("[data-wallet]");
+    if (wallet) {
+      state.walletConnected = true;
+      state.walletProvider = wallet.dataset.wallet;
+      overlay = null;
+      saveState();
+      render();
+      return showToast(`${state.walletProvider} sandbox session이 연결되었습니다.`);
+    }
+
     const question = event.target.closest("[data-question]");
     if (question) {
       state.issuerAnswers[question.dataset.question] = question.dataset.answer;
@@ -408,6 +469,28 @@
 
     const action = event.target.closest("[data-action]")?.dataset.action;
     if (!action) return;
+    if (action === "wallet-details") {
+      overlay = "wallet";
+      return render();
+    }
+    if (action === "transaction-details") {
+      overlay = "transaction";
+      return render();
+    }
+    if (action === "close-overlay") {
+      if (event.target.closest("[data-modal-panel]") && !event.target.matches(".modal-close")) return;
+      overlay = null;
+      return render();
+    }
+    if (action === "disconnect-wallet") {
+      state.walletConnected = false;
+      overlay = "wallet";
+      saveState();
+      render();
+      return showToast("Sandbox wallet session이 해제되었습니다.");
+    }
+    if (action === "switch-network") return showToast("Ethereum Mainnet · Chain ID 1 확인 완료");
+    if (action === "copy-transaction") return showToast("Sandbox transaction hash를 복사했습니다.");
     if (action === "close-provider") {
       if (event.target.closest("[data-modal-panel]") && !event.target.matches(".modal-close")) return;
       return go("investor/qualification");
@@ -438,9 +521,7 @@
       return render();
     }
     if (event.target.matches("#certification-file")) {
-      state.certificationFile = event.target.files[0]?.name || null;
-      saveState();
-      return render();
+      return beginCertificationUpload(event.target.files[0]?.name || null);
     }
     if (event.target.closest("#issuer-form")) {
       const data = new FormData(event.target.form);
@@ -464,10 +545,28 @@
   app.addEventListener("drop", (event) => {
     if (!event.target.closest("#certification-drop")) return;
     event.preventDefault();
-    state.certificationFile = event.dataTransfer.files[0]?.name || "qualification-evidence.pdf";
+    beginCertificationUpload(event.dataTransfer.files[0]?.name || "qualification-evidence.pdf");
+  });
+
+  function beginCertificationUpload(name) {
+    uploadTimers.forEach(clearTimeout);
+    uploadTimers = [];
+    state.certificationFile = name;
+    state.certificationUploadProgress = name ? 35 : 0;
     saveState();
     render();
-  });
+    if (!name) return;
+    uploadTimers.push(setTimeout(() => {
+      state.certificationUploadProgress = 72;
+      saveState();
+      if (route() === "investor/upload") render();
+    }, 500));
+    uploadTimers.push(setTimeout(() => {
+      state.certificationUploadProgress = 100;
+      saveState();
+      if (route() === "investor/upload") render();
+    }, 1100));
+  }
 
   window.addEventListener("hashchange", render);
   render();

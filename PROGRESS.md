@@ -15,6 +15,19 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `PORTAL-002 — Production-like Demo Integration Facades`: 외부 권한을 획득하지
+  않는 기존 browser-only 경계를 유지하면서 wallet 연결/해제/재연결, KYC/TA
+  provider와 PII-free evidence, multi-dealer RFQ·EIP-712/taker/inventory 검증,
+  Router settlement·finality receipt와 발행사 일곱 evidence connector를 제품 수준의
+  sandbox interaction으로 보강했다. 완료 화면의 가로 action row에 중앙 화면용
+  sibling margin이 침범하던 CSS specificity 결함을 수정하고, Figma/interaction
+  spec의 두 핵심 CTA와 별도 체결 증거 action으로 계층을 정리했다. Chrome CDP
+  22개 interaction assertion, 대표 1440x900 visual review, targeted smoke와
+  `git diff --check`가 통과했다. restoration trap을 사용한 전체 `scripts/check.sh`도
+  Foundry 870/870, 모든 service smoke와 deploy-v3 10/10으로 통과했고 두 기존
+  Solidity formatting drift 원본은 복원했다. contract/RPC/testnet path가 없어
+  Anvil/GIWA E2E는 재실행하지 않았다.
+
 - `PORTAL-001 — Figma Investor and Issuer Product Demo`: `origin/main`에서 분리한
   `feature/figma-investor-issuer-portals`에 독립 browser-only product portal을
   구현했다. 투자자 홈/거래/자격/인증/RFQ 견적·체결/자산·인증과 발행사 기본

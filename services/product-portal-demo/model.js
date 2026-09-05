@@ -9,9 +9,12 @@
   function initialState() {
     return {
       investorQualified: false,
+      walletConnected: true,
+      walletProvider: "MetaMask",
       qualificationChecks: [false, false, false, false],
       provider: null,
       certificationFile: null,
+      certificationUploadProgress: 0,
       orderAmount: 20,
       postTrade: false,
       issuerAssetListed: false,

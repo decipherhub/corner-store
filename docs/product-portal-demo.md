@@ -15,6 +15,10 @@ browser-only reference UI다. source design은 Figma의 `[디자인] 투자자 �
 3. 자격 검토 후 최소 50개 수량을 충족해 ABCF 견적을 요청한다.
 4. 견적 수신, 체결 중, 체결 완료 후 홈과 내 자산 상태가 갱신된다.
 5. `#/investor/paused`는 주문 중지 상태를 별도로 시연한다.
+6. 계정 chip에서 wallet 연결 상태, network, EIP-712와 identity를 확인하고 sandbox
+   연결 해제·MetaMask/WalletConnect/Safe 재연결을 시연한다.
+7. RFQ 단계에서 세 딜러 응답, best quote, signer/taker/inventory 검증과 Router
+   settlement confirmation/receipt를 확인한다.
 
 ### Issuer
 
@@ -23,6 +27,8 @@ browser-only reference UI다. source design은 Figma의 `[디자인] 투자자 �
 3. 일곱 증빙 항목을 upload/connect modal로 준비한다.
 4. 심사 상태를 거쳐 거래를 시작하고 자산 지표와 최근 체결을 확인한다.
 5. activation 이후 같은 origin의 투자자 거래 목록에 ABCF가 표시된다.
+6. 일곱 evidence popup은 issuer schema, TA provider, file processing, sanctions
+   freshness와 distribution window에 맞는 서로 다른 sandbox connector를 제공한다.
 
 ## Run and Test
 
@@ -36,10 +42,12 @@ npm test --prefix services/product-portal-demo
 
 ## Trust Boundary
 
-- 모든 결과는 reference/mock이다. production compliance decision, legal opinion,
-  quote, signature 또는 settlement evidence가 아니다.
+- 모든 결과는 reference/mock이다. UI에서는 wallet/KYC/TA/RFQ/signer/settlement의
+  완결된 제품 상태와 증거를 재현하지만 production compliance decision, legal
+  opinion, quote, signature 또는 settlement evidence가 아니다.
 - 선택한 파일의 이름만 browser state에 보관하며 내용은 읽거나 전송하지 않는다.
-- provider endpoint, API credential, wallet 또는 private key를 받지 않는다.
+- provider endpoint, API credential, wallet 또는 private key를 실제로 연결하거나
+  저장하지 않는다. credential 입력란은 빈 sandbox field로만 제공한다.
 - cross-flow state는 `localStorage`에만 저장되며 production service state와 연결되지
   않는다.
 - ERC-3643/ONCHAINID, production onboarding과 durable RFQ의 실제 검증 경계는 기존

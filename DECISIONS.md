@@ -16,7 +16,10 @@ production trust boundaries and couple a presentation state machine to live APIs
 Implement the journeys in `services/product-portal-demo` as a dependency-free,
 browser-only reference service. It reuses visual and server conventions but owns no
 wallet, PII, provider, legal decision, signer, inventory or settlement authority.
-Cross-flow activation is persisted only in same-origin `localStorage`.
+Cross-flow activation is persisted only in same-origin `localStorage`. Product-like
+wallet, provider, dealer, signer and settlement facades may expose interactive status
+and evidence, but they must not acquire those external authorities or export demo
+results as production evidence.
 
 ### Alternatives Considered
 

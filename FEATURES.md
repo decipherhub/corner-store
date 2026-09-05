@@ -10,6 +10,37 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## PORTAL-002 — Production-like Demo Integration Facades
+
+### Behavior
+
+- 실제 외부 권한이나 transaction을 사용하지 않으면서 wallet session, KYC/TA
+  evidence, multi-dealer RFQ matching, quote signature verification과 on-chain
+  settlement progress를 완성된 제품 수준의 sandbox UI로 표현한다.
+- 투자자 파일 처리와 발행사 일곱 evidence modal은 서로 다른 입력·진행·성공 상태를
+  가지며 PII/credential은 저장하거나 전송하지 않는다.
+- 기존 Figma layout, `INTERACTION_SPEC.md` route/timer와 PORTAL-001 browser-only
+  trust boundary를 유지한다.
+
+### Verification
+
+- `npm test --prefix services/product-portal-demo`: passed
+- Chrome CDP investor/issuer facade walkthrough: 22 assertions passed
+- Chrome 1440x900 visual review: quote, wallet, sanctions, investor completion,
+  qualification approval and issuer activation passed; completion and activation
+  action rows share a baseline and centered approval actions share a width
+- Full `scripts/check.sh`: passed with Foundry 870/870, all service smoke and
+  deploy-v3 10/10 after temporarily formatting the two known pre-existing drift
+  files under a restoration trap; the original files were restored byte-for-byte
+- `git diff --check`: passed
+- Anvil/GIWA E2E not rerun: browser-only facade code does not change contracts,
+  deployment, RPC or testnet paths
+
+### State
+
+passing
+
+
 ## PORTAL-001 — Figma Investor and Issuer Product Demo
 
 ### Behavior
