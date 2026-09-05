@@ -33,3 +33,13 @@
 2. Portal smoke와 JS syntax/whitespace를 실행한다.
 3. 1440px browser flow에서 investor/issuer cross-flow를 확인한다.
 4. repository-wide `scripts/check.sh`를 실행한다.
+
+## Completion Evidence
+
+- Product portal model/smoke, JavaScript syntax and whitespace: passed
+- Headless Chrome 1440x900 cross-flow: 18 assertions passed
+- Visual checkpoints: holdings, transaction history, issuer paused metrics and
+  investor blocked order reviewed
+- PR CI repository-wide `scripts/check.sh`: passed with Foundry 870/870, all
+  service smoke tests and vendored deploy-v3 10/10
+- Anvil/GIWA E2E not rerun because no contract, deployment, RPC or testnet path changed

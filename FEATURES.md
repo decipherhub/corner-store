@@ -27,17 +27,21 @@
 
 ### Verification
 
-- model regression: exact settlement accounting, duplicate completion idempotency,
-  repeated purchase accumulation, legacy state migration and pause normalization
-- product portal smoke and JavaScript syntax
-- browser walkthrough: buy → completion → holdings/history/home/issuer metrics,
-  issuer pause → investor blocked order → issuer resume
-- `scripts/check.sh`
-- Anvil/GIWA E2E not required unless contract, deployment, RPC or testnet paths change
+- model regression passed: exact settlement accounting, duplicate completion
+  idempotency including pending-order replay, repeated purchase accumulation,
+  legacy state migration, pause normalization and pending-order cancellation
+- product portal smoke, JavaScript syntax and `git diff --check`: passed
+- headless Chrome 1440x900 walkthrough: 18 assertions passed across buy → completion
+  → holdings/history/home/issuer metrics, pause cancellation, issuer pause → investor
+  blocked order → issuer resume; four visual checkpoints reviewed
+- repository-wide `scripts/check.sh`: passed in PR CI with Foundry 870/870, all
+  service smoke tests and vendored deploy-v3 10/10
+- Anvil/GIWA E2E not rerun: browser-only state/UI changes do not touch contracts,
+  deployment, RPC or testnet paths
 
 ### State
 
-active
+passing
 
 
 ## PORTAL-003 — Figma Visual Parity and Stable Demo Identity
