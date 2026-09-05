@@ -23,6 +23,7 @@ function get(port, pathname) {
 
 async function run() {
   const initial = Model.initialState();
+  assert.equal(initial.schemaVersion, 6);
   assert.equal(initial.walletConnected, true);
   assert.equal(initial.walletProvider, "MetaMask");
   assert.equal(initial.certificationUploadProgress, 0);
@@ -33,6 +34,19 @@ async function run() {
   assert.equal(initialAssets.MMF.eligible, true);
   assert.equal(initialAssets.KLMS.eligible, false);
   assert.equal(initialAssets.ABCF.eligible, false);
+  const migratedQualification = Model.normalizeState({
+    schemaVersion: 5,
+    investorQualified: true,
+    qualifiedAssets: { KTB: true, MMF: true, KLMS: true, ABCF: true }
+  });
+  assert.deepEqual(migratedQualification.qualifiedAssets, { KTB: true, MMF: true, KLMS: false, ABCF: false });
+  assert.equal(migratedQualification.investorQualified, false);
+  const currentQualification = Model.normalizeState({
+    schemaVersion: 6,
+    investorQualified: true,
+    qualifiedAssets: { KTB: true, MMF: true, KLMS: false, ABCF: true }
+  });
+  assert.equal(currentQualification.qualifiedAssets.ABCF, true);
   assert.equal(Model.isMinimumOrder(49), false);
   assert.equal(Model.isMinimumOrder(50), true);
   assert.equal(Model.isMinimumOrder(9, "KTB"), false);
@@ -119,7 +133,7 @@ async function run() {
   for (const marker of [
     "investor/home", "investor/trade", "investor/qualification", "investor/provider",
     "investor/upload", "investor/review", "investor/quote-loading", "investor/quote",
-    "investor/fill", "investor/complete", "investor/paused", "issuer/home", "issuer/basic",
+    "investor/fill", "investor/complete", "investor/applications", "investor/paused", "issuer/home", "issuer/basic",
     "issuer/rules", "issuer/evidence", "issuer/review", "issuer/live", "issuer/metrics"
   ]) assert.match(app, new RegExp(marker.replace("/", "\\/")));
   assert.match(app, /2500, "investor\/qualification-ready"/);
@@ -132,6 +146,7 @@ async function run() {
   assert.match(app, /"investor\/provider": investorQualification/);
   assert.doesNotMatch(app, /data-route="investor\/provider"/);
   assert.match(app, /corner-store-product-portal-demo-v3/);
+  assert.match(app, /guardedTradeRoutes\.includes\(current\) && !currentAsset\(\)\.eligible/);
   assert.match(app, /Robin/);
   assert.match(app, /0xB0B7\.\.\.91C4/);
   assert.match(app, /ABC 자산운용/);
@@ -150,6 +165,8 @@ async function run() {
   assert.match(app, /class="receipt-action-row"/);
   assert.match(app, /investorTransactions/);
   assert.match(app, /investor\/transactions/);
+  assert.match(app, /자격 신청 내역/);
+  assert.match(app, /보유 중인 자산과 거래 내역입니다/);
   assert.match(app, /Model\.settlePendingOrder\(state\)/);
   assert.match(app, /Model\.createPendingOrder\(state, state\.orderAmount\)/);
   assert.match(app, /data-select-asset="\$\{asset\.symbol\}"/);
@@ -161,6 +178,11 @@ async function run() {
   assert.match(app, /"confirm-resume"/);
   assert.match(app, /"cancel-control"/);
   assert.match(app, /투자자 화면의 자격 보유 자산을 한 번에 제어/);
+  assert.match(app, /const portfolio = Model\.portfolioSummary\(state\)/);
+  assert.match(app, /한국예탁결제원/);
+  assert.match(app, /신한아이타스/);
+  assert.match(app, /data-complete-evidence="acquisition"/);
+  assert.doesNotMatch(app, /Korea Trust TA/);
   assert.match(app, /window\.addEventListener\("storage"/);
   assert.match(app, /class="asset-list"/);
   assert.match(app, /class="flow-stepper"/);
@@ -184,6 +206,7 @@ async function run() {
   assert.match(css, /\.transaction-row/);
   assert.match(css, /\.asset-operations/);
   assert.match(css, /\.operation-history/);
+  assert.match(css, /\.provider-guidance/);
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {

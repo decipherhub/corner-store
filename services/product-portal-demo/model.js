@@ -22,7 +22,7 @@
 
   function initialState() {
     return {
-      schemaVersion: 5,
+      schemaVersion: 6,
       investorQualified: false,
       qualifiedAssets: { KTB: true, MMF: true, KLMS: false, ABCF: false },
       selectedAsset: "ABCF",
@@ -172,16 +172,17 @@
     const legacyPostTrade = Boolean(value.postTrade) && nonNegativeInteger(value.schemaVersion) < 5;
     if (legacyPostTrade && holdings.ABCF === 0) holdings.ABCF = 180;
     if (legacyPostTrade && !transactions.some((trade) => trade.symbol === "ABCF")) transactions.unshift(legacyTrade());
+    const resetsSeededQualification = nonNegativeInteger(value.schemaVersion) < 6;
     const qualifiedAssets = {
       KTB: true,
       MMF: true,
-      KLMS: Boolean(value.qualifiedAssets?.KLMS),
-      ABCF: Boolean(value.qualifiedAssets?.ABCF ?? value.investorQualified)
+      KLMS: resetsSeededQualification ? false : Boolean(value.qualifiedAssets?.KLMS),
+      ABCF: resetsSeededQualification ? false : Boolean(value.qualifiedAssets?.ABCF ?? value.investorQualified)
     };
     return {
       ...base,
       ...value,
-      schemaVersion: 5,
+      schemaVersion: 6,
       investorQualified: qualifiedAssets.ABCF,
       qualifiedAssets,
       selectedAsset: catalog[String(value.selectedAsset || "ABCF").toUpperCase()] ? String(value.selectedAsset || "ABCF").toUpperCase() : "ABCF",

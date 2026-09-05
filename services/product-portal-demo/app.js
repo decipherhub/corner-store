@@ -139,6 +139,12 @@
     ).format(date);
   }
 
+  function formatDate(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  }
+
   function assetName(symbol) {
     return Model.assets(state).find((asset) => asset.symbol === symbol)?.name || symbol;
   }
@@ -180,7 +186,7 @@
         <div class="card"><div class="card-heading"><strong>보유 자산</strong><button class="text-button" data-route="investor/assets">전체 보기 ›</button></div>
           ${holdings.map((holding) => holdingRow(holding.name, `${holding.quantity.toLocaleString("ko-KR")}주`, formatWon(holding.value))).join("")}
         </div>
-        <div class="card"><div class="card-heading"><strong>최근 거래</strong><button class="text-button" data-route="investor/transactions">전체 보기 ›</button></div>
+        <div class="card"><div class="card-heading"><strong>최근 거래</strong><button class="text-button" data-route="investor/assets">전체 보기 ›</button></div>
           ${recentTrades.map(recentTradeRow).join("")}
         </div>
       </section>`);
@@ -328,25 +334,37 @@
 
   function investorAssets() {
     const portfolio = Model.portfolioSummary(state);
-    return shell("investor", "assets", `${header("내 자산", "현재 보유 수량과 평가액")}
-      <section class="stats-grid asset-stats">${stat("총 평가액", formatWon(portfolio.totalValue))}${stat("보유 자산", `${portfolio.assetCount}종`)}${stat("오늘 매수", `+${formatWon(portfolio.todayPurchaseValue)}`)}</section>
-      <div class="tabs"><button class="is-active">보유 자산</button><button data-route="investor/transactions">거래 내역</button><button data-route="investor/certifications">인증 현황</button></div>
-      <section class="card"><div class="table-row table-head"><span>자산</span><span>보유 수량</span><span>평가액</span><span>상태</span></div>
-      ${portfolio.holdings.slice().sort((left, right) => (right.symbol === "ABCF") - (left.symbol === "ABCF")).map((holding) => `<div class="table-row"><strong>${holding.symbol}<small>${escapeHtml(holding.name)}</small></strong><span>${holding.quantity.toLocaleString("ko-KR")}주</span><span>${formatWon(holding.value)}</span><span class="${state.assetPaused ? "warning-text" : "positive"}">${state.assetPaused ? "주문 중지" : "거래 가능"}</span></div>`).join("")}</section>`);
+    const transactions = Model.recentTransactions(state, 50);
+    const latestDemoSymbols = new Set(transactions.filter((trade) => trade.source === "demo").map((trade) => trade.symbol));
+    const holdings = portfolio.holdings.slice().sort((left, right) => (right.symbol === "ABCF") - (left.symbol === "ABCF"));
+    return shell("investor", "assets", `${header("내 자산", "보유 중인 자산과 거래 내역입니다")}
+      <section class="stats-grid asset-stats">${stat("총 평가액", formatWon(portfolio.totalValue))}${stat("보유 자산", `${portfolio.assetCount}종`)}${stat("오늘 거래", `${portfolio.demoTradeCount}건`)}</section>
+      <section class="card portfolio-section"><div class="card-heading"><strong>보유 자산</strong><span>${portfolio.assetCount}종</span></div>${holdings.map((holding) => `<div class="portfolio-holding-row"><span class="holding-icon"></span><span><strong>${escapeHtml(holding.name)}${latestDemoSymbols.has(holding.symbol) ? '<em class="today-badge">오늘 매수</em>' : ""}</strong><small>${holding.quantity.toLocaleString("ko-KR")}주</small></span><b>${formatWon(holding.value)}</b></div>`).join("")}</section>
+      <section class="card portfolio-section"><div class="card-heading"><strong>거래 내역</strong><span>${transactions.length}건</span></div>${transactions.map((trade) => `<div class="portfolio-transaction-row"><span><strong>${escapeHtml(assetName(trade.symbol))} 매수</strong><small>${formatDate(trade.completedAt)}</small></span><b>+${trade.quantity.toLocaleString("ko-KR")}주</b><span>${formatWon(trade.total)}</span></div>`).join("")}</section>`);
   }
 
   function investorTransactions() {
-    const transactions = Model.recentTransactions(state, 50);
-    return shell("investor", "assets", `${header("거래 내역", "체결된 주문과 정산 금액을 확인합니다")}
-      <section class="stats-grid asset-stats">${stat("전체 체결", `${transactions.length}건`)}${stat("ABCF 매수", `${transactions.filter((trade) => trade.symbol === "ABCF").length}건`)}${stat("최근 체결", transactions[0] ? formatDateTime(transactions[0].completedAt, true) : "-")}</section>
-      <div class="tabs"><button data-route="investor/assets">보유 자산</button><button class="is-active">거래 내역</button><button data-route="investor/certifications">인증 현황</button></div>
-      <section class="card transaction-list"><div class="transaction-row transaction-head"><span>체결 시각</span><span>자산</span><span>구분</span><span>수량</span><span>총 대금</span><span>상태</span></div>${transactions.map((trade) => `<div class="transaction-row"><span>${formatDateTime(trade.completedAt, true)}</span><strong>${trade.symbol}<small>${escapeHtml(assetName(trade.symbol))}</small></strong><span>매수</span><span>+${trade.quantity.toLocaleString("ko-KR")}주</span><span>${formatWon(trade.total)}</span><span class="positive">체결 완료</span></div>`).join("")}</section>`);
+    return investorAssets();
   }
 
   function investorCertifications() {
-    const certs = [["ONCHAINID 신원", "확인됨", "2027.09.05"], ["제재 목록", "통과", "실시간"], ["국가", "대한민국", "2027.09.05"], ["적격투자자", "유효", "2027.06.30"], ["고액투자자", state.investorQualified ? "유효" : "미보유", state.investorQualified ? "2027.09.05" : "-"]];
-    return shell("investor", "certifications", `${header("내 인증", "개인정보 대신 자격 상태와 유효기간만 표시합니다")}
-      <div class="tabs"><button data-route="investor/assets">보유 자산</button><button data-route="investor/transactions">거래 내역</button><button class="is-active">인증 현황</button></div><section class="card cert-list">${certs.map(([name, status, date]) => `<div><span class="status-dot ${status === "미보유" ? "no" : "ok"}">${status === "미보유" ? "×" : "✓"}</span><strong>${name}</strong><span>${status}</span><small>${date}</small></div>`).join("")}</section>`);
+    const certs = [
+      ["신원 확인", "KYC Provider Co.", "2027-03-31까지", true],
+      ["제재 대상 여부 확인", "Screening Co.", "2026-12-31까지", true],
+      ["거주 국가 대한민국", "KYC Provider Co.", "2027-03-31까지", true],
+      ["고액 투자자 인증", state.investorQualified ? "한국인증원" : "미발급", state.investorQualified ? "2027-09-05까지" : "-", state.investorQualified]
+    ];
+    return shell("investor", "certifications", `${header("내 인증", "한 번 받아두면 모든 자산에 사용됩니다")}
+      <div class="tabs certification-tabs"><button class="is-active">인증 목록</button><button data-route="investor/applications">자격 신청 내역</button></div><section class="card cert-list"><div class="card-heading"><strong>보유한 인증</strong><span>${certs.filter(([, , , valid]) => valid).length}개</span></div>${certs.map(([name, issuer, date, valid]) => `<div><span class="status-dot ${valid ? "ok" : "no"}">${valid ? "○" : "×"}</span><strong>${name}<small>발급&nbsp; ${issuer}</small></strong><time>${date}</time></div>`).join("")}</section>`);
+  }
+
+  function investorApplications() {
+    const applications = [
+      state.qualifiedAssets.ABCF ? ["ABC 사모 펀드 토큰", "승인됨", "운용사 검토 완료"] : null,
+      state.qualifiedAssets.KLMS ? ["KLM 주식", "승인됨", "운용사 검토 완료"] : null
+    ].filter(Boolean);
+    return shell("investor", "certifications", `${header("내 인증", "한 번 받아두면 모든 자산에 사용됩니다")}
+      <div class="tabs certification-tabs"><button data-route="investor/certifications">인증 목록</button><button class="is-active">자격 신청 내역</button></div><section class="card application-history"><div class="card-heading"><strong>자격 신청 내역</strong><span>${applications.length}건</span></div>${applications.length ? applications.map(([asset, status, detail]) => `<div><span><strong>${asset}</strong><small>${detail}</small></span><b class="positive">${status}</b></div>`).join("") : '<div class="empty-application"><strong>아직 신청 내역이 없습니다</strong><span>거래하기에서 자산별 거래 자격을 신청할 수 있습니다.</span><button class="button secondary" data-route="investor/trade">거래 자격 확인</button></div>'}</section>`);
   }
 
   function investorPaused() {
@@ -418,7 +436,8 @@
     if (!item) return "";
     const [, label] = item;
     const content = evidenceModalContent(key);
-    return `<div class="modal-backdrop" data-action="close-evidence"><section class="modal evidence-modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-evidence" aria-label="닫기">×</button><p class="eyebrow">필요 자료 · Sandbox connector</p><h2>${label}</h2>${content}<button class="button primary full" data-complete-evidence="${key}">연결 상태 확인</button><p class="privacy-note">입력값과 파일은 외부로 전송하거나 저장하지 않습니다.</p></section></div>`;
+    const completionAction = key === "acquisition" ? "" : `<button class="button primary full" data-complete-evidence="${key}">연결 상태 확인</button>`;
+    return `<div class="modal-backdrop" data-action="close-evidence"><section class="modal evidence-modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-evidence" aria-label="닫기">×</button><p class="eyebrow">필요 자료 · Sandbox connector</p><h2>${label}</h2>${content}${completionAction}<p class="privacy-note">입력값과 파일은 외부로 전송하거나 저장하지 않습니다.</p></section></div>`;
   }
 
   function evidenceModalContent(key) {
@@ -426,7 +445,7 @@
       return `<p>인증 발급 주체와 PII-free evidence source를 설정합니다.</p><div class="radio-stack"><label><input type="radio" name="issuer-mode" checked/> 발행사가 직접 attestation</label><label><input type="radio" name="issuer-mode"/> 외부 인증기관 위임</label></div><div class="modal-field-grid"><label class="modal-field"><span>Issuer ID</span><input value="ABC-ASSET-001"/></label><label class="modal-field"><span>Credential schema</span><input value="${key === "qualified" ? "qualified-investor-v2" : "high-value-investor-v1"}"/></label></div><div class="connection-status compact"><span class="live-dot"></span><strong>Issuer key 확인됨</strong><small>마지막 동기화 14:31</small></div>`;
     }
     if (key === "acquisition") {
-      return `<p>취득일과 lot lineage를 제공할 Transfer Agent를 선택하세요.</p><div class="provider-list compact-list"><button><span class="provider-mark">KT</span><span><strong>Korea Trust TA</strong><small>Lot API v2 · 정상</small></span><span>●</span></button><button><span class="provider-mark">HF</span><span><strong>Han Fund Services</strong><small>SFTP evidence · 정상</small></span><span>●</span></button><button><span class="provider-mark">MA</span><span><strong>Manual Attestation</strong><small>담당자 검토 필요</small></span><span>→</span></button></div>`;
+      return `<p>자료를 받아올 곳을 연결해 주세요</p><div class="provider-list compact-list"><button data-complete-evidence="acquisition"><span class="provider-mark">예</span><span><strong>한국예탁결제원</strong><small>실시간 연동</small></span><span>›</span></button><button data-complete-evidence="acquisition"><span class="provider-mark">신</span><span><strong>신한아이타스</strong><small>하루 1회 연동</small></span><span>›</span></button><button data-complete-evidence="acquisition"><span class="provider-mark">직</span><span><strong>직접 업로드</strong><small>거래마다 파일 제출</small></span><span>›</span></button></div><div class="provider-guidance">이 자료가 없으면 새로운 투자자가 될 수 없습니다</div>`;
     }
     if (key === "holders") {
       return `<p>현재 보유자 명부를 업로드하고 schema 검사를 실행합니다.</p><label class="drop-zone compact"><input type="file"/><span class="upload-icon">↑</span><strong>CSV 파일을 놓거나 선택</strong><small>holder ID는 브라우저 밖으로 전송되지 않습니다</small></label><div class="file-row modal-file"><span class="file-icon">CSV</span><span><strong>holders.csv</strong><small>128 rows · schema valid</small></span>${badge("검증 완료", "positive")}</div>`;
@@ -457,6 +476,7 @@
 
   function issuerMetrics() {
     const active = state.issuerAssetListed;
+    const portfolio = Model.portfolioSummary(state);
     const userTrades = Model.recentTransactions(state, 10).filter((trade) => trade.symbol === "ABCF" && trade.source === "demo");
     const abcfPurchaseValue = userTrades.reduce((total, trade) => total + trade.quantity * trade.unitPrice, 0);
     const status = state.assetPaused ? "거래 일시정지" : "거래 중";
@@ -478,7 +498,13 @@
   function render() {
     clearTimeout(timer);
     const current = route();
-    if (state.assetPaused && ["investor/order", "investor/quote-loading", "investor/quote", "investor/fill"].includes(current)) {
+    const guardedTradeRoutes = ["investor/order", "investor/quote-loading", "investor/quote", "investor/fill"];
+    if (guardedTradeRoutes.includes(current) && !currentAsset().eligible) {
+      state.pendingOrder = null;
+      saveState();
+      return go("investor/asset");
+    }
+    if (state.assetPaused && guardedTradeRoutes.includes(current)) {
       return go("investor/paused");
     }
     if (current === "investor/complete" && state.pendingOrder) {
@@ -506,7 +532,7 @@
       "investor/qualification-ready": qualificationReady, "investor/application-review": applicationReviewScreen,
       "investor/approved": qualificationApproved, "investor/order": () => investorOrder("order"), "investor/quote-loading": () => investorOrder("loading"),
       "investor/quote": () => investorOrder("quote"), "investor/fill": () => investorOrder("fill"), "investor/complete": investorComplete,
-      "investor/assets": investorAssets, "investor/transactions": investorTransactions, "investor/certifications": investorCertifications, "investor/paused": investorPaused,
+      "investor/assets": investorAssets, "investor/transactions": investorTransactions, "investor/certifications": investorCertifications, "investor/applications": investorApplications, "investor/paused": investorPaused,
       "issuer/home": issuerHome, "issuer/basic": issuerBasic, "issuer/rules": issuerRules, "issuer/evidence": () => issuerEvidence(),
       "issuer/review": issuerReview, "issuer/live": issuerLive, "issuer/metrics": issuerMetrics
     };

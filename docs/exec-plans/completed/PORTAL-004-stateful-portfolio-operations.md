@@ -8,7 +8,7 @@
 ## In Scope
 
 1. 체결 시점의 idempotent purchase journal과 선택 자산 보유 수량 누적
-2. 동적 홈 요약, 보유 자산과 별도 거래 내역 화면
+2. 동적 홈 요약, Figma 구조의 보유 자산·거래 내역 통합 화면
 3. 발행사 홈/현황의 전체 주문 pause/resume control과 운영 이력
 4. pause 상태의 투자자 목록·주문·quote/fill fail-closed 반영
 5. 기존 localStorage demo state migration
@@ -47,6 +47,10 @@
 - Figma follow-up: 23 Chrome assertions passed for initial per-asset eligibility,
   KTB/ABCF order routing, isolated KLM qualification and global order pause;
   fresh investor trade and issuer operations screenshots reviewed at 1440x900
+- Follow-up regression: schema v6 legacy qualification reset, unqualified direct-route
+  blocking, issuer live/metrics and pause/resume actions, completion/assets navigation,
+  Figma acquisition providers and investor assets/certification layout passed 25 Chrome
+  assertions; five 1440x900 screenshots reviewed
 - PR CI repository-wide `scripts/check.sh`: passed with Foundry 870/870, all
   service smoke tests and vendored deploy-v3 10/10
 - Current tree `scripts/check.sh`: passed with Homebrew Node 24; unrelated existing
