@@ -15,6 +15,19 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `PORTAL-001 — Figma Investor and Issuer Product Demo`: `origin/main`에서 분리한
+  `feature/figma-investor-issuer-portals`에 독립 browser-only product portal을
+  구현했다. 투자자 홈/거래/자격/인증/RFQ 견적·체결/자산·인증과 발행사 기본
+  정보/발행 조건/증빙/심사/거래 시작/지표를 연결했고, 발행사 activation 이후
+  ABCF가 같은 origin의 투자자 거래 목록에 표시된다. 실제 wallet, PII, provider,
+  법률 판단, signer와 settlement에는 연결하지 않는다. targeted smoke와 JS syntax,
+  `git diff --check`, Figma 대비 1440x900 Chrome render, Chrome CDP full interaction
+  walkthrough가 통과했다. 두 기존 Solidity formatting drift를 restoration trap 안에서
+  임시 포맷한 full `scripts/check.sh`도 Foundry 870/870, 전체 services와 deploy-v3
+  10/10으로 통과했으며 원본 파일은 복원했다. direct current-tree check는 동일한 기존
+  formatting drift에서 중단된다. Anvil/GIWA path는 변경하지 않아 별도 E2E는 실행하지
+  않았다.
+
 - `SDK-003 — Publishable Package Release Contract`: CLI, Toolkit과 RFQ SDK를
   독립 npm tarball로 build/pack하고 Node 20 clean temporary projects에 설치하는
   release gate를 완성했다. Toolkit packed export/config simulation, generated

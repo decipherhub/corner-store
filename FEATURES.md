@@ -10,6 +10,41 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## PORTAL-001 — Figma Investor and Issuer Product Demo
+
+### Behavior
+
+- `INTERACTION_SPEC.md`와 Figma `[디자인] 투자자 흐름` / `[디자인] 발행인 흐름`을
+  1440px desktop reference demo로 구현한다.
+- 투자자 자격 신청, 인증기관/파일 제출 시뮬레이션, RFQ 견적·체결 상태와 발행사
+  기본 정보, 발행 조건, 증빙 준비, 심사, 자산 현황을 각각 재현한다.
+- 발행사에서 거래를 시작한 `ABCF`가 동일 browser origin의 투자자 거래 목록에
+  나타나는 cross-flow를 제공한다.
+- 실제 wallet, KYC/TA provider, 파일 전송, 법률 판단, RFQ signer 또는 온체인
+  settlement와 분리된 reference/mock UI로 유지한다.
+
+### Verification
+
+- `npm test --prefix services/product-portal-demo`: passed
+- Chrome 1440x900 render: investor home, issuer rules and investor order passed;
+  Figma 28x28 avatar and 22x22 order handle geometry verified
+- Chrome CDP interaction walkthrough: investor qualification/provider/file/review,
+  minimum order/quote/fill/post-trade and issuer rules/review/cross-flow passed
+- Full `scripts/check.sh`: passed with Foundry 870/870, all service smoke and
+  deploy-v3 10/10 after temporarily formatting the two known pre-existing drift
+  files under a restoration trap; the original files were restored byte-for-byte
+- Direct current-tree `scripts/check.sh` remains blocked at `forge fmt --check` by
+  the pre-existing `script/DeployProductionCore.s.sol` and
+  `script/DemoScenarios.s.sol` drift; PORTAL-001 does not modify either file
+- `git diff --check`: passed
+- Anvil/GIWA E2E not rerun: this feature adds a browser-only mock and changes no
+  contract, deployment, RPC or testnet path
+
+### State
+
+passing
+
+
 ## CORE-005 — Compliance Core Production Hardening
 
 ### Behavior

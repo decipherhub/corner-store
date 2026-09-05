@@ -29,6 +29,7 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `services/deployment-studio/` | local reference deployment 실행과 production core config/preflight/plan export를 분리한 control UI |
 | `services/operator-api/` | private-key 없는 read-only operator snapshot/event API |
 | `services/operator-dashboard/` | Operator API를 소비하는 read-only snapshot/proposal review 화면 |
+| `services/product-portal-demo/` | Figma 기반 투자자·발행사 product journey를 재현하는 browser-only reference demo |
 | `services/compliance-data/` | provider-neutral TA lot, person-group state와 reject/surveillance audit SDK |
 | `tools/deploy-v3/` | 독립적으로 유지하는 vendored Uniswap v3 배포 도구 |
 | `lib/` | Foundry 의존성 |

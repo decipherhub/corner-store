@@ -1,5 +1,47 @@
 # Decisions
 
+## D018 — Investor and issuer journeys stay a browser-only reference service
+
+Date: 2026-09-05
+
+### Context
+
+Figma defines connected investor qualification/RFQ and issuer onboarding journeys,
+but the repository's existing dashboards have narrower operator, deployment or
+testnet-wallet responsibilities. Folding the designs into those services would blur
+production trust boundaries and couple a presentation state machine to live APIs.
+
+### Decision
+
+Implement the journeys in `services/product-portal-demo` as a dependency-free,
+browser-only reference service. It reuses visual and server conventions but owns no
+wallet, PII, provider, legal decision, signer, inventory or settlement authority.
+Cross-flow activation is persisted only in same-origin `localStorage`.
+
+### Alternatives Considered
+
+- Extend Operator Dashboard: rejected because it is a read-only operational surface,
+  not an investor or issuer workflow.
+- Extend Deployment Studio: rejected because local deployment orchestration must not
+  become a product onboarding simulator.
+- Connect immediately to production APIs: rejected because authenticated provider,
+  legal, custody and settlement contracts are outside the Figma interaction spec.
+
+### Consequences
+
+- Product UX can be tested and demonstrated without changing Anvil, GIWA or production
+  execution paths.
+- UI state cannot be cited as production compliance, onboarding or settlement evidence.
+- A future production frontend must replace the reference state ports with explicit,
+  authenticated APIs and preserve fail-closed boundaries.
+
+### Related Files
+
+- `services/product-portal-demo/`
+- `docs/product-portal-demo.md`
+- `INTERACTION_SPEC.md`
+- `FEATURES.md`
+
 ## D010 — Configuration-driven Toolkit is the operator entry point
 
 Date: 2026-07-22

@@ -233,6 +233,21 @@ demo network and RPC allowlist. Mainnet deployment, signing secrets and
 production ERC-3643 onboarding are outside this control surface. See
 [`docs/deployment-studio.md`](./docs/deployment-studio.md).
 
+### Investor and Issuer Product Portal Demo
+
+`services/product-portal-demo`는 Figma와 `INTERACTION_SPEC.md`의 투자자 자격 신청,
+RFQ 주문, 발행사 자산 등록과 증빙 준비 흐름을 1440px desktop reference UI로
+재현한다. 발행사에서 거래를 시작한 demo 자산은 같은 browser origin의 투자자 거래
+목록에 나타난다.
+
+```shell
+npm start --prefix services/product-portal-demo
+```
+
+이 서비스는 wallet, 실제 KYC/TA, 파일 업로드, signer와 온체인 체결을 호출하지
+않는다. 상세 boundary와 시연 경로는
+[`docs/product-portal-demo.md`](./docs/product-portal-demo.md)를 참조한다.
+
 ### Production Deployment
 
 Production core deployment is implemented separately from the local/demo
