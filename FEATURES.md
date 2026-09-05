@@ -29,6 +29,9 @@
   completion and issuer home/basic/rules/evidence/review/live passed
 - Chrome 1440x720 reduced-height regression: bottom investor/issuer identity remains
   visible inside the fixed viewport sidebar
+- Chrome 1440x720 direct-route regression: `#/investor/qualification` and legacy
+  `#/investor/provider` both render the qualification page without opening the
+  provider modal; only the explicit `인증 받기` action can open it
 - `scripts/check.sh`: passed under installed Node 24 with Foundry 870/870, all
   service smoke tests and vendored deploy-v3 10/10; two unrelated pre-existing
   Solidity formatting drift files were temporarily formatted under a restoration

@@ -30,7 +30,11 @@ source of truth로 사용한다.
   Anvil/GIWA E2E는 재실행하지 않았다. 후속 확인에서 900px 미만 viewport에서는
   sidebar의 고정 `min-height` 때문에 계정 chip이 화면 아래로 밀리는 문제를 찾아
   sidebar를 `100vh`에 고정하고 1440x720에서도 Robin 및 ABC 자산운용 identity가
-  하단에 남는 것을 검증했다.
+  하단에 남는 것을 검증했다. 자격 신청 직접 진입 시 고액 투자자 인증기관 선택이
+  먼저 노출될 수 있던 route 기반 modal도 명시적 overlay state로 분리했다.
+  `#/investor/qualification` 및 호환용 `#/investor/provider` 직접 진입은 모두 modal
+  없이 자격 신청 화면을 표시하며, `인증 받기` 클릭만 provider modal을 연다.
+  targeted smoke, JS syntax, whitespace와 두 경로의 1440x720 render를 재검증했다.
 
 - `PORTAL-002 — Production-like Demo Integration Facades`: 외부 권한을 획득하지
   않는 기존 browser-only 경계를 유지하면서 wallet 연결/해제/재연결, KYC/TA

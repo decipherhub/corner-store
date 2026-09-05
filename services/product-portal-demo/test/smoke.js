@@ -51,6 +51,10 @@ async function run() {
   assert.match(app, /state\.issuerAssetListed = true/);
   assert.match(app, /dataTransfer\.files/);
   assert.match(app, /data-action="wallet-details"/);
+  assert.match(app, /data-action="open-provider"/);
+  assert.match(app, /overlay === "provider"/);
+  assert.match(app, /"investor\/provider": investorQualification/);
+  assert.doesNotMatch(app, /data-route="investor\/provider"/);
   assert.match(app, /corner-store-product-portal-demo-v3/);
   assert.match(app, /Robin/);
   assert.match(app, /0xB0B7\.\.\.91C4/);

@@ -182,7 +182,7 @@
   function investorAsset() {
     return shell("investor", "trade", `
       <button class="back" data-route="investor/trade">← 거래하기</button>${header("ABC 사모 펀드 토큰")}
-      <section class="two-column asset-detail-layout"><div><section class="card eligibility-summary"><div class="eligibility-title"><strong class="negative">거래 자격 없음</strong><span>고액 투자자 인증이 필요합니다</span></div><div class="missing-credential"><span class="status-dot no">×</span><span><strong>고액 투자자 인증</strong><small>아직 받지 않았습니다</small></span><button class="button secondary" data-route="investor/provider">인증 받기</button></div><div class="collapsed-condition"><span class="status-dot ok">○</span><span>나머지 조건 3가지는 충족했습니다</span><strong>펼치기⌄</strong></div></section><section class="card asset-info"><div class="card-heading"><strong>자산 정보</strong></div><div><span>현재가</span><strong>100,000 원</strong></div><div><span>최소 주문 수량</span><strong>50주</strong></div><div><span>거래 방식</span><strong>딜러와 1:1</strong></div><div><span>운용사</span><strong>ABC 자산운용</strong></div></section></div><aside class="side-card availability-card"><div class="side-heading">거래 가능 여부</div><div class="alert danger compact"><strong>×</strong><span>아직 거래할 수 없습니다</span></div><button class="button primary full" data-route="investor/qualification">거래 자격 신청</button></aside></section>`);
+      <section class="two-column asset-detail-layout"><div><section class="card eligibility-summary"><div class="eligibility-title"><strong class="negative">거래 자격 없음</strong><span>고액 투자자 인증이 필요합니다</span></div><div class="missing-credential"><span class="status-dot no">×</span><span><strong>고액 투자자 인증</strong><small>아직 받지 않았습니다</small></span><button class="button secondary" data-action="open-provider">인증 받기</button></div><div class="collapsed-condition"><span class="status-dot ok">○</span><span>나머지 조건 3가지는 충족했습니다</span><strong>펼치기⌄</strong></div></section><section class="card asset-info"><div class="card-heading"><strong>자산 정보</strong></div><div><span>현재가</span><strong>100,000 원</strong></div><div><span>최소 주문 수량</span><strong>50주</strong></div><div><span>거래 방식</span><strong>딜러와 1:1</strong></div><div><span>운용사</span><strong>ABC 자산운용</strong></div></section></div><aside class="side-card availability-card"><div class="side-heading">거래 가능 여부</div><div class="alert danger compact"><strong>×</strong><span>아직 거래할 수 없습니다</span></div><button class="button primary full" data-route="investor/qualification">거래 자격 신청</button></aside></section>`);
   }
 
   function investorQualification() {
@@ -191,11 +191,11 @@
     return shell("investor", "trade", `
       <button class="back" data-route="investor/asset">← ABC 사모 펀드 토큰</button>
       ${header("거래 자격 신청", "이 자산에 필요한 인증을 확인합니다")}${stepper(["인증 확인", "신청서 제출", "운용사 검토"], 0)}
-      <section class="two-column"><div class="card form-card requirement-card"><div class="card-heading"><strong>필요한 인증</strong><span>${state.qualificationChecks.filter(Boolean).length} / 4 보유</span></div>${items.map(([item, detail], index) => `<label class="check-row ${index === 3 && !state.qualificationChecks[index] ? "is-missing" : ""}"><input type="checkbox" data-check="${index}" ${state.qualificationChecks[index] ? "checked" : ""}/><span><strong>${item}</strong><small>${detail}</small></span>${index === 3 && !state.qualificationChecks[index] ? '<button type="button" class="button secondary small" data-route="investor/provider">인증 받기</button>' : ""}</label>`).join("")}</div><aside class="side-card application-summary"><div class="side-heading">신청 준비</div><div class="alert ${ready ? "success" : "danger"} compact"><strong>${ready ? "○" : "×"}</strong><span>${ready ? "신청할 수 있습니다" : "인증 1개가 부족합니다"}</span></div><div class="mini-row"><span>자산</span><strong>ABC 사모 펀드 토큰</strong></div><div class="mini-row"><span>보유 인증</span><strong>${state.qualificationChecks.filter(Boolean).length}개</strong></div><div class="mini-row"><span>필요 인증</span><strong>4개</strong></div><button class="button primary full" data-route="investor/qualification-ready" ${ready ? "" : "disabled"}>신청서 제출</button></aside></section>`);
+      <section class="two-column"><div class="card form-card requirement-card"><div class="card-heading"><strong>필요한 인증</strong><span>${state.qualificationChecks.filter(Boolean).length} / 4 보유</span></div>${items.map(([item, detail], index) => `<label class="check-row ${index === 3 && !state.qualificationChecks[index] ? "is-missing" : ""}"><input type="checkbox" data-check="${index}" ${state.qualificationChecks[index] ? "checked" : ""}/><span><strong>${item}</strong><small>${detail}</small></span>${index === 3 && !state.qualificationChecks[index] ? '<button type="button" class="button secondary small" data-action="open-provider">인증 받기</button>' : ""}</label>`).join("")}</div><aside class="side-card application-summary"><div class="side-heading">신청 준비</div><div class="alert ${ready ? "success" : "danger"} compact"><strong>${ready ? "○" : "×"}</strong><span>${ready ? "신청할 수 있습니다" : "인증 1개가 부족합니다"}</span></div><div class="mini-row"><span>자산</span><strong>ABC 사모 펀드 토큰</strong></div><div class="mini-row"><span>보유 인증</span><strong>${state.qualificationChecks.filter(Boolean).length}개</strong></div><div class="mini-row"><span>필요 인증</span><strong>4개</strong></div><button class="button primary full" data-route="investor/qualification-ready" ${ready ? "" : "disabled"}>신청서 제출</button></aside></section>`);
   }
 
   function providerModal() {
-    return `${investorQualification()}<div class="modal-backdrop" data-action="close-provider"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="provider-title" data-modal-panel>
+    return `<div class="modal-backdrop" data-action="close-provider"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="provider-title" data-modal-panel>
       <button class="modal-close" data-action="close-provider" aria-label="닫기">×</button><h2 id="provider-title">고액 투자자 인증</h2><p>인증 기관을 선택해 주세요</p><div class="provider-list"><button data-provider="한국인증원"><span class="provider-mark"></span><span><strong>한국인증원</strong><small>서류 심사 · 1~2일 소요</small></span><span>›</span></button><button data-provider="Verify Partners"><span class="provider-mark"></span><span><strong>Verify Partners</strong><small>계좌 연동으로 즉시 확인</small></span><span>›</span></button><button data-provider="직접 서류 제출"><span class="provider-mark"></span><span><strong>직접 서류 제출</strong><small>소득·자산 증빙 업로드</small></span><span>›</span></button></div>
     </section></div>`;
   }
@@ -391,7 +391,7 @@
     }
     const views = {
       "investor/home": () => investorHome(false), "investor/post-trade": () => investorHome(true), "investor/trade": investorTrade,
-      "investor/asset": investorAsset, "investor/qualification": investorQualification, "investor/provider": providerModal,
+      "investor/asset": investorAsset, "investor/qualification": investorQualification, "investor/provider": investorQualification,
       "investor/upload": investorUpload, "investor/review": credentialReviewScreen,
       "investor/qualification-ready": qualificationReady, "investor/application-review": applicationReviewScreen,
       "investor/approved": qualificationApproved, "investor/order": () => investorOrder("order"), "investor/quote-loading": () => investorOrder("loading"),
@@ -403,6 +403,7 @@
     app.innerHTML = (views[current] || views["investor/home"])();
     if (overlay === "wallet" || overlay === "wallet-picker") app.insertAdjacentHTML("beforeend", walletModal());
     if (overlay === "transaction") app.insertAdjacentHTML("beforeend", transactionModal());
+    if (overlay === "provider") app.insertAdjacentHTML("beforeend", providerModal());
     const range = document.querySelector("#order-range");
     if (range) range.style.setProperty("--range-progress", `${Math.min(100, state.orderAmount / 6)}%`);
     document.title = `${current.startsWith("issuer") ? "발행사" : "투자자"} · Corner Store`;
@@ -426,6 +427,7 @@
     const provider = event.target.closest("[data-provider]");
     if (provider) {
       state.provider = provider.dataset.provider;
+      overlay = null;
       saveState();
       return go("investor/upload");
     }
@@ -470,6 +472,10 @@
       overlay = "transaction";
       return render();
     }
+    if (action === "open-provider") {
+      overlay = "provider";
+      return render();
+    }
     if (action === "close-overlay") {
       if (event.target.closest("[data-modal-panel]") && !event.target.matches(".modal-close")) return;
       overlay = null;
@@ -483,7 +489,8 @@
     if (action === "copy-transaction") return showToast("Sandbox transaction hash를 복사했습니다.");
     if (action === "close-provider") {
       if (event.target.closest("[data-modal-panel]") && !event.target.matches(".modal-close")) return;
-      return go("investor/qualification");
+      overlay = null;
+      return render();
     }
     if (action === "close-evidence") {
       if (event.target.closest("[data-modal-panel]") && !event.target.matches(".modal-close")) return;
