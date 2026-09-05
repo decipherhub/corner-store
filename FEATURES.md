@@ -10,6 +10,107 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## PORTAL-003 — Figma Visual Parity and Stable Demo Identity
+
+### Behavior
+
+- 제공된 1440x900 Figma PNG를 기준으로 투자자·발행사 핵심 화면의 정보 구조,
+  spacing, card/list layout, action hierarchy와 상태 표현을 정렬한다.
+- 투자자 계정은 항상 `Robin / 0xB0B7...91C4`, 발행사 계정은 항상
+  `ABC 자산운용 / Peter`로 표시하며 실제 wallet/SSO 연결 없이도 완결된 demo
+  session처럼 보인다.
+- production-like integration facade는 유지하되 Figma의 핵심 화면 hierarchy를
+  밀어내지 않고 account/evidence detail 안에서 제공한다.
+
+### Verification
+
+- `npm test --prefix services/product-portal-demo`: passed
+- Chrome 1440x900 reference-image comparison: investor home/trade/qualification/order/
+  completion and issuer home/basic/rules/evidence/review/live passed
+- Chrome 1440x720 reduced-height regression: bottom investor/issuer identity remains
+  visible inside the fixed viewport sidebar
+- Chrome 1440x720 direct-route regression: `#/investor/qualification` and legacy
+  `#/investor/provider` both render the qualification page without opening the
+  provider modal; only the explicit `인증 받기` action can open it
+- `scripts/check.sh`: passed under installed Node 24 with Foundry 870/870, all
+  service smoke tests and vendored deploy-v3 10/10; two unrelated pre-existing
+  Solidity formatting drift files were temporarily formatted under a restoration
+  trap and restored byte-for-byte
+- `git diff --check`: passed
+- Anvil/GIWA E2E not rerun: browser-only HTML/CSS/model changes do not touch
+  contracts, deployment, RPC or testnet paths
+
+### State
+
+passing
+
+
+## PORTAL-002 — Production-like Demo Integration Facades
+
+### Behavior
+
+- 실제 외부 권한이나 transaction을 사용하지 않으면서 wallet session, KYC/TA
+  evidence, multi-dealer RFQ matching, quote signature verification과 on-chain
+  settlement progress를 완성된 제품 수준의 sandbox UI로 표현한다.
+- 투자자 파일 처리와 발행사 일곱 evidence modal은 서로 다른 입력·진행·성공 상태를
+  가지며 PII/credential은 저장하거나 전송하지 않는다.
+- 기존 Figma layout, `INTERACTION_SPEC.md` route/timer와 PORTAL-001 browser-only
+  trust boundary를 유지한다.
+
+### Verification
+
+- `npm test --prefix services/product-portal-demo`: passed
+- Chrome CDP investor/issuer facade walkthrough: 22 assertions passed
+- Chrome 1440x900 visual review: quote, wallet, sanctions, investor completion,
+  qualification approval and issuer activation passed; completion and activation
+  action rows share a baseline and centered approval actions share a width
+- Full `scripts/check.sh`: passed with Foundry 870/870, all service smoke and
+  deploy-v3 10/10 after temporarily formatting the two known pre-existing drift
+  files under a restoration trap; the original files were restored byte-for-byte
+- `git diff --check`: passed
+- Anvil/GIWA E2E not rerun: browser-only facade code does not change contracts,
+  deployment, RPC or testnet paths
+
+### State
+
+passing
+
+
+## PORTAL-001 — Figma Investor and Issuer Product Demo
+
+### Behavior
+
+- `INTERACTION_SPEC.md`와 Figma `[디자인] 투자자 흐름` / `[디자인] 발행인 흐름`을
+  1440px desktop reference demo로 구현한다.
+- 투자자 자격 신청, 인증기관/파일 제출 시뮬레이션, RFQ 견적·체결 상태와 발행사
+  기본 정보, 발행 조건, 증빙 준비, 심사, 자산 현황을 각각 재현한다.
+- `ABCF`는 Figma catalog처럼 처음부터 보이고, 발행사에서 거래를 시작하면 동일
+  browser origin의 투자자 화면에 activation 알림이 반영되는 cross-flow를 제공한다.
+- 실제 wallet, KYC/TA provider, 파일 전송, 법률 판단, RFQ signer 또는 온체인
+  settlement와 분리된 reference/mock UI로 유지한다.
+
+### Verification
+
+- `npm test --prefix services/product-portal-demo`: passed
+- Chrome 1440x900 render: investor home, issuer rules and investor order passed;
+  Figma 28x28 avatar and 22x22 order handle geometry verified
+- Chrome CDP interaction walkthrough: investor qualification/provider/file/review,
+  minimum order/quote/fill/post-trade and issuer rules/review/cross-flow passed
+- Full `scripts/check.sh`: passed with Foundry 870/870, all service smoke and
+  deploy-v3 10/10 after temporarily formatting the two known pre-existing drift
+  files under a restoration trap; the original files were restored byte-for-byte
+- Direct current-tree `scripts/check.sh` remains blocked at `forge fmt --check` by
+  the pre-existing `script/DeployProductionCore.s.sol` and
+  `script/DemoScenarios.s.sol` drift; PORTAL-001 does not modify either file
+- `git diff --check`: passed
+- Anvil/GIWA E2E not rerun: this feature adds a browser-only mock and changes no
+  contract, deployment, RPC or testnet path
+
+### State
+
+passing
+
+
 ## CORE-005 — Compliance Core Production Hardening
 
 ### Behavior

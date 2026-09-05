@@ -1,0 +1,13 @@
+{
+  "name": "@corner-store/product-portal-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Figma-aligned investor and issuer product journey reference demo.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

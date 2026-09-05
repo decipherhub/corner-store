@@ -20,6 +20,7 @@
 | [`sdk-integration.md`](./sdk-integration.md)         | modular SDK·scaffold·conformance | Current |
 | [`sdk-versioning.md`](./sdk-versioning.md)           | package semver·release·migration policy | Current |
 | [`deployment-studio.md`](./deployment-studio.md)     | local reference execution + production preflight/plan Studio | Current |
+| [`product-portal-demo.md`](./product-portal-demo.md) | Figma 기반 investor/issuer reference journey | Current |
 | [`deployment-production.md`](./deployment-production.md) | production deployment runbook | Current |
 | [`testnet-deployment.md`](./testnet-deployment.md)       | public testnet RFQ reference deployment | Current |
 | [`product-specs/production-rfq-policy.md`](./product-specs/production-rfq-policy.md) | production RFQ 운영·구현 계약 | Current |

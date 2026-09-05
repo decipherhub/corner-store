@@ -1,5 +1,90 @@
 # Decisions
 
+## D019 — Figma demo starts with a stable connected identity and seeded asset catalog
+
+Date: 2026-09-05
+
+### Context
+
+The supplied investor Figma flow always shows `Robin / 0xB0B7...91C4` and includes
+ABCF in the initial four-row asset catalog. Hiding the account or ABCF until an
+unrelated issuer-flow action made the demo look incomplete and diverged from the
+reference screens.
+
+### Decision
+
+Start the browser-only portal with a stable connected-looking investor identity,
+issuer operator identity and all four Figma catalog assets. Issuer activation still
+persists same-origin demo state and adds an activation notice, but it does not control
+whether the seeded ABCF reference row exists. Wallet, SSO, asset activation, provider,
+RFQ and settlement indicators remain sandbox facades without external authority.
+
+### Alternatives Considered
+
+- Require an actual wallet or SSO connection: rejected because the product demo must
+  remain usable without credentials and must not acquire external authority.
+- Hide ABCF until the issuer flow completes: rejected because it contradicts the
+  investor design source and makes the investor journey dependent on setup order.
+
+### Consequences
+
+- Every fresh demo opens in the same presentation-ready state.
+- Issuer-to-investor cross-flow demonstrates activation state and notification rather
+  than dynamically creating the Figma-seeded catalog row.
+- Production systems must still source identity and catalog state from authenticated,
+  fail-closed services.
+
+### Related Files
+
+- `services/product-portal-demo/`
+- `docs/product-portal-demo.md`
+- `FEATURES.md`
+
+## D018 — Investor and issuer journeys stay a browser-only reference service
+
+Date: 2026-09-05
+
+### Context
+
+Figma defines connected investor qualification/RFQ and issuer onboarding journeys,
+but the repository's existing dashboards have narrower operator, deployment or
+testnet-wallet responsibilities. Folding the designs into those services would blur
+production trust boundaries and couple a presentation state machine to live APIs.
+
+### Decision
+
+Implement the journeys in `services/product-portal-demo` as a dependency-free,
+browser-only reference service. It reuses visual and server conventions but owns no
+wallet, PII, provider, legal decision, signer, inventory or settlement authority.
+Cross-flow activation is persisted only in same-origin `localStorage`. Product-like
+wallet, provider, dealer, signer and settlement facades may expose interactive status
+and evidence, but they must not acquire those external authorities or export demo
+results as production evidence.
+
+### Alternatives Considered
+
+- Extend Operator Dashboard: rejected because it is a read-only operational surface,
+  not an investor or issuer workflow.
+- Extend Deployment Studio: rejected because local deployment orchestration must not
+  become a product onboarding simulator.
+- Connect immediately to production APIs: rejected because authenticated provider,
+  legal, custody and settlement contracts are outside the Figma interaction spec.
+
+### Consequences
+
+- Product UX can be tested and demonstrated without changing Anvil, GIWA or production
+  execution paths.
+- UI state cannot be cited as production compliance, onboarding or settlement evidence.
+- A future production frontend must replace the reference state ports with explicit,
+  authenticated APIs and preserve fail-closed boundaries.
+
+### Related Files
+
+- `services/product-portal-demo/`
+- `docs/product-portal-demo.md`
+- `INTERACTION_SPEC.md`
+- `FEATURES.md`
+
 ## D010 — Configuration-driven Toolkit is the operator entry point
 
 Date: 2026-07-22

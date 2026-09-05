@@ -117,6 +117,12 @@ echo "==> Running read-only Operator dashboard smoke test"
   npm test
 )
 
+echo "==> Running investor and issuer product portal smoke test"
+(
+  cd services/product-portal-demo
+  npm test
+)
+
 echo "==> Validating deployment-to-DEX showcase plan"
 SHOWCASE_PLAN=$(scripts/showcase.sh --plan)
 node -e '

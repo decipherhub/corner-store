@@ -11,9 +11,56 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음.
+없음. 다음 feature를 시작할 때 `FEATURES.md`에서 하나만 `active`로 전환한다.
 
 ## Completed
+
+- `PORTAL-003 — Figma Visual Parity and Stable Demo Identity`: 사용자가 제공한
+  `figma/*.zip` 원본은 수정·stage하지 않고 `/tmp`에서만 안전하게 추출해 투자자
+  19개 및 발행사 18개 PNG를 확인했다. 투자자 `Robin / 0xB0B7...91C4`와 발행사
+  `ABC 자산운용 / Peter`를 항상 연결된 demo identity로 표시하고, 거래 목록,
+  자격 신청, 주문/완료, 자산 등록, 규칙, 자료 준비와 심사 화면의 list/card,
+  progress, CTA hierarchy를 1440x900 Figma 구조에 맞췄다. wallet/KYC/RFQ/
+  settlement/asset-onboarding facade는 account/evidence detail에 유지했다. targeted
+  portal smoke, 대표 12개 Chrome 1440x900 visual comparison, `git diff --check`가
+  통과했다. Node 16 실행은 SDK doctor가 요구대로 fail-closed했고, 설치된 Node 24로
+  재실행한 전체 `scripts/check.sh`는 Foundry 870/870, 모든 service smoke 및
+  deploy-v3 10/10으로 통과했다. 두 기존 Solidity formatting drift 파일은
+  restoration trap 후 원본 SHA-256으로 복원했다. contract/RPC/testnet 변경이 없어
+  Anvil/GIWA E2E는 재실행하지 않았다. 후속 확인에서 900px 미만 viewport에서는
+  sidebar의 고정 `min-height` 때문에 계정 chip이 화면 아래로 밀리는 문제를 찾아
+  sidebar를 `100vh`에 고정하고 1440x720에서도 Robin 및 ABC 자산운용 identity가
+  하단에 남는 것을 검증했다. 자격 신청 직접 진입 시 고액 투자자 인증기관 선택이
+  먼저 노출될 수 있던 route 기반 modal도 명시적 overlay state로 분리했다.
+  `#/investor/qualification` 및 호환용 `#/investor/provider` 직접 진입은 모두 modal
+  없이 자격 신청 화면을 표시하며, `인증 받기` 클릭만 provider modal을 연다.
+  targeted smoke, JS syntax, whitespace와 두 경로의 1440x720 render를 재검증했다.
+
+- `PORTAL-002 — Production-like Demo Integration Facades`: 외부 권한을 획득하지
+  않는 기존 browser-only 경계를 유지하면서 wallet 연결/해제/재연결, KYC/TA
+  provider와 PII-free evidence, multi-dealer RFQ·EIP-712/taker/inventory 검증,
+  Router settlement·finality receipt와 발행사 일곱 evidence connector를 제품 수준의
+  sandbox interaction으로 보강했다. 완료 화면의 가로 action row에 중앙 화면용
+  sibling margin이 침범하던 CSS specificity 결함을 수정하고, Figma/interaction
+  spec의 두 핵심 CTA와 별도 체결 증거 action으로 계층을 정리했다. Chrome CDP
+  22개 interaction assertion, 대표 1440x900 visual review, targeted smoke와
+  `git diff --check`가 통과했다. restoration trap을 사용한 전체 `scripts/check.sh`도
+  Foundry 870/870, 모든 service smoke와 deploy-v3 10/10으로 통과했고 두 기존
+  Solidity formatting drift 원본은 복원했다. contract/RPC/testnet path가 없어
+  Anvil/GIWA E2E는 재실행하지 않았다.
+
+- `PORTAL-001 — Figma Investor and Issuer Product Demo`: `origin/main`에서 분리한
+  `feature/figma-investor-issuer-portals`에 독립 browser-only product portal을
+  구현했다. 투자자 홈/거래/자격/인증/RFQ 견적·체결/자산·인증과 발행사 기본
+  정보/발행 조건/증빙/심사/거래 시작/지표를 연결했고, Figma catalog의 ABCF는
+  처음부터 표시하며 발행사 activation 이후 같은 origin에 알림을 반영한다. 실제 wallet, PII, provider,
+  법률 판단, signer와 settlement에는 연결하지 않는다. targeted smoke와 JS syntax,
+  `git diff --check`, Figma 대비 1440x900 Chrome render, Chrome CDP full interaction
+  walkthrough가 통과했다. 두 기존 Solidity formatting drift를 restoration trap 안에서
+  임시 포맷한 full `scripts/check.sh`도 Foundry 870/870, 전체 services와 deploy-v3
+  10/10으로 통과했으며 원본 파일은 복원했다. direct current-tree check는 동일한 기존
+  formatting drift에서 중단된다. Anvil/GIWA path는 변경하지 않아 별도 E2E는 실행하지
+  않았다.
 
 - `SDK-003 — Publishable Package Release Contract`: CLI, Toolkit과 RFQ SDK를
   독립 npm tarball로 build/pack하고 Node 20 clean temporary projects에 설치하는
