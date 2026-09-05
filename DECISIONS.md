@@ -1004,7 +1004,9 @@ also had no issuer action that produced the state.
    the completion state journals that order at most once and updates ABCF holdings atomically in
    the normalized browser state.
 2. Investor home, holdings, transaction history and issuer metrics derive their values from the
-   same holdings and transaction journal rather than route names or presentation flags.
+   same holdings and transaction journal rather than route names or presentation flags. A
+   completed ABCF settlement or migrated ABCF holding also makes that asset discoverable in the
+   issuer operations surface.
 3. ABCF pause/resume is an asset-level issuer operation. Pause clears an unfilled pending order,
    blocks new quote/fill paths, preserves completed holdings/history and records a bounded,
    PII-free browser operation entry.

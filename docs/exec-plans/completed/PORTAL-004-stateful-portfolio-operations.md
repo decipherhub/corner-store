@@ -24,6 +24,7 @@
 
 - 한 pending order는 거래 ID 기준으로 최대 한 번만 holdings와 history에 반영한다.
 - portfolio summary와 issuer metrics는 저장된 holdings/transactions에서 계산한다.
+- 완료된 ABCF settlement/holding은 issuer operations의 활성 자산으로도 보인다.
 - paused ABCF는 새 quote와 fill을 진행하지 못하며 기존 holdings/history는 보존한다.
 - 사용자가 제공한 미추적 파일은 수정·삭제·stage하지 않는다.
 
@@ -37,7 +38,7 @@
 ## Completion Evidence
 
 - Product portal model/smoke, JavaScript syntax and whitespace: passed
-- Headless Chrome 1440x900 cross-flow: 18 assertions passed
+- Headless Chrome 1440x900 cross-flow: 19 assertions passed
 - Visual checkpoints: holdings, transaction history, issuer paused metrics and
   investor blocked order reviewed
 - PR CI repository-wide `scripts/check.sh`: passed with Foundry 870/870, all

@@ -18,11 +18,12 @@ source of truth로 사용한다.
 - `PORTAL-004 — Stateful Portfolio and Asset Operations`: route별 hardcode 대신
   idempotent pending-order/transaction journal과 holdings를 browser state에 추가해
   체결 완료 즉시 홈, 내 자산, 거래 내역과 발행사 현황이 같은 수량·평가액·정산
-  결과를 읽도록 연결했다. 반복 매수 누적, legacy `postTrade` migration과
+  결과를 읽도록 연결했다. 완료된 체결/ABCF 보유 상태는 발행사 운영 자산도
+  활성화한다. 반복 매수 누적, legacy `postTrade` migration과
   localStorage reload를 지원한다. 발행사 ABCF pause/resume confirmation, PII-free
   운영 이력과 same-origin tab 동기화를 추가하고 pause 중 pending 주문 제거 및
   투자자 quote/fill fail-closed를 구현했다. model regression과 portal smoke,
-  JS syntax/whitespace, 1440x900 headless Chrome 18개 cross-flow assertion 및 네 화면
+  JS syntax/whitespace, 1440x900 headless Chrome 19개 cross-flow assertion 및 네 화면
   visual review가 통과했다. PR CI의 repository-wide `scripts/check.sh`도 Foundry
   870/870, 모든 service smoke와 deploy-v3 10/10으로 통과했다. contract/RPC/testnet
   변경이 없어 Anvil/GIWA E2E는 재실행하지 않았다.

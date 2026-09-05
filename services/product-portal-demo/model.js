@@ -179,6 +179,7 @@
       pauseReason: value.pauseReason ? String(value.pauseReason).slice(0, 80) : null,
       pauseUpdatedAt: value.pauseUpdatedAt && !Number.isNaN(Date.parse(value.pauseUpdatedAt)) ? String(value.pauseUpdatedAt) : null,
       operationLog: normalizeOperationLog(value.operationLog),
+      issuerAssetListed: Boolean(value.issuerAssetListed || holdings.ABCF > 0),
       issuerForm: { ...base.issuerForm, ...(value.issuerForm || {}) },
       issuerAnswers: { ...(value.issuerAnswers || {}) },
       evidence: { ...base.evidence, ...(value.evidence || {}) },
@@ -290,6 +291,7 @@
     next.pendingOrder = null;
     next.nextTradeSequence = Math.max(next.nextTradeSequence, trade.sequence + 1);
     next.postTrade = true;
+    next.issuerAssetListed = true;
     return { state: next, trade, created: true };
   }
 

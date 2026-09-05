@@ -50,6 +50,7 @@ async function run() {
   assert.equal(firstSettlement.trade.total, 18018000);
   assert.equal(firstSettlement.state.holdings.ABCF, 180);
   assert.equal(firstSettlement.state.transactions.length, 3);
+  assert.equal(firstSettlement.state.issuerAssetListed, true);
   const replaySettlement = Model.settlePendingOrder({ ...firstSettlement.state, pendingOrder: firstSettlement.trade }, "2026-09-05T14:21:04+09:00");
   assert.equal(replaySettlement.created, false);
   assert.equal(replaySettlement.state.holdings.ABCF, 180);
@@ -75,6 +76,7 @@ async function run() {
   const migrated = Model.normalizeState({ postTrade: true });
   assert.equal(migrated.holdings.ABCF, 180);
   assert.equal(migrated.transactions.filter((trade) => trade.symbol === "ABCF").length, 1);
+  assert.equal(migrated.issuerAssetListed, true);
   assert.equal(Model.qualificationReady(initial), false);
   initial.qualificationChecks = [true, true, true, true];
   assert.equal(Model.qualificationReady(initial), true);

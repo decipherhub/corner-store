@@ -8,7 +8,8 @@ KYC/TA evidence, multi-dealer quote, signer verification과 settlement receipt�
 
 체결 완료 시 주문 수량과 정산 금액이 idempotent transaction journal에 기록되고
 홈, 보유 자산, 거래 내역과 발행사 자산 현황이 같은 state를 읽는다. 발행사 현황의
-ABCF 일시정지·재개는 투자자 거래 목록과 주문 gate에 즉시 반영된다.
+ABCF 일시정지·재개는 투자자 거래 목록과 주문 gate에 즉시 반영된다. 완료된 ABCF
+체결 또는 기존 ABCF 보유 상태는 발행사 운영 화면에서도 해당 자산을 노출한다.
 
 ## Run
 

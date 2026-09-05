@@ -19,7 +19,8 @@
   같은 체결 결과를 읽는다.
 - 반복 매수는 ABCF 보유 수량과 평가액을 누적하며 새로고침·직접 화면 이동 후에도
   localStorage 기반 demo state를 유지한다. 기존 PORTAL-003 state는 보수적으로
-  마이그레이션한다.
+  마이그레이션한다. 완료된 ABCF 체결 또는 기존 ABCF 보유 상태는 발행사 운영
+  화면에서도 해당 자산을 활성 자산으로 노출한다.
 - 발행사 자산 현황에서 ABCF 거래를 일시정지·재개할 수 있고, 그 상태는 투자자
   거래 목록·주문 화면에 즉시 반영되어 정지 중 신규 quote/fill을 차단한다.
 - 일시정지와 재개 이력을 PII-free browser-only 운영 기록으로 표시하고 실제
@@ -31,7 +32,7 @@
   idempotency including pending-order replay, repeated purchase accumulation,
   legacy state migration, pause normalization and pending-order cancellation
 - product portal smoke, JavaScript syntax and `git diff --check`: passed
-- headless Chrome 1440x900 walkthrough: 18 assertions passed across buy → completion
+- headless Chrome 1440x900 walkthrough: 19 assertions passed across buy → completion
   → holdings/history/home/issuer metrics, pause cancellation, issuer pause → investor
   blocked order → issuer resume; four visual checkpoints reviewed
 - repository-wide `scripts/check.sh`: passed in PR CI with Foundry 870/870, all
