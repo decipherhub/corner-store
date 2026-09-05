@@ -29,6 +29,52 @@ async function run() {
   assert.deepEqual(initial.qualificationChecks, [true, true, true, false]);
   assert.equal(Model.isMinimumOrder(49), false);
   assert.equal(Model.isMinimumOrder(50), true);
+  assert.deepEqual(Model.portfolioSummary(initial), {
+    holdings: [
+      { symbol: "KTB", name: "국고채 토큰", unitPrice: 20000, eligible: true, minimum: "10개", quantity: 1200, value: 24000000 },
+      { symbol: "MMF", name: "MMF 토큰", unitPrice: 10000, eligible: true, minimum: "10개", quantity: 840, value: 8400000 }
+    ],
+    totalValue: 32400000,
+    assetCount: 2,
+    todayPurchaseValue: 0,
+    transactionCount: 2,
+    demoTradeCount: 0
+  });
+  initial.orderAmount = 180;
+  initial.pendingOrder = Model.createPendingOrder(initial, initial.orderAmount, "2026-09-05T14:21:00+09:00");
+  assert.equal(initial.pendingOrder.id, "RFQ-DEMO-1842");
+  const firstSettlement = Model.settlePendingOrder(initial, "2026-09-05T14:21:03+09:00");
+  assert.equal(firstSettlement.created, true);
+  assert.equal(firstSettlement.trade.quantity, 180);
+  assert.equal(firstSettlement.trade.fee, 18000);
+  assert.equal(firstSettlement.trade.total, 18018000);
+  assert.equal(firstSettlement.state.holdings.ABCF, 180);
+  assert.equal(firstSettlement.state.transactions.length, 3);
+  const replaySettlement = Model.settlePendingOrder({ ...firstSettlement.state, pendingOrder: firstSettlement.trade }, "2026-09-05T14:21:04+09:00");
+  assert.equal(replaySettlement.created, false);
+  assert.equal(replaySettlement.state.holdings.ABCF, 180);
+  assert.equal(replaySettlement.state.transactions.length, 3);
+  const duplicateSettlement = Model.settlePendingOrder(firstSettlement.state, "2026-09-05T14:22:00+09:00");
+  assert.equal(duplicateSettlement.created, false);
+  assert.equal(duplicateSettlement.state.holdings.ABCF, 180);
+  assert.equal(duplicateSettlement.state.transactions.length, 3);
+  duplicateSettlement.state.pendingOrder = Model.createPendingOrder(duplicateSettlement.state, 50, "2026-09-05T14:23:00+09:00");
+  const secondSettlement = Model.settlePendingOrder(duplicateSettlement.state, "2026-09-05T14:23:03+09:00");
+  assert.equal(secondSettlement.state.holdings.ABCF, 230);
+  assert.equal(secondSettlement.state.transactions.length, 4);
+  const paused = Model.setAssetPaused(secondSettlement.state, true, "유동성 점검", "2026-09-05T14:24:00+09:00");
+  assert.equal(paused.changed, true);
+  assert.equal(paused.state.assetPaused, true);
+  assert.equal(paused.state.operationLog[0].action, "PAUSE");
+  assert.equal(Model.createPendingOrder(paused.state, 50), null);
+  const resumed = Model.setAssetPaused(paused.state, false, "점검 완료", "2026-09-05T14:25:00+09:00");
+  assert.equal(resumed.state.assetPaused, false);
+  const orderBeforePause = Model.createPendingOrder(resumed.state, 50, "2026-09-05T14:26:00+09:00");
+  const interrupted = Model.setAssetPaused({ ...resumed.state, pendingOrder: orderBeforePause }, true, "긴급 점검", "2026-09-05T14:26:01+09:00");
+  assert.equal(interrupted.state.pendingOrder, null);
+  const migrated = Model.normalizeState({ postTrade: true });
+  assert.equal(migrated.holdings.ABCF, 180);
+  assert.equal(migrated.transactions.filter((trade) => trade.symbol === "ABCF").length, 1);
   assert.equal(Model.qualificationReady(initial), false);
   initial.qualificationChecks = [true, true, true, true];
   assert.equal(Model.qualificationReady(initial), true);
@@ -72,8 +118,16 @@ async function run() {
   assert.match(app, /3 confirmations/);
   assert.match(app, /class="button-row completion-actions"/);
   assert.match(app, /class="receipt-action-row"/);
-  assert.match(app, /180주/);
-  assert.match(app, /18,018,000 원/);
+  assert.match(app, /investorTransactions/);
+  assert.match(app, /investor\/transactions/);
+  assert.match(app, /Model\.settlePendingOrder\(state\)/);
+  assert.match(app, /Model\.createPendingOrder\(state, state\.orderAmount\)/);
+  assert.match(app, /"open-pause"/);
+  assert.match(app, /"confirm-pause"/);
+  assert.match(app, /"confirm-resume"/);
+  assert.match(app, /"cancel-control"/);
+  assert.match(app, /ABCF 신규 quote와 fill/);
+  assert.match(app, /window\.addEventListener\("storage"/);
   assert.match(app, /class="asset-list"/);
   assert.match(app, /class="flow-stepper"/);
   assert.match(app, /issuerProgress\(2\)/);
@@ -93,6 +147,9 @@ async function run() {
   assert.match(css, /\.asset-list-row/);
   assert.match(css, /\.progress-card/);
   assert.match(css, /\.issuer-review-layout/);
+  assert.match(css, /\.transaction-row/);
+  assert.match(css, /\.asset-operations/);
+  assert.match(css, /\.operation-history/);
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {

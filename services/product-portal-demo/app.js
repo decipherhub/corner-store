@@ -112,35 +112,68 @@
   }
 
   function transactionModal() {
-    return `<div class="modal-backdrop" data-action="close-overlay"><section class="modal session-modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-overlay" aria-label="닫기">×</button><p class="eyebrow">Settlement evidence</p><h2>체결 증거</h2><div class="connection-status"><span class="live-dot"></span><strong>Finalized · 3 confirmations</strong><small>Ethereum · block 22,184,102</small></div><div class="session-grid transaction-grid"><span>Transaction</span><code>0x6f82a918...c491ae</code><span>Router</span><code>0xC042...7110</code><span>Manifest</span><strong>ABCF v4</strong><span>Decision</span><strong class="positive">PASS · 5/5</strong><span>Quote</span><strong>RFQ-1842 · nonce 984102</strong></div><button class="button secondary full" data-action="copy-transaction">Transaction hash 복사</button><p class="privacy-note">Sandbox receipt이며 실제 explorer 또는 RPC의 증거가 아닙니다.</p></section></div>`;
+    const trade = latestAbcfTrade();
+    const transactionHash = trade?.transactionHash || "0x6f82a918...c491ae";
+    return `<div class="modal-backdrop" data-action="close-overlay"><section class="modal session-modal" role="dialog" aria-modal="true" data-modal-panel><button class="modal-close" data-action="close-overlay" aria-label="닫기">×</button><p class="eyebrow">Settlement evidence</p><h2>체결 증거</h2><div class="connection-status"><span class="live-dot"></span><strong>Finalized · 3 confirmations</strong><small>Ethereum · block 22,184,102</small></div><div class="session-grid transaction-grid"><span>Transaction</span><code>${escapeHtml(transactionHash)}</code><span>Router</span><code>0xC042...7110</code><span>Manifest</span><strong>ABCF v4</strong><span>Decision</span><strong class="positive">PASS · 5/5</strong><span>Quote</span><strong>${trade?.id ? escapeHtml(trade.id) : "RFQ-1842"} · nonce ${trade?.sequence || 984102}</strong></div><button class="button secondary full" data-action="copy-transaction">Transaction hash 복사</button><p class="privacy-note">Sandbox receipt이며 실제 explorer 또는 RPC의 증거가 아닙니다.</p></section></div>`;
+  }
+
+  function marketControlModal(mode) {
+    const pausing = mode === "pause";
+    return `<div class="modal-backdrop" data-action="close-overlay"><section class="modal market-control-modal" role="dialog" aria-modal="true" aria-labelledby="market-control-title" data-modal-panel><button class="modal-close" data-action="close-overlay" aria-label="닫기">×</button><p class="eyebrow">Asset operations · Sandbox</p><h2 id="market-control-title">${pausing ? "ABCF 거래 일시정지" : "ABCF 거래 재개"}</h2><p>${pausing ? "새 견적과 체결을 즉시 차단합니다. 기존 보유 자산과 거래 내역은 유지됩니다." : "정지 사유가 해소됐는지 확인한 뒤 투자자 주문을 다시 허용합니다."}</p>${pausing ? '<label class="modal-field"><span>정지 사유</span><select id="pause-reason"><option>유동성 및 재고 점검</option><option>컴플라이언스 자료 갱신</option><option>시장 변동성 확인</option><option>운영 점검</option></select></label>' : `<div class="alert success compact"><strong>○</strong><span>${escapeHtml(state.pauseReason || "운영 점검")} 확인 완료</span></div>`}<div class="control-impact"><div><span>신규 견적</span><strong>${pausing ? "차단" : "허용"}</strong></div><div><span>보유 자산</span><strong>영향 없음</strong></div><div><span>거래 내역</span><strong>보존</strong></div></div><div class="button-row"><button class="button secondary" data-action="cancel-control">취소</button><button class="button ${pausing ? "danger-outline" : "primary"}" data-action="${pausing ? "confirm-pause" : "confirm-resume"}">${pausing ? "거래 일시정지" : "거래 재개"}</button></div><p class="privacy-note">실제 operator 권한이나 온체인 pause transaction을 실행하지 않는 browser-only 제어입니다.</p></section></div>`;
   }
 
   function stat(label, value, detail = "") {
     return `<article class="stat-card"><span>${label}</span><strong>${value}</strong>${detail ? `<small>${detail}</small>` : ""}</article>`;
   }
 
-  function investorHome(postTrade = false) {
+  function formatWon(value) {
+    return `${Number(value || 0).toLocaleString("ko-KR")} 원`;
+  }
+
+  function formatDateTime(value, compact = false) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return new Intl.DateTimeFormat("ko-KR", compact
+      ? { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }
+      : { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }
+    ).format(date);
+  }
+
+  function assetName(symbol) {
+    return Model.assets(state).find((asset) => asset.symbol === symbol)?.name || symbol;
+  }
+
+  function latestAbcfTrade() {
+    return Model.recentTransactions(state, 50).find((trade) => trade.symbol === "ABCF" && trade.source === "demo") || null;
+  }
+
+  function investorHome() {
     const qualified = state.investorQualified;
+    const portfolio = Model.portfolioSummary(state);
+    const hasCompletedPurchase = portfolio.demoTradeCount > 0;
+    const holdings = portfolio.holdings.slice().sort((left, right) => (right.symbol === "ABCF") - (left.symbol === "ABCF"));
+    const recentTrades = Model.recentTransactions(state, 3);
     return shell("investor", "홈", `
-      ${header(`안녕하세요, Robin님`, postTrade ? "ABCF 주문이 체결되었습니다" : qualified ? "모든 거래 자격이 준비되었습니다" : "거래 자격을 신청하면 자산 2종을 더 거래할 수 있습니다")}
-      ${postTrade ? '<div class="alert success"><strong>체결 완료</strong><span>ABC 사모 펀드 토큰 180주가 내 자산에 반영됐습니다.</span></div>' : ""}
+      ${header(`안녕하세요, Robin님`, hasCompletedPurchase ? "최근 ABCF 주문이 보유 자산에 반영되었습니다" : qualified ? "모든 거래 자격이 준비되었습니다" : "거래 자격을 신청하면 자산 2종을 더 거래할 수 있습니다")}
+      ${hasCompletedPurchase ? `<div class="alert success"><strong>포트폴리오 갱신</strong><span>ABCF 누적 ${state.holdings.ABCF.toLocaleString("ko-KR")}주와 체결 ${portfolio.demoTradeCount}건이 반영됐습니다.</span></div>` : ""}
+      ${state.assetPaused ? `<div class="alert warning"><strong>ABCF 거래 일시정지</strong><span>${escapeHtml(state.pauseReason || "운영 점검 중")} · 보유 자산과 이전 거래는 그대로 유지됩니다.</span></div>` : ""}
       <section class="stats-grid">
-        ${stat("총 평가액", postTrade ? "50,418,000 원" : "32,400,000 원")}
-        ${stat("보유 자산", postTrade ? "3종" : "2종")}
+        ${stat("총 평가액", formatWon(portfolio.totalValue))}
+        ${stat("보유 자산", `${portfolio.assetCount}종`)}
         ${stat("거래 가능한 자산", qualified ? "4종" : "2종")}
       </section>
       <section class="card">
-        <div class="card-heading"><strong>${qualified ? "추천 자산" : "해야 할 일"}</strong><span>${qualified ? "2종" : "2건"}</span></div>
-        ${qualified ? taskRow("ABC 사모 펀드 토큰", "최소 주문 50개 · 기준가 100,000원", "주문하기", "investor/order") : `
+        <div class="card-heading"><strong>${qualified ? "추천 자산" : "해야 할 일"}</strong><span>${qualified ? "1종" : "2건"}</span></div>
+        ${qualified ? taskRow("ABC 사모 펀드 토큰", state.assetPaused ? "운영 점검으로 신규 주문이 중지됐습니다" : "최소 주문 50개 · 기준가 100,000원", state.assetPaused ? "상태 보기" : "주문하기", state.assetPaused ? "investor/paused" : "investor/order", state.assetPaused ? "secondary" : "primary") : `
           ${taskRow("KLM 주식", "거래 자격만 신청하면 바로 거래할 수 있습니다", "거래 자격 신청", "investor/qualification")}
           ${taskRow("ABC 사모 펀드 토큰", "인증 1개가 더 필요합니다", "거래 자격 신청", "investor/asset", "secondary")}`}
       </section>
       <section class="home-lower">
         <div class="card"><div class="card-heading"><strong>보유 자산</strong><button class="text-button" data-route="investor/assets">전체 보기 ›</button></div>
-          ${postTrade ? holdingRow("ABC 사모 펀드 토큰", "180주", "18,000,000 원") : ""}${holdingRow("국고채 토큰", "1,200주", "24,000,000 원")}${holdingRow("MMF 토큰", "840주", "8,400,000 원")}
+          ${holdings.map((holding) => holdingRow(holding.name, `${holding.quantity.toLocaleString("ko-KR")}주`, formatWon(holding.value))).join("")}
         </div>
-        <div class="card"><div class="card-heading"><strong>최근 거래</strong><button class="text-button" data-route="investor/assets">전체 보기 ›</button></div>
-          ${postTrade ? recentTradeRow("ABCF 매수", "오늘", "+180주") : ""}${recentTradeRow("국고채 토큰 매수", "09-01", "+400주")}${recentTradeRow("MMF 토큰 매수", "08-28", "+840주")}
+        <div class="card"><div class="card-heading"><strong>최근 거래</strong><button class="text-button" data-route="investor/transactions">전체 보기 ›</button></div>
+          ${recentTrades.map(recentTradeRow).join("")}
         </div>
       </section>`);
   }
@@ -153,8 +186,8 @@
     return `<div class="holding-row"><span class="holding-icon"></span><span><strong>${name}</strong><small>${amount}</small></span><b>${value}</b></div>`;
   }
 
-  function recentTradeRow(name, date, amount) {
-    return `<div class="recent-trade-row"><span><strong>${name}</strong><small>${date}</small></span><b>${amount}</b></div>`;
+  function recentTradeRow(trade) {
+    return `<div class="recent-trade-row"><span><strong>${escapeHtml(assetName(trade.symbol))} 매수</strong><small>${formatDateTime(trade.completedAt, true)}</small></span><b>+${trade.quantity.toLocaleString("ko-KR")}주</b></div>`;
   }
 
   function investorTrade() {
@@ -162,11 +195,13 @@
     return shell("investor", "trade", `
       ${header("거래하기", "자격을 받은 자산은 바로 거래할 수 있습니다")}
       ${state.issuerAssetListed ? '<div class="alert success"><strong>신규 자산</strong><span>ABC 사모 펀드 토큰이 거래 목록에 등록됐습니다.</span></div>' : ""}
+      ${state.assetPaused ? `<div class="alert warning"><strong>ABCF 거래 일시정지</strong><span>${escapeHtml(state.pauseReason || "운영 점검 중")} · 다른 자산은 정상적으로 거래할 수 있습니다.</span></div>` : ""}
       <section class="asset-list">${assets.map(assetCard).join("")}</section>`);
   }
 
   function assetCard(asset) {
     const eligible = asset.eligible || state.investorQualified;
+    if (asset.paused) return `<article class="asset-list-row"><span class="holding-icon"></span><span class="asset-title"><strong>${asset.name}</strong><small>${asset.symbol}</small></span><strong class="asset-status warning-text">거래 일시정지</strong><button class="button secondary" data-route="investor/paused">상태 보기</button></article>`;
     const target = eligible ? (asset.symbol === "ABCF" ? "investor/order" : "investor/assets") : "investor/asset";
     return `<article class="asset-list-row"><span class="holding-icon"></span><span class="asset-title"><strong>${asset.name}</strong><small>${asset.symbol}</small></span><strong class="asset-status ${eligible ? "positive" : "negative"}">${eligible ? "거래 가능" : "거래 자격 없음"}</strong><button class="button ${eligible ? "primary" : "secondary"}" data-route="${target}">${eligible ? "거래하기" : "거래 자격 신청"}</button></article>`;
   }
@@ -180,6 +215,7 @@
   ];
 
   function investorAsset() {
+    if (state.assetPaused) return investorPaused();
     return shell("investor", "trade", `
       <button class="back" data-route="investor/trade">← 거래하기</button>${header("ABC 사모 펀드 토큰")}
       <section class="two-column asset-detail-layout"><div><section class="card eligibility-summary"><div class="eligibility-title"><strong class="negative">거래 자격 없음</strong><span>고액 투자자 인증이 필요합니다</span></div><div class="missing-credential"><span class="status-dot no">×</span><span><strong>고액 투자자 인증</strong><small>아직 받지 않았습니다</small></span><button class="button secondary" data-action="open-provider">인증 받기</button></div><div class="collapsed-condition"><span class="status-dot ok">○</span><span>나머지 조건 3가지는 충족했습니다</span><strong>펼치기⌄</strong></div></section><section class="card asset-info"><div class="card-heading"><strong>자산 정보</strong></div><div><span>현재가</span><strong>100,000 원</strong></div><div><span>최소 주문 수량</span><strong>50주</strong></div><div><span>거래 방식</span><strong>딜러와 1:1</strong></div><div><span>운용사</span><strong>ABC 자산운용</strong></div></section></div><aside class="side-card availability-card"><div class="side-heading">거래 가능 여부</div><div class="alert danger compact"><strong>×</strong><span>아직 거래할 수 없습니다</span></div><button class="button primary full" data-route="investor/qualification">거래 자격 신청</button></aside></section>`);
@@ -231,6 +267,7 @@
   }
 
   function investorOrder(stage = "order") {
+    if (state.assetPaused) return investorPaused();
     const valid = Model.isMinimumOrder(state.orderAmount);
     const price = Number(state.orderAmount || 0) * 100000;
     const fee = Math.round(price * 0.001);
@@ -254,32 +291,48 @@
   }
 
   function investorComplete() {
-    return shell("investor", "trade", `<section class="center-state completion-state"><div class="success-ring">○</div><h1>주문이 체결되었습니다</h1><p>2026-09-04 14:21</p><div class="receipt figma-receipt"><div class="receipt-heading"><strong>체결 내역</strong></div><div><span>자산</span><strong>ABC 사모 펀드 토큰</strong></div><div><span>수량</span><strong>180주</strong></div><div><span>단가</span><strong>100,000 원</strong></div><div><span>수수료</span><strong>18,000 원</strong></div><div><span>총 대금</span><strong>18,018,000 원</strong></div><div class="receipt-action-row"><span>거래 번호</span><button class="text-button" data-action="transaction-details">0x9b2c7d14</button></div></div><div class="button-row completion-actions"><button class="button secondary" data-action="complete-home">홈으로</button><button class="button primary" data-route="investor/assets">내 자산 보기</button></div></section>`);
+    const trade = latestAbcfTrade();
+    const quantity = trade?.quantity || state.orderAmount;
+    const unitPrice = trade?.unitPrice || 100000;
+    const fee = trade?.fee || Math.round(quantity * unitPrice * 0.001);
+    const total = trade?.total || quantity * unitPrice + fee;
+    return shell("investor", "trade", `<section class="center-state completion-state"><div class="success-ring">○</div><h1>주문이 체결되었습니다</h1><p>${trade ? formatDateTime(trade.completedAt) : "체결 처리 완료"}</p><div class="receipt figma-receipt"><div class="receipt-heading"><strong>체결 내역</strong></div><div><span>자산</span><strong>ABC 사모 펀드 토큰</strong></div><div><span>수량</span><strong>${quantity.toLocaleString("ko-KR")}주</strong></div><div><span>단가</span><strong>${formatWon(unitPrice)}</strong></div><div><span>수수료</span><strong>${formatWon(fee)}</strong></div><div><span>총 대금</span><strong>${formatWon(total)}</strong></div><div class="receipt-action-row"><span>거래 번호</span><button class="text-button" data-action="transaction-details">${escapeHtml(trade?.transactionHash || trade?.id || "0x9b2c7d14")}</button></div></div><div class="button-row completion-actions"><button class="button secondary" data-action="complete-home">홈으로</button><button class="button primary" data-route="investor/assets">내 자산 보기</button></div></section>`);
   }
 
   function investorAssets() {
+    const portfolio = Model.portfolioSummary(state);
     return shell("investor", "assets", `${header("내 자산", "현재 보유 수량과 평가액")}
-      ${state.postTrade ? `<section class="stats-grid asset-stats">${stat("총 평가액", "50,418,000 원")}${stat("보유 자산", "3종")}${stat("오늘 변동", "+18,018,000 원")}</section>` : ""}
-      <div class="tabs"><button class="is-active">보유 자산</button><button data-route="investor/certifications">인증 현황</button></div>
+      <section class="stats-grid asset-stats">${stat("총 평가액", formatWon(portfolio.totalValue))}${stat("보유 자산", `${portfolio.assetCount}종`)}${stat("오늘 매수", `+${formatWon(portfolio.todayPurchaseValue)}`)}</section>
+      <div class="tabs"><button class="is-active">보유 자산</button><button data-route="investor/transactions">거래 내역</button><button data-route="investor/certifications">인증 현황</button></div>
       <section class="card"><div class="table-row table-head"><span>자산</span><span>보유 수량</span><span>평가액</span><span>상태</span></div>
-      ${state.postTrade ? '<div class="table-row"><strong>ABCF</strong><span>180</span><span>18,000,000 원</span><span class="positive">거래 가능</span></div>' : ""}<div class="table-row"><strong>KTB</strong><span>1,200</span><span>24,000,000 원</span><span class="positive">거래 가능</span></div><div class="table-row"><strong>MMF</strong><span>840</span><span>8,400,000 원</span><span class="positive">거래 가능</span></div></section>`);
+      ${portfolio.holdings.slice().sort((left, right) => (right.symbol === "ABCF") - (left.symbol === "ABCF")).map((holding) => `<div class="table-row"><strong>${holding.symbol}<small>${escapeHtml(holding.name)}</small></strong><span>${holding.quantity.toLocaleString("ko-KR")}주</span><span>${formatWon(holding.value)}</span><span class="${holding.symbol === "ABCF" && state.assetPaused ? "warning-text" : "positive"}">${holding.symbol === "ABCF" && state.assetPaused ? "거래 일시정지" : "거래 가능"}</span></div>`).join("")}</section>`);
+  }
+
+  function investorTransactions() {
+    const transactions = Model.recentTransactions(state, 50);
+    return shell("investor", "assets", `${header("거래 내역", "체결된 주문과 정산 금액을 확인합니다")}
+      <section class="stats-grid asset-stats">${stat("전체 체결", `${transactions.length}건`)}${stat("ABCF 매수", `${transactions.filter((trade) => trade.symbol === "ABCF").length}건`)}${stat("최근 체결", transactions[0] ? formatDateTime(transactions[0].completedAt, true) : "-")}</section>
+      <div class="tabs"><button data-route="investor/assets">보유 자산</button><button class="is-active">거래 내역</button><button data-route="investor/certifications">인증 현황</button></div>
+      <section class="card transaction-list"><div class="transaction-row transaction-head"><span>체결 시각</span><span>자산</span><span>구분</span><span>수량</span><span>총 대금</span><span>상태</span></div>${transactions.map((trade) => `<div class="transaction-row"><span>${formatDateTime(trade.completedAt, true)}</span><strong>${trade.symbol}<small>${escapeHtml(assetName(trade.symbol))}</small></strong><span>매수</span><span>+${trade.quantity.toLocaleString("ko-KR")}주</span><span>${formatWon(trade.total)}</span><span class="positive">체결 완료</span></div>`).join("")}</section>`);
   }
 
   function investorCertifications() {
     const certs = [["ONCHAINID 신원", "확인됨", "2027.09.05"], ["제재 목록", "통과", "실시간"], ["국가", "대한민국", "2027.09.05"], ["적격투자자", "유효", "2027.06.30"], ["고액투자자", state.investorQualified ? "유효" : "미보유", state.investorQualified ? "2027.09.05" : "-"]];
     return shell("investor", "certifications", `${header("내 인증", "개인정보 대신 자격 상태와 유효기간만 표시합니다")}
-      <div class="tabs"><button data-route="investor/assets">보유 자산</button><button class="is-active">인증 현황</button></div><section class="card cert-list">${certs.map(([name, status, date]) => `<div><span class="status-dot ${status === "미보유" ? "no" : "ok"}">${status === "미보유" ? "×" : "✓"}</span><strong>${name}</strong><span>${status}</span><small>${date}</small></div>`).join("")}</section>`);
+      <div class="tabs"><button data-route="investor/assets">보유 자산</button><button data-route="investor/transactions">거래 내역</button><button class="is-active">인증 현황</button></div><section class="card cert-list">${certs.map(([name, status, date]) => `<div><span class="status-dot ${status === "미보유" ? "no" : "ok"}">${status === "미보유" ? "×" : "✓"}</span><strong>${name}</strong><span>${status}</span><small>${date}</small></div>`).join("")}</section>`);
   }
 
   function investorPaused() {
     return shell("investor", "trade", `${header("주문하기", "ABC 사모 펀드 토큰")}
-      <div class="alert warning"><strong>주문이 일시 중지되었습니다</strong><span>운영자가 시장 상태를 확인하고 있습니다. 기존 자산과 인증에는 영향이 없습니다.</span></div><section class="two-column"><div class="card form-card muted"><div class="card-heading"><strong>주문 수량</strong>${badge("일시 중지", "warning")}</div><label class="amount-field"><span>수량</span><input value="50" disabled/><strong>ABCF</strong></label></div><aside class="side-card"><h2>주문 요약</h2><p>거래가 재개되면 새 견적을 요청해야 합니다.</p><button class="button primary full" disabled>견적 요청</button><button class="button secondary full" data-route="investor/trade">거래 목록으로</button></aside></section>`);
+      <div class="alert warning"><strong>ABCF 주문이 일시정지되었습니다</strong><span>${escapeHtml(state.pauseReason || "운영자가 시장 상태를 확인하고 있습니다.")} 기존 자산과 인증에는 영향이 없습니다.</span></div><section class="two-column"><div class="card form-card muted"><div class="card-heading"><strong>주문 수량</strong>${badge("일시정지", "warning")}</div><label class="amount-field"><span>수량</span><input value="${state.orderAmount}" disabled/><strong>ABCF</strong></label><div class="pause-explanation"><strong>새 견적과 체결이 차단됐습니다</strong><span>이미 체결된 ABCF ${state.holdings.ABCF.toLocaleString("ko-KR")}주와 거래 내역은 그대로 확인할 수 있습니다.</span></div></div><aside class="side-card"><div class="side-heading">운영 상태</div><div class="mini-row"><span>자산</span><strong>ABCF</strong></div><div class="mini-row"><span>상태</span><strong class="warning-text">거래 일시정지</strong></div><div class="mini-row"><span>변경 시각</span><strong>${state.pauseUpdatedAt ? formatDateTime(state.pauseUpdatedAt, true) : "방금 전"}</strong></div><p>거래가 재개되면 새 견적을 요청해야 합니다.</p><button class="button primary full" disabled>견적 요청</button><button class="button secondary full" data-route="investor/assets">보유 자산 보기</button><button class="button secondary full" data-route="investor/trade">거래 목록으로</button></aside></section>`);
   }
 
   function issuerHome() {
+    const portfolio = Model.portfolioSummary(state);
+    const abcfStatus = state.assetPaused ? "일시정지" : "거래 중";
     return shell("issuer", "홈", `${header("안녕하세요, Peter님", "거래 중인 자산 1종을 운영하고 있습니다")}
-      <section class="stats-grid">${stat("거래 중인 자산", state.issuerAssetListed ? "2종" : "1종")}${stat("이번 달 체결", state.issuerAssetListed ? "346건" : "318건")}${stat("전체 보유자", state.issuerAssetListed ? "500명" : "482명")}</section>
-      <section class="card issuer-assets"><div class="card-heading"><strong>내 자산</strong><span>${state.issuerAssetListed ? "2종" : "1종"}</span></div>${state.issuerAssetListed ? '<div class="issuer-asset-row"><span class="holding-icon"></span><span><strong>ABC 사모 펀드 토큰</strong><small><em>ABCF</em><em>Reg D 506(c)</em><em>§ 3(c)(7)</em></small></span><strong class="positive">거래 중</strong><button class="button secondary" data-route="issuer/metrics">현황 보기</button></div>' : ""}<div class="issuer-asset-row"><span class="holding-icon"></span><span><strong>ABC 성장형 펀드 토큰</strong><small><em>ABCG</em><em>Reg D 506(c)</em><em>§ 3(c)(7)</em></small></span><strong class="positive">거래 중</strong><button class="button secondary" data-route="issuer/metrics">현황 보기</button></div></section><section class="card issuer-cta"><span><strong>새 자산을 등록하시겠어요</strong><small>발행 조건을 고르면 필요한 자료가 자동으로 정리됩니다</small></span><button class="button primary" data-route="issuer/basic">새 자산 등록</button></section>`);
+      <section class="stats-grid">${stat("거래 중인 자산", state.issuerAssetListed ? (state.assetPaused ? "1종 · 1종 정지" : "2종") : "1종")}${stat("이번 달 체결", `${318 + portfolio.demoTradeCount}건`)}${stat("전체 보유자", `${482 + (state.holdings.ABCF > 0 ? 1 : 0)}명`)}</section>
+      <section class="card issuer-assets"><div class="card-heading"><strong>내 자산</strong><span>${state.issuerAssetListed ? "2종" : "1종"}</span></div>${state.issuerAssetListed ? `<div class="issuer-asset-row"><span class="holding-icon"></span><span><strong>ABC 사모 펀드 토큰</strong><small><em>ABCF</em><em>Reg D 506(c)</em><em>§ 3(c)(7)</em></small></span><strong class="${state.assetPaused ? "warning-text" : "positive"}">${abcfStatus}</strong><button class="button secondary" data-route="issuer/metrics">운영 보기</button></div>` : ""}<div class="issuer-asset-row"><span class="holding-icon"></span><span><strong>ABC 성장형 펀드 토큰</strong><small><em>ABCG</em><em>Reg D 506(c)</em><em>§ 3(c)(7)</em></small></span><strong class="positive">거래 중</strong><button class="button secondary" data-route="issuer/metrics">현황 보기</button></div></section><section class="card issuer-cta"><span><strong>새 자산을 등록하시겠어요</strong><small>발행 조건을 고르면 필요한 자료가 자동으로 정리됩니다</small></span><button class="button primary" data-route="issuer/basic">새 자산 등록</button></section>`);
   }
 
   const issuerFields = [
@@ -369,14 +422,36 @@
 
   function issuerMetrics() {
     const active = state.issuerAssetListed;
-    return shell("issuer", "assets", `${header(active ? "ABC 사모 펀드 토큰" : "ABC 글로벌 채권 토큰", active ? "ABCF · 거래 중" : "ABCG · 거래 중")}
-      <section class="stats-grid">${stat("총 체결 금액", active ? "128,500,000 원" : "840,000,000 원", "+12.4%")}${stat("보유 투자자", active ? "18명" : "64명")}${stat("이번 달 체결", active ? "28건" : "24건")}</section>
-      <section class="two-column dashboard"><div class="card chart-card"><div class="card-heading"><strong>체결 금액</strong><span>최근 7일</span></div><div class="chart" aria-label="최근 7일 체결 금액 막대 그래프">${[32, 54, 42, 68, 51, 82, 74].map((height, index) => `<span class="height-${height}"><small>${index + 1}일</small></span>`).join("")}</div></div><aside class="card recent-card"><div class="card-heading"><strong>최근 체결</strong><span>실시간</span></div>${[["09:42", "50 ABCF", "5,000,000원"], ["09:18", "120 ABCF", "12,000,000원"], ["어제", "80 ABCF", "8,000,000원"]].map((row) => `<div class="recent-row"><span>${row[0]}</span><strong>${row[1]}</strong><span>${row[2]}</span></div>`).join("")}</aside></section>`);
+    const portfolio = Model.portfolioSummary(state);
+    const userTrades = Model.recentTransactions(state, 10).filter((trade) => trade.symbol === "ABCF" && trade.source === "demo");
+    const status = state.assetPaused ? "거래 일시정지" : "거래 중";
+    const recentRows = [
+      ...userTrades.map((trade) => [formatDateTime(trade.completedAt, true), `${trade.quantity.toLocaleString("ko-KR")} ABCF`, formatWon(trade.quantity * trade.unitPrice)]),
+      ["09:42", "50 ABCF", "5,000,000 원"], ["09:18", "120 ABCF", "12,000,000 원"], ["어제", "80 ABCF", "8,000,000 원"]
+    ].slice(0, 5);
+    const operationRows = state.operationLog.slice(0, 4);
+    const displayedRecentRows = active ? recentRows : [["09:42", "50 ABCG", "42,000,000 원"], ["09:18", "120 ABCG", "100,800,000 원"], ["어제", "80 ABCG", "67,200,000 원"]];
+    const operations = active ? `<section class="asset-operations"><div><strong>거래 운영 상태</strong><span>ABCF 신규 quote와 fill을 자산 단위로 제어합니다</span></div><div class="operation-state"><span class="status-dot ${state.assetPaused ? "pause" : "ok"}">${state.assetPaused ? "!" : "○"}</span><span><strong class="${state.assetPaused ? "warning-text" : "positive"}">${status}</strong><small>${state.assetPaused ? escapeHtml(state.pauseReason || "운영 점검") : "RFQ venue · signer · inventory ready"}</small></span></div><button class="button ${state.assetPaused ? "primary" : "danger-outline"}" data-action="${state.assetPaused ? "open-resume" : "open-pause"}">${state.assetPaused ? "거래 재개" : "거래 일시정지"}</button></section>` : "";
+    const operationHistory = active ? `<section class="card operation-history"><div class="card-heading"><strong>운영 이력</strong><span>PII-free browser audit</span></div>${operationRows.map((entry) => `<div class="operation-row"><span class="status-dot ${entry.action === "PAUSE" ? "pause" : "ok"}">${entry.action === "PAUSE" ? "!" : "○"}</span><span><strong>${entry.action === "PAUSE" ? "거래 일시정지" : "거래 재개"}</strong><small>${escapeHtml(entry.reason)}</small></span><time>${formatDateTime(entry.at, true)}</time></div>`).join("")}</section>` : "";
+    return shell("issuer", "assets", `${header(active ? "ABC 사모 펀드 토큰" : "ABC 글로벌 채권 토큰", active ? `ABCF · ${status}` : "ABCG · 거래 중")}
+      ${active && state.assetPaused ? `<div class="alert warning"><strong>투자자 주문 차단 중</strong><span>${escapeHtml(state.pauseReason || "운영 점검")} · 기존 보유 자산과 체결 이력은 유지됩니다.</span></div>` : ""}
+      <section class="stats-grid">${stat("총 체결 금액", active ? formatWon(128500000 + portfolio.todayPurchaseValue) : "840,000,000 원", "+12.4%")} ${stat("보유 투자자", active ? `${18 + (state.holdings.ABCF > 0 ? 1 : 0)}명` : "64명")}${stat("이번 달 체결", active ? `${28 + portfolio.demoTradeCount}건` : "24건")}</section>
+      ${operations}
+      <section class="two-column dashboard"><div class="card chart-card"><div class="card-heading"><strong>체결 금액</strong><span>최근 7일</span></div><div class="chart" aria-label="최근 7일 체결 금액 막대 그래프">${[32, 54, 42, 68, 51, 82, active && portfolio.demoTradeCount ? 82 : 74].map((height, index) => `<span class="height-${height}"><small>${index + 1}일</small></span>`).join("")}</div></div><aside class="card recent-card"><div class="card-heading"><strong>최근 체결</strong><span>${active && state.assetPaused ? "정지됨" : "실시간"}</span></div>${displayedRecentRows.map((row) => `<div class="recent-row"><span>${row[0]}</span><strong>${row[1]}</strong><span>${row[2]}</span></div>`).join("")}</aside></section>
+      ${operationHistory}`);
   }
 
   function render() {
     clearTimeout(timer);
     const current = route();
+    if (state.assetPaused && ["investor/order", "investor/quote-loading", "investor/quote", "investor/fill"].includes(current)) {
+      return go("investor/paused");
+    }
+    if (current === "investor/complete" && state.pendingOrder) {
+      const settlement = Model.settlePendingOrder(state);
+      state = settlement.state;
+      saveState();
+    }
     if (current === "investor/approved" && !state.investorQualified) {
       state.investorQualified = true;
       saveState();
@@ -390,13 +465,13 @@
       saveState();
     }
     const views = {
-      "investor/home": () => investorHome(false), "investor/post-trade": () => investorHome(true), "investor/trade": investorTrade,
+      "investor/home": investorHome, "investor/post-trade": investorHome, "investor/trade": investorTrade,
       "investor/asset": investorAsset, "investor/qualification": investorQualification, "investor/provider": investorQualification,
       "investor/upload": investorUpload, "investor/review": credentialReviewScreen,
       "investor/qualification-ready": qualificationReady, "investor/application-review": applicationReviewScreen,
       "investor/approved": qualificationApproved, "investor/order": () => investorOrder("order"), "investor/quote-loading": () => investorOrder("loading"),
       "investor/quote": () => investorOrder("quote"), "investor/fill": () => investorOrder("fill"), "investor/complete": investorComplete,
-      "investor/assets": investorAssets, "investor/certifications": investorCertifications, "investor/paused": investorPaused,
+      "investor/assets": investorAssets, "investor/transactions": investorTransactions, "investor/certifications": investorCertifications, "investor/paused": investorPaused,
       "issuer/home": issuerHome, "issuer/basic": issuerBasic, "issuer/rules": issuerRules, "issuer/evidence": () => issuerEvidence(),
       "issuer/review": issuerReview, "issuer/live": issuerLive, "issuer/metrics": issuerMetrics
     };
@@ -404,6 +479,7 @@
     if (overlay === "wallet" || overlay === "wallet-picker") app.insertAdjacentHTML("beforeend", walletModal());
     if (overlay === "transaction") app.insertAdjacentHTML("beforeend", transactionModal());
     if (overlay === "provider") app.insertAdjacentHTML("beforeend", providerModal());
+    if (overlay === "pause" || overlay === "resume") app.insertAdjacentHTML("beforeend", marketControlModal(overlay));
     const range = document.querySelector("#order-range");
     if (range) range.style.setProperty("--range-progress", `${Math.min(100, state.orderAmount / 6)}%`);
     document.title = `${current.startsWith("issuer") ? "발행사" : "투자자"} · Corner Store`;
@@ -422,7 +498,10 @@
 
   app.addEventListener("click", (event) => {
     const routeButton = event.target.closest("[data-route]");
-    if (routeButton && !routeButton.disabled) return go(routeButton.dataset.route);
+    if (routeButton && !routeButton.disabled) {
+      overlay = null;
+      return go(routeButton.dataset.route);
+    }
 
     const provider = event.target.closest("[data-provider]");
     if (provider) {
@@ -498,13 +577,47 @@
     }
     if (action === "submit-certification") return go("investor/review");
     if (action === "submit-qualification") return go("investor/application-review");
-    if (action === "request-quote") return go("investor/quote-loading");
-    if (action === "accept-quote") return go("investor/fill");
-    if (action === "complete-home") {
-      state.postTrade = true;
+    if (action === "request-quote") {
+      if (state.assetPaused) return go("investor/paused");
+      return go("investor/quote-loading");
+    }
+    if (action === "accept-quote") {
+      state.pendingOrder = Model.createPendingOrder(state, state.orderAmount);
+      if (!state.pendingOrder) return go(state.assetPaused ? "investor/paused" : "investor/order");
       saveState();
+      return go("investor/fill");
+    }
+    if (action === "complete-home") {
       go("investor/post-trade");
       return showToast("체결 내역과 보유 자산이 갱신되었습니다.");
+    }
+    if (action === "open-pause") {
+      overlay = "pause";
+      return render();
+    }
+    if (action === "open-resume") {
+      overlay = "resume";
+      return render();
+    }
+    if (action === "cancel-control") {
+      overlay = null;
+      return render();
+    }
+    if (action === "confirm-pause") {
+      const result = Model.setAssetPaused(state, true, document.querySelector("#pause-reason")?.value || "운영 점검");
+      state = result.state;
+      overlay = null;
+      saveState();
+      render();
+      return showToast("ABCF 신규 주문이 일시정지되었습니다.");
+    }
+    if (action === "confirm-resume") {
+      const result = Model.setAssetPaused(state, false, "운영 점검 완료");
+      state = result.state;
+      overlay = null;
+      saveState();
+      render();
+      return showToast("ABCF 거래가 재개되었습니다.");
     }
     if (action === "submit-issuer-review") {
       return go("issuer/review");
@@ -566,5 +679,12 @@
   }
 
   window.addEventListener("hashchange", render);
+  window.addEventListener("storage", (event) => {
+    if (event.key !== STORAGE_KEY) return;
+    state = loadState();
+    overlay = null;
+    render();
+    showToast("다른 포털에서 변경된 상태를 반영했습니다.");
+  });
   render();
 })();

@@ -11,7 +11,11 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. 다음 feature를 시작할 때 `FEATURES.md`에서 하나만 `active`로 전환한다.
+`PORTAL-004 — Stateful Portfolio and Asset Operations`. RFQ 체결을 route flag가
+아닌 idempotent browser journal로 기록하고 홈·보유 자산·거래 내역·발행사 지표가
+같은 상태를 사용하도록 연결했다. 발행사 ABCF pause/resume과 투자자 quote/fill
+차단, same-origin tab 동기화도 구현했으며 targeted model/smoke와 18개 headless
+Chrome cross-flow assertion이 통과했다. repository-wide CI 검증이 남아 있다.
 
 ## Completed
 

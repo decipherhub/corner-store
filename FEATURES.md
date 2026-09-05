@@ -10,6 +10,36 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## PORTAL-004 — Stateful Portfolio and Asset Operations
+
+### Behavior
+
+- RFQ 체결 완료 시점에 주문 수량·가격·수수료·거래 ID를 단 한 번 저장하고,
+  동일한 browser state에서 홈 요약, 내 자산, 거래 내역과 발행사 자산 현황이
+  같은 체결 결과를 읽는다.
+- 반복 매수는 ABCF 보유 수량과 평가액을 누적하며 새로고침·직접 화면 이동 후에도
+  localStorage 기반 demo state를 유지한다. 기존 PORTAL-003 state는 보수적으로
+  마이그레이션한다.
+- 발행사 자산 현황에서 ABCF 거래를 일시정지·재개할 수 있고, 그 상태는 투자자
+  거래 목록·주문 화면에 즉시 반영되어 정지 중 신규 quote/fill을 차단한다.
+- 일시정지와 재개 이력을 PII-free browser-only 운영 기록으로 표시하고 실제
+  operator API, signer, RPC 또는 온체인 pause 권한과 혼동하지 않는다.
+
+### Verification
+
+- model regression: exact settlement accounting, duplicate completion idempotency,
+  repeated purchase accumulation, legacy state migration and pause normalization
+- product portal smoke and JavaScript syntax
+- browser walkthrough: buy → completion → holdings/history/home/issuer metrics,
+  issuer pause → investor blocked order → issuer resume
+- `scripts/check.sh`
+- Anvil/GIWA E2E not required unless contract, deployment, RPC or testnet paths change
+
+### State
+
+active
+
+
 ## PORTAL-003 — Figma Visual Parity and Stable Demo Identity
 
 ### Behavior
