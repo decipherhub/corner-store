@@ -8,3 +8,7 @@
 - 관련 feature가 `passing`으로 변경됨
 - 실행한 검증과 결과가 `PROGRESS.md`에 기록됨
 - 중요한 결정이 `DECISIONS.md`에 기록됨
+
+완료된 계획:
+
+- [`PORTAL-003-figma-visual-parity.md`](./PORTAL-003-figma-visual-parity.md)

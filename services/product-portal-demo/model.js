@@ -11,7 +11,7 @@
       investorQualified: false,
       walletConnected: true,
       walletProvider: "MetaMask",
-      qualificationChecks: [false, false, false, false],
+      qualificationChecks: [true, true, true, false],
       provider: null,
       certificationFile: null,
       certificationUploadProgress: 0,
@@ -23,7 +23,7 @@
         symbol: "ABCF",
         supply: "1000000",
         minimum: "50",
-        contract: "0xABCF...2048",
+        contract: "0x7c41...a9e2",
         chain: "Ethereum"
       },
       issuerAnswers: {},
@@ -32,8 +32,8 @@
         highValue: true,
         acquisition: false,
         holders: true,
-        related: true,
-        sanctions: false,
+        related: false,
+        sanctions: true,
         distribution: true
       }
     };
@@ -76,21 +76,21 @@
     const badges = [];
     if (answers.offering === "reg-d") badges.push("Reg D 506(c)");
     if (answers.offering === "reg-s") badges.push("Reg S");
-    if (answers.investor === "qualified") badges.push("적격투자자");
-    if (answers.investor === "high-value") badges.push("고액투자자");
-    if (answers.holding === "90") badges.push("90일 보유");
-    if (answers.distribution === "quarterly") badges.push("분기 분배");
+    if (answers.fund === "private-fund") badges.push("§ 3(c)(7)");
+    if (answers.investor === "contract") badges.push("계약 이전 제한");
+    if (answers.holding === "transfer-agent") badges.push("명의개서대리인");
+    if (answers.distribution === "rule-144") badges.push("Rule 144");
     return badges;
   }
 
   function assets(state) {
     const rows = [
-      { symbol: "KTB", name: "한국 국채 토큰", eligible: true, price: "10,000 원", minimum: "10개" },
-      { symbol: "MMF", name: "원화 머니마켓 펀드", eligible: true, price: "24,000 원", minimum: "10개" },
+      { symbol: "KTB", name: "국고채 토큰", eligible: true, price: "10,000 원", minimum: "10개" },
+      { symbol: "MMF", name: "MMF 토큰", eligible: true, price: "24,000 원", minimum: "10개" },
       { symbol: "KLMS", name: "KLM 주식", eligible: false, missing: 2, price: "42,000 원", minimum: "20개" },
       { symbol: "ABCF", name: "ABC 사모 펀드 토큰", eligible: false, missing: 4, price: "100,000 원", minimum: "50개" }
     ];
-    return state.issuerAssetListed ? rows : rows.filter((asset) => asset.symbol !== "ABCF");
+    return rows;
   }
 
   return {

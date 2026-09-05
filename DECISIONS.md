@@ -1,5 +1,45 @@
 # Decisions
 
+## D019 — Figma demo starts with a stable connected identity and seeded asset catalog
+
+Date: 2026-09-05
+
+### Context
+
+The supplied investor Figma flow always shows `Robin / 0xB0B7...91C4` and includes
+ABCF in the initial four-row asset catalog. Hiding the account or ABCF until an
+unrelated issuer-flow action made the demo look incomplete and diverged from the
+reference screens.
+
+### Decision
+
+Start the browser-only portal with a stable connected-looking investor identity,
+issuer operator identity and all four Figma catalog assets. Issuer activation still
+persists same-origin demo state and adds an activation notice, but it does not control
+whether the seeded ABCF reference row exists. Wallet, SSO, asset activation, provider,
+RFQ and settlement indicators remain sandbox facades without external authority.
+
+### Alternatives Considered
+
+- Require an actual wallet or SSO connection: rejected because the product demo must
+  remain usable without credentials and must not acquire external authority.
+- Hide ABCF until the issuer flow completes: rejected because it contradicts the
+  investor design source and makes the investor journey dependent on setup order.
+
+### Consequences
+
+- Every fresh demo opens in the same presentation-ready state.
+- Issuer-to-investor cross-flow demonstrates activation state and notification rather
+  than dynamically creating the Figma-seeded catalog row.
+- Production systems must still source identity and catalog state from authenticated,
+  fail-closed services.
+
+### Related Files
+
+- `services/product-portal-demo/`
+- `docs/product-portal-demo.md`
+- `FEATURES.md`
+
 ## D018 — Investor and issuer journeys stay a browser-only reference service
 
 Date: 2026-09-05

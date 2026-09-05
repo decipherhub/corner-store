@@ -239,8 +239,8 @@ production ERC-3643 onboarding are outside this control surface. See
 RFQ 주문, 발행사 자산 등록과 증빙 준비 흐름을 1440px desktop reference UI로
 재현한다. wallet session, KYC/TA connector, multi-dealer quote/signature와
 settlement receipt는 실제 외부 권한 없이 product-like sandbox facade로 동작한다.
-발행사에서 거래를 시작한 demo 자산은 같은 browser origin의 투자자 거래 목록에
-나타난다.
+ABCF를 포함한 Figma catalog는 처음부터 보이며, 발행사에서 거래를 시작하면 같은
+browser origin의 투자자 화면에 activation 상태와 알림이 반영된다.
 
 ```shell
 npm start --prefix services/product-portal-demo

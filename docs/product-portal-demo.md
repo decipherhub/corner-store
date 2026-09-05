@@ -15,9 +15,9 @@ browser-only reference UI다. source design은 Figma의 `[디자인] 투자자 �
 3. 자격 검토 후 최소 50개 수량을 충족해 ABCF 견적을 요청한다.
 4. 견적 수신, 체결 중, 체결 완료 후 홈과 내 자산 상태가 갱신된다.
 5. `#/investor/paused`는 주문 중지 상태를 별도로 시연한다.
-6. 계정 chip에서 wallet 연결 상태, network, EIP-712와 identity를 확인하고 sandbox
-   연결 해제·MetaMask/WalletConnect/Safe 재연결을 시연한다.
-7. RFQ 단계에서 세 딜러 응답, best quote, signer/taker/inventory 검증과 Router
+6. 계정 chip에서 항상 연결된 demo wallet identity, network와 EIP-712 상태를
+   확인하고 MetaMask/WalletConnect/Safe 표시를 전환한다.
+7. RFQ 단계에서 세 딜러 비교와 signer/taker/inventory 검증 요약, Router
    settlement confirmation/receipt를 확인한다.
 
 ### Issuer
@@ -26,7 +26,8 @@ browser-only reference UI다. source design은 Figma의 `[디자인] 투자자 �
 2. 다섯 발행 조건에 답하고 계산된 rule badge와 준비 자료 수를 확인한다.
 3. 일곱 증빙 항목을 upload/connect modal로 준비한다.
 4. 심사 상태를 거쳐 거래를 시작하고 자산 지표와 최근 체결을 확인한다.
-5. activation 이후 같은 origin의 투자자 거래 목록에 ABCF가 표시된다.
+5. ABCF는 Figma의 초기 catalog처럼 항상 표시되며, activation 이후 같은 origin의
+   투자자 화면에 신규 자산 알림과 활성 상태가 반영된다.
 6. 일곱 evidence popup은 issuer schema, TA provider, file processing, sanctions
    freshness와 distribution window에 맞는 서로 다른 sandbox connector를 제공한다.
 

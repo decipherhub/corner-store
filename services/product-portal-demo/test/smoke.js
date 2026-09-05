@@ -26,18 +26,19 @@ async function run() {
   assert.equal(initial.walletConnected, true);
   assert.equal(initial.walletProvider, "MetaMask");
   assert.equal(initial.certificationUploadProgress, 0);
+  assert.deepEqual(initial.qualificationChecks, [true, true, true, false]);
   assert.equal(Model.isMinimumOrder(49), false);
   assert.equal(Model.isMinimumOrder(50), true);
   assert.equal(Model.qualificationReady(initial), false);
   initial.qualificationChecks = [true, true, true, true];
   assert.equal(Model.qualificationReady(initial), true);
   assert.deepEqual(Model.evidenceProgress(initial), { ready: 5, total: 7 });
-  assert.equal(Model.assets(initial).some((asset) => asset.symbol === "ABCF"), false);
+  assert.equal(Model.assets(initial).some((asset) => asset.symbol === "ABCF"), true);
   initial.issuerAssetListed = true;
   assert.equal(Model.assets(initial).some((asset) => asset.symbol === "ABCF"), true);
-  initial.issuerAnswers = { offering: "reg-d", fund: "private-fund", investor: "qualified", holding: "90", distribution: "quarterly" };
+  initial.issuerAnswers = { offering: "reg-d", fund: "private-fund", investor: "contract", holding: "transfer-agent", distribution: "rule-144" };
   assert.equal(Model.issuerRulesReady(initial), true);
-  assert.deepEqual(Model.compiledRules(initial), ["Reg D 506(c)", "적격투자자", "90일 보유", "분기 분배"]);
+  assert.deepEqual(Model.compiledRules(initial), ["Reg D 506(c)", "§ 3(c)(7)", "계약 이전 제한", "명의개서대리인", "Rule 144"]);
 
   for (const marker of [
     "investor/home", "investor/trade", "investor/qualification", "investor/provider",
@@ -50,8 +51,16 @@ async function run() {
   assert.match(app, /state\.issuerAssetListed = true/);
   assert.match(app, /dataTransfer\.files/);
   assert.match(app, /data-action="wallet-details"/);
+  assert.match(app, /corner-store-product-portal-demo-v3/);
+  assert.match(app, /Robin/);
+  assert.match(app, /0xB0B7\.\.\.91C4/);
+  assert.match(app, /ABC 자산운용/);
+  assert.match(app, /Peter/);
+  assert.doesNotMatch(app, /<div class="demo-boundary"/);
+  assert.doesNotMatch(app, /class="portal-link"/);
   assert.match(app, /data-wallet="WalletConnect"/);
-  assert.match(app, /Provider session KYC-0905-1842/);
+  assert.match(app, /Provider session/);
+  assert.match(app, /KYC-0905-1842/);
   assert.match(app, /Han River Markets/);
   assert.match(app, /Atlas Liquidity/);
   assert.match(app, /EIP-712 서명/);
@@ -59,6 +68,11 @@ async function run() {
   assert.match(app, /3 confirmations/);
   assert.match(app, /class="button-row completion-actions"/);
   assert.match(app, /class="receipt-action-row"/);
+  assert.match(app, /180주/);
+  assert.match(app, /18,018,000 원/);
+  assert.match(app, /class="asset-list"/);
+  assert.match(app, /class="flow-stepper"/);
+  assert.match(app, /issuerProgress\(2\)/);
   assert.match(app, /Token \/ IdentityRegistry/);
   assert.match(app, /Safe proposal/);
   for (const evidence of ["qualified", "highValue", "acquisition", "holders", "related", "sanctions", "distribution"]) {
@@ -71,6 +85,9 @@ async function run() {
   assert.match(css, /\.center-state > \.button \{[^}]*min-width: 160px;/);
   assert.match(css, /\.center-state > \.button \+ \.button/);
   assert.match(css, /\.completion-actions \.button \{[^}]*margin: 0;/);
+  assert.match(css, /\.asset-list-row/);
+  assert.match(css, /\.progress-card/);
+  assert.match(css, /\.issuer-review-layout/);
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {

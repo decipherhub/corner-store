@@ -29,5 +29,6 @@ npm test --prefix services/product-portal-demo
   facade로 재현하지만 실제 provider, signer, RPC 또는 transaction을 호출하지 않는다.
 - 입력한 demo state는 현재 origin의 `localStorage`에만 저장한다.
 - UI의 자격·규칙 결과는 production compliance engine의 판정이 아니다.
-- 발행사 심사 완료 후 `ABCF`가 투자자 거래 목록에 나타나며, activation evidence와
-  투자자 quote/settlement evidence도 같은 demo state에서 확인할 수 있다.
+- `ABCF`는 Figma catalog에 처음부터 표시되며 발행사 심사 완료 후 activation 알림과
+  상태가 같은 demo state에 반영된다. 투자자 quote/settlement evidence도 동일한
+  browser-only fixture에서 확인할 수 있다.
