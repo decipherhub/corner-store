@@ -31,6 +31,7 @@
 - `npm test --prefix services/product-portal-demo`: passed
 - Chrome 1440x900 visual comparison: investor home/trade/qualification/order/
   completion, issuer home/basic/rules/evidence/review/live
+- Chrome 1440x720 reduced-height regression: fixed sidebar account identity remains visible
 - Node 24 full `scripts/check.sh`: Foundry 870/870, all service smoke tests,
   deploy-v3 10/10 passed
 - `git diff --check`: passed

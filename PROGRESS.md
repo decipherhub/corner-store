@@ -27,7 +27,10 @@ source of truth로 사용한다.
   재실행한 전체 `scripts/check.sh`는 Foundry 870/870, 모든 service smoke 및
   deploy-v3 10/10으로 통과했다. 두 기존 Solidity formatting drift 파일은
   restoration trap 후 원본 SHA-256으로 복원했다. contract/RPC/testnet 변경이 없어
-  Anvil/GIWA E2E는 재실행하지 않았다.
+  Anvil/GIWA E2E는 재실행하지 않았다. 후속 확인에서 900px 미만 viewport에서는
+  sidebar의 고정 `min-height` 때문에 계정 chip이 화면 아래로 밀리는 문제를 찾아
+  sidebar를 `100vh`에 고정하고 1440x720에서도 Robin 및 ABC 자산운용 identity가
+  하단에 남는 것을 검증했다.
 
 - `PORTAL-002 — Production-like Demo Integration Facades`: 외부 권한을 획득하지
   않는 기존 browser-only 경계를 유지하면서 wallet 연결/해제/재연결, KYC/TA

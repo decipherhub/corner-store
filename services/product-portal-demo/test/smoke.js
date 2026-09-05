@@ -81,6 +81,7 @@ async function run() {
   assert.match(html, /<script src="\/model\.js"><\/script>/);
   assert.match(css, /url\("\/assets\/order-handle\.svg"\)/);
   assert.match(css, /width: 240px/);
+  assert.match(css, /\.sidebar \{[^}]*height: 100vh;[^}]*min-height: 0;/);
   assert.match(css, /\.button-row \{[^}]*align-items: center;[^}]*justify-content: center;/);
   assert.match(css, /\.center-state > \.button \{[^}]*min-width: 160px;/);
   assert.match(css, /\.center-state > \.button \+ \.button/);

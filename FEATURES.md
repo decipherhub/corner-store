@@ -27,6 +27,8 @@
 - `npm test --prefix services/product-portal-demo`: passed
 - Chrome 1440x900 reference-image comparison: investor home/trade/qualification/order/
   completion and issuer home/basic/rules/evidence/review/live passed
+- Chrome 1440x720 reduced-height regression: bottom investor/issuer identity remains
+  visible inside the fixed viewport sidebar
 - `scripts/check.sh`: passed under installed Node 24 with Foundry 870/870, all
   service smoke tests and vendored deploy-v3 10/10; two unrelated pre-existing
   Solidity formatting drift files were temporarily formatted under a restoration

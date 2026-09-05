@@ -27,8 +27,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid rgb(37 71 208 / 24%); outline-offset: 2px; }
 button:disabled { cursor: not-allowed; opacity: .45; box-shadow: none !important; }
 
-.app-shell { min-height: 900px; }
-.sidebar { position: fixed; inset: 0 auto 0 0; z-index: 10; display: flex; flex-direction: column; width: 240px; min-height: 900px; padding-bottom: 16px; background: var(--surface); border-right: 1px solid var(--line-soft); box-shadow: 1px 0 2px rgb(15 23 41 / 3%); }
+.app-shell { min-height: 100vh; }
+.sidebar { position: fixed; inset: 0 auto 0 0; z-index: 10; display: flex; flex-direction: column; width: 240px; height: 100vh; min-height: 0; padding-bottom: 16px; overflow: hidden; background: var(--surface); border-right: 1px solid var(--line-soft); box-shadow: 1px 0 2px rgb(15 23 41 / 3%); }
 .brand { display: flex; flex-direction: column; justify-content: center; height: 72px; padding: 0 20px; }
 .brand strong { font-size: 15px; line-height: 23px; }
 .brand small { color: var(--muted); font-size: 11px; line-height: 17px; }
@@ -52,7 +52,7 @@ nav { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
 .account-chip small { color: var(--muted); font-size: 11px; line-height: 17px; white-space: nowrap; }
 .chevron { margin-left: auto; color: var(--muted); font-size: 11px; }
 
-.main { width: calc(100% - 240px); min-height: 900px; margin-left: 240px; }
+.main { width: calc(100% - 240px); min-height: 100vh; margin-left: 240px; }
 .content { width: 100%; min-width: 0; max-width: 1200px; padding: 40px 48px 64px; }
 .page-header { display: flex; flex-direction: column; gap: 6px; margin: 0 0 24px; }
 .page-header h1 { margin: 0; font-size: 26px; line-height: 39px; letter-spacing: -.02em; }
