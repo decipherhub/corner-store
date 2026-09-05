@@ -94,6 +94,7 @@ nav { display: flex; flex-direction: column; gap: 4px; padding: 12px; }
 .button.warning-button, .warning-button { color: #92400e; background: #fef3c7; border-color: #fcd34d; }
 .button.full { width: 100%; }
 .button.small { min-width: 112px; height: 36px; font-size: 13px; }
+.empty-row { padding: 24px; color: var(--muted); font-size: 13px; text-align: center; }
 .button-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; }
 
 .table-row { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; align-items: center; min-height: 56px; padding: 0 22px; border-bottom: 1px solid var(--line-soft); }

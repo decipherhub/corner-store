@@ -1000,16 +1000,18 @@ also had no issuer action that produced the state.
 
 ### Decision
 
-1. A quote accepted in the demo creates one pending order with a stable demo RFQ ID. Entering
-   the completion state journals that order at most once and updates ABCF holdings atomically in
-   the normalized browser state.
+1. A quote accepted in the demo creates one pending order with a stable demo RFQ ID and selected
+   asset symbol. Entering the completion state journals that order at most once and updates the
+   matching asset holding atomically in the normalized browser state.
 2. Investor home, holdings, transaction history and issuer metrics derive their values from the
    same holdings and transaction journal rather than route names or presentation flags. A
    completed ABCF settlement or migrated ABCF holding also makes that asset discoverable in the
    issuer operations surface.
-3. ABCF pause/resume is an asset-level issuer operation. Pause clears an unfilled pending order,
-   blocks new quote/fill paths, preserves completed holdings/history and records a bounded,
-   PII-free browser operation entry.
+3. Qualification is asset-scoped: initial KTB/MMF access does not unlock KLM/ABCF, and ABCF
+   approval does not leak into KLM. The Figma paused-order state is modeled as an issuer-visible
+   order-intake operation over all currently qualified assets. Pause clears an unfilled pending
+   order, blocks new quote/fill paths, preserves unqualified states and completed holdings/history,
+   and records a bounded PII-free browser operation entry.
 4. Same-origin tabs synchronize through the browser `storage` event. This is demo consistency,
    not distributed coordination or production authority.
 5. Existing `postTrade` local state is migrated into one legacy ABCF journal entry so current

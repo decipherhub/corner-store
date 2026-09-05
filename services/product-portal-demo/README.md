@@ -6,10 +6,12 @@ demo다. 투자자 자격 신청·RFQ 주문과 발행사 자산 등록·규칙 
 KYC/TA evidence, multi-dealer quote, signer verification과 settlement receipt를
 제품 수준의 sandbox facade로 시연할 수 있다.
 
-체결 완료 시 주문 수량과 정산 금액이 idempotent transaction journal에 기록되고
-홈, 보유 자산, 거래 내역과 발행사 자산 현황이 같은 state를 읽는다. 발행사 현황의
-ABCF 일시정지·재개는 투자자 거래 목록과 주문 gate에 즉시 반영된다. 완료된 ABCF
-체결 또는 기존 ABCF 보유 상태는 발행사 운영 화면에서도 해당 자산을 노출한다.
+체결 완료 시 선택한 자산, 주문 수량과 정산 금액이 idempotent transaction journal에
+기록되고 홈, 보유 자산, 거래 내역과 발행사 자산 현황이 같은 state를 읽는다. KTB와
+MMF의 `거래하기`도 각 자산 주문 화면으로 연결되며, ABCF 자격 승인은 KLM 자격을
+해제하지 않는다. 발행사 홈과 자산 현황의 전체 주문 일시정지·재개는 투자자 거래
+목록과 주문 gate에 즉시 반영된다. 완료된 ABCF 체결 또는 기존 ABCF 보유 상태는
+발행사 운영 화면에서도 해당 자산을 노출한다.
 
 ## Run
 
@@ -22,9 +24,9 @@ npm start --prefix services/product-portal-demo
 - 보유 자산: `http://127.0.0.1:4180/#/investor/assets`
 - 거래 내역: `http://127.0.0.1:4180/#/investor/transactions`
 
-일시정지는 발행사에서 ABCF 등록을 완료한 뒤 **내 자산 → 거래 일시정지**로
-실행한다. 별도의 고립된 화면을 여는 대신 같은 browser state에서 투자자 주문이
-차단되는 것을 확인할 수 있다.
+일시정지는 발행사 **홈 → 주문 접수 관리** 또는 **내 자산 → 주문 접수 관리**에서
+실행한다. Figma의 `주문 일시 중지` 상태처럼 자격을 보유한 자산의 버튼이 모두
+비활성화되고, 자격이 없는 KLM/ABCF는 기존 자격 상태를 유지한다.
 
 ## Verify
 

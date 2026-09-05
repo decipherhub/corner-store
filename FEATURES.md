@@ -17,12 +17,16 @@
 - RFQ 체결 완료 시점에 주문 수량·가격·수수료·거래 ID를 단 한 번 저장하고,
   동일한 browser state에서 홈 요약, 내 자산, 거래 내역과 발행사 자산 현황이
   같은 체결 결과를 읽는다.
-- 반복 매수는 ABCF 보유 수량과 평가액을 누적하며 새로고침·직접 화면 이동 후에도
+- 선택한 거래 가능 자산의 반복 매수는 보유 수량과 평가액을 누적하며 새로고침·직접 화면 이동 후에도
   localStorage 기반 demo state를 유지한다. 기존 PORTAL-003 state는 보수적으로
   마이그레이션한다. 완료된 ABCF 체결 또는 기존 ABCF 보유 상태는 발행사 운영
   화면에서도 해당 자산을 활성 자산으로 노출한다.
-- 발행사 자산 현황에서 ABCF 거래를 일시정지·재개할 수 있고, 그 상태는 투자자
-  거래 목록·주문 화면에 즉시 반영되어 정지 중 신규 quote/fill을 차단한다.
+- Figma 시드처럼 초기에는 KTB/MMF만 거래 가능하고 KLM/ABCF는 자산별 자격이
+  없으며, ABCF 자격 승인이 KLM까지 해제하지 않는다. 각 거래 가능 자산의
+  `거래하기`는 해당 자산 주문 화면과 journal로 연결된다.
+- 발행사 홈과 자산 현황에서 전체 주문을 일시정지·재개할 수 있고, 그 상태는
+  투자자 거래 목록·주문 화면에 즉시 반영되어 자격 보유 자산의 신규 quote/fill을
+  차단한다. 자격 미보유 자산은 `거래 자격 없음` 상태를 유지한다.
 - 일시정지와 재개 이력을 PII-free browser-only 운영 기록으로 표시하고 실제
   operator API, signer, RPC 또는 온체인 pause 권한과 혼동하지 않는다.
 
@@ -35,8 +39,15 @@
 - headless Chrome 1440x900 walkthrough: 19 assertions passed across buy → completion
   → holdings/history/home/issuer metrics, pause cancellation, issuer pause → investor
   blocked order → issuer resume; four visual checkpoints reviewed
+- Figma follow-up: fresh state keeps KLM/ABCF unavailable, KTB/MMF and qualified
+  ABCF route to their own order context, ABCF qualification does not unlock KLM,
+  KLM qualification remains asset-scoped, and issuer-visible global pause disables only
+  qualified assets; 23 Chrome assertions
+  and fresh investor/issuer 1440x900 screenshots reviewed
 - repository-wide `scripts/check.sh`: passed in PR CI with Foundry 870/870, all
   service smoke tests and vendored deploy-v3 10/10
+- current tree `scripts/check.sh`: passed with Homebrew Node 24 after the two unrelated
+  pre-existing Solidity formatting drifts were temporarily formatted and restored
 - Anvil/GIWA E2E not rerun: browser-only state/UI changes do not touch contracts,
   deployment, RPC or testnet paths
 

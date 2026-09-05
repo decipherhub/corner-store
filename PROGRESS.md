@@ -20,13 +20,18 @@ source of truth로 사용한다.
   체결 완료 즉시 홈, 내 자산, 거래 내역과 발행사 현황이 같은 수량·평가액·정산
   결과를 읽도록 연결했다. 완료된 체결/ABCF 보유 상태는 발행사 운영 자산도
   활성화한다. 반복 매수 누적, legacy `postTrade` migration과
-  localStorage reload를 지원한다. 발행사 ABCF pause/resume confirmation, PII-free
-  운영 이력과 same-origin tab 동기화를 추가하고 pause 중 pending 주문 제거 및
-  투자자 quote/fill fail-closed를 구현했다. model regression과 portal smoke,
-  JS syntax/whitespace, 1440x900 headless Chrome 19개 cross-flow assertion 및 네 화면
-  visual review가 통과했다. PR CI의 repository-wide `scripts/check.sh`도 Foundry
-  870/870, 모든 service smoke와 deploy-v3 10/10으로 통과했다. contract/RPC/testnet
-  변경이 없어 Anvil/GIWA E2E는 재실행하지 않았다.
+  localStorage reload를 지원한다. 후속 Figma 대조에서 자격을 자산별로 분리해 초기
+  KTB/MMF만 거래 가능하고 KLM/ABCF는 거래 불가로 고정했으며, ABCF 승인 후에도
+  KLM은 잠긴 상태를 유지한다. KTB/MMF/승인된 ABCF의 `거래하기`는 선택 자산의
+  주문·체결 journal로 연결된다. 발행사 홈과 현황에는 Figma의 주문 중지 상태를
+  만드는 전체 주문 pause/resume confirmation, PII-free 운영 이력과 same-origin tab
+  동기화를 노출했고, pause 중 pending 주문 제거 및 자격 보유 자산 quote/fill
+  fail-closed를 구현했다. model regression, portal smoke, JS syntax/whitespace,
+  기존 19개 cross-flow와 후속 Chrome 23개 assertion, 초기 거래/발행사 운영
+  1440x900 visual review가 통과했다. current tree `scripts/check.sh`도 Homebrew Node
+  24에서 Foundry 870/870, 모든 service smoke와 deploy-v3 10/10으로 통과했다.
+  두 무관한 기존 Solidity formatting drift는 검사 중 임시 포맷 후 원본으로
+  복원했다. contract/RPC/testnet 변경이 없어 Anvil/GIWA E2E는 재실행하지 않았다.
 
 - `PORTAL-003 — Figma Visual Parity and Stable Demo Identity`: 사용자가 제공한
   `figma/*.zip` 원본은 수정·stage하지 않고 `/tmp`에서만 안전하게 추출해 투자자

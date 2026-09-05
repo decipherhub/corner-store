@@ -6,10 +6,10 @@
   const MIN_ORDER = 50;
   const issuerQuestions = ["offering", "fund", "investor", "holding", "distribution"];
   const catalog = {
-    KTB: { symbol: "KTB", name: "국고채 토큰", unitPrice: 20000, eligible: true, minimum: "10개" },
-    MMF: { symbol: "MMF", name: "MMF 토큰", unitPrice: 10000, eligible: true, minimum: "10개" },
-    KLMS: { symbol: "KLMS", name: "KLM 주식", unitPrice: 42000, eligible: false, missing: 2, minimum: "20개" },
-    ABCF: { symbol: "ABCF", name: "ABC 사모 펀드 토큰", unitPrice: 100000, eligible: false, missing: 4, minimum: "50개" }
+    KTB: { symbol: "KTB", name: "국고채 토큰", unitPrice: 20000, eligible: true, minimum: "10개", minimumQuantity: 10 },
+    MMF: { symbol: "MMF", name: "MMF 토큰", unitPrice: 10000, eligible: true, minimum: "10개", minimumQuantity: 10 },
+    KLMS: { symbol: "KLMS", name: "KLM 주식", unitPrice: 42000, eligible: false, requirements: 2, minimum: "20개", minimumQuantity: 20 },
+    ABCF: { symbol: "ABCF", name: "ABC 사모 펀드 토큰", unitPrice: 100000, eligible: false, requirements: 4, minimum: "50개", minimumQuantity: 50 }
   };
   const seedTransactions = [
     { id: "TX-KTB-0901", symbol: "KTB", side: "BUY", quantity: 400, unitPrice: 20000, fee: 8000, total: 8008000, completedAt: "2026-09-01T10:14:00+09:00", status: "COMPLETED", source: "seed" },
@@ -22,8 +22,10 @@
 
   function initialState() {
     return {
-      schemaVersion: 4,
+      schemaVersion: 5,
       investorQualified: false,
+      qualifiedAssets: { KTB: true, MMF: true, KLMS: false, ABCF: false },
+      selectedAsset: "ABCF",
       walletConnected: true,
       walletProvider: "MetaMask",
       qualificationChecks: [true, true, true, false],
@@ -32,7 +34,7 @@
       certificationUploadProgress: 0,
       orderAmount: 20,
       postTrade: false,
-      holdings: { KTB: 1200, MMF: 840, ABCF: 0 },
+      holdings: { KTB: 1200, MMF: 840, KLMS: 0, ABCF: 0 },
       transactions: cloneTransactions(seedTransactions),
       pendingOrder: null,
       nextTradeSequence: 1842,
@@ -104,16 +106,17 @@
 
   function normalizePendingOrder(value) {
     if (!value || typeof value !== "object") return null;
+    const symbol = catalog[String(value.symbol || "ABCF").toUpperCase()] ? String(value.symbol || "ABCF").toUpperCase() : "ABCF";
     const quantity = nonNegativeInteger(value.quantity);
     const sequence = nonNegativeInteger(value.sequence);
     const id = String(value.id || "").slice(0, 64);
-    if (!id || !sequence || quantity < MIN_ORDER) return null;
-    const unitPrice = catalog.ABCF.unitPrice;
+    if (!id || !sequence || quantity < catalog[symbol].minimumQuantity) return null;
+    const unitPrice = catalog[symbol].unitPrice;
     const fee = Math.round(quantity * unitPrice * 0.001);
     return {
       id,
       sequence,
-      symbol: "ABCF",
+      symbol,
       side: "BUY",
       quantity,
       unitPrice,
@@ -162,15 +165,26 @@
     const holdings = {
       KTB: nonNegativeInteger(value.holdings?.KTB, base.holdings.KTB),
       MMF: nonNegativeInteger(value.holdings?.MMF, base.holdings.MMF),
+      KLMS: nonNegativeInteger(value.holdings?.KLMS, base.holdings.KLMS),
       ABCF: nonNegativeInteger(value.holdings?.ABCF, base.holdings.ABCF)
     };
     const transactions = normalizeTransactions(value.transactions);
-    if (value.postTrade && holdings.ABCF === 0) holdings.ABCF = 180;
-    if (value.postTrade && !transactions.some((trade) => trade.symbol === "ABCF")) transactions.unshift(legacyTrade());
+    const legacyPostTrade = Boolean(value.postTrade) && nonNegativeInteger(value.schemaVersion) < 5;
+    if (legacyPostTrade && holdings.ABCF === 0) holdings.ABCF = 180;
+    if (legacyPostTrade && !transactions.some((trade) => trade.symbol === "ABCF")) transactions.unshift(legacyTrade());
+    const qualifiedAssets = {
+      KTB: true,
+      MMF: true,
+      KLMS: Boolean(value.qualifiedAssets?.KLMS),
+      ABCF: Boolean(value.qualifiedAssets?.ABCF ?? value.investorQualified)
+    };
     return {
       ...base,
       ...value,
-      schemaVersion: 4,
+      schemaVersion: 5,
+      investorQualified: qualifiedAssets.ABCF,
+      qualifiedAssets,
+      selectedAsset: catalog[String(value.selectedAsset || "ABCF").toUpperCase()] ? String(value.selectedAsset || "ABCF").toUpperCase() : "ABCF",
       holdings,
       transactions,
       pendingOrder: normalizePendingOrder(value.pendingOrder),
@@ -189,11 +203,13 @@
     };
   }
 
-  function isMinimumOrder(amount) {
-    return Number(amount) >= MIN_ORDER;
+  function isMinimumOrder(amount, symbol = "ABCF") {
+    const asset = catalog[String(symbol).toUpperCase()] || catalog.ABCF;
+    return Number(amount) >= asset.minimumQuantity;
   }
 
-  function qualificationReady(state) {
+  function qualificationReady(state, symbol = "ABCF") {
+    if (String(symbol).toUpperCase() === "KLMS") return true;
     return state.qualificationChecks.every(Boolean);
   }
 
@@ -221,8 +237,9 @@
   function assets(state) {
     return Object.values(catalog).map((asset) => ({
       ...asset,
+      eligible: Boolean(state.qualifiedAssets?.[asset.symbol] ?? asset.eligible),
       price: `${asset.unitPrice.toLocaleString("ko-KR")} 원`,
-      paused: asset.symbol === "ABCF" && Boolean(state.assetPaused)
+      paused: Boolean(state.assetPaused) && Boolean(state.qualifiedAssets?.[asset.symbol] ?? asset.eligible)
     }));
   }
 
@@ -252,15 +269,17 @@
 
   function createPendingOrder(state, amount, now = new Date()) {
     const normalized = normalizeState(state);
+    const symbol = normalized.selectedAsset;
+    const asset = assets(normalized).find((candidate) => candidate.symbol === symbol);
     const quantity = nonNegativeInteger(amount);
-    if (normalized.assetPaused || quantity < MIN_ORDER) return null;
+    if (!asset?.eligible || normalized.assetPaused || quantity < asset.minimumQuantity) return null;
     const sequence = normalized.nextTradeSequence;
-    const unitPrice = catalog.ABCF.unitPrice;
+    const unitPrice = asset.unitPrice;
     const fee = Math.round(quantity * unitPrice * 0.001);
     return {
       id: `RFQ-DEMO-${sequence}`,
       sequence,
-      symbol: "ABCF",
+      symbol,
       side: "BUY",
       quantity,
       unitPrice,
@@ -286,12 +305,12 @@
       status: "COMPLETED",
       source: "demo"
     };
-    next.holdings.ABCF += trade.quantity;
+    next.holdings[trade.symbol] = nonNegativeInteger(next.holdings[trade.symbol]) + trade.quantity;
     next.transactions.unshift(trade);
     next.pendingOrder = null;
     next.nextTradeSequence = Math.max(next.nextTradeSequence, trade.sequence + 1);
     next.postTrade = true;
-    next.issuerAssetListed = true;
+    if (trade.symbol === "ABCF") next.issuerAssetListed = true;
     return { state: next, trade, created: true };
   }
 

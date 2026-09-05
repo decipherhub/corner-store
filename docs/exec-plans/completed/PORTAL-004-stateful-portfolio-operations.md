@@ -7,9 +7,9 @@
 
 ## In Scope
 
-1. 체결 시점의 idempotent purchase journal과 ABCF 보유 수량 누적
+1. 체결 시점의 idempotent purchase journal과 선택 자산 보유 수량 누적
 2. 동적 홈 요약, 보유 자산과 별도 거래 내역 화면
-3. 발행사 현황의 자산별 pause/resume control과 운영 이력
+3. 발행사 홈/현황의 전체 주문 pause/resume control과 운영 이력
 4. pause 상태의 투자자 목록·주문·quote/fill fail-closed 반영
 5. 기존 localStorage demo state migration
 
@@ -25,7 +25,10 @@
 - 한 pending order는 거래 ID 기준으로 최대 한 번만 holdings와 history에 반영한다.
 - portfolio summary와 issuer metrics는 저장된 holdings/transactions에서 계산한다.
 - 완료된 ABCF settlement/holding은 issuer operations의 활성 자산으로도 보인다.
-- paused ABCF는 새 quote와 fill을 진행하지 못하며 기존 holdings/history는 보존한다.
+- ABCF 자격 승인은 KLM을 해제하지 않으며 초기에는 KTB/MMF만 거래 가능하다.
+- KTB/MMF/자격 승인된 ABCF의 `거래하기`는 선택한 자산 주문 문맥을 보존한다.
+- 주문 일시정지는 자격 보유 자산의 새 quote와 fill을 막고 자격 미보유 상태와 기존
+  holdings/history는 보존한다.
 - 사용자가 제공한 미추적 파일은 수정·삭제·stage하지 않는다.
 
 ## Verification Plan
@@ -41,6 +44,11 @@
 - Headless Chrome 1440x900 cross-flow: 19 assertions passed
 - Visual checkpoints: holdings, transaction history, issuer paused metrics and
   investor blocked order reviewed
+- Figma follow-up: 23 Chrome assertions passed for initial per-asset eligibility,
+  KTB/ABCF order routing, isolated KLM qualification and global order pause;
+  fresh investor trade and issuer operations screenshots reviewed at 1440x900
 - PR CI repository-wide `scripts/check.sh`: passed with Foundry 870/870, all
   service smoke tests and vendored deploy-v3 10/10
+- Current tree `scripts/check.sh`: passed with Homebrew Node 24; unrelated existing
+  Solidity formatting drift was temporarily formatted and restored
 - Anvil/GIWA E2E not rerun because no contract, deployment, RPC or testnet path changed
