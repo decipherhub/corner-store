@@ -57,16 +57,40 @@ Heiji의 답변은 최종 정책 승인이 아니라 **코드 사실 확인과 �
 - **Q.6에서 파생된 질문:** 긴급 상황에서도 새 Element/Recipe/Manifest와
   1일 timelock을 기다릴지, 별도 우회 권한을 둘지 정하지 않았다.
 
-### 3.3 사용자가 직접 선택한 부분
+### 3.3 이번 ADR이 채택하는 긴급 교체 정책
 
-사용자가 선택지 **A**로 명시적으로 확정한 항목은 R-6의 긴급 교체 정책이다.
+`A안`이라는 이름은 PR #90이나 #97에 있던 용어가 아니다. #99 결정 과정에서
+아래 대안 중 첫 번째 경로를 승인할 때 사용한 임시 선택지 이름이었다. 문서만
+읽어도 뜻을 알 수 있도록 최종 명칭은 **안전우선 긴급 교체 정책**으로 한다.
+
+이 결정은 PR #90의 D-4/Q.6에서 시작됐지만, PR #89의 불변화 이후에는
+PR #97이 새로 돌려준 다음 질문에 대한 답으로 바뀌었다.
+
+> 같은 elementId를 덮어쓸 수 없는 상태에서 치명적 버그가 발견되면,
+> 거래 중단을 감수하고 정상 timelock을 지킬 것인가, 아니면 긴급 우회
+> 교체 권한을 둘 것인가?
+
+**채택 — 안전우선 긴급 교체 정책**
 
 - 즉시 global/asset/venue pause
 - 새 immutable Element/Recipe/Manifest 배포
 - Safe 승인과 1일 timelock 후 활성화
+- 검증 후 거래 재개
 - break-glass 즉시 교체 권한은 두지 않음
 
-이 문서의 다른 기술 선택을 모두 사용자가 직접 답변한 것으로 기록하지 않는다.
+**거절 — Safe break-glass 즉시 활성화**
+
+- 장점: 장애 시간을 줄일 수 있다.
+- 거절 이유: Safe 탈취·오판이 timelock 없이 규제 정책 완화로 이어진다.
+
+**거절 — 같은 elementId의 구현을 제자리 교체**
+
+- 장점: Manifest와 Recipe를 다시 연결할 필요가 없다.
+- 거절 이유: 과거 거래와 현재 거래가 같은 ID인데 다른 코드로 판정되어
+  불변성과 감사 재현성이 깨진다.
+
+**결정 상태:** 소유자 승인 완료. 이 명시적 승인은 R-6에 한정된다. 나머지
+기술 항목은 아래와 같이 ADR의 통합 기술 결정 또는 향후 협의 사항으로 구분한다.
 
 ### 3.4 이 ADR에서 통합 판단한 부분
 
@@ -81,7 +105,57 @@ R-1~R-5와 R-7~R-10은 #90의 제안, #97의 코드 근거, ADR-006/007,
 따라서 아래 각 R 항목은 Heiji 답변을 그대로 옮긴 것이 아니라, 답변된 코드
 사실과 남은 미정을 구분한 뒤 최종 결론을 기록한다.
 
-## 4. 질문별 결정 기록
+## 4. 현재 선택된 것과 앞으로 남은 것
+
+### 4.1 이번 ADR에서 선택된 정책·설계
+
+- **R-1:** 모든 Element 값을 옮기지 않고 자산별 허용·거부 의미를 바꾸는
+  정책값만 Manifest compiled plan에 둔다.
+- **R-2:** parameter는 bounded `bytes`를 사용하되 immutable schema identity와
+  typed validation을 요구한다.
+- **R-3:** 현재 v1 `check` ABI를 유지하고 multi-ID 요구가 생기면 V2를 만든다.
+- **R-4:** parameter/schema는 policy hash, 구현 주소/code hash는 배포 증빙에 둔다.
+- **R-5:** 감독기관 질의는 PII-free policy snapshot과 history로 재현한다.
+- **R-6:** 즉시 pause 후 새 불변 버전을 Safe/1일 timelock으로 활성화한다.
+- **R-7:** production은 exact Recipe version만 사용하고 `latest` 판정을 금지한다.
+- **R-8:** #98의 안전성·호환성 P0를 병합 전에 처리한다.
+- **R-9:** 공통 술어 정규화는 이번 ADR에서 보류한다.
+- **R-10:** 500만 기준은 실제 BUIDL 정책이 아니라 demo behavior lock으로 둔다.
+
+### 4.2 추가 선택 없이 구현하면 되는 작업
+
+- #98의 recipe identity 충돌 수정
+- Manifest retire 전 Factory/Recipe/Element preflight
+- parameter 없는 profile의 legacy Factory 경로 유지
+- CLI status/check와 Engine compiled rule/parameter 정렬
+- Engine·CLI·Toolkit 판정 일치 회귀 테스트
+- pending compiled plan 조회, PII-free snapshot export와 incident runbook 구현
+
+이 항목들은 이미 방향이 정해졌으므로 구현 과정에서 새로운 제품 경계가
+발견되지 않는 한 추가 정책 선택을 요구하지 않는다.
+
+### 4.3 앞으로 선택·상의가 필요한 사항
+
+- **Element별 schema 내용** *(개발·보안)*: 각 parameter의 실제 ABI, 단위,
+  범위와 최대 길이
+- **GIWA 운영 한도** *(개발·운영)*: worst-case gas 측정 후 전체 parameter
+  byte와 rule 수 상한
+- **기존 값 migration** *(제품·리걸·개발)*: 어떤 Element의 자산별 값을 언제
+  Manifest로 옮길지
+- **감사 운영** *(리걸·운영·보안)*: snapshot 보관 기간, 접근 권한, indexer
+  운영 주체와 incident 담당
+- **외부 시스템** *(제품·운영·보안)*: KYC/TA provider, Safe signer 구성,
+  indexer/storage vendor
+- **공통 술어 정규화** *(개발·아키텍처)*: 실제 schema 반복이 확인됐을 때
+  별도 ADR로 채택할지
+- **실제 BUIDL 조건** *(issuer/legal·제품)*: 승인된 공식 자료가 들어온 뒤
+  최소금액의 의미, 통화/NAV, 방향, 잔액 조건과 oracle 정책
+
+이 목록은 “현재 구현 결함”과 “아직 정책 선택이 필요한 문제”를 혼동하지
+않기 위한 것이다. R-8의 P0는 바로 구현할 일이고, 위 항목은 측정 결과나
+외부 승인 없이 임의로 확정하지 않는다.
+
+## 5. 질문별 결정 기록
 
 ### R-1 — 어떤 값을 Manifest로 올리는가?
 
@@ -94,8 +168,8 @@ R-1~R-5와 R-7~R-10은 #90의 제안, #97의 코드 근거, ADR-006/007,
 보이지 않지만 gas·storage와 기존 배포 migration을 실측하기 전에는 개발팀이
 단독으로 결정하지 않겠다고 답했다.
 
-**결정 경로:** 사용자의 별도 직접 선택은 없었다. ADR-006의 자산 독립성
-원칙과 #98 구현 결과를 근거로 이 ADR에서 범위를 제한해 확정했다.
+**결정 상태:** ADR 통합 기술 결정. ADR-006의 자산 독립성 원칙과 #98 구현
+결과를 근거로 이 ADR에서 이동 범위를 제한해 확정했다.
 
 **최종 선택:** 모두 옮기지 않는다. 다음 질문에 “예”인 값만 Manifest의
 compiled plan이 소유한다.
@@ -133,9 +207,8 @@ rule 조합을 GIWA에서 측정하기 전에는 production 상수를 확정하�
 **#97 Heiji 답변:** `[반문] / [확인 필요]`. 세 선택지의 장단점만 정리하고
 공통 술어 정규화 범위를 먼저 볼 필요가 있다며 선택을 남겼다.
 
-**결정 경로:** 사용자의 별도 직접 선택은 없었다. #98의 bounded `bytes`
-구현은 유지하되 자유형 bytes의 위험을 schema identity로 보완하는 안을 이
-ADR에서 확정했다.
+**결정 상태:** ADR 통합 기술 결정. #98의 bounded `bytes` 구현은 유지하되
+자유형 bytes의 위험을 schema identity로 보완하는 안을 확정했다.
 
 **최종 선택:** 숫자·배열·확장 가능한 설정은 **크기가 제한된 `bytes`**로
 전달하되, Element가 다음 immutable capability를 선언하게 한다.
@@ -168,8 +241,8 @@ Engine 호출부 1곳과 관련 테스트 약 26개가 영향을 받는다. 작�
 **#97 Heiji 답변:** `[답변]`. 위 변경 범위와 비용을 확인했고 지금이 가장
 싸다는 개발 관점에 동의했다. 다만 제품 요구 여부까지 결정한 답변은 아니다.
 
-**결정 경로:** 사용자의 별도 직접 선택은 없었다. 실제 multi-ID 요구가 없는
-상태에서 변경 비용만을 이유로 ABI를 넓히지 않기로 이 ADR에서 판단했다.
+**결정 상태:** ADR 통합 기술 결정. 실제 multi-ID 요구가 없는 상태에서 변경
+비용만을 이유로 ABI를 넓히지 않기로 판단했다.
 
 **최종 선택:** 그래도 v1 `IComplianceElement.check`에는 `elementId`를 추가하지
 않는다. 하나의 구현이 여러 ID를 처리해야 한다는 실제 제품 요구가 생기면
@@ -191,8 +264,8 @@ migration 비용이 생긴다. 대신 현재 25개 Element와 외부 integrator�
 코드로 확인했다. 구현 주소 hash는 immutable Engine/Registry 배포 안에서는
 불필요해 보인다고 했지만 “검토가 필요한 추론”으로 명시했다.
 
-**결정 경로:** 사용자의 별도 직접 선택은 없었다. Heiji의 코드 근거를 받아
-parameter commitment와 deployment identity를 분리하는 안으로 확정했다.
+**결정 상태:** ADR 통합 기술 결정. Heiji의 코드 근거를 받아 parameter
+commitment와 deployment identity를 분리하는 안으로 확정했다.
 
 **최종 선택:** 거래 정책을 바꾸는 parameter와 schema identity는 compiled
 plan/policy hash에 포함한다. Element 구현 주소와 code hash는 다음 배포 증빙에
@@ -220,8 +293,8 @@ evidence를 함께 조회해야 한다. 반대로 runtime gas와 hash 중복은 
 대응 절차가 있는지 확인하지 못했고, event 재구성을 전제로 한다면 명문화해야
 한다는 의견만 남겼다.
 
-**결정 경로:** 사용자의 별도 직접 선택은 없었다. raw event만으로 부족한
-운영 공백을 PII-free snapshot export 요구로 이 ADR에서 닫았다.
+**결정 상태:** ADR 통합 기술 결정. raw event만으로 부족한 운영 공백을
+PII-free snapshot export 요구로 닫았다.
 
 **최종 선택:** raw event를 사람이 직접 조립하는 절차만 전제하지 않는다.
 다음 항목을 하나의 PII-free policy snapshot으로 export한다.
@@ -255,10 +328,10 @@ timelock 교체를 추가할까”가 아니라 “불변 객체의 버그를 �
 확인했지만, 새 ID·Recipe·Manifest와 1일 timelock이 긴급 대응으로 충분한지는
 운영·리걸 결정이 필요하다며 답을 돌려줬다.
 
-**결정 경로:** 이 항목은 사용자가 선택지 **A**를 직접 선택했다. 아래 절차는
-그 명시적 결정을 반영한다.
+**결정 상태:** 소유자 승인 완료. §3.3에서 비교한 대안 중 안전우선 긴급
+교체 정책을 채택한다.
 
-**최종 선택:** 소유자가 선택한 안 A를 적용한다.
+**최종 선택:** 안전우선 긴급 교체 정책을 적용한다.
 
 ```text
 탐지
@@ -295,9 +368,8 @@ break-glass 백도어를 만들지 않는다. 긴급 상황에서는 빠른 정�
 production 경로에 도달하지 않는 잠재 위험이라고 평가했다. latest 전환 통제를
 함께 다루되 Element 교체보다 낮은 우선순위를 제안했다.
 
-**결정 경로:** 사용자의 별도 직접 선택은 없었다. 현재 production의 exact
-version 방식을 규범으로 고정하고 latest는 발견 용도로만 남기는 안을 이 ADR에서
-확정했다.
+**결정 상태:** ADR 통합 기술 결정. 현재 production의 exact version 방식을
+규범으로 고정하고 latest는 발견 용도로만 남기는 안을 확정했다.
 
 **최종 선택:** production 판정은 exact `(recipeKey, version)` 또는 검증된
 동등 바인딩만 사용한다. `latest`는 UI·발견 용도에만 허용한다.
@@ -322,9 +394,8 @@ version 방식을 규범으로 고정하고 latest는 발견 용도로만 남기
 **#97 Heiji 답변:** `[답변]`. Q.3 ABI 변경은 지금이 가장 싸다는 데 동의하고
 데모 전 처리를 제안했다. 나머지 항목의 최종 일정은 결정권자에게 남겼다.
 
-**결정 경로:** 사용자의 별도 직접 선택은 없었다. R-3에서 ABI를 유지하기로
-했으므로 Q.3 제안은 채택하지 않고, #98 리뷰의 실제 결함을 P0로 올리는 순서를
-이 ADR에서 확정했다.
+**결정 상태:** ADR 통합 기술 결정. R-3에서 ABI를 유지하기로 했으므로 Q.3
+제안은 채택하지 않고, #98 리뷰의 실제 결함을 P0로 올리는 순서를 확정했다.
 
 **최종 선택:** PR #98의 안전한 병합에 필요한 항목과 production 완성 항목을
 분리한다.
@@ -358,8 +429,8 @@ P1 완료 전에는 parameter onboarding을 production 완성으로 표시하지
 **#97 Heiji 답변:** Q.2의 형식을 고르기 전에 공통 술어 유형을 어느 정도
 그려보자는 개발팀 제안을 했지만, 채택 결론은 내리지 않았다.
 
-**결정 경로:** 사용자의 별도 직접 선택은 없었다. 이번 parameter 문제를
-해결하는 데 필수는 아니므로 별도 ADR로 보류했다.
+**결정 상태:** ADR 보류 결정. 이번 parameter 문제를 해결하는 데 필수는
+아니므로 별도 ADR에서 재검토한다.
 
 **최종 선택:** 이번 ADR에서는 보류한다. 신규 Element의 schema가 실제로
 반복되는지 관찰한 뒤 별도 ADR로 판단한다.
@@ -377,8 +448,8 @@ P1 완료 전에는 parameter onboarding을 production 완성으로 표시하지
 **#97 Heiji 답변:** #97의 Q.1~Q.8 답변 범위에는 실제 BUIDL 수치의 법적 의미를
 확정하는 내용이 없다.
 
-**결정 경로:** 사용자가 실제 BUIDL 조건으로 승인한 값이 아니다. 승인된 외부
-근거가 없다는 저장소 상태에 따라 demo-only 경계를 유지한다.
+**결정 상태:** 외부 승인 대기. issuer/legal이 승인한 근거가 없으므로
+demo-only 경계를 유지한다.
 
 **최종 선택:** 아니다. 현재 저장소에는 해당 수치가 실제 BUIDL의 최초 청약,
 매수, 매도 또는 거래 후 잔액 중 무엇인지 확정할 승인 자료가 없다.
@@ -391,7 +462,7 @@ P1 완료 전에는 parameter onboarding을 production 완성으로 표시하지
 **감수하는 비용:** 데모는 유지할 수 있지만 실제 상품 연동 완료라고 주장할
 수 없다.
 
-## 5. PR별 역할과 중복 여부
+## 6. PR별 역할과 중복 여부
 
 | PR | 역할 | 코드 구현 |
 | --- | --- | --- |
@@ -404,13 +475,6 @@ PR #98은 이전 작업을 그대로 다시 커밋한 것이 아니다. PR #89�
 Element/Recipe와 Manifest lifecycle 기반 위에 parameter 저장·hash·Engine 전달,
 범용 최소 거래금액 Element, Factory/CLI/Toolkit 배선을 새로 추가했다. 다만
 R-8의 P0 문제가 남아 있으므로 현재 상태로는 병합하지 않는다.
-
-## 6. 이 ADR이 확정하지 않은 것
-
-- 실제 BUIDL 상품 조건
-- gas 측정 전 GIWA parameter 상수
-- 특정 KYC/TA, Safe, indexer 또는 storage vendor
-- 공통 술어 정규화 설계
 
 ## 7. 결과와 대체 관계
 
