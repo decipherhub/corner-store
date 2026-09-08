@@ -218,9 +218,12 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         if (rules.length == 0 || rules.length > MAX_ELEMENTS_PER_RECIPE) {
             revert Errors.TooManyRecipeElements(recipeId, rules.length, MAX_ELEMENTS_PER_RECIPE);
         }
-        bytes memory elementContext = abi.encode(ctx);
         uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
         for (uint256 i = 0; i < rules.length; i++) {
+            bytes memory parameters = policyReg.compiledElementParameterOf(token, bindingIndex, i);
+            // Preserve the exact legacy context for existing Elements. Only a
+            // parameterized rule receives the extended envelope.
+            bytes memory elementContext = parameters.length == 0 ? abi.encode(ctx) : abi.encode(ctx, parameters);
             (bool elementPassed, bytes32 elementReason) =
                 _checkElementRule(ctx, token, rwaAmount, elementContext, rules[i].elementId);
             if (elementPassed) continue;

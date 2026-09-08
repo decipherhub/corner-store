@@ -1,14 +1,16 @@
-import {AbiCoder, keccak256, parseEther, toUtf8Bytes} from "ethers";
+import {AbiCoder, encodeBytes32String, keccak256, parseEther, toUtf8Bytes} from "ethers";
 
 import {CliError} from "./util";
 
 export type AssetProfile = "buidl-like" | "reg-d";
 
 export type RecipeBindingTuple = [recipeId: number, recipeVersion: number, mode: number, pathGroupId: number, priority: number];
+export type ElementParameterTuple = [elementId: string, value: string];
 
 export interface AssetProfileBinding {
   profile: AssetProfile;
   bindings: RecipeBindingTuple[];
+  elementParameters: ElementParameterTuple[];
   factsPacked: bigint;
   fullManifestHash: string;
 }
@@ -51,11 +53,15 @@ export function assetProfileBinding(value?: string): AssetProfileBinding {
       profile,
       bindings: [
         [1, 2, 0, 0, 100],
-        [3, 1, 0, 0, 90]
+        [2, 1, 0, 0, 90],
+        [3, 2, 0, 0, 80]
+      ],
+      elementParameters: [
+        [encodeBytes32String("MIN-TRADE-v1"), AbiCoder.defaultAbiCoder().encode(["uint256"], [parseEther("5000000")])]
       ],
       factsPacked: 1n,
       fullManifestHash: BUIDL_LIKE_MANIFEST_HASH
     };
   }
-  return {profile, bindings: [[1, 2, 0, 0, 100]], factsPacked: 0n, fullManifestHash: ZERO32};
+  return {profile, bindings: [[1, 2, 0, 0, 100]], elementParameters: [], factsPacked: 0n, fullManifestHash: ZERO32};
 }

@@ -50,4 +50,8 @@ library Errors {
     error InvalidEnforcementOverride();
     error TooManyEnforcementOverrides(uint256 supplied, uint256 maximum);
     error DuplicateElementOverride(uint256 bindingIndex, bytes32 elementId);
+    error InvalidElementParameter(bytes32 elementId);
+    error DuplicateElementParameter(bytes32 elementId);
+    error TooManyElementParameters(uint256 supplied, uint256 maximum);
+    error ElementParameterTooLarge(bytes32 elementId, uint256 supplied, uint256 maximum);
 }

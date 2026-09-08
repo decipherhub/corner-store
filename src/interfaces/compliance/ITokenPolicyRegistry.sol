@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {
     CompiledElementRule,
     ElementEnforcementOverride,
+    ElementParameter,
     ManifestCore,
     PolicyStatus,
     RecipeBinding
@@ -22,6 +23,14 @@ interface ITokenPolicyRegistry {
         ElementEnforcementOverride[] calldata overrides
     ) external;
 
+    function registerManifest(
+        address token,
+        ManifestCore calldata m,
+        RecipeBinding[] calldata bindings,
+        ElementEnforcementOverride[] calldata overrides,
+        ElementParameter[] calldata parameters
+    ) external;
+
     function approveManifest(address token) external; // PROPOSED -> ACTIVE
 
     function suspendManifest(address token, bytes32 reasonCode) external; // ACTIVE -> SUSPENDED
@@ -36,6 +45,15 @@ interface ITokenPolicyRegistry {
         address token,
         ManifestCore calldata m,
         RecipeBinding[] calldata bindings,
+        bytes32 reasonCode
+    ) external;
+
+    function scheduleManifestUpdate(
+        address token,
+        ManifestCore calldata m,
+        RecipeBinding[] calldata bindings,
+        ElementEnforcementOverride[] calldata overrides,
+        ElementParameter[] calldata parameters,
         bytes32 reasonCode
     ) external;
 
@@ -77,6 +95,11 @@ interface ITokenPolicyRegistry {
         returns (RecipeBinding memory binding, bytes32 recipeKey, bytes32 bindingPlanHash);
 
     function compiledRulesOf(address token, uint256 bindingIndex) external view returns (CompiledElementRule[] memory);
+
+    function compiledElementParameterOf(address token, uint256 bindingIndex, uint256 ruleIndex)
+        external
+        view
+        returns (bytes memory);
 
     function pendingManifestUpdateOf(address token)
         external

@@ -19,7 +19,7 @@ import {ComplianceEngine} from "../src/compliance/ComplianceEngine.sol";
 import {Sanctions} from "../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../src/compliance/elements/QualifiedPurchaser.sol";
-import {BuidlMinimumInvestment} from "../src/compliance/elements/BuidlMinimumInvestment.sol";
+import {MinimumTradeAmount} from "../src/compliance/elements/MinimumTradeAmount.sol";
 import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../src/compliance/elements/IdentityUniqueness.sol";
 import {UsTaxResident} from "../src/compliance/elements/UsTaxResident.sol";
@@ -29,14 +29,22 @@ import {FormDFiling} from "../src/compliance/elements/FormDFiling.sol";
 import {Lockup} from "../src/compliance/elements/Lockup.sol";
 import {IAcquisitionSource} from "../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipe} from "../src/compliance/recipes/RegD506cRecipe.sol";
-import {BuidlLikeFundRecipe} from "../src/compliance/recipes/BuidlLikeFundRecipe.sol";
+import {Fund3c7Recipe} from "../src/compliance/recipes/Fund3c7Recipe.sol";
+import {MinimumTradeAmountRecipe} from "../src/compliance/recipes/MinimumTradeAmountRecipe.sol";
 import {BuidlLikeDemoAsset} from "../src/demo/BuidlLikeDemoAsset.sol";
 
 import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
 import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
 import {RFQAdapter} from "../src/execution/adapters/rfq/RFQAdapter.sol";
 import {MockERC20} from "../test/mocks/MockERC20.sol";
-import {ManifestCore, PolicyStatus, RecipeBinding, VenueType} from "../src/types/ComplianceTypes.sol";
+import {
+    ElementEnforcementOverride,
+    ElementParameter,
+    ManifestCore,
+    PolicyStatus,
+    RecipeBinding,
+    VenueType
+} from "../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../src/types/VenueTypes.sol";
 
 /// @title DeployTestnetRFQ
@@ -90,9 +98,10 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
     AttestedAcquisitionSource internal acquisitionSource;
     QualifiedPurchaser internal qualifiedPurchaser;
     Lockup internal lockup;
-    BuidlMinimumInvestment internal minimumInvestment;
+    MinimumTradeAmount internal minimumTradeAmount;
     RegD506cRecipe internal issuanceRecipe;
-    BuidlLikeFundRecipe internal fundRecipe;
+    Fund3c7Recipe internal fundRecipe;
+    MinimumTradeAmountRecipe internal minimumTradeRecipe;
     MockERC20 internal quoteToken;
     address internal makerIdentity;
     address internal investorIdentity;
@@ -213,13 +222,15 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
 
         qualifiedPurchaser = new QualifiedPurchaser();
         elementReg.registerElement(bytes32("A-13-v1"), address(qualifiedPurchaser));
-        minimumInvestment = new BuidlMinimumInvestment();
-        elementReg.registerElement(bytes32("BUIDL-MIN-v1"), address(minimumInvestment));
+        minimumTradeAmount = new MinimumTradeAmount();
+        elementReg.registerElement(bytes32("MIN-TRADE-v1"), address(minimumTradeAmount));
 
         issuanceRecipe = new RegD506cRecipe();
-        fundRecipe = new BuidlLikeFundRecipe();
+        fundRecipe = new Fund3c7Recipe();
+        minimumTradeRecipe = new MinimumTradeAmountRecipe();
         recipeReg.registerRecipe(1, 2, address(issuanceRecipe));
-        recipeReg.registerRecipe(3, 1, address(fundRecipe));
+        recipeReg.registerRecipe(2, 1, address(fundRecipe));
+        recipeReg.registerRecipe(3, 2, address(minimumTradeRecipe));
     }
 
     function _configureAssetAndActors(Actors memory actors, Balances memory balances) internal {
@@ -266,7 +277,9 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
     function _activateRfqPolicy(address maker) internal {
         ManifestCore memory manifest = BuidlLikeDemoAsset.manifest(ENGINES_RFQ);
         RecipeBinding[] memory bindings = BuidlLikeDemoAsset.recipeBindings();
-        policyReg.registerManifest(address(rwaToken), manifest, bindings);
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        ElementParameter[] memory parameters = BuidlLikeDemoAsset.elementParameters();
+        policyReg.registerManifest(address(rwaToken), manifest, bindings, overrides_, parameters);
         policyReg.approveManifest(address(rwaToken));
 
         venueReg.registerVenue(
@@ -374,7 +387,7 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         vm.serializeAddress(key, "acquisitionSource", address(acquisitionSource));
         vm.serializeAddress(key, "qualifiedPurchaser", address(qualifiedPurchaser));
         vm.serializeAddress(key, "lockup", address(lockup));
-        vm.serializeAddress(key, "minimumInvestment", address(minimumInvestment));
+        vm.serializeAddress(key, "minimumTradeAmount", address(minimumTradeAmount));
         vm.serializeAddress(key, "issuanceRecipe", address(issuanceRecipe));
         vm.serializeAddress(key, "fundRecipe", address(fundRecipe));
         vm.serializeAddress(key, "identityRegistry", address(idRegistry));

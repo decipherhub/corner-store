@@ -10,6 +10,57 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## CORE-006 — Manifest-bound Element Parameters
+
+### Behavior
+
+- A Manifest may provide a bounded, unique `ElementParameter[]` keyed by an
+  Element's immutable `bytes32 elementId`. Parameters must belong to an Element
+  used by the Manifest, be non-empty and be at most 256 bytes each.
+- `TokenPolicyRegistry` copies the parameter beside every compiled Element rule
+  that uses it and commits the aligned `bytes[]` into both the binding plan hash
+  and aggregate compiled plan hash. Parameter changes therefore use the existing
+  delayed semantic Manifest update path.
+- Parameterized Elements receive `abi.encode(ComplianceContext, bytes)` while
+  manifests without parameters retain the exact legacy `abi.encode(ComplianceContext)`
+  call and binding hash. The stable `IComplianceElement` ABI is unchanged.
+- The generic `MIN-TRADE-v1` Element and recipe enforce an injected inclusive
+  minimum regulated-asset quantity. Missing, malformed or zero parameters fail
+  closed with a detailed Element reason code.
+- The BUIDL-like reference profile now composes independent Reg D 506(c),
+  3(c)(7) qualified-purchaser and minimum-trade recipes. Its existing
+  `5,000,000 ether` demo threshold is Manifest input rather than immutable
+  BUIDL-specific predicate bytecode.
+- Legacy `BuidlMinimumInvestment` and `BuidlLikeFundRecipe` contracts remain
+  source/deployment compatibility artifacts, but new demo deployments do not
+  register or bind them.
+- Toolkit production onboarding validates and exports Element parameters,
+  includes them in deterministic plan commitments, and verifies each compiled
+  parameter directly from the registry. CLI onboarding uses the parameter-aware
+  Factory entry point only for profiles that declare parameters.
+
+### Verification
+
+- Targeted Forge registry, Factory, generic minimum and BUIDL integration tests:
+  82 passed (79 CORE-006 cases plus 3 legacy BUIDL recipe compatibility cases)
+- `npm test --prefix services/toolkit`: passed
+- `npm test --prefix services/cli`: passed
+- Full `forge test --offline`: 878/878 passed
+- `scripts/e2e-anvil.sh --profile buidl-like`: 7/7 scenarios plus dashboard,
+  bidirectional RFQ, QP expiry/recovery and CLI settlement passed
+- Isolated `/tmp` `scripts/check.sh`: passed after formatting only the
+  pre-existing `script/DeployProductionCore.s.sol` drift and installing clean
+  service dependencies in the copy
+- Original-tree `scripts/check.sh` stops at the same pre-existing
+  `script/DeployProductionCore.s.sol` formatting drift; that unrelated file is
+  not modified by CORE-006
+- Scoped `forge fmt` and `git diff --check`: passed
+
+### State
+
+passing
+
+
 ## CORE-005 — Compliance Core Production Hardening
 
 ### Behavior

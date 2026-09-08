@@ -9,6 +9,7 @@ import {IRecipe} from "../interfaces/compliance/IRecipe.sol";
 import {
     CompiledElementRule,
     ElementEnforcementOverride,
+    ElementParameter,
     EnforcementAction,
     EnforcementOverrideMode,
     ManifestCore,
@@ -29,6 +30,8 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
     uint256 public constant MAX_RECIPE_BINDINGS = 8;
     uint256 public constant MAX_ELEMENTS_PER_RECIPE = 32;
     uint256 public constant MAX_ENFORCEMENT_OVERRIDES = MAX_RECIPE_BINDINGS * MAX_ELEMENTS_PER_RECIPE;
+    uint256 public constant MAX_ELEMENT_PARAMETERS = MAX_RECIPE_BINDINGS * MAX_ELEMENTS_PER_RECIPE;
+    uint256 public constant MAX_ELEMENT_PARAMETER_BYTES = 256;
 
     struct PendingManifestUpdate {
         ManifestCore manifest;
@@ -47,6 +50,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         bytes32 recipeKey;
         bytes32 planHash;
         CompiledElementRule[] rules;
+        bytes[] parameters;
     }
 
     IRecipeRegistry public immutable recipeReg;
@@ -73,7 +77,8 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         onlyOwner
     {
         ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
-        _registerManifest(token, m, bindings, overrides_);
+        ElementParameter[] memory parameters_ = new ElementParameter[](0);
+        _registerManifest(token, m, bindings, overrides_, parameters_);
     }
 
     function registerManifest(
@@ -82,22 +87,35 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         RecipeBinding[] calldata bindings,
         ElementEnforcementOverride[] calldata overrides_
     ) external onlyOwner {
-        _registerManifest(token, m, bindings, overrides_);
+        ElementParameter[] memory parameters_ = new ElementParameter[](0);
+        _registerManifest(token, m, bindings, overrides_, parameters_);
+    }
+
+    function registerManifest(
+        address token,
+        ManifestCore calldata m,
+        RecipeBinding[] calldata bindings,
+        ElementEnforcementOverride[] calldata overrides_,
+        ElementParameter[] calldata parameters_
+    ) external onlyOwner {
+        _registerManifest(token, m, bindings, overrides_, parameters_);
     }
 
     function registerManifest(address token, ManifestCore calldata m) external onlyOwner {
         ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
-        _registerManifest(token, m, _legacyBindings(m), overrides_);
+        ElementParameter[] memory parameters_ = new ElementParameter[](0);
+        _registerManifest(token, m, _legacyBindings(m), overrides_, parameters_);
     }
 
     function _registerManifest(
         address token,
         ManifestCore memory m,
         RecipeBinding[] memory bindings,
-        ElementEnforcementOverride[] memory overrides_
+        ElementEnforcementOverride[] memory overrides_,
+        ElementParameter[] memory parameters_
     ) internal {
         _validateBindings(bindings);
-        bytes32 planHash = _compileInto(_compiledPlans[token], bindings, overrides_);
+        bytes32 planHash = _compileInto(_compiledPlans[token], bindings, overrides_, parameters_);
         PolicyStatus current = _manifests[token].status;
         bytes32 oldHash = _manifests[token].fullManifestHash;
         if (current != PolicyStatus.UNKNOWN && current != PolicyStatus.RETIRED) {
@@ -202,7 +220,8 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         bytes32 reasonCode
     ) external onlyOwner {
         ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
-        _scheduleManifestUpdate(token, m, bindings, overrides_, reasonCode);
+        ElementParameter[] memory parameters_ = new ElementParameter[](0);
+        _scheduleManifestUpdate(token, m, bindings, overrides_, parameters_, reasonCode);
     }
 
     function scheduleManifestUpdate(
@@ -212,12 +231,25 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         ElementEnforcementOverride[] calldata overrides_,
         bytes32 reasonCode
     ) external onlyOwner {
-        _scheduleManifestUpdate(token, m, bindings, overrides_, reasonCode);
+        ElementParameter[] memory parameters_ = new ElementParameter[](0);
+        _scheduleManifestUpdate(token, m, bindings, overrides_, parameters_, reasonCode);
+    }
+
+    function scheduleManifestUpdate(
+        address token,
+        ManifestCore calldata m,
+        RecipeBinding[] calldata bindings,
+        ElementEnforcementOverride[] calldata overrides_,
+        ElementParameter[] calldata parameters_,
+        bytes32 reasonCode
+    ) external onlyOwner {
+        _scheduleManifestUpdate(token, m, bindings, overrides_, parameters_, reasonCode);
     }
 
     function scheduleManifestUpdate(address token, ManifestCore calldata m, bytes32 reasonCode) external onlyOwner {
         ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
-        _scheduleManifestUpdate(token, m, _legacyBindings(m), overrides_, reasonCode);
+        ElementParameter[] memory parameters_ = new ElementParameter[](0);
+        _scheduleManifestUpdate(token, m, _legacyBindings(m), overrides_, parameters_, reasonCode);
     }
 
     function _scheduleManifestUpdate(
@@ -225,6 +257,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         ManifestCore memory m,
         RecipeBinding[] memory bindings,
         ElementEnforcementOverride[] memory overrides_,
+        ElementParameter[] memory parameters_,
         bytes32 reasonCode
     ) internal {
         _validateBindings(bindings);
@@ -237,7 +270,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
             revert Errors.InvalidManifestHash();
         }
         uint64 effectiveTime = _readyTime();
-        bytes32 planHash = _compileInto(_pendingCompiledPlans[token], bindings, overrides_);
+        bytes32 planHash = _compileInto(_pendingCompiledPlans[token], bindings, overrides_, parameters_);
         _pendingManifestUpdates[token] = PendingManifestUpdate(m, effectiveTime, reasonCode, planHash);
         _replaceBindings(_pendingManifestBindings[token], bindings);
         emit Events.ManifestSemanticUpdateScheduled(
@@ -400,6 +433,14 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         }
     }
 
+    function compiledElementParameterOf(address token, uint256 bindingIndex, uint256 ruleIndex)
+        external
+        view
+        returns (bytes memory)
+    {
+        return _compiledPlans[token][bindingIndex].parameters[ruleIndex];
+    }
+
     function pendingManifestUpdateOf(address token)
         external
         view
@@ -430,43 +471,80 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
     function _compileInto(
         CompiledBindingPlan[] storage target,
         RecipeBinding[] memory bindings,
-        ElementEnforcementOverride[] memory overrides_
+        ElementEnforcementOverride[] memory overrides_,
+        ElementParameter[] memory parameters_
     ) internal returns (bytes32 planHash) {
         if (overrides_.length > MAX_ENFORCEMENT_OVERRIDES) {
             revert Errors.TooManyEnforcementOverrides(overrides_.length, MAX_ENFORCEMENT_OVERRIDES);
         }
+        if (parameters_.length > MAX_ELEMENT_PARAMETERS) {
+            revert Errors.TooManyElementParameters(parameters_.length, MAX_ELEMENT_PARAMETERS);
+        }
+        _validateParameters(parameters_);
         _clearCompiled(target);
         bytes32 acc;
         for (uint256 i = 0; i < bindings.length; i++) {
-            RecipeBinding memory binding = bindings[i];
-            bytes32 recipeKey = recipeReg.recipeKeyOf(binding.recipeId);
-            address recipeAddress = recipeReg.recipeOf(binding.recipeId, binding.recipeVersion);
-            if (recipeAddress == address(0) || recipeKey == bytes32(0)) {
-                revert Errors.RecipeNotRegistered(binding.recipeId);
-            }
-            IRecipe recipe = IRecipe(recipeAddress);
-            uint16 actualVersion = recipe.version();
-            if (actualVersion != binding.recipeVersion || recipe.recipeId() != binding.recipeId) {
-                revert Errors.RecipeVersionMismatch(binding.recipeId, binding.recipeVersion, actualVersion);
-            }
-            bytes32[] memory required = recipe.requiredElements();
-            if (required.length == 0 || required.length > MAX_ELEMENTS_PER_RECIPE) {
-                revert Errors.TooManyRecipeElements(binding.recipeId, required.length, MAX_ELEMENTS_PER_RECIPE);
-            }
-            CompiledElementRule[] memory rules = new CompiledElementRule[](required.length);
-            for (uint256 j = 0; j < required.length; j++) {
-                if (elementReg.elementOf(required[j]) == address(0)) revert Errors.ElementNotRegistered(required[j]);
-                rules[j] = CompiledElementRule(
-                    required[j], _compiledAction(overrides_, i, required[j], elementReg.defaultActionOf(required[j]))
-                );
-            }
-            _rejectUnusedOrDuplicateOverrides(overrides_, i, required);
-            bytes32 bindingPlanHash = keccak256(abi.encode(binding, recipeKey, rules));
-            _pushCompiled(target, binding, recipeKey, bindingPlanHash, rules);
+            bytes32 bindingPlanHash = _compileBinding(target, bindings[i], overrides_, parameters_, i);
             acc = keccak256(abi.encode(acc, bindingPlanHash));
         }
         _rejectOutOfRangeOverrides(overrides_, bindings.length);
+        _rejectUnusedParameters(parameters_, target);
         return acc;
+    }
+
+    function _compileBinding(
+        CompiledBindingPlan[] storage target,
+        RecipeBinding memory binding,
+        ElementEnforcementOverride[] memory overrides_,
+        ElementParameter[] memory parameters_,
+        uint256 bindingIndex
+    ) internal returns (bytes32 bindingPlanHash) {
+        bytes32 recipeKey = recipeReg.recipeKeyOf(binding.recipeId);
+        address recipeAddress = recipeReg.recipeOf(binding.recipeId, binding.recipeVersion);
+        if (recipeAddress == address(0) || recipeKey == bytes32(0)) {
+            revert Errors.RecipeNotRegistered(binding.recipeId);
+        }
+        IRecipe recipe = IRecipe(recipeAddress);
+        uint16 actualVersion = recipe.version();
+        if (actualVersion != binding.recipeVersion || recipe.recipeId() != binding.recipeId) {
+            revert Errors.RecipeVersionMismatch(binding.recipeId, binding.recipeVersion, actualVersion);
+        }
+        bytes32[] memory required = recipe.requiredElements();
+        if (required.length == 0 || required.length > MAX_ELEMENTS_PER_RECIPE) {
+            revert Errors.TooManyRecipeElements(binding.recipeId, required.length, MAX_ELEMENTS_PER_RECIPE);
+        }
+        (CompiledElementRule[] memory rules, bytes[] memory parameterValues) =
+            _compileRules(required, overrides_, parameters_, bindingIndex);
+        _rejectUnusedOrDuplicateOverrides(overrides_, bindingIndex, required);
+        bindingPlanHash = _hasParameters(parameterValues)
+            ? keccak256(abi.encode(binding, recipeKey, rules, parameterValues))
+            : keccak256(abi.encode(binding, recipeKey, rules));
+        _pushCompiled(target, binding, recipeKey, bindingPlanHash, rules, parameterValues);
+    }
+
+    function _hasParameters(bytes[] memory parameterValues) internal pure returns (bool) {
+        for (uint256 i = 0; i < parameterValues.length; i++) {
+            if (parameterValues[i].length != 0) return true;
+        }
+        return false;
+    }
+
+    function _compileRules(
+        bytes32[] memory required,
+        ElementEnforcementOverride[] memory overrides_,
+        ElementParameter[] memory parameters_,
+        uint256 bindingIndex
+    ) internal view returns (CompiledElementRule[] memory rules, bytes[] memory parameterValues) {
+        rules = new CompiledElementRule[](required.length);
+        parameterValues = new bytes[](required.length);
+        for (uint256 j = 0; j < required.length; j++) {
+            bytes32 elementId = required[j];
+            if (elementReg.elementOf(elementId) == address(0)) revert Errors.ElementNotRegistered(elementId);
+            rules[j] = CompiledElementRule(
+                elementId, _compiledAction(overrides_, bindingIndex, elementId, elementReg.defaultActionOf(elementId))
+            );
+            parameterValues[j] = _parameterValue(parameters_, elementId);
+        }
     }
 
     function _pushCompiled(
@@ -474,7 +552,8 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         RecipeBinding memory binding,
         bytes32 recipeKey,
         bytes32 bindingPlanHash,
-        CompiledElementRule[] memory rules
+        CompiledElementRule[] memory rules,
+        bytes[] memory parameters_
     ) internal {
         target.push();
         CompiledBindingPlan storage stored = target[target.length - 1];
@@ -483,6 +562,55 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         stored.planHash = bindingPlanHash;
         for (uint256 i = 0; i < rules.length; i++) {
             stored.rules.push(rules[i]);
+            stored.parameters.push(parameters_[i]);
+        }
+    }
+
+    function _validateParameters(ElementParameter[] memory parameters_) internal pure {
+        for (uint256 i = 0; i < parameters_.length; i++) {
+            ElementParameter memory parameter = parameters_[i];
+            if (parameter.elementId == bytes32(0) || parameter.value.length == 0) {
+                revert Errors.InvalidElementParameter(parameter.elementId);
+            }
+            if (parameter.value.length > MAX_ELEMENT_PARAMETER_BYTES) {
+                revert Errors.ElementParameterTooLarge(
+                    parameter.elementId, parameter.value.length, MAX_ELEMENT_PARAMETER_BYTES
+                );
+            }
+            for (uint256 j = 0; j < i; j++) {
+                if (parameters_[j].elementId == parameter.elementId) {
+                    revert Errors.DuplicateElementParameter(parameter.elementId);
+                }
+            }
+        }
+    }
+
+    function _parameterValue(ElementParameter[] memory parameters_, bytes32 elementId)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        for (uint256 i = 0; i < parameters_.length; i++) {
+            if (parameters_[i].elementId == elementId) return parameters_[i].value;
+        }
+        return bytes("");
+    }
+
+    function _rejectUnusedParameters(ElementParameter[] memory parameters_, CompiledBindingPlan[] storage plans)
+        internal
+        view
+    {
+        for (uint256 p = 0; p < parameters_.length; p++) {
+            bool used;
+            for (uint256 i = 0; i < plans.length && !used; i++) {
+                for (uint256 j = 0; j < plans[i].rules.length; j++) {
+                    if (plans[i].rules[j].elementId == parameters_[p].elementId) {
+                        used = true;
+                        break;
+                    }
+                }
+            }
+            if (!used) revert Errors.InvalidElementParameter(parameters_[p].elementId);
         }
     }
 
@@ -639,6 +767,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
             dst.planHash = source[i].planHash;
             for (uint256 j = 0; j < source[i].rules.length; j++) {
                 dst.rules.push(source[i].rules[j]);
+                dst.parameters.push(source[i].parameters[j]);
             }
         }
     }

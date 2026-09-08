@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.17;
 
-import {ManifestCore, PolicyStatus, RecipeBinding, RecipeBindingMode} from "../types/ComplianceTypes.sol";
+import {
+    ElementParameter,
+    ManifestCore,
+    PolicyStatus,
+    RecipeBinding,
+    RecipeBindingMode
+} from "../types/ComplianceTypes.sol";
 
 /// @title BuidlLikeDemoAsset
 /// @notice Giwa MVP demo profile for a local BUIDL-like ERC-3643 asset.
@@ -19,14 +25,19 @@ library BuidlLikeDemoAsset {
 
     uint16 internal constant ISSUANCE_RECIPE_ID = 1; // Reg D 506(c)
     uint16 internal constant ISSUANCE_RECIPE_VERSION = 2;
-    uint16 internal constant FUND_RECIPE_ID = 3; // BUIDL-like ICA 3(c)(7) + minimum investment
+    uint16 internal constant FUND_RECIPE_ID = 2; // generic ICA 3(c)(7)
     uint16 internal constant FUND_RECIPE_VERSION = 1;
+    uint16 internal constant MINIMUM_TRADE_RECIPE_ID = 3; // generic threshold predicate
+    uint16 internal constant MINIMUM_TRADE_RECIPE_VERSION = 2;
 
     bytes32 internal constant PROFILE_KEY = keccak256("CORNER_STORE.PROFILE.BUIDL_LIKE_DEMO_V1");
     bytes32 internal constant SECURITIZE_DS_ADAPTER_SEAM = keccak256("CORNER_STORE.ADAPTER.SECURITIZE_DS_PROTOCOL");
     uint256 internal constant CLAIM_TOPIC_ACCREDITED_INVESTOR = 1001;
     uint256 internal constant CLAIM_TOPIC_QUALIFIED_PURCHASER = 1002;
-    uint256 internal constant MINIMUM_INVESTMENT_AMOUNT = 5_000_000 ether;
+    uint256 internal constant MINIMUM_TRADE_AMOUNT = 5_000_000 ether;
+    // Source-compatibility alias for existing demo callers. The enforced rule is
+    // explicitly a per-trade amount, not a claim about subscription semantics.
+    uint256 internal constant MINIMUM_INVESTMENT_AMOUNT = MINIMUM_TRADE_AMOUNT;
 
     // Current skeleton convention: factsPacked bit0 means the fund recipe is applicable.
     uint256 internal constant FACT_FUND_APPLICABLE = 1;
@@ -41,15 +52,23 @@ library BuidlLikeDemoAsset {
                 SECURITIZE_DS_ADAPTER_SEAM,
                 CLAIM_TOPIC_ACCREDITED_INVESTOR,
                 CLAIM_TOPIC_QUALIFIED_PURCHASER,
-                MINIMUM_INVESTMENT_AMOUNT
+                MINIMUM_TRADE_AMOUNT
             )
         );
     }
 
     function recipeBindings() internal pure returns (RecipeBinding[] memory bindings) {
-        bindings = new RecipeBinding[](2);
+        bindings = new RecipeBinding[](3);
         bindings[0] =
             RecipeBinding(ISSUANCE_RECIPE_ID, ISSUANCE_RECIPE_VERSION, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         bindings[1] = RecipeBinding(FUND_RECIPE_ID, FUND_RECIPE_VERSION, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
+        bindings[2] = RecipeBinding(
+            MINIMUM_TRADE_RECIPE_ID, MINIMUM_TRADE_RECIPE_VERSION, RecipeBindingMode.REQUIRED_BLOCKING, 0, 80
+        );
+    }
+
+    function elementParameters() internal pure returns (ElementParameter[] memory parameters) {
+        parameters = new ElementParameter[](1);
+        parameters[0] = ElementParameter(bytes32("MIN-TRADE-v1"), abi.encode(MINIMUM_TRADE_AMOUNT));
     }
 }

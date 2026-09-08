@@ -87,6 +87,16 @@ onboarding may only strengthen enforcement (`FLAG_ONLY < OPERATOR_REVIEW <
 BLOCK`); `FORCE_FLAG_ONLY` is accepted only when the Element default is already
 `FLAG_ONLY`.
 
+Token-scoped Element settings use bounded `ElementParameter[]` entries keyed by
+immutable `elementId`. The registry rejects empty, duplicate, unused, oversized
+(more than 256 bytes), or excessive parameter entries. Parameter bytes are copied
+beside every compiled rule that references the Element and are included in that
+binding's plan hash. Consequently a parameter change is a semantic Manifest
+update: it follows the existing owner schedule/operator activation timelock,
+increments Manifest history, and changes `compiledPlanHashOf(token)`. Existing
+manifests without parameters retain their prior compiled-plan hash and legacy
+Element context ABI.
+
 `ManifestCore`의 과거 issuance/fund 필드는 ABI 전환을 위한 deprecated mirror이며
 현재 Engine, Factory와 CLI의 source of truth는 registry의 `RecipeBinding[]`다.
 
@@ -110,7 +120,7 @@ hot path에 필요한 compact core만 온체인에 둔다. 법률 문서, 심사
 
 - `ACTIVE`가 아닌 Manifest는 regulated execution을 허용하지 않는다.
 - pair 거래에서 양쪽 자산의 classification과 regulated Manifest를 누락하지 않는다.
-- Recipe key, version, compiled Element enforcement plan, engine과 scope가
+- Recipe key, version, compiled Element enforcement/parameter plan, engine과 scope가
   decision에 바인딩된다.
 - full manifest hash가 변경되면 새로운 version 또는 명시적 update가 필요하다.
 - ACTIVE/SUSPENDED core fact를 직접 덮어써 timelock을 우회할 수 없다.

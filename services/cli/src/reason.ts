@@ -1,6 +1,6 @@
 import {AbiCoder, encodeBytes32String, keccak256} from "ethers";
 
-// Element id (bytes32 string) -> human label — 23 labeled elements. The first
+// Element id (bytes32 string) -> human label — 24 labeled elements. The first
 // 11 (A-01, A-02, A-03, A-04, A-05, B-01, B-02, C-01, E-01, A-13, F-02) are the
 // original illustrative elements — six of which (A-01, A-03, A-04, A-13, B-01,
 // B-02) were upgraded in place to the walkthrough-doc failure-code taxonomy
@@ -8,8 +8,8 @@ import {AbiCoder, encodeBytes32String, keccak256} from "ethers";
 // B-04, D-01) are the wave-2 illustrative elements (CMP-003); the last 6 (A-06,
 // A-12, E-03, F-01, F-03, F-04) are the wave-3 illustrative elements (CMP-004).
 // These are NOT all DeployStack-registered: script/DeployStack.s.sol's
-// _deployAndRegisterElements registers only 12 — the 11 originals labeled here
-// PLUS BUIDL-MIN-v1 (which is itself NOT labeled here). The wave-2 (CMP-003)
+// _deployAndRegisterElements registers the 11 originals plus the reusable
+// MIN-TRADE-v1 predicate. The wave-2 (CMP-003)
 // and wave-3 (CMP-004) sets are registered opt-in via tools/deploy-wave2 and
 // tools/deploy-wave3 respectively — not by DeployStack, and not wired into any
 // recipe's `requiredElements`.
@@ -25,6 +25,7 @@ export const ELEMENT_LABELS: Record<string, string> = {
   "E-01-v1": "Form D Filing",
   "A-13-v1": "Qualified Purchaser",
   "F-02-v1": "Surveillance Flag",
+  "MIN-TRADE-v1": "Minimum Trade Amount",
   "A-08-v1": "Entity Eligibility",
   "A-09-v1": "Equity Owner Look-Through",
   "A-11-v1": "Claim Freshness",
@@ -43,6 +44,7 @@ export const ELEMENT_LABELS: Record<string, string> = {
 export const RECIPE_LABELS: Record<number, string> = {
   1: "Reg D 506(c)",
   2: "3(c)(7) Fund",
+  3: "Minimum Trade Amount",
   7: "Reg D + Surveillance"
 };
 
@@ -63,6 +65,10 @@ export const POLICY_STATUS: Record<number, string> = {
 // code 1 -> the element's human label, exactly the file's original behavior
 // (see buildTable below).
 export const ELEMENT_CODE_NAMES: Record<string, Record<number, string>> = {
+  "MIN-TRADE-v1": {
+    1: "MISSING_OR_MALFORMED_PARAMETER",
+    2: "BELOW_MINIMUM_TRADE_AMOUNT"
+  },
   // A-01-v1 Sanctions (src/compliance/elements/Sanctions.sol header table).
   "A-01-v1": {
     1: "FAIL_SDN_WALLET_MATCH",

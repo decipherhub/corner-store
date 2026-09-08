@@ -13,8 +13,7 @@ import {RecipeBinding} from "../../src/types/ComplianceTypes.sol";
 /// setup through a mock Securitize/TA-style fact source, and binds a Manifest
 /// that models the minimum current demo facts: Reg D 506(c) issuance + ICA
 /// 3(c)(7) fund status. In this skeleton, `factsPacked bit0` activates the
-/// BuidlLikeFundRecipe, which adds A-13 Qualified Purchaser plus the demo
-/// minimum investment gate.
+/// generic Fund3c7Recipe and standalone MinimumTradeAmountRecipe bindings.
 contract BUIDLLikeFlowTest is IntegrationBase {
     function setUp() public {
         deployBuidlLikeStack();
@@ -25,9 +24,12 @@ contract BUIDLLikeFlowTest is IntegrationBase {
         assertEq(rwaToken.symbol(), BuidlLikeDemoAsset.TOKEN_SYMBOL, "demo asset symbol");
         assertEq(uint8(policyReg.statusOf(address(rwaToken))), 2, "manifest active");
         RecipeBinding[] memory bindings = policyReg.recipeBindingsOf(address(rwaToken));
-        assertEq(bindings.length, 2, "two recipe bindings");
+        assertEq(bindings.length, 3, "three composable recipe bindings");
         assertEq(bindings[0].recipeId, BuidlLikeDemoAsset.ISSUANCE_RECIPE_ID, "RegD 506c recipe");
         assertEq(bindings[1].recipeId, BuidlLikeDemoAsset.FUND_RECIPE_ID, "BUIDL-like fund recipe");
+        assertEq(bindings[2].recipeId, BuidlLikeDemoAsset.MINIMUM_TRADE_RECIPE_ID, "generic minimum-trade recipe");
+        bytes memory configured = policyReg.compiledElementParameterOf(address(rwaToken), 2, 0);
+        assertEq(abi.decode(configured, (uint256)), BuidlLikeDemoAsset.MINIMUM_TRADE_AMOUNT);
         assertEq(
             policyReg.manifestOf(address(rwaToken)).factsPacked & BuidlLikeDemoAsset.FACT_FUND_APPLICABLE,
             BuidlLikeDemoAsset.FACT_FUND_APPLICABLE,
@@ -79,7 +81,7 @@ contract BUIDLLikeFlowTest is IntegrationBase {
         );
 
         vm.prank(alice);
-        vm.expectRevert(); // ComplianceRejected: A-13-v1 from BuidlLikeFundRecipe
+        vm.expectRevert(); // ComplianceRejected: A-13-v1 from Fund3c7Recipe
         router.execute(req);
 
         assertEq(rwaToken.balanceOf(alice), 0, "non-QP receives no BUIDL-like asset");
@@ -143,7 +145,7 @@ contract BUIDLLikeFlowTest is IntegrationBase {
         ExecutionRequest memory req = buildBuyRequest(alice, 1_000_000 ether, 1_000_000 ether);
 
         vm.prank(alice);
-        vm.expectRevert(); // ComplianceRejected: BUIDL-MIN-v1 from BuidlLikeFundRecipe
+        vm.expectRevert(); // ComplianceRejected: MIN-TRADE-v1 from standalone threshold recipe
         router.execute(req);
 
         assertEq(rwaToken.balanceOf(alice), 0, "below-minimum buyer receives no BUIDL-like asset");

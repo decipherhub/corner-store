@@ -29,9 +29,11 @@ The demo deploys a standard ERC-3643/T-REX token with BUIDL-like metadata:
 - token name: `BUIDL-like ERC-3643 Demo Asset`
 - token symbol: `bBUIDL`
 - issuance recipe: Reg D 506(c)
-- fund recipe: BUIDL-like ICA 3(c)(7) recipe
+- fund recipe: generic ICA 3(c)(7) recipe
+- commercial-term recipe: generic minimum-trade-amount recipe
 - fund applicability: `factsPacked` bit 0
-- minimum investment amount: `5,000,000` demo units, modeled as $5M at $1 NAV
+- minimum trade amount: `5,000,000` demo units, modeled as $5M at $1 NAV
+  and supplied through Manifest-bound Element parameters
 - supported execution engine: AMM in the current fixture
 
 ## Compliance model
@@ -53,13 +55,20 @@ Current demo checks:
 - sanctions clear through `A-01-v1`
 - accredited investor through `A-03-v1`
 - qualified purchaser through `A-13-v1`
-- BUIDL-like minimum investment through `BUIDL-MIN-v1`
+- minimum regulated-asset trade amount through reusable `MIN-TRADE-v1`
 - ERC-3643 recipient verification at token transfer time
 
 Investor facts are seeded through `MockSecuritizeTA`, not by calling the AI/QP
 Elements directly from the BUIDL flow test. This keeps the demo shaped like the
 production seam without pretending to have a real Securitize or transfer-agent
 connection.
+
+The BUIDL-like name now exists only at the asset-profile boundary. Its lower
+layers are reusable: Reg D 506(c), generic 3(c)(7), and a standalone minimum
+trade predicate are three independent Manifest bindings. The `5,000,000 ether`
+value is not compiled into the predicate; it is committed into the token's
+compiled plan. Legacy `BuidlMinimumInvestment`/`BuidlLikeFundRecipe` v1 source is
+retained only so already-deployed demo manifests remain explainable.
 
 ```text
 MockSecuritizeTA profile
@@ -107,7 +116,7 @@ The BUIDL-like profile should demonstrate:
 3. accredited but non-QP buyer is rejected before token movement
 4. sanctioned QP buyer is rejected before token movement
 5. QP/accredited but ERC-3643-unverified recipient rolls back during token settlement
-6. QP/accredited buyer below the BUIDL-like minimum investment is rejected before token movement
+6. QP/accredited buyer below the configured minimum trade amount is rejected before token movement
 7. expired TA profile is not synced into current eligibility and is rejected before token movement
 
 ## Non-goals
@@ -127,7 +136,9 @@ The BUIDL-like profile should demonstrate:
 - Add claim expiry/freshness tests.
 - Add Securitize/DS adapter research issue once official/current integration details are available.
 - Split primary distribution, secondary DEX execution, redemption, and monthly distribution rails.
-- Promote BUIDL-like profile data into the future Manifest compiler/onboarding flow.
+- Resolve the legal/product semantics of subscription minimum vs per-trade or
+  post-trade-balance minimum before a production version; v1 preserves the
+  existing both-direction per-trade quantity behavior.
 
 ## References
 

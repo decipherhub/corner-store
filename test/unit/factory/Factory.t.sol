@@ -21,6 +21,8 @@ import {
     ObligationTiming,
     Statefulness,
     ManifestCore,
+    ElementEnforcementOverride,
+    ElementParameter,
     PolicyStatus,
     RecipeBinding,
     RecipeBindingMode,
@@ -120,6 +122,11 @@ contract FactoryTest is Test {
         c.active = true;
     }
 
+    function _parameters(uint256 minimum) internal pure returns (ElementParameter[] memory parameters) {
+        parameters = new ElementParameter[](1);
+        parameters[0] = ElementParameter(ELEMENT_ID, abi.encode(minimum));
+    }
+
     function test_registerRWAToken_registersManifest() public {
         factory.registerRWAToken(rwa, _manifest(), _bindings(), venue, _venueCfg());
 
@@ -138,6 +145,17 @@ contract FactoryTest is Test {
         assertEq(stored.adapter, adapter);
         assertTrue(stored.active);
         assertEq(uint8(stored.custody), uint8(CustodyModel.POOL));
+    }
+
+    function test_registerRWATokenWithParameters_compilesParameter() public {
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        factory.registerRWATokenWithParameters(
+            rwa, _manifest(), _bindings(), overrides_, _parameters(5_000_000 ether), venue, _venueCfg()
+        );
+
+        assertEq(tpr.compiledElementParameterOf(rwa, 0, 0), abi.encode(5_000_000 ether));
+        assertEq(uint8(tpr.manifestOf(rwa).status), uint8(PolicyStatus.ACTIVE));
+        assertTrue(vr.venueOf(venue).active);
     }
 
     function test_registerRWAToken_onlyOperator() public {
@@ -179,6 +197,25 @@ contract FactoryTest is Test {
         assertEq(pending.fullManifestHash, next.fullManifestHash);
         assertEq(effectiveTime, block.timestamp + tpr.MIN_MANIFEST_DELAY());
         assertEq(reasonCode, bytes32("LEGAL-UPDATE"));
+    }
+
+    function test_scheduleManifestUpdateWithParameters_forwardsCompiledParameter() public {
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        factory.registerRWATokenWithParameters(
+            rwa, initial, _bindings(), overrides_, _parameters(5_000_000 ether), venue, _venueCfg()
+        );
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        factory.scheduleManifestUpdateWithParameters(
+            rwa, next, _bindings(), overrides_, _parameters(6_000_000 ether), bytes32("PARAMETER-UPDATE")
+        );
+        vm.warp(block.timestamp + tpr.MIN_MANIFEST_DELAY());
+        tpr.activateManifestUpdate(rwa);
+
+        assertEq(tpr.compiledElementParameterOf(rwa, 0, 0), abi.encode(6_000_000 ether));
     }
 
     function test_cancelManifestActions_forwardsRegistryOwnerCalls() public {

@@ -25,6 +25,11 @@ swap, quote fill, order matching 또는 settlement 자체는 수행하지 않는
 
 Element는 하나의 구성요건 사실만 판정한다. 특정 Recipe나 venue에 종속되지 않는다.
 
+자산마다 달라지는 수치·목록은 Element bytecode 상수가 아니다. Manifest의 bounded
+`ElementParameter[]`로 입력하고, registry가 immutable Element rule과 함께 compile해
+plan hash에 커밋한다. 설정이 없는 기존 Element에는 과거와 같은 `abi.encode(ctx)`를,
+설정된 Element에는 `abi.encode(ctx, parameterBytes)`를 전달해 ABI 호환성을 유지한다.
+
 Element 추가 기준:
 
 1. 기존 Element로 같은 사실을 표현할 수 없는가?
@@ -133,6 +138,8 @@ struct ComplianceDecision {
 - Element default enforcement와 onboarding override는 registration/update 시점에
   bounded compiled plan으로 고정한다. 일반 onboarding은 strengthen-only이며
   `FORCE_FLAG_ONLY` downgrade는 허용하지 않는다.
+- 자산별 Element parameter도 registration/update 시점에 bounded compiled plan으로
+  고정하며 parameter 변경은 Manifest timelock/history를 우회할 수 없다.
 - Element가 nonzero reasonCode를 반환하면 Engine/CLI가 그 값을 그대로 전달한다.
   zero reason만 recipe-scoped generic code `1`로 fallback한다.
 - Asset Manifest가 기존 single Recipe mapping/Token Policy 역할을 확장한다.

@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {Governed} from "../auth/Governed.sol";
 import {ITokenPolicyRegistry} from "../interfaces/compliance/ITokenPolicyRegistry.sol";
 import {IVenueRegistry} from "../interfaces/execution/IVenueRegistry.sol";
-import {ManifestCore, RecipeBinding} from "../types/ComplianceTypes.sol";
+import {ElementEnforcementOverride, ElementParameter, ManifestCore, RecipeBinding} from "../types/ComplianceTypes.sol";
 import {VenueConfig} from "../types/VenueTypes.sol";
 
 /// @title CornerStoreFactory
@@ -59,6 +59,24 @@ contract CornerStoreFactory is Governed {
         emit RWATokenRegistered(token, venue);
     }
 
+    /// @notice Parameter-aware onboarding path. Legacy callers remain on the
+    ///         overload above; new assets can bind token-scoped Element values
+    ///         into the immutable compiled plan.
+    function registerRWATokenWithParameters(
+        address token,
+        ManifestCore calldata manifest,
+        RecipeBinding[] calldata bindings,
+        ElementEnforcementOverride[] calldata overrides_,
+        ElementParameter[] calldata parameters_,
+        address venue,
+        VenueConfig calldata venueCfg
+    ) external onlyOperator {
+        tokenPolicyRegistry.registerManifest(token, manifest, bindings, overrides_, parameters_);
+        tokenPolicyRegistry.approveManifest(token);
+        venueRegistry.registerVenue(venue, venueCfg);
+        emit RWATokenRegistered(token, venue);
+    }
+
     /// @notice Schedule a delayed manifest reopening through the registry owner.
     /// @dev The factory owns the registry after deployment, while this factory's
     ///      owner is the external governance account (a Safe in production).
@@ -79,6 +97,17 @@ contract CornerStoreFactory is Governed {
         bytes32 reasonCode
     ) external onlyOwner {
         tokenPolicyRegistry.scheduleManifestUpdate(token, manifest, bindings, reasonCode);
+    }
+
+    function scheduleManifestUpdateWithParameters(
+        address token,
+        ManifestCore calldata manifest,
+        RecipeBinding[] calldata bindings,
+        ElementEnforcementOverride[] calldata overrides_,
+        ElementParameter[] calldata parameters_,
+        bytes32 reasonCode
+    ) external onlyOwner {
+        tokenPolicyRegistry.scheduleManifestUpdate(token, manifest, bindings, overrides_, parameters_, reasonCode);
     }
 
     /// @notice Cancel a pending semantic manifest update through governance.

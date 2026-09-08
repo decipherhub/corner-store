@@ -21,6 +21,7 @@ import {
     EnforcementAction,
     EnforcementOverrideMode,
     ElementEnforcementOverride,
+    ElementParameter,
     CompiledElementRule
 } from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
@@ -578,10 +579,64 @@ contract TokenPolicyRegistryTest is Test {
         assertEq(rules.length, 1);
         assertEq(rules[0].elementId, ELEMENT_ID);
         assertEq(uint256(rules[0].action), uint256(EnforcementAction.BLOCK));
+        assertEq(reg.compiledElementParameterOf(token, 0, 0), bytes(""));
+
+        bytes32 expectedBindingHash = keccak256(abi.encode(bindings[0], recipeKey, rules));
+        assertEq(bindingPlanHash, expectedBindingHash, "parameterless binding hash must remain legacy-compatible");
+        assertEq(
+            firstHash,
+            keccak256(abi.encode(bytes32(0), expectedBindingHash)),
+            "parameterless aggregate hash must remain legacy-compatible"
+        );
 
         address token2 = address(0x7001);
         reg.registerManifest(token2, _manifest(), bindings);
         assertEq(reg.compiledPlanHashOf(token2), firstHash, "same bindings compile deterministically");
+    }
+
+    function test_register_compiles_tokenScoped_parameter_into_plan_hash() public {
+        RecipeBinding[] memory bindings = _bindings();
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        ElementParameter[] memory parameters = new ElementParameter[](1);
+        parameters[0] = ElementParameter(ELEMENT_ID, abi.encode(uint256(5_000_000 ether)));
+
+        reg.registerManifest(token, _manifest(), bindings, overrides_, parameters);
+        bytes32 configuredHash = reg.compiledPlanHashOf(token);
+        assertEq(abi.decode(reg.compiledElementParameterOf(token, 0, 0), (uint256)), 5_000_000 ether);
+
+        address token2 = address(0x7001);
+        parameters[0].value = abi.encode(uint256(250_000 ether));
+        reg.registerManifest(token2, _manifest(), bindings, overrides_, parameters);
+        assertTrue(reg.compiledPlanHashOf(token2) != configuredHash, "parameter must change plan commitment");
+    }
+
+    function test_parameters_reject_duplicate_unused_empty_and_oversized_values() public {
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        ElementParameter[] memory parameters = new ElementParameter[](2);
+        parameters[0] = ElementParameter(ELEMENT_ID, abi.encode(uint256(1)));
+        parameters[1] = ElementParameter(ELEMENT_ID, abi.encode(uint256(2)));
+        vm.expectRevert(abi.encodeWithSelector(Errors.DuplicateElementParameter.selector, ELEMENT_ID));
+        reg.registerManifest(token, _manifest(), _bindings(), overrides_, parameters);
+
+        parameters = new ElementParameter[](1);
+        parameters[0] = ElementParameter(bytes32("UNUSED-v1"), abi.encode(uint256(1)));
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidElementParameter.selector, bytes32("UNUSED-v1")));
+        reg.registerManifest(token, _manifest(), _bindings(), overrides_, parameters);
+
+        parameters[0] = ElementParameter(ELEMENT_ID, "");
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidElementParameter.selector, ELEMENT_ID));
+        reg.registerManifest(token, _manifest(), _bindings(), overrides_, parameters);
+
+        parameters[0] = ElementParameter(ELEMENT_ID, new bytes(reg.MAX_ELEMENT_PARAMETER_BYTES() + 1));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Errors.ElementParameterTooLarge.selector,
+                ELEMENT_ID,
+                reg.MAX_ELEMENT_PARAMETER_BYTES() + 1,
+                reg.MAX_ELEMENT_PARAMETER_BYTES()
+            )
+        );
+        reg.registerManifest(token, _manifest(), _bindings(), overrides_, parameters);
     }
 
     function test_overrides_reject_length_above_bounded_limit_before_compilation() public {
@@ -694,6 +749,32 @@ contract TokenPolicyRegistryTest is Test {
         reg.activateManifestUpdate(token);
         assertEq(keccak256(abi.encode(reg.recipeBindingsOf(token))), keccak256(abi.encode(nextBindings)));
         assertEq(reg.manifestVersionOf(token), 2);
+    }
+
+    function test_manifestUpdate_changesElementParameterOnlyAfterTimelockActivation() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        ElementParameter[] memory parameters = new ElementParameter[](1);
+        parameters[0] = ElementParameter(ELEMENT_ID, abi.encode(uint256(100)));
+        reg.registerManifest(token, initial, _bindings(), overrides_, parameters);
+        vm.prank(operator);
+        reg.approveManifest(token);
+        bytes32 oldPlanHash = reg.compiledPlanHashOf(token);
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        parameters[0].value = abi.encode(uint256(250));
+        reg.scheduleManifestUpdate(token, next, _bindings(), overrides_, parameters, bytes32("PARAMETER_UPDATE"));
+
+        assertEq(abi.decode(reg.compiledElementParameterOf(token, 0, 0), (uint256)), 100);
+        (,, uint64 effectiveTime,) = reg.pendingManifestUpdateOf(token);
+        vm.warp(effectiveTime);
+        vm.prank(operator);
+        reg.activateManifestUpdate(token);
+
+        assertEq(abi.decode(reg.compiledElementParameterOf(token, 0, 0), (uint256)), 250);
+        assertNotEq(reg.compiledPlanHashOf(token), oldPlanHash);
     }
 
     function test_manifestUpdate_preservesSuspendedState() public {

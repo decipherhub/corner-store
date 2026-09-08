@@ -901,3 +901,83 @@ review and post-deployment reconciliation unreliable.
 - `services/cli/src/commands.ts`
 - `docs/architecture/asset-manifest.md`
 - `docs/architecture/compliance-policy.md`
+
+## D018 — Asset-specific Element values belong to the Manifest compiled plan
+
+Date: 2026-09-08
+
+### Context
+
+The BUIDL-like reference profile encoded `5,000,000 ether` in three places and
+bound a BUIDL-named Element/Recipe even though qualified-purchaser status and a
+commercial minimum are independent predicates. Phase 3 review material and the
+open ADR-010 discussion in PRs #90 and #97 identified the same ownership issue:
+immutable Element code should define reusable logic while the token Manifest
+should own asset-specific values.
+
+The commercial meaning of the demo threshold remains unresolved. Available
+inputs do not establish whether a real product would apply it to subscription,
+buy-only secondary trades, every trade, or post-trade holdings.
+
+### Decision
+
+1. A Manifest may bind a bounded non-empty byte value to an immutable
+   `elementId`. The registry rejects duplicate, unused, oversized or zero-length
+   parameter entries and limits both entry count and value length to 256.
+2. The registry aligns parameter bytes with compiled Element rules and commits
+   them into each parameterized binding hash and the aggregate plan hash.
+   Semantic changes therefore use the existing Manifest timelock.
+3. A parameterized rule receives `abi.encode(ComplianceContext, bytes)` through
+   the existing `IComplianceElement.check(..., bytes context)` ABI. A rule with
+   no parameter receives the exact legacy `abi.encode(ComplianceContext)` value,
+   and a fully parameterless binding keeps its legacy hash construction.
+4. `MIN-TRADE-v1` defines only the reusable inclusive per-trade regulated-asset
+   amount predicate. Its parameter schema is `abi.encode(uint256 minimumAmount)`;
+   missing, malformed or zero values fail closed.
+5. The BUIDL-like demo composes Reg D 506(c), 3(c)(7) QP and minimum-trade as
+   three independent bindings. It preserves the existing `5,000,000 ether`
+   behavior in both trade directions only as a reference-demo behavior lock.
+6. Legacy BUIDL-specific contracts remain for source and deployed-version
+   compatibility but are not registered by new demo/testnet deployments.
+
+### Alternatives Considered
+
+- Constructor-configured Element instances per asset: rejected because it
+  duplicates bytecode and registry entries instead of preserving reusable
+  immutable predicates.
+- Put values in Recipe bytecode: rejected because it recreates an asset-specific
+  Recipe and makes value changes require a new implementation/version.
+- Change the stable Element interface to add an explicit `elementId` and
+  parameter argument: deferred because the existing context byte boundary can
+  carry the compiled value without a repository-wide ABI migration. A future
+  interface version may make this shape explicit.
+- Infer that the BUIDL-like threshold is a real BUIDL subscription rule:
+  rejected because the repository has no approved product/legal evidence for
+  that claim.
+
+### Consequences
+
+- One generic predicate can be reused across assets with independently reviewed
+  Manifest values and deterministic Safe/onboarding commitments.
+- Dynamic `bytes` storage and context encoding add registration and evaluation
+  gas relative to a hardcoded constant; bounds prevent unbounded operator input.
+- The context format is intentionally dual-mode. New parameter-aware Elements
+  must validate the extended encoding strictly, while legacy Elements continue
+  to receive their unchanged encoding.
+- Toolkit and post-deployment verification must compare the compiled parameter,
+  not only the aggregate plan hash.
+- PRs #90/#97 remain useful design history; this decision records the tested
+  implementation outcome rather than duplicating their proposed ADR file.
+
+### Related Files
+
+- `src/types/ComplianceTypes.sol`
+- `src/registry/TokenPolicyRegistry.sol`
+- `src/compliance/ComplianceEngine.sol`
+- `src/compliance/elements/MinimumTradeAmount.sol`
+- `src/compliance/recipes/MinimumTradeAmountRecipe.sol`
+- `src/demo/BuidlLikeDemoAsset.sol`
+- `services/toolkit/src/production-onboarding.ts`
+- `services/cli/src/assetProfiles.ts`
+- `docs/architecture/asset-manifest.md`
+- `docs/product-specs/buidl-like-demo-profile.md`

@@ -17,7 +17,7 @@ import {ComplianceEngine} from "../src/compliance/ComplianceEngine.sol";
 import {Sanctions} from "../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../src/compliance/elements/QualifiedPurchaser.sol";
-import {BuidlMinimumInvestment} from "../src/compliance/elements/BuidlMinimumInvestment.sol";
+import {MinimumTradeAmount} from "../src/compliance/elements/MinimumTradeAmount.sol";
 import {SurveillanceFlag} from "../src/compliance/elements/SurveillanceFlag.sol";
 import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../src/compliance/elements/IdentityUniqueness.sol";
@@ -29,7 +29,7 @@ import {Lockup} from "../src/compliance/elements/Lockup.sol";
 import {IAcquisitionSource} from "../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipe} from "../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../src/compliance/recipes/Fund3c7Recipe.sol";
-import {BuidlLikeFundRecipe} from "../src/compliance/recipes/BuidlLikeFundRecipe.sol";
+import {MinimumTradeAmountRecipe} from "../src/compliance/recipes/MinimumTradeAmountRecipe.sol";
 import {BuidlLikeDemoAsset} from "../src/demo/BuidlLikeDemoAsset.sol";
 
 import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
@@ -173,11 +173,11 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         _deployAndRegisterElements();
 
         // 4. recipes: RegD 506(c) (id 1) + generic 3(c)(7) fund (id 2) +
-        //    BUIDL-like QP/minimum profile (id 3) + a surveillance-enabled RegD
+        //    standalone minimum-trade predicate (id 3 v2) + surveillance-enabled RegD
         //    variant (id 7) used by scenario 6.
         recipeReg.registerRecipe(1, 2, address(new RegD506cRecipe()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
-        recipeReg.registerRecipe(3, 1, address(new BuidlLikeFundRecipe()));
+        recipeReg.registerRecipe(3, 2, address(new MinimumTradeAmountRecipe()));
         recipeReg.registerRecipe(SURVEIL_RECIPE_ID, 1, address(new DemoSurveillanceRecipe()));
 
         // 5. Demo-only onboarding helper. The core registries, engine, router
@@ -368,7 +368,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         surveillance = new SurveillanceFlag();
         qualifiedPurchaser = new QualifiedPurchaser();
         elementReg.registerElement(bytes32("A-13-v1"), address(qualifiedPurchaser));
-        elementReg.registerElement(bytes32("BUIDL-MIN-v1"), address(new BuidlMinimumInvestment()));
+        elementReg.registerElement(bytes32("MIN-TRADE-v1"), address(new MinimumTradeAmount()));
         elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
     }
 

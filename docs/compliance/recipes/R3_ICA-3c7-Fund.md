@@ -3,9 +3,9 @@ type: recipe-requirement-spec
 recipe-id: R3
 recipe-name: ICA §3(c)(7) Fund
 project: RWA DEX (Giwa) · corner-store
-status: v2.0 (2026-07-28) — 2부 구성(제1부 법률논증 산문 + 제2부 구현명세). Part II는 실장 컨트랙트(Fund3c7Recipe.sol · BuidlLikeFundRecipe.sol) 기준.
+status: v2.1 (2026-09-08) — current runtime composes Fund3c7Recipe independently; BuidlLikeFundRecipe v1 is compatibility-only.
 substance-sot: "승준 recipe walkthrough — R3_ICA-3c7-Fund.md v1.0 (2026-06-17, 조문별 삼단논법). 보경 recipe 검토본 없음 — 법률 검토 필요."
-implements: "src/compliance/recipes/Fund3c7Recipe.sol (recipeId 2, {A-13}, fund-bit gated) · BuidlLikeFundRecipe.sol (recipeId 3, {A-13, BUIDL-MIN}, fund-bit gated)."
+implements: "Current: Fund3c7Recipe.sol (recipeId 2, {A-13}, fund-bit gated). Compatibility only: BuidlLikeFundRecipe.sol v1. Commercial minimum is a separate MinimumTradeAmountRecipe v2 binding."
 reflects-decisions: [ADR-004, ADR-006, ADR-008]
 umbrella: "SPEC.md — 공유 개념(Element/Recipe/Manifest·Router cumulative AND·경계)은 여기에 의한다"
 legal-effect: "발행자가 ICA상 investment company가 아님(§3(c)(7) 제외) → ICA 등록·실체규제 면제"
@@ -14,6 +14,12 @@ tags: [recipe-requirement-spec, R3, ica, 3c7, qualified-purchaser, always-on]
 ---
 
 # R3 ICA §3(c)(7) Fund — 요구사항 명세서 (Recipe)
+
+> **2026-09-08 조합 정정.** 현재 BUIDL-like 데모는 `Fund3c7Recipe`
+> `{A-13}`를 독립 binding으로 사용한다. 최소 거래 수량은 별도
+> `MinimumTradeAmountRecipe` `{MIN-TRADE-v1}`와 Manifest parameter로 조합한다.
+> 아래의 `BuidlLikeFundRecipe` 설명은 이미 존재하는 v1 호환 기록이며 신규
+> onboarding 또는 현재 데모의 권장 구성이 아니다.
 
 > **저술 지위 고지.** 본 Recipe의 법적 논증은 승준 recipe walkthrough(2026-06-17)를 산문 2부 형식으로 재구성한 것이며, 대응 보경 recipe 검토본은 없다 — 법률 검토 전 상태(제4절). 제2부의 두 기준 컨트랙트(`Fund3c7Recipe.sol`, `BuidlLikeFundRecipe.sol`)는 모두 mock이며, 그 요소 집합은 법적 논증이 요구하는 이상 집합보다 축약되어 있다(제10절 seam).
 

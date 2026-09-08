@@ -15,6 +15,29 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `CORE-006 — Manifest-bound Element Parameters`: Manifest registration and
+  delayed updates now accept bounded token-scoped `ElementParameter[]`, compile
+  the parameter alongside every referenced immutable Element rule, and commit
+  aligned parameter bytes into binding/aggregate plan hashes. Parameterless
+  manifests retain the exact legacy Element context and hash behavior. A generic
+  fail-closed `MIN-TRADE-v1` predicate and standalone recipe replace the active
+  BUIDL-specific minimum predicate; the BUIDL-like profile is now composed from
+  independent Reg D, 3(c)(7) QP and parameterized minimum-trade bindings while
+  legacy contracts remain compatibility-only. Factory, demo/testnet scripts,
+  CLI and production Toolkit support the new path; Toolkit verification compares
+  each compiled parameter directly with the expected Manifest input. This
+  preserves the existing demo's inclusive `5,000,000 ether` per-trade behavior
+  without claiming that the value represents BlackRock/Securitize production
+  policy or resolving subscription-vs-secondary-trade semantics. 검증: targeted
+  Forge 82/82 (CORE-006 79 + legacy compatibility 3), Toolkit/CLI smoke, full
+  `forge test --offline` 878/878, BUIDL-like
+  Anvil E2E 7/7 plus dashboard/bidirectional RFQ/QP-expiry/CLI settlement, scoped
+  formatting and `git diff --check` pass. An isolated `/tmp` full
+  `scripts/check.sh` passed after formatting only the pre-existing
+  `script/DeployProductionCore.s.sol` drift and installing clean dependencies.
+  Original-tree `scripts/check.sh` still stops at that unrelated formatting
+  drift, which CORE-006 deliberately does not include.
+
 - `SDK-003 — Publishable Package Release Contract`: CLI, Toolkit과 RFQ SDK를
   독립 npm tarball로 build/pack하고 Node 20 clean temporary projects에 설치하는
   release gate를 완성했다. Toolkit packed export/config simulation, generated

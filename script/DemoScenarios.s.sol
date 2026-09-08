@@ -20,6 +20,8 @@ import {ExecutionRequest} from "../src/types/ExecutionTypes.sol";
 import {
     ComplianceContext,
     ComplianceDecision,
+    ElementEnforcementOverride,
+    ElementParameter,
     ManifestCore,
     PolicyStatus,
     RecipeBinding,
@@ -116,6 +118,8 @@ contract DemoScenarios is Script, DemoConstants {
 
         ManifestCore memory m = _baseManifest();
         RecipeBinding[] memory bindings = _baseBindings();
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        ElementParameter[] memory parameters = _elementParameters();
 
         VenueConfig memory ammCfg = VenueConfig({
             venueType: VenueType.AMM,
@@ -127,14 +131,16 @@ contract DemoScenarios is Script, DemoConstants {
         });
 
         vm.broadcast(deployerPk);
-        factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
+        factory.registerRWATokenWithParameters(address(rwa), m, bindings, overrides_, parameters, pool, ammCfg);
 
         ManifestCore memory stored = policyReg.manifestOf(address(rwa));
         ManifestCore memory expected = _baseManifest();
         RecipeBinding[] memory storedBindings = policyReg.recipeBindingsOf(address(rwa));
-        bool profileOk = keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
+        bool profileOk =
+            keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
             && stored.factsPacked == expected.factsPacked && stored.fullManifestHash == expected.fullManifestHash;
-        bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
+        bool ok =
+            stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
             && stored.approvedBy == address(factory) && profileOk;
         _writeManifestSnapshot(stored, storedBindings);
         console2.log("    evidence: ACTIVE selected asset profile, approved by factory");
@@ -281,6 +287,8 @@ contract DemoScenarios is Script, DemoConstants {
 
         ManifestCore memory m = _baseManifest();
         RecipeBinding[] memory bindings = _surveillanceBindings();
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        ElementParameter[] memory parameters = _elementParameters();
         VenueConfig memory ammCfg = VenueConfig({
             venueType: VenueType.AMM,
             adapter: address(ammAdapter),
@@ -290,7 +298,7 @@ contract DemoScenarios is Script, DemoConstants {
             active: true
         });
         vm.broadcast(deployerPk);
-        factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
+        factory.registerRWATokenWithParameters(address(rwa), m, bindings, overrides_, parameters, pool, ammCfg);
 
         uint256 threshold = 2;
         vm.broadcast(deployerPk);
@@ -605,8 +613,13 @@ contract DemoScenarios is Script, DemoConstants {
         bindings[0] = RecipeBinding(1, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
     }
 
+    function _elementParameters() internal view returns (ElementParameter[] memory parameters) {
+        if (useBuidlLikeProfile) return BuidlLikeDemoAsset.elementParameters();
+        return new ElementParameter[](0);
+    }
+
     function _surveillanceBindings() internal view returns (RecipeBinding[] memory bindings) {
-        uint256 count = useBuidlLikeProfile ? 2 : 1;
+        uint256 count = useBuidlLikeProfile ? 3 : 1;
         bindings = new RecipeBinding[](count);
         bindings[0] = RecipeBinding(SURVEIL_RECIPE_ID, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         if (useBuidlLikeProfile) {
@@ -616,6 +629,13 @@ contract DemoScenarios is Script, DemoConstants {
                 RecipeBindingMode.REQUIRED_BLOCKING,
                 0,
                 90
+            );
+            bindings[2] = RecipeBinding(
+                BuidlLikeDemoAsset.MINIMUM_TRADE_RECIPE_ID,
+                BuidlLikeDemoAsset.MINIMUM_TRADE_RECIPE_VERSION,
+                RecipeBindingMode.REQUIRED_BLOCKING,
+                0,
+                80
             );
         }
     }

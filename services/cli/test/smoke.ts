@@ -258,7 +258,8 @@ async function main() {
   );
   const buidl = assetProfileBinding("buidl-like");
   assert(
-    JSON.stringify(buidl.bindings) === JSON.stringify([[1, 2, 0, 0, 100], [3, 1, 0, 0, 90]]) &&
+    JSON.stringify(buidl.bindings) === JSON.stringify([[1, 2, 0, 0, 100], [2, 1, 0, 0, 90], [3, 2, 0, 0, 80]]) &&
+    buidl.elementParameters.length === 1 &&
       buidl.factsPacked === 1n,
     "BUIDL-like RecipeBinding[]/facts binding"
   );
@@ -284,7 +285,7 @@ async function main() {
   // table = (recipe-scoped: 3 recipes x codes-per-element-sum) + (direct
   // element-level: 1 x codes-per-element-sum, recipeId 0 — the reasonCode an
   // element's own `check()` actually self-encodes) + 6 policy statuses.
-  // codes-per-element-sum is each of the 23 elements' code count, where an
+  // codes-per-element-sum is each of the 24 elements' code count, where an
   // element without a richer ELEMENT_CODE_NAMES table contributes 1.
   // Wave-2b upgraded 6 elements to multi-code taxonomies (A-01:10, A-03:9,
   // A-04:9, A-13:9, B-01:6, B-02:6); the wave-2 illustrative elements
@@ -293,7 +294,7 @@ async function main() {
   // also enumerated; the remaining 5 single-code mocks (A-02, A-05, C-01,
   // E-01, F-02) contribute 1 each.
   const CODES_PER_ELEMENT =
-    10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5; // = 119
+    10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 2; // = 121
   assert(tableSize() === 4 * CODES_PER_ELEMENT + 6, "reason table size");
 
   const jur = decodeReason(A02_RECIPE1);

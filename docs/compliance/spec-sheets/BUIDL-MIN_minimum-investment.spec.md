@@ -3,7 +3,7 @@ type: requirement-spec
 project: RWA DEX (Giwa) · corner-store
 element-id: BUIDL-MIN
 element-name: Minimum Investment Threshold (최소 투자금 한도 · 데모 프로파일)
-status: v0.1 (2026-07-28) — walkthrough 부재. 데모 프로파일 규칙(상업적 fund-terms 성격). 법적 성격 규명은 검토 필요.
+status: superseded (2026-09-08) — deployed/source compatibility record only; current demo uses generic MIN-TRADE-v1 with Manifest-bound parameters.
 substance-sot: "없음 — 본 명세가 1차 저술. 데모 발행 프로파일의 상업적 조건을 온체인 게이트로 모델링한 것."
 implements: "src/compliance/elements/BuidlMinimumInvestment.sol (ELEMENT_ID BUIDL-MIN-v1, 커밋 'Add BUIDL-like minimum investment gate')"
 reflects-decisions: [ADR-004(pool 신규 등재 필요), ADR-006]
@@ -14,6 +14,14 @@ tags: [requirement-spec, BUIDL-MIN, minimum-investment, demo-profile, new-elemen
 ---
 
 # BUIDL-MIN Minimum Investment Threshold — 요구사항 명세서
+
+> **2026-09-08 구현 정정.** 아래 문서는 이미 배포될 수 있었던 v1 동작의 역사적
+> 기록으로 보존한다. 현재 데모는 BUIDL 전용 Element/Recipe를 활성화하지 않는다.
+> `MIN-TRADE-v1`(generic predicate), `MinimumTradeAmountRecipe` v2, 그리고
+> `BuidlLikeDemoAsset.elementParameters()`의 `5,000,000 ether` 설정을 조합한다.
+> 설정값은 compiled plan hash에 포함되고 변경 시 Manifest timelock/history를 거친다.
+> “subscription minimum” 여부는 아직 법률·상품 결정이 아니므로 현재 동작을
+> **양방향 per-trade regulated-asset quantity minimum**으로 정확히 제한해 설명한다.
 
 > **저술 지위·데모 성격 고지.** 본 부품은 대응 walkthrough가 없으며, 컨트랙트 `BuidlMinimumInvestment.sol`은 개발팀이 Giwa MVP 데모 프로파일용으로 선반영한 것이다. 컨트랙트 NatSpec이 명시하듯 **본 부품은 실제 BlackRock/Securitize BUIDL 토큰이 본 요소를 통해 연동될 수 있다는 주장을 하지 아니하며**, 공개된 5백만 달러 최소 투자금 사실을 1달러 순자산가치(NAV) 단위로 환산하여 테스트 발행 규칙으로 모델링한 것이다. 최소 투자금 한도는 본질적으로 발행·펀드 조건(상업적 term)으로서 특정 증권법 조문의 요건이 아니므로, **제1부는 그 상업적 조건의 후보 규범적 맥락을 1차 저술한 것**이며 법적 성격 규명은 검토를 요한다(제4절). 본 부품은 Element Pool Freeze v1(ADR-004)에 포함되지 아니하였으므로 신규 등재 절차를 요한다.
 

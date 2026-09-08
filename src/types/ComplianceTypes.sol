@@ -69,6 +69,16 @@ struct ElementEnforcementOverride {
     EnforcementOverrideMode mode;
 }
 
+/// @notice Token-scoped configuration for an immutable Element implementation.
+/// @dev Values are compiled into every binding that references `elementId` and
+///      committed by the binding/aggregate plan hashes. The Element owns its
+///      value schema; the registry only enforces membership, uniqueness and a
+///      bounded byte length.
+struct ElementParameter {
+    bytes32 elementId;
+    bytes value;
+}
+
 struct CompiledElementRule {
     bytes32 elementId;
     EnforcementAction action;
