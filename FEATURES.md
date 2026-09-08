@@ -22,6 +22,9 @@
   제안하고 소유자가 승인한 안전우선 긴급 교체 정책과 ADR 통합 판단을 구분했다.
 - 현재 확정된 정책, 추가 선택 없이 구현할 작업과 앞으로 외부 승인·측정·
   운영 협의가 필요한 사항을 별도 목록으로 관리한다.
+- #97에서 미정이었던 Q.1·Q.2·Q.5와 Q.6 파생 질문에 비교 선택지,
+  장단점과 현재 채택 상태를 제공하고 남은 협의를 개발·리걸·제품·운영·보안·
+  조달/파트너·issuer 책임으로 구분했다.
 - 자산별 정책값은 Manifest compiled plan이 소유하고, parameter는
   bounded bytes와 immutable schema identity를 같이 사용한다.
 - production 판정은 exact Recipe family/version을 pin하며 unrelated policy는

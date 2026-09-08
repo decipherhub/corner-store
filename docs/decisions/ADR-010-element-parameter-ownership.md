@@ -46,16 +46,79 @@ Heiji의 답변은 최종 정책 승인이 아니라 **코드 사실 확인과 �
 - **Q.8:** ABI 변경은 지금이 가장 싸다는 의견에 동의하고 우선순위를
   제안했다. 무엇을 실제로 채택할지는 결정권자에게 남겼다.
 
-### 3.2 Heiji가 미정·확인 필요로 남긴 부분
+### 3.2 Heiji가 당시 미정·확인 필요로 남긴 부분과 선택지
 
-- **Q.1:** 자산별 값을 Manifest로 옮길지 — 방향상 반대 이유는 없지만
-  gas·storage와 기존 배포 migration을 측정한 뒤 결정해야 한다고 답했다.
-- **Q.2:** parameter 형식 — `factsPacked`, 자유형 `bytes`, Element별 struct 중
-  하나를 개발팀 단독으로 고르지 않고 반문으로 남겼다.
-- **Q.5:** 감독기관 질의 대응 — 기존 문서에 절차가 있는지 확인하지 못해
-  `[확인 필요]`로 남겼다.
-- **Q.6에서 파생된 질문:** 긴급 상황에서도 새 Element/Recipe/Manifest와
-  1일 timelock을 기다릴지, 별도 우회 권한을 둘지 정하지 않았다.
+아래 항목은 #97 시점에는 미정이었다. 선택지를 비교한 뒤 이번 ADR에서
+어느 안을 채택했는지도 함께 표시한다.
+
+#### Q.1 — 자산별 값을 어디에 둘 것인가?
+
+Heiji는 Manifest 방향에 기술적 반대 이유는 없지만 gas·storage와 기존 배포
+migration을 측정하기 전에는 단독 결정하지 않겠다고 답했다.
+
+1. **모든 값 Manifest 집중:** 정책값·동적 상태·증빙을 한곳에 둔다.
+   - 장점: 조회 위치가 단순하다.
+   - 단점: Manifest가 외부 증빙과 runtime state까지 책임져 경계가 무너진다.
+2. **정책·상태 분리:** 자산별 허용·거부 의미만 Manifest, 증빙과 동적 상태는
+   provider/stateful Element에 둔다.
+   - 장점: 정책 version/hash와 runtime state의 책임이 명확하다.
+   - 단점: 감사 시 Manifest와 상태 provider를 함께 조회해야 한다.
+3. **기존 Element 저장 유지:** 자산별 설정도 각 Element에 계속 저장한다.
+   - 장점: migration이 가장 작다.
+   - 단점: 설정 변경이 Manifest timelock/history/hash와 분리된다.
+
+**현재 채택:** 2번, R-1 정책·상태 분리. gas 상한과 migration 일정만 남았다.
+
+#### Q.2 — parameter를 어떤 형식으로 전달할 것인가?
+
+Heiji는 세 안의 장단점을 제시했지만 공통 술어 정규화 범위를 먼저 볼 필요가
+있다며 선택을 남겼다.
+
+1. **`factsPacked` 확장**
+   - 장점: compact하고 기존 policy hash 재료를 재사용한다.
+   - 단점: 숫자·배열이 늘면 bit layout 충돌과 migration이 복잡해진다.
+2. **bounded `bytes` + immutable schema identity**
+   - 장점: core ABI를 유지하면서 Element마다 필요한 값을 표현할 수 있다.
+   - 단점: Registry·Toolkit에 schema-aware validation이 필요하다.
+3. **Element별 Solidity struct**
+   - 장점: compile-time 타입 안전성이 가장 높다.
+   - 단점: 새 Element마다 core interface와 Toolkit 타입을 바꿔야 한다.
+
+**현재 채택:** 2번, R-2. 고정 bool·enum은 `factsPacked` 사용을 허용한다.
+
+#### Q.5 — 감독기관 질의에 무엇을 제출할 것인가?
+
+Heiji는 기존 architecture에 절차가 있는지 확인하지 못해 `[확인 필요]`로
+남겼고, event 재구성을 전제로 한다면 문서화해야 한다고 답했다.
+
+1. **raw event만 보관:** 질의 때마다 event를 다시 조립한다.
+   - 장점: 별도 snapshot 저장소가 필요 없다.
+   - 단점: 재구성 로직과 배포 증빙이 빠지면 같은 결론을 재현하기 어렵다.
+2. **PII-free policy snapshot + history export**
+   - 장점: 거래별 판정 근거를 표준 형식으로 바로 제출·검증할 수 있다.
+   - 단점: indexer, 보관, 접근 통제 운영이 추가된다.
+3. **외부 provider 기록만 사용:** TA/KYC 사업자의 보고서를 근거로 삼는다.
+   - 장점: 내부 데이터 운영이 줄어든다.
+   - 단점: 온체인 policy version과 실제 Engine 판정을 독립적으로 증명하지 못한다.
+
+**현재 채택:** 2번, R-5. 보관 기간과 운영 주체는 리걸·운영 협의가 남았다.
+
+#### Q.6 파생 질문 — 긴급 교체에 timelock을 유지할 것인가?
+
+Heiji는 기존 ID 덮어쓰기가 #89로 막힌 사실을 확인한 뒤, 새 버전을 배포하는
+동안 1일 timelock을 그대로 지킬지 운영·리걸 결정으로 돌려줬다.
+
+1. **즉시 pause + 새 불변 버전 + 정상 timelock**
+   - 장점: 긴급 상황에도 조용한 compliance 완화 경로가 생기지 않는다.
+   - 단점: 수정·timelock 동안 거래가 중단된다.
+2. **Safe break-glass 즉시 활성화**
+   - 장점: 거래 중단 시간을 줄인다.
+   - 단점: Safe 탈취·오판이 즉시 정책 완화로 이어진다.
+3. **같은 elementId의 구현을 제자리 교체**
+   - 장점: 새 Recipe·Manifest 연결 작업이 작다.
+   - 단점: 동일 ID의 과거·현재 판정 코드가 달라져 감사 재현성이 깨진다.
+
+**현재 채택:** 1번, R-6 안전우선 긴급 교체 정책. 소유자 승인 완료.
 
 ### 3.3 이번 ADR이 채택하는 긴급 교체 정책
 
@@ -70,7 +133,7 @@ PR #97이 새로 돌려준 다음 질문에 대한 답으로 바뀌었다.
 > 거래 중단을 감수하고 정상 timelock을 지킬 것인가, 아니면 긴급 우회
 > 교체 권한을 둘 것인가?
 
-**채택 — 안전우선 긴급 교체 정책**
+§3.2의 세 선택지 중 **1번 안전우선 긴급 교체 정책**을 채택한다.
 
 - 즉시 global/asset/venue pause
 - 새 immutable Element/Recipe/Manifest 배포
@@ -78,16 +141,8 @@ PR #97이 새로 돌려준 다음 질문에 대한 답으로 바뀌었다.
 - 검증 후 거래 재개
 - break-glass 즉시 교체 권한은 두지 않음
 
-**거절 — Safe break-glass 즉시 활성화**
-
-- 장점: 장애 시간을 줄일 수 있다.
-- 거절 이유: Safe 탈취·오판이 timelock 없이 규제 정책 완화로 이어진다.
-
-**거절 — 같은 elementId의 구현을 제자리 교체**
-
-- 장점: Manifest와 Recipe를 다시 연결할 필요가 없다.
-- 거절 이유: 과거 거래와 현재 거래가 같은 ID인데 다른 코드로 판정되어
-  불변성과 감사 재현성이 깨진다.
+거래 중단은 감수하지만 Safe 탈취·오판이 timelock 없이 규제 정책을 완화하는
+경로와 동일 ID의 판정 코드가 바뀌는 감사 문제를 만들지 않는다.
 
 **결정 상태:** 소유자 승인 완료. 이 명시적 승인은 R-6에 한정된다. 나머지
 기술 항목은 아래와 같이 ADR의 통합 기술 결정 또는 향후 협의 사항으로 구분한다.
@@ -136,20 +191,44 @@ R-1~R-5와 R-7~R-10은 #90의 제안, #97의 코드 근거, ADR-006/007,
 
 ### 4.3 앞으로 선택·상의가 필요한 사항
 
-- **Element별 schema 내용** *(개발·보안)*: 각 parameter의 실제 ABI, 단위,
-  범위와 최대 길이
-- **GIWA 운영 한도** *(개발·운영)*: worst-case gas 측정 후 전체 parameter
-  byte와 rule 수 상한
-- **기존 값 migration** *(제품·리걸·개발)*: 어떤 Element의 자산별 값을 언제
-  Manifest로 옮길지
-- **감사 운영** *(리걸·운영·보안)*: snapshot 보관 기간, 접근 권한, indexer
-  운영 주체와 incident 담당
-- **외부 시스템** *(제품·운영·보안)*: KYC/TA provider, Safe signer 구성,
-  indexer/storage vendor
-- **공통 술어 정규화** *(개발·아키텍처)*: 실제 schema 반복이 확인됐을 때
-  별도 ADR로 채택할지
-- **실제 BUIDL 조건** *(issuer/legal·제품)*: 승인된 공식 자료가 들어온 뒤
-  최소금액의 의미, 통화/NAV, 방향, 잔액 조건과 oracle 정책
+#### 개발자 책임
+
+- Element별 parameter ABI, 단위, 범위, maximum byte length 초안 작성
+- GIWA worst-case gas 측정과 전체 parameter byte/rule 수 상한 제안
+- 기존 Element 저장값 inventory와 단계별 migration 기술안 작성
+- 동일 schema가 반복되는지 측정하고 공통 술어 정규화 ADR 필요 여부 제안
+- 각 선택안에 대한 contract/CLI/Toolkit 호환성과 migration 비용 제시
+
+개발자는 법률 의미나 vendor를 단독 선택하지 않고, 측정 결과와 안전한 기술
+선택지를 결정권자에게 제공한다.
+
+#### 리걸 책임
+
+- 어떤 값이 자산별 거래 허용·거부의 법적 의미를 갖는지 승인
+- Element별 parameter의 법적 단위·경계값·적용 방향을 확인
+- policy snapshot 필수 필드, 보관 기간, 접근 권한과 규제기관 제출 형식 확정
+- issuer가 승인한 자료를 기준으로 실제 BUIDL 최소금액의 의미, 통화/NAV,
+  매수·매도·잔액 적용 범위와 oracle 필요성을 확정
+- KYC/TA evidence의 필수성, 만료와 provider 장애 시 fail-closed 기준 승인
+
+리걸 입력이 없으면 BUIDL-like 값은 demo-only이고 production policy로 승격하지
+않는다.
+
+#### 그 외 책임
+
+- **제품:** 어떤 자산과 Element부터 migration할지, downtime·출시 우선순위 결정
+- **운영:** indexer 운영 주체, incident 담당, pause·resume runbook과 SLA 결정
+- **보안:** Safe signer 구성·threshold, key custody, snapshot 접근 통제 검토
+- **조달/파트너:** KYC/TA provider와 indexer/storage vendor 후보·계약 조건 제시
+- **issuer/asset manager:** 실제 상품 조건과 변경 승인 자료 제공
+
+#### 공동 결정이 필요한 최종 항목
+
+1. 개발 측정값을 받은 뒤 GIWA parameter/rule hard cap
+2. 리걸 분류와 제품 우선순위를 합친 Element migration 순서
+3. 리걸 보관 요건과 운영 비용을 합친 snapshot 보관·접근 정책
+4. 보안 평가와 운영 SLA를 합친 Safe signer 및 외부 provider 선정
+5. issuer 승인 자료와 oracle 설계를 합친 실제 BUIDL profile
 
 이 목록은 “현재 구현 결함”과 “아직 정책 선택이 필요한 문제”를 혼동하지
 않기 위한 것이다. R-8의 P0는 바로 구현할 일이고, 위 항목은 측정 결과나
