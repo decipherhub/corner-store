@@ -10,6 +10,32 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## DOC-005 — Element Parameter and Policy Versioning ADR
+
+### Behavior
+
+- PR #90의 ADR-010 제안과 PR #97의 개발팀 회신을 통합해 accepted
+  ADR-010으로 정리했다.
+- 자산별 정책값은 Manifest compiled plan이 소유하고, parameter는
+  bounded bytes와 immutable schema identity를 같이 사용한다.
+- production 판정은 exact Recipe family/version을 pin하며 unrelated policy는
+  기존 family의 새 version으로 등록하지 않는다.
+- 치명적 policy bug는 즉시 pause 후 새 immutable Element/Recipe/Manifest를
+  Safe 승인과 timelock으로 활성화하며 break-glass 교체 백도어를 두지 않는다.
+- PR #98이 이 ADR의 부분 구현이며 recipe identity, CLI preflight,
+  compiled-rule diagnosis, parameter schema 검증을 병합 전 보강해야 함을 명시했다.
+
+### Verification
+
+- Markdown structure/link/path review
+- `git diff --check`
+- docs-only change; runtime behavior unchanged
+
+### State
+
+passing
+
+
 ## CORE-005 — Compliance Core Production Hardening
 
 ### Behavior

@@ -15,6 +15,17 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DOC-005 — Element Parameter and Policy Versioning ADR`: PR #90의 문제 제기와
+  PR #97의 개발팀 회신을 쉽게 읽히는 accepted ADR-010으로 통합했다.
+  자산별 정책값은 Manifest compiled plan, parameter는 bounded bytes +
+  immutable schema identity, production Recipe는 exact family/version pinning으로 확정했다.
+  소유자 결정에 따라 치명적 Element 버그는 break-glass 즉시 교체 대신
+  global/asset/venue pause → 새 Element/Recipe/Manifest 버전 → Safe 승인 +
+  timelock → 배포 후 검증 → 재개 순서를 사용한다. PR #98은 부분
+  구현으로 구분하고 리뷰에서 확인된 병합 전 P0 보강과 production 전
+  P1 후속 작업을 분리했다. 검증: Markdown structure/link/path review,
+  `git diff --check`; docs-only change로 runtime test는 생략했다.
+
 - `SDK-003 — Publishable Package Release Contract`: CLI, Toolkit과 RFQ SDK를
   독립 npm tarball로 build/pack하고 Node 20 clean temporary projects에 설치하는
   release gate를 완성했다. Toolkit packed export/config simulation, generated

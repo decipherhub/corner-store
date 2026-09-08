@@ -21,6 +21,7 @@
 | **ADR-007** | PD-1~PD-7 Phase 1 architecture baseline accepted | 개발팀 | Manifest/Recipe/state/claims/enforcement/governance/lifecycle |
 | **ADR-008** | 취득 출처·상태 카운팅·거절 로깅·라우터 밖 감시 seam | 리걸/PM + 개발팀 | off-chain compliance data layer 기준 |
 | **ADR-009** | production RFQ dealer/settlement baseline | 개발팀 | non-custodial exact full-fill, signer/nonce/risk 운영 경계 |
+| **ADR-010** | Element parameter는 Manifest compiled plan이 소유하고, 불변 policy object는 pause + 새 version + timelock으로 교체 | 소유자 + 개발팀 | #90/#97 통합, #98은 부분 구현 |
 
 ## 2. ✅ 확정 — 사용자(리걸/PM) 비준 [스코프·정책]
 
@@ -87,3 +88,7 @@
 
 - [2026-07-14] ADR-007 accepted PD-1~PD-7 Phase 1 architecture baseline. Section 3 moved from proposed/development-team pending to accepted.
 - [2026-07-30] ADR-008 compliance data seam과 ADR-009 production RFQ policy를 accepted index에 추가.
+- [2026-09-08] PR #90의 ADR-010 제안과 PR #97의 개발팀 회신을 통합해
+  Element parameter ownership, exact Recipe version, immutable-version incident
+  response를 accepted로 확정. 소유자는 break-glass 교체 대신 즉시 pause와
+  Safe/timelock을 거친 새 Element/Recipe/Manifest 버전을 선택.
