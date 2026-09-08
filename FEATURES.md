@@ -16,6 +16,8 @@
 
 - PR #90의 ADR-010 제안과 PR #97의 개발팀 회신을 통합해 accepted
   ADR-010으로 정리했다.
+- Q.1~Q.8과 제안 D-1~D-5를 R-1~R-10 결정 항목으로 연결하고, 각 항목에
+  최종 선택·선택 이유·포기한 대안·trade-off·PR #98 후속을 명시했다.
 - 자산별 정책값은 Manifest compiled plan이 소유하고, parameter는
   bounded bytes와 immutable schema identity를 같이 사용한다.
 - production 판정은 exact Recipe family/version을 pin하며 unrelated policy는
