@@ -24,8 +24,7 @@ source of truth로 사용한다.
   선택 완료, 추가 선택 없이 구현할 작업, 외부 승인·측정·운영 협의가 필요한
   사항을 분리해 다음 행동을 명확히 했다.
   #97에서 미정이었던 각 질문에는 비교 선택지와 장단점·현재 선택을 추가하고,
-  남은 협의를 개발자·리걸·제품·운영·보안·조달/파트너·issuer 책임과 공동
-  결정 항목으로 나눴다.
+  남은 협의를 개발·리걸·그 외의 세 책임 영역과 영역 간 결정 순서로 나눴다.
   자산별 정책값은 Manifest compiled plan, parameter는 bounded bytes +
   immutable schema identity, production Recipe는 exact family/version pinning으로 확정했다.
   소유자 결정에 따라 치명적 Element 버그는 break-glass 즉시 교체 대신

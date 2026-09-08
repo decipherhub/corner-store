@@ -191,7 +191,7 @@ R-1~R-5와 R-7~R-10은 #90의 제안, #97의 코드 근거, ADR-006/007,
 
 ### 4.3 앞으로 선택·상의가 필요한 사항
 
-#### 개발자 책임
+#### 개발
 
 - Element별 parameter ABI, 단위, 범위, maximum byte length 초안 작성
 - GIWA worst-case gas 측정과 전체 parameter byte/rule 수 상한 제안
@@ -199,10 +199,10 @@ R-1~R-5와 R-7~R-10은 #90의 제안, #97의 코드 근거, ADR-006/007,
 - 동일 schema가 반복되는지 측정하고 공통 술어 정규화 ADR 필요 여부 제안
 - 각 선택안에 대한 contract/CLI/Toolkit 호환성과 migration 비용 제시
 
-개발자는 법률 의미나 vendor를 단독 선택하지 않고, 측정 결과와 안전한 기술
+개발은 법률 의미나 vendor를 단독 선택하지 않고, 측정 결과와 안전한 기술
 선택지를 결정권자에게 제공한다.
 
-#### 리걸 책임
+#### 리걸
 
 - 어떤 값이 자산별 거래 허용·거부의 법적 의미를 갖는지 승인
 - Element별 parameter의 법적 단위·경계값·적용 방향을 확인
@@ -214,21 +214,23 @@ R-1~R-5와 R-7~R-10은 #90의 제안, #97의 코드 근거, ADR-006/007,
 리걸 입력이 없으면 BUIDL-like 값은 demo-only이고 production policy로 승격하지
 않는다.
 
-#### 그 외 책임
+#### 그 외
 
-- **제품:** 어떤 자산과 Element부터 migration할지, downtime·출시 우선순위 결정
-- **운영:** indexer 운영 주체, incident 담당, pause·resume runbook과 SLA 결정
-- **보안:** Safe signer 구성·threshold, key custody, snapshot 접근 통제 검토
-- **조달/파트너:** KYC/TA provider와 indexer/storage vendor 후보·계약 조건 제시
-- **issuer/asset manager:** 실제 상품 조건과 변경 승인 자료 제공
+제품·운영·보안·조달/파트너·issuer/asset manager의 책임을 이 범주로 묶는다.
 
-#### 공동 결정이 필요한 최종 항목
+- 어떤 자산과 Element부터 migration할지, downtime과 출시 우선순위 결정
+- indexer 운영 주체, incident 담당, pause·resume runbook과 SLA 결정
+- Safe signer 구성·threshold, key custody, snapshot 접근 통제 검토
+- KYC/TA provider와 indexer/storage vendor 후보·계약 조건 제시
+- 실제 상품 조건과 변경 승인 자료 제공
 
-1. 개발 측정값을 받은 뒤 GIWA parameter/rule hard cap
-2. 리걸 분류와 제품 우선순위를 합친 Element migration 순서
-3. 리걸 보관 요건과 운영 비용을 합친 snapshot 보관·접근 정책
-4. 보안 평가와 운영 SLA를 합친 Safe signer 및 외부 provider 선정
-5. issuer 승인 자료와 oracle 설계를 합친 실제 BUIDL profile
+세 책임 영역은 다음 순서로 남은 결정을 닫는다.
+
+1. 개발의 측정 결과와 리걸의 정책 경계를 받아 GIWA hard cap을 정한다.
+2. 개발 migration 안과 리걸 분류를 받아 그 외 영역이 rollout 순서를 정한다.
+3. 리걸 보관 요건과 개발 export 형식을 받아 그 외 영역이 운영 주체·비용을 정한다.
+4. 개발 통합 조건과 리걸 fail-closed 요건을 받아 그 외 영역이 Safe/provider를 정한다.
+5. issuer 승인 자료와 리걸 해석을 받아 개발이 실제 BUIDL profile을 구현한다.
 
 이 목록은 “현재 구현 결함”과 “아직 정책 선택이 필요한 문제”를 혼동하지
 않기 위한 것이다. R-8의 P0는 바로 구현할 일이고, 위 항목은 측정 결과나
