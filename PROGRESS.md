@@ -19,6 +19,8 @@ source of truth로 사용한다.
   PR #97의 개발팀 회신을 쉽게 읽히는 accepted ADR-010으로 통합했다.
   원래 Q.1~Q.8 및 D-1~D-5를 최종 R-1~R-10에 매핑하고 각 결정의 선택,
   이유, 대안, trade-off와 PR #98 조치를 개별 기록했다.
+  Heiji의 #97 답변·확인 필요·반문, 사용자가 직접 선택한 긴급 교체 A안,
+  나머지 ADR 통합 판단의 출처도 분리해 기록했다.
   자산별 정책값은 Manifest compiled plan, parameter는 bounded bytes +
   immutable schema identity, production Recipe는 exact family/version pinning으로 확정했다.
   소유자 결정에 따라 치명적 Element 버그는 break-glass 즉시 교체 대신

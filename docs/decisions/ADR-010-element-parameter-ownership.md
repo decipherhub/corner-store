@@ -26,20 +26,60 @@ Manifest parameter로 옮기는 구현을 먼저 만들었다.
 예를 들어 `MIN-TRADE-v1` Element는 “거래량이 기준 이상인가”만 판정한다.
 기준이 500만인지 25만인지는 각 token의 Manifest가 정한다.
 
-## 3. 한눈에 보는 최종 결정
+## 3. 결정 과정: 누가 어디까지 답했는가
 
-| 최종 결정 | 원래 항목 | 선택 | 핵심 trade-off |
-| --- | --- | --- | --- |
-| R-1 정책값 소유권 | #90 D-1, Q.1 | 자산별 정책 의미만 Manifest로 이동 | 중복 배포 감소 ↔ schema·storage 비용 |
-| R-2 parameter 형식 | Q.2 | bounded `bytes` + immutable schema identity | ABI 안정성 ↔ 별도 검증 계층 필요 |
-| R-3 Element ABI | #90 D-2, Q.3 | v1 유지, 실제 필요 시 V2 | 현재 변경 회피 ↔ multi-ID 구현은 연기 |
-| R-4 policy commitment | #90 D-3, Q.4 | parameter는 policy hash, 코드는 배포 증빙 | runtime gas 절감 ↔ 배포 증빙 함께 보관 |
-| R-5 감사 재현 | Q.5 | PII-free snapshot + history chain | 설명 가능성 ↔ indexer·보관 운영 필요 |
-| R-6 버그·긴급 교체 | #90 D-4, Q.6, #97 반문 | 즉시 pause 후 새 불변 버전 + Safe/1일 timelock | 백도어 제거 ↔ downtime 감수 |
-| R-7 Recipe version | Q.7 | exact version pin, `latest`는 판정에 금지 | 정책 재현성 ↔ 운영자가 버전 명시 |
-| R-8 구현 우선순위 | Q.8 | #98 P0는 병합 전, 나머지는 production 전 | 안전한 작은 병합 ↔ 단계적 작업 필요 |
-| R-9 술어 정규화 | #90 D-5 | 이번 ADR에서 보류 | 과설계 방지 ↔ 일부 중복 decoder 허용 |
-| R-10 BUIDL-like 500만 | #98 리뷰 | 실제 상품정책이 아닌 demo behavior lock | 데모 보존 ↔ 실제 BUIDL로 표현 금지 |
+### 3.1 PR #97에서 Heiji가 답한 부분
+
+Heiji의 답변은 최종 정책 승인이 아니라 **코드 사실 확인과 개발팀 의견**이다.
+
+- **Q.3:** `check` ABI 변경 범위를 실제 파일 수로 확인했다. 기술적으로는
+  기계적인 변경이며 지금이 나중보다 싸다고 답했다.
+- **Q.4:** Manifest parameter가 기존 policy hash에 들어갈 수 있음을 코드로
+  확인했다. 구현 주소 hash는 immutable registry 안에서는 불필요해 보인다는
+  추론을 제시했지만 최종 결정으로 못박지는 않았다.
+- **Q.6:** PR #89 이후 같은 elementId 덮어쓰기가 금지되어 기존 질문은
+  사실상 해소됐다고 답했다. 대신 “불변 Element의 버그를 긴급하게 어떻게
+  교체할 것인가”를 새 미정 질문으로 돌려줬다.
+- **Q.7:** Recipe 주소와 alias는 불변이지만 `latest` 포인터는 즉시 바뀐다는
+  점을 확인했다. 현재 production 경로는 exact version을 사용하므로 잠재
+  위험이라고 평가했다.
+- **Q.8:** ABI 변경은 지금이 가장 싸다는 의견에 동의하고 우선순위를
+  제안했다. 무엇을 실제로 채택할지는 결정권자에게 남겼다.
+
+### 3.2 Heiji가 미정·확인 필요로 남긴 부분
+
+- **Q.1:** 자산별 값을 Manifest로 옮길지 — 방향상 반대 이유는 없지만
+  gas·storage와 기존 배포 migration을 측정한 뒤 결정해야 한다고 답했다.
+- **Q.2:** parameter 형식 — `factsPacked`, 자유형 `bytes`, Element별 struct 중
+  하나를 개발팀 단독으로 고르지 않고 반문으로 남겼다.
+- **Q.5:** 감독기관 질의 대응 — 기존 문서에 절차가 있는지 확인하지 못해
+  `[확인 필요]`로 남겼다.
+- **Q.6에서 파생된 질문:** 긴급 상황에서도 새 Element/Recipe/Manifest와
+  1일 timelock을 기다릴지, 별도 우회 권한을 둘지 정하지 않았다.
+
+### 3.3 사용자가 직접 선택한 부분
+
+사용자가 선택지 **A**로 명시적으로 확정한 항목은 R-6의 긴급 교체 정책이다.
+
+- 즉시 global/asset/venue pause
+- 새 immutable Element/Recipe/Manifest 배포
+- Safe 승인과 1일 timelock 후 활성화
+- break-glass 즉시 교체 권한은 두지 않음
+
+이 문서의 다른 기술 선택을 모두 사용자가 직접 답변한 것으로 기록하지 않는다.
+
+### 3.4 이 ADR에서 통합 판단한 부분
+
+R-1~R-5와 R-7~R-10은 #90의 제안, #97의 코드 근거, ADR-006/007,
+#98 구현·리뷰 결과를 합쳐 이번 ADR에서 확정하거나 보류한 결론이다.
+
+- **확정:** 자산별 정책 의미만 Manifest로 이동, bounded `bytes` + schema,
+  v1 ABI 유지, parameter hash와 배포 증빙 분리, PII-free 감사 snapshot,
+  exact Recipe version, 단계별 구현 우선순위
+- **보류:** 공통 술어 정규화와 실제 BUIDL 상품 조건
+
+따라서 아래 각 R 항목은 Heiji 답변을 그대로 옮긴 것이 아니라, 답변된 코드
+사실과 남은 미정을 구분한 뒤 최종 결론을 기록한다.
 
 ## 4. 질문별 결정 기록
 
@@ -49,6 +89,13 @@ Manifest parameter로 옮기는 구현을 먼저 만들었다.
 
 **원래 질문:** Element가 가진 값을 모두 Manifest로 옮기는가? 기술적
 걸림돌과 gas·storage 비용은 감수할 만한가?
+
+**#97 Heiji 답변:** `[반문] / [확인 필요]`. 방향상 기술적 반대 이유는
+보이지 않지만 gas·storage와 기존 배포 migration을 실측하기 전에는 개발팀이
+단독으로 결정하지 않겠다고 답했다.
+
+**결정 경로:** 사용자의 별도 직접 선택은 없었다. ADR-006의 자산 독립성
+원칙과 #98 구현 결과를 근거로 이 ADR에서 범위를 제한해 확정했다.
 
 **최종 선택:** 모두 옮기지 않는다. 다음 질문에 “예”인 값만 Manifest의
 compiled plan이 소유한다.
@@ -83,6 +130,13 @@ rule 조합을 GIWA에서 측정하기 전에는 production 상수를 확정하�
 
 **검토한 선택지:** `factsPacked` 확장 / 자유 형식 `bytes` / Element별 struct
 
+**#97 Heiji 답변:** `[반문] / [확인 필요]`. 세 선택지의 장단점만 정리하고
+공통 술어 정규화 범위를 먼저 볼 필요가 있다며 선택을 남겼다.
+
+**결정 경로:** 사용자의 별도 직접 선택은 없었다. #98의 bounded `bytes`
+구현은 유지하되 자유형 bytes의 위험을 schema identity로 보완하는 안을 이
+ADR에서 확정했다.
+
 **최종 선택:** 숫자·배열·확장 가능한 설정은 **크기가 제한된 `bytes`**로
 전달하되, Element가 다음 immutable capability를 선언하게 한다.
 
@@ -111,6 +165,12 @@ production 단계에서 capability metadata와 typed validation을 추가한다.
 Engine 호출부 1곳과 관련 테스트 약 26개가 영향을 받는다. 작업은 기계적이며
 지금이 나중보다 싸다.
 
+**#97 Heiji 답변:** `[답변]`. 위 변경 범위와 비용을 확인했고 지금이 가장
+싸다는 개발 관점에 동의했다. 다만 제품 요구 여부까지 결정한 답변은 아니다.
+
+**결정 경로:** 사용자의 별도 직접 선택은 없었다. 실제 multi-ID 요구가 없는
+상태에서 변경 비용만을 이유로 ABI를 넓히지 않기로 이 ADR에서 판단했다.
+
 **최종 선택:** 그래도 v1 `IComplianceElement.check`에는 `elementId`를 추가하지
 않는다. 하나의 구현이 여러 ID를 처리해야 한다는 실제 제품 요구가 생기면
 `IComplianceElementV2`로 분리한다.
@@ -126,6 +186,13 @@ migration 비용이 생긴다. 대신 현재 25개 Element와 외부 integrator�
 ### R-4 — policy hash에 무엇을 포함하는가?
 
 **원래 항목:** PR #90 D-3, Q.4
+
+**#97 Heiji 답변:** `[답변]`. parameter가 policy hash에 들어가는 경로는
+코드로 확인했다. 구현 주소 hash는 immutable Engine/Registry 배포 안에서는
+불필요해 보인다고 했지만 “검토가 필요한 추론”으로 명시했다.
+
+**결정 경로:** 사용자의 별도 직접 선택은 없었다. Heiji의 코드 근거를 받아
+parameter commitment와 deployment identity를 분리하는 안으로 확정했다.
 
 **최종 선택:** 거래 정책을 바꾸는 parameter와 schema identity는 compiled
 plan/policy hash에 포함한다. Element 구현 주소와 code hash는 다음 배포 증빙에
@@ -148,6 +215,13 @@ evidence를 함께 조회해야 한다. 반대로 runtime gas와 hash 중복은 
 ### R-5 — 감독기관 질의에 어떻게 판정을 재현하는가?
 
 **원래 항목:** Q.5
+
+**#97 Heiji 답변:** `[확인 필요]`. 기존 architecture 문서에 감독기관 질의
+대응 절차가 있는지 확인하지 못했고, event 재구성을 전제로 한다면 명문화해야
+한다는 의견만 남겼다.
+
+**결정 경로:** 사용자의 별도 직접 선택은 없었다. raw event만으로 부족한
+운영 공백을 PII-free snapshot export 요구로 이 ADR에서 닫았다.
 
 **최종 선택:** raw event를 사람이 직접 조립하는 절차만 전제하지 않는다.
 다음 항목을 하나의 PII-free policy snapshot으로 export한다.
@@ -176,6 +250,13 @@ snapshot 보관·검증 운영이 필요하다.
 PR #89가 main에 병합되며 Element identity가 불변이 되었다. 따라서 “기존 ID에
 timelock 교체를 추가할까”가 아니라 “불변 객체의 버그를 어떻게 처리할까”가
 실제 질문이다.
+
+**#97 Heiji 답변:** `[답변] + [반문]`. 기존 덮어쓰기 문제는 해소됐음을
+확인했지만, 새 ID·Recipe·Manifest와 1일 timelock이 긴급 대응으로 충분한지는
+운영·리걸 결정이 필요하다며 답을 돌려줬다.
+
+**결정 경로:** 이 항목은 사용자가 선택지 **A**를 직접 선택했다. 아래 절차는
+그 명시적 결정을 반영한다.
 
 **최종 선택:** 소유자가 선택한 안 A를 적용한다.
 
@@ -210,6 +291,14 @@ break-glass 백도어를 만들지 않는다. 긴급 상황에서는 빠른 정�
 하이재킹은 이미 막혀 있다. 하지만 높은 version 등록 시 `latest` 포인터는
 즉시 바뀐다. 현재 production 판정 경로는 이미 exact version overload를 쓴다.
 
+**#97 Heiji 답변:** `[답변]`. 위 코드 사실을 확인하고 `latest`는 현재
+production 경로에 도달하지 않는 잠재 위험이라고 평가했다. latest 전환 통제를
+함께 다루되 Element 교체보다 낮은 우선순위를 제안했다.
+
+**결정 경로:** 사용자의 별도 직접 선택은 없었다. 현재 production의 exact
+version 방식을 규범으로 고정하고 latest는 발견 용도로만 남기는 안을 이 ADR에서
+확정했다.
+
 **최종 선택:** production 판정은 exact `(recipeKey, version)` 또는 검증된
 동등 바인딩만 사용한다. `latest`는 UI·발견 용도에만 허용한다.
 
@@ -229,6 +318,13 @@ break-glass 백도어를 만들지 않는다. 긴급 상황에서는 빠른 정�
 ### R-8 — 무엇을 언제 구현하는가?
 
 **원래 항목:** Q.8
+
+**#97 Heiji 답변:** `[답변]`. Q.3 ABI 변경은 지금이 가장 싸다는 데 동의하고
+데모 전 처리를 제안했다. 나머지 항목의 최종 일정은 결정권자에게 남겼다.
+
+**결정 경로:** 사용자의 별도 직접 선택은 없었다. R-3에서 ABI를 유지하기로
+했으므로 Q.3 제안은 채택하지 않고, #98 리뷰의 실제 결함을 P0로 올리는 순서를
+이 ADR에서 확정했다.
 
 **최종 선택:** PR #98의 안전한 병합에 필요한 항목과 production 완성 항목을
 분리한다.
@@ -259,6 +355,12 @@ P1 완료 전에는 parameter onboarding을 production 완성으로 표시하지
 
 **원래 항목:** PR #90 D-5(선택 사항)
 
+**#97 Heiji 답변:** Q.2의 형식을 고르기 전에 공통 술어 유형을 어느 정도
+그려보자는 개발팀 제안을 했지만, 채택 결론은 내리지 않았다.
+
+**결정 경로:** 사용자의 별도 직접 선택은 없었다. 이번 parameter 문제를
+해결하는 데 필수는 아니므로 별도 ADR로 보류했다.
+
 **최종 선택:** 이번 ADR에서는 보류한다. 신규 Element의 schema가 실제로
 반복되는지 관찰한 뒤 별도 ADR로 판단한다.
 
@@ -271,6 +373,12 @@ P1 완료 전에는 parameter onboarding을 production 완성으로 표시하지
 ### R-10 — BUIDL-like 500만 기준은 실제 상품정책인가?
 
 **원래 항목:** PR #98 구현과 리뷰에서 확인된 제품 경계
+
+**#97 Heiji 답변:** #97의 Q.1~Q.8 답변 범위에는 실제 BUIDL 수치의 법적 의미를
+확정하는 내용이 없다.
+
+**결정 경로:** 사용자가 실제 BUIDL 조건으로 승인한 값이 아니다. 승인된 외부
+근거가 없다는 저장소 상태에 따라 demo-only 경계를 유지한다.
 
 **최종 선택:** 아니다. 현재 저장소에는 해당 수치가 실제 BUIDL의 최초 청약,
 매수, 매도 또는 거래 후 잔액 중 무엇인지 확정할 승인 자료가 없다.
