@@ -136,11 +136,9 @@ contract DemoScenarios is Script, DemoConstants {
         ManifestCore memory stored = policyReg.manifestOf(address(rwa));
         ManifestCore memory expected = _baseManifest();
         RecipeBinding[] memory storedBindings = policyReg.recipeBindingsOf(address(rwa));
-        bool profileOk =
-            keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
+        bool profileOk = keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
             && stored.factsPacked == expected.factsPacked && stored.fullManifestHash == expected.fullManifestHash;
-        bool ok =
-            stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
+        bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
             && stored.approvedBy == address(factory) && profileOk;
         _writeManifestSnapshot(stored, storedBindings);
         console2.log("    evidence: ACTIVE selected asset profile, approved by factory");
