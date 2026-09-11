@@ -1885,3 +1885,32 @@ passing
   `setRegistryAvailable(true)`를 호출해야 통과가 시작된다.
 - F-03 FraudSurveillance는 STATEFUL(`BaseStatefulElement`)이므로 배포 후
   `setEngine(engine)` wiring이 필요하다(wave-2 D-01 HolderCount와 동일 패턴).
+
+## CMP-005 — A-12 Registration Safety
+
+### Behavior
+
+- opt-in wave-3 배포에서 A-12를 명시적으로 `FLAG_ONLY`로 등록한다.
+- A-12는 거래를 직접 차단하지 않고 red-flag audit와 operator review로 라우팅한다.
+- active Recipe 배선과 production surveillance data source는 이 변경의 범위 밖이다.
+- one-shot Element 등록이 잘못된 기본 action으로 실행되지 않도록 정적 검증 gate를 둔다.
+
+### Verification
+
+- `scripts/check-wave3-element-policies.sh`
+- `forge build tools/deploy-wave3/DeployWave3Elements.s.sol`
+- `forge test --offline --match-path test/unit/registry/ElementRegistry.t.sol`
+- `forge test --offline` (870/870)
+- isolated full `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- PR #96의 배선 위험 분석을 코드와 명세에 반영한다.
+- `RedFlagKnowledgeBar`의 기존 flag-not-block 동작은 변경하지 않는다.
+- 실제 broadcast/E2E는 active Recipe를 변경하지 않는 opt-in 등록 metadata 수정이고
+  배포 키가 필요한 경로이므로 실행하지 않는다.

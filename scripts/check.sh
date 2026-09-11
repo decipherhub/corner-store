@@ -6,6 +6,9 @@ export npm_config_cache=${npm_config_cache:-"${TMPDIR:-/tmp}/corner-store-npm-ca
 
 cd "$ROOT_DIR"
 
+echo "==> Checking opt-in wave-3 element registration policies"
+scripts/check-wave3-element-policies.sh
+
 V3_FACTORY_ARTIFACT="tools/deploy-v3/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json"
 if [ ! -f "$V3_FACTORY_ARTIFACT" ]; then
   echo "==> Installing pinned deploy-v3 dependencies required by canonical pool E2E"
