@@ -15,6 +15,19 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `CMP-005 — A-12 Registration Safety`: opt-in wave-3 배포 스크립트가 A-12를
+  2-인자 기본 `BLOCK` 경로로 등록하던 문제를 수정해 명시적 `FLAG_ONLY`로
+  등록한다. wave-3가 기본 Foundry compile graph 밖에 있는 경계를 유지하면서도
+  `scripts/check-wave3-element-policies.sh`가 one-shot 등록 action의 회귀를
+  fail-closed로 검사한다. 오래된 A-12 명세의 "컨트랙트 미구현" 상태를 현재
+  illustrative reference 구현과 production data-source/Recipe 미배선 경계로
+  정렬했다. 검증: policy check 통과, wave-3 script 단독 build 통과,
+  ElementRegistry 7/7 및 전체 Foundry 870/870 통과, 기존 main의 formatting
+  drift(`script/DeployProductionCore.s.sol`, `script/DemoScenarios.s.sol`)만 검증
+  복사본에서 임시 포맷한 전체 `scripts/check.sh` 통과, `git diff --check` 통과.
+  active Recipe 활성화와 production surveillance 연동은 범위 밖이며 실제
+  broadcast/E2E는 수행하지 않았다.
+
 - `SDK-003 — Publishable Package Release Contract`: CLI, Toolkit과 RFQ SDK를
   독립 npm tarball로 build/pack하고 Node 20 clean temporary projects에 설치하는
   release gate를 완성했다. Toolkit packed export/config simulation, generated
