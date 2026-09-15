@@ -189,6 +189,8 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패
+- canonical `recipeKey + exact version` 조회와 새 catalog version 등록 후에도 기존
+  ACTIVE Manifest/policy ID가 변하지 않는 회귀
 - RecipeBinding의 REQUIRED/PATH/FLAG truth table과 stateful commit 중복 방지
 - Manifest lifecycle, version과 supported engine binding
 - ERC-3643 transfer 거부의 원자적 실패

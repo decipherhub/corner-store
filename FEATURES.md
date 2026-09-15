@@ -10,6 +10,33 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## CORE-008 — Exact Recipe Key and Version Resolution
+
+### Behavior
+
+- Recipe implementation 주소는 canonical `recipeKey + version`으로만 조회한다.
+- numeric `recipeId`는 기존 Manifest binding을 canonical key로 연결하는 immutable
+  compatibility alias이며 latest implementation 의미를 갖지 않는다.
+- catalog/UI discovery는 주소가 아닌 `latestRegisteredVersionOf(recipeKey)` metadata를
+  사용하고, active version은 항상 Manifest `RecipeBinding`에서 읽는다.
+- 새 Recipe version 등록만으로 ACTIVE Manifest, compiled plan 또는 policy ID가
+  변경되지 않는다.
+
+### Verification
+
+- RecipeRegistry 7/7, TokenPolicyRegistry 56/56, Engine 39/39 targeted tests pass
+- CLI/Toolkit build + smoke pass
+- full `scripts/check.sh` pass: Foundry 882/882, all service/package smoke,
+  standalone clean SDK consumer와 deploy-v3 10/10
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ flow pass
+- `TokenPolicyRegistry` runtime 23,978 bytes(EIP-170 margin 598 bytes)
+- `git diff --check` pass
+
+### State
+
+passing
+
+
 ## CORE-007 — Versioned Manifest Policy Config
 
 ### Behavior

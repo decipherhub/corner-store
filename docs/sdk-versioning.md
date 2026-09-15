@@ -50,3 +50,21 @@ step may resolve package code through a repository-relative path.
 Version `0.x` packages remain pre-1.0: any incompatible public change still needs
 a documented migration and a minor-version bump at minimum. Production operators
 should pin exact versions and promote only artifacts that passed the release gate.
+
+### RecipeRegistry exact-version lookup migration
+
+Recipe implementation lookup no longer exposes `recipeOf(uint16 recipeId)` or
+`recipeOf(uint16 recipeId, uint16 version)`. Consumers must resolve the immutable
+compatibility alias and then request the Manifest-bound exact version:
+
+```ts
+const recipeKey = await recipeRegistry.recipeKeyOf(binding.recipeId);
+const implementation = await recipeRegistry.recipeOf(recipeKey, binding.recipeVersion);
+```
+
+A zero key or zero implementation is a fail-closed configuration error. Catalogs
+may read `latestRegisteredVersionOf(recipeKey)`, but that value is display and
+upgrade-discovery metadata only. It must be labelled separately from the active
+Manifest version and must never select an execution implementation. Upgrading an
+asset requires the normal Manifest semantic-update, review, timelock and activation
+lifecycle; registering a new Recipe version alone has no effect on active policy.

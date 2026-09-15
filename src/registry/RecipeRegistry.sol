@@ -11,8 +11,7 @@ contract RecipeRegistry is IRecipeRegistry, Governed {
     bytes32 public constant RECIPE_KEY_DOMAIN = keccak256("corner-store.recipe-key.v1");
 
     mapping(uint16 => bytes32) internal _legacyKeys;
-    mapping(uint16 => address) internal _latestRecipes;
-    mapping(uint16 => uint16) internal _latestVersions;
+    mapping(bytes32 => uint16) internal _latestVersions;
     mapping(bytes32 => mapping(uint16 => address)) internal _recipes;
     mapping(bytes32 => bytes32) internal _aliasToKey;
     mapping(bytes32 => bytes32) internal _keyToAlias;
@@ -74,25 +73,18 @@ contract RecipeRegistry is IRecipeRegistry, Governed {
         if (legacyKey == bytes32(0)) _legacyKeys[recipeId] = recipeKey;
         if (existingRecipeId == 0) _keyToRecipeId[recipeKey] = recipeId;
         _recipes[recipeKey][version] = recipe;
-        if (version > _latestVersions[recipeId]) {
-            _latestVersions[recipeId] = version;
-            _latestRecipes[recipeId] = recipe;
-        }
+        if (version > _latestVersions[recipeKey]) _latestVersions[recipeKey] = version;
 
         emit Events.RecipeRegistered(recipeId, version, recipe);
         emit Events.RecipeRegisteredV2(recipeKey, aliasHash, recipeId, version, recipe);
     }
 
-    function recipeOf(uint16 recipeId) external view returns (address) {
-        return _latestRecipes[recipeId];
-    }
-
-    function recipeOf(uint16 recipeId, uint16 version) external view returns (address) {
-        return _recipes[_legacyKeys[recipeId]][version];
-    }
-
     function recipeOf(bytes32 recipeKey, uint16 version) external view returns (address) {
         return _recipes[recipeKey][version];
+    }
+
+    function latestRegisteredVersionOf(bytes32 recipeKey) external view returns (uint16) {
+        return _latestVersions[recipeKey];
     }
 
     function recipeKeyOf(uint16 recipeId) external view returns (bytes32) {

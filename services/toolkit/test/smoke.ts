@@ -380,6 +380,8 @@ const okReader = {
     if (fn === "isOperator") return true;
     if (fn === "elementOf") return onboardingConfig.elements[0].implementation;
     if (fn === "recipeOf") return onboardingConfig.recipes[0].implementation;
+    if (fn === "recipeKeyOf") return recipeKey;
+    if (fn === "latestRegisteredVersionOf") return 2;
     if (fn === "statusOf") return 2;
     if (fn === "manifestOf") return [2, 1, 2, 0, 1, 5, 7, 1n, 3n, onboardingConfig.manifest.fullManifestHash, "0x8888888888888888888888888888888888888888", "0x5555555555555555555555555555555555555555"];
     if (fn === "recipeBindingsOf") return [[1, 2, 0, 0, 100]];
@@ -431,6 +433,7 @@ const onboardingVerificationPromise = verifyProductionOnboarding(onboardingConfi
       if (fn === "recipeKeyOfAlias") return recipeKey;
       if (fn === "aliasHashOf") return aliasHash;
       if (fn === "recipeKeyOf") return recipeKey;
+      if (fn === "latestRegisteredVersionOf") return 2;
       if (fn === "recipeBindingsOf") return [[1, 2, 0, 0, 100]];
       if (fn === "compiledPlanHashOf") return expectedCompiled.compiledPlanHash;
       if (fn === "compiledBindingCountOf") return BigInt(expectedCompiled.bindings.length);

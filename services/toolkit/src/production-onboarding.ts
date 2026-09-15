@@ -213,9 +213,8 @@ const ELEMENT_REGISTRY = new Interface([
 const RECIPE_REGISTRY = new Interface([
   "function registerRecipe(uint16 recipeId,uint16 version,address recipe)",
   "function registerRecipe(bytes32 aliasHash,bytes32 recipeKey,uint16 recipeId,uint16 version,address recipe)",
-  "function recipeOf(uint16 recipeId) view returns (address)",
-  "function recipeOf(uint16 recipeId,uint16 version) view returns (address)",
   "function recipeOf(bytes32 recipeKey,uint16 version) view returns (address)",
+  "function latestRegisteredVersionOf(bytes32 recipeKey) view returns (uint16)",
   "function recipeKeyOf(uint16 recipeId) view returns (bytes32)",
   "function recipeKeyOfAlias(bytes32 aliasHash) view returns (bytes32)",
   "function aliasHashOf(bytes32 recipeKey) view returns (bytes32)",
@@ -584,16 +583,29 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
     }
   }
   for (const recipe of selected.recipes) {
+    let recipeKey: string;
     if (isV2Onboarding(selected)) {
       const normalizedAlias = normalizeRecipeAlias(recipe.alias!);
       const aliasHash = recipeAliasHash(normalizedAlias);
-      const recipeKey = deriveRecipeKey(aliasHash);
+      recipeKey = deriveRecipeKey(aliasHash);
       await verifyCallHash(reader, selected.addresses.recipeRegistry, ["function recipeKeyOfAlias(bytes32) view returns (bytes32)"], "recipeKeyOfAlias", [aliasHash], recipeKey, `recipe-${recipe.recipeId}-alias-key`, check);
       await verifyCallHash(reader, selected.addresses.recipeRegistry, ["function aliasHashOf(bytes32) view returns (bytes32)"], "aliasHashOf", [recipeKey], aliasHash, `recipe-${recipe.recipeId}-key-alias`, check);
       await verifyCallHash(reader, selected.addresses.recipeRegistry, ["function recipeKeyOf(uint16) view returns (bytes32)"], "recipeKeyOf", [recipe.recipeId], recipeKey, `recipe-${recipe.recipeId}-legacy-key`, check);
-      await verifyCallAddress(reader, selected.addresses.recipeRegistry, ["function recipeOf(bytes32,uint16) view returns (address)"], "recipeOf", [recipeKey, recipe.version], recipe.implementation, `recipe-${recipe.recipeId}-versioned`, check);
     } else {
-      await verifyCallAddress(reader, selected.addresses.recipeRegistry, ["function recipeOf(uint16) view returns (address)"], "recipeOf", [recipe.recipeId], recipe.implementation, `recipe-${recipe.recipeId}`, check);
+      try {
+        recipeKey = String(await reader.call(selected.addresses.recipeRegistry, ["function recipeKeyOf(uint16) view returns (bytes32)"], "recipeKeyOf", [recipe.recipeId]));
+        check(`recipe-${recipe.recipeId}-legacy-key`, !/^0x0{64}$/i.test(recipeKey), `canonicalKey=${recipeKey}`);
+      } catch (err: any) {
+        check(`recipe-${recipe.recipeId}-legacy-key`, false, `unavailable: ${err.message}`);
+        continue;
+      }
+    }
+    await verifyCallAddress(reader, selected.addresses.recipeRegistry, ["function recipeOf(bytes32,uint16) view returns (address)"], "recipeOf", [recipeKey, recipe.version], recipe.implementation, `recipe-${recipe.recipeId}-versioned`, check);
+    try {
+      const latestRegisteredVersion = Number(await reader.call(selected.addresses.recipeRegistry, ["function latestRegisteredVersionOf(bytes32) view returns (uint16)"], "latestRegisteredVersionOf", [recipeKey]));
+      check(`recipe-${recipe.recipeId}-catalog-latest`, latestRegisteredVersion >= recipe.version, `active/exact=${recipe.version}; catalogLatest=${latestRegisteredVersion}`);
+    } catch (err: any) {
+      check(`recipe-${recipe.recipeId}-catalog-latest`, false, `unavailable: ${err.message}`);
     }
   }
   try {

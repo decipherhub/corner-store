@@ -172,15 +172,6 @@ function bindingPriority(binding: any): number {
   return Number(binding.priority ?? binding[4]);
 }
 
-function bindingRecipeIds(bindings: any[]): number[] {
-  const ids: number[] = [];
-  for (const binding of bindings) {
-    const rid = bindingRecipeId(binding);
-    if (rid !== 0 && !ids.includes(rid)) ids.push(rid);
-  }
-  return ids;
-}
-
 function bindingSummary(binding: any): string {
   const rid = bindingRecipeId(binding);
   const version = bindingRecipeVersion(binding);
@@ -1058,12 +1049,18 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
   const coder = require("ethers").AbiCoder.defaultAbiCoder();
   const elementContext = coder.encode([CTX_TUPLE], [ctx]);
   const recipeContext = coder.encode(["uint256", CTX_TUPLE], [manifest.factsPacked, ctx]);
-  const recipeIds = bindingRecipeIds(bindings);
   const recipeReg = recipeRegistry(a, provider);
+  const recipes: Array<{id: number; name: string; key: string; activeVersion: number; latestRegisteredVersion: number}> = [];
   const activeElementIds: string[] = [];
-  for (const rid of recipeIds) {
-    const recipeAddr = await recipeReg.recipeOf(rid);
-    if (recipeAddr === ZERO_ADDR) continue;
+  for (const binding of bindings) {
+    const rid = bindingRecipeId(binding);
+    const activeVersion = bindingRecipeVersion(binding);
+    const recipeKey = String(await recipeReg.recipeKeyOf(rid));
+    if (recipeKey === ZERO32) throw new CliError(`recipe ${rid} has no canonical key in RecipeRegistry`);
+    const recipeAddr = await recipeReg.recipeOf(recipeKey, activeVersion);
+    if (recipeAddr === ZERO_ADDR) throw new CliError(`recipe ${rid} version ${activeVersion} not registered in RecipeRegistry`);
+    const latestRegisteredVersion = Number(await recipeReg.latestRegisteredVersionOf(recipeKey));
+    recipes.push({id: rid, name: RECIPE_LABELS[rid] ?? "?", key: recipeKey, activeVersion, latestRegisteredVersion});
     const recipe = new Contract(recipeAddr, RECIPE_ABI, provider);
     if (!(await recipe.isApplicable(recipeContext))) continue;
     const requiredIds: string[] = await recipe.requiredElements();
@@ -1102,6 +1099,7 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
             status,
             statusName: POLICY_STATUS[status] ?? "?",
             bindings: bindings.map(bindingJson),
+            recipes,
             supportedEngines,
             declaredBy: manifest.declaredBy,
             approvedBy: manifest.approvedBy
@@ -1126,7 +1124,10 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
   console.log("RWA manifest:");
   console.log(`  status           ${status} (${POLICY_STATUS[status] ?? "?"})`);
   console.log("  recipeBindings");
-  for (const binding of bindings) console.log(`    - ${bindingSummary(binding)}`);
+  for (const [index, binding] of bindings.entries()) {
+    const recipe = recipes[index];
+    console.log(`    - ${bindingSummary(binding)} key=${recipe.key} catalogLatest=v${recipe.latestRegisteredVersion}`);
+  }
   console.log(`  supportedEngines 0b${supportedEngines.toString(2).padStart(3, "0")} (AMM=${!!(supportedEngines & 1)}, RFQ=${!!(supportedEngines & 4)})`);
   console.log(`  declaredBy       ${manifest.declaredBy}`);
   console.log(`  approvedBy       ${manifest.approvedBy}`);
@@ -1566,7 +1567,7 @@ export async function cmdCheck(
   const manifest = await policy.manifestOf(a.rwaToken);
   const bindings: any[] = await policy.recipeBindingsOf(a.rwaToken);
   const status = Number(manifest.status);
-  const recipeIds: number[] = [];
+  const recipes: Array<{id: number; name: string; key: string; activeVersion: number; latestRegisteredVersion: number}> = [];
   const coder = require("ethers").AbiCoder.defaultAbiCoder();
   const elementContext = coder.encode([CTX_TUPLE], [ctx]);
   const recipeContext = coder.encode(["uint256", CTX_TUPLE], [manifest.factsPacked, ctx]);
@@ -1584,15 +1585,19 @@ export async function cmdCheck(
   }> = [];
   for (const binding of bindings) {
     const rid = bindingRecipeId(binding);
-    const recipeAddr = await recipeReg.recipeOf(rid);
-    if (recipeAddr === ZERO_ADDR) throw new CliError(`recipe ${rid} not registered in RecipeRegistry`);
+    const activeVersion = bindingRecipeVersion(binding);
+    const recipeKey = String(await recipeReg.recipeKeyOf(rid));
+    if (recipeKey === ZERO32) throw new CliError(`recipe ${rid} has no canonical key in RecipeRegistry`);
+    const recipeAddr = await recipeReg.recipeOf(recipeKey, activeVersion);
+    if (recipeAddr === ZERO_ADDR) throw new CliError(`recipe ${rid} version ${activeVersion} not registered in RecipeRegistry`);
+    const latestRegisteredVersion = Number(await recipeReg.latestRegisteredVersionOf(recipeKey));
     const recipe = new Contract(recipeAddr, RECIPE_ABI, provider);
     const actualVersion = Number(await recipe.version());
-    if (actualVersion !== bindingRecipeVersion(binding)) {
-      throw new CliError(`recipe ${rid} version mismatch: binding=${bindingRecipeVersion(binding)}, registry=${actualVersion}`);
+    if (actualVersion !== activeVersion) {
+      throw new CliError(`recipe ${rid} version mismatch: binding=${activeVersion}, registry=${actualVersion}`);
     }
     if (!(await recipe.isApplicable(recipeContext))) continue;
-    recipeIds.push(rid);
+    recipes.push({id: rid, name: RECIPE_LABELS[rid] ?? "?", key: recipeKey, activeVersion, latestRegisteredVersion});
     const requiredIds: string[] = await recipe.requiredElements();
     for (const raw of requiredIds) {
       const idStr = decodeBytes32String(raw);
@@ -1648,7 +1653,7 @@ export async function cmdCheck(
           seller,
           manifest: {status, statusName: POLICY_STATUS[status] ?? "?"},
           bindings: bindings.map(bindingJson),
-          recipes: recipeIds.map((r) => ({id: r, name: RECIPE_LABELS[r] ?? "?"})),
+          recipes,
           elements: rows,
           verdict: {
             allowed,

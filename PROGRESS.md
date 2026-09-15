@@ -11,10 +11,20 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음.
+없음. 다음 feature는 별도 `origin/main` 기반 branch에서 활성화한다.
 
 ## Completed
 
+- `CORE-008 — Exact Recipe Key and Version Resolution`: 모호한 latest-address 및
+  numeric-address Recipe 조회를 제거하고 Registry, TokenPolicyRegistry, Engine,
+  CLI와 Toolkit을 canonical `recipeKey + exact version`으로 통일했다. numeric
+  `recipeId`는 immutable key alias로만 남고 `latestRegisteredVersionOf(recipeKey)`는
+  catalog metadata로 active Manifest version과 명확히 분리된다. 새 Recipe version
+  등록만으로 기존 ACTIVE policy ID/version/평가 결과가 바뀌지 않는 회귀를 추가했다.
+  검증: RecipeRegistry 7/7, TokenPolicyRegistry 56/56, Engine 39/39, full Foundry
+  882/882, 전체 `scripts/check.sh`, CLI/Toolkit smoke, clean SDK consumer,
+  deploy-v3 10/10, BUIDL-like/Reg-D E2E 각각 7/7 및 dashboard/CLI/RFQ flow.
+  `TokenPolicyRegistry` runtime은 23,978 bytes(EIP-170 margin 598 bytes)다.
 - `CORE-007 — Versioned Manifest Policy Config`: 자산별 Element 정책값을 schema v1
   `ManifestPolicyConfig`로 분리하고 Manifest 등록/semantic update에만 결합했다.
   Registry는 최대 256 entry, 총 16,384 bytes, binding/Recipe membership, 중복,
