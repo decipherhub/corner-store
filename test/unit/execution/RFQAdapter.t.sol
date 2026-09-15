@@ -24,6 +24,7 @@ contract RFQAdapterTest is Test {
     uint256 internal constant MAKER_PK = 0xA11CE;
     uint256 internal constant WRONG_PK = 0xB0B;
     uint256 internal constant DELEGATE_PK = 0xD311;
+    bytes32 internal constant POLICY_ID = keccak256("policy-v1");
 
     address internal maker;
     address internal taker = address(0xCAFE);
@@ -84,6 +85,7 @@ contract RFQAdapterTest is Test {
         returns (ComplianceDecision memory d)
     {
         d.allowed = allowed;
+        d.policyId = POLICY_ID;
         d.allowedVenueTypes = venueTypes;
         d.allowedVenuesHash = venuesHash;
         d.maxAmount = maxAmount;
@@ -98,6 +100,7 @@ contract RFQAdapterTest is Test {
         q.amountIn = 100 ether;
         q.amountOut = 250 ether;
         q.venue = venue;
+        q.policyId = POLICY_ID;
         q.nonce = nonce;
         q.expiry = expiry;
     }
@@ -261,6 +264,16 @@ contract RFQAdapterTest is Test {
         RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
         ExecutionRequest memory req = _request(q, _sign(q, MAKER_PK), 1);
         req.context.amountIn = q.amountIn + 1;
+
+        vm.prank(taker);
+        vm.expectRevert(Errors.RFQQuoteMismatch.selector);
+        router.execute(req);
+    }
+
+    function test_revert_quotePolicyDoesNotMatchFreshSettlementDecision() public {
+        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        q.policyId = keccak256("stale-policy");
+        ExecutionRequest memory req = _request(q, _sign(q, MAKER_PK), 1);
 
         vm.prank(taker);
         vm.expectRevert(Errors.RFQQuoteMismatch.selector);

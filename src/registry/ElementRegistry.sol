@@ -14,6 +14,7 @@ contract ElementRegistry is IElementRegistry, Governed {
     mapping(bytes32 => address) internal _elements;
     mapping(bytes32 => bytes32) internal _metadataHashes;
     mapping(bytes32 => bytes32) internal _versionHashes;
+    mapping(bytes32 => bytes32) internal _runtimeCodeHashes;
     mapping(bytes32 => EnforcementAction) internal _defaultActions;
 
     function registerElement(bytes32 elementId, address element) external onlyOwner {
@@ -65,6 +66,7 @@ contract ElementRegistry is IElementRegistry, Governed {
         _elements[elementId] = element;
         _metadataHashes[elementId] = metadataHash;
         _versionHashes[elementId] = versionHash;
+        _runtimeCodeHashes[elementId] = element.codehash;
         _defaultActions[elementId] = metadata.defaultEnforcement;
 
         emit Events.ElementRegistered(elementId, element);
@@ -98,6 +100,11 @@ contract ElementRegistry is IElementRegistry, Governed {
     function versionHashOf(bytes32 elementId) external view returns (bytes32) {
         if (_elements[elementId] == address(0)) revert Errors.ElementNotRegistered(elementId);
         return _versionHashes[elementId];
+    }
+
+    function runtimeCodeHashOf(bytes32 elementId) external view returns (bytes32) {
+        if (_elements[elementId] == address(0)) revert Errors.ElementNotRegistered(elementId);
+        return _runtimeCodeHashes[elementId];
     }
 
     function defaultActionOf(bytes32 elementId) external view returns (EnforcementAction) {

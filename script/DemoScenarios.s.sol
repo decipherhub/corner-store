@@ -371,6 +371,7 @@ contract DemoScenarios is Script, DemoConstants {
         q.amountIn = tradeAmount;
         q.amountOut = rfqBuyAmountOut;
         q.venue = RFQ_VENUE;
+        (,, q.policyId) = router.engine().policyHashesOf(address(rwa));
         q.nonce = quoteNonce;
         q.expiry = uint64(block.timestamp) + quoteTtlSeconds;
 
@@ -407,6 +408,7 @@ contract DemoScenarios is Script, DemoConstants {
         q.amountIn = sellTradeAmount;
         q.amountOut = rfqSellAmountOut;
         q.venue = RFQ_VENUE;
+        (,, q.policyId) = router.engine().policyHashesOf(address(rwa));
         q.nonce = quoteNonce;
         q.expiry = uint64(block.timestamp) + quoteTtlSeconds;
 

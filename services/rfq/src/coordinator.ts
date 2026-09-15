@@ -111,6 +111,7 @@ export interface PiiFreeQuoteRequest {
   tokenOut: Address;
   amountIn: string;
   venue: Address;
+  policyId: Hex;
   ttlSeconds: number;
 }
 
@@ -353,6 +354,7 @@ export class RFQQuoteCoordinator {
       tokenOut: normalizeAddress(intent.tokenOut, "tokenOut"),
       amountIn: toPositiveUintString(intent.amountIn, "amountIn"),
       venue: normalizeAddress(intent.venue, "venue"),
+      policyId: assertBytes32Hex(intent.policyId, "policyId"),
       ttlSeconds: normalizeTtlSeconds(intent.ttlSeconds ?? this.defaultTtlSeconds)
     };
   }
@@ -408,6 +410,7 @@ export class RFQQuoteCoordinator {
       amountIn: record.request.amountIn,
       amountOut: record.inventoryLease.amount,
       venue: record.request.venue,
+      policyId: record.request.policyId,
       nonce: record.nonce,
       expiry: record.inventoryLease.expiresAt
     };

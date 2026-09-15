@@ -13,10 +13,11 @@ The host owns request-path hardening that belongs outside the SDK:
 2. authentication through an `RFQAuthenticator` port;
 3. exact normalized authenticated-taker binding to body `taker`;
 4. principal-hash keyed rate limiting through a replaceable `RateLimiter` port;
-5. strict coordinator `quoteWithEvidence()` issuance, where the actual pricing result and risk decision carry freshness evidence before nonce reservation;
-6. durable coordinator quote issuance and local signer verification;
-7. strict PII-free audit persistence before returning a quote;
-8. bounded metrics and best-effort incident notification.
+5. trusted on-chain `resolvePolicyId` after auth/rate-limit, never from client input;
+6. strict coordinator `quoteWithEvidence()` issuance, where the actual pricing result and risk decision carry freshness evidence before nonce reservation;
+7. durable coordinator quote issuance and local signer verification;
+8. strict PII-free audit persistence before returning a quote;
+9. bounded metrics and best-effort incident notification.
 
 The request path never logs or audits raw bearer tokens, raw idempotency keys,
 raw request bodies, signer references or stack traces. Audit records carry hashes
@@ -28,6 +29,7 @@ for principal/request/idempotency and on-chain identifiers only.
 | --- | --- | --- |
 | `RFQAuthenticator` | `StaticBearerAuthenticator` for tests | mTLS/OIDC/session authority returning a principal and exact taker claim |
 | `RateLimiter` | bounded in-memory single-process limiter | shared store/service limiter using hashed principal keys |
+| `resolvePolicyId` | injected deterministic resolver in tests | fail-closed RPC/indexer read of the current Engine policy for the regulated token |
 | coordinator pricing/risk modules | SDK test fixtures | actual module return values with `snapshotId`, `version`, `observedAt`, `validUntil`, `available` validated inside `quoteWithEvidence()` |
 | `AuditSink` | memory sink | strict WORM/retention sink; default `strictAudit` fails closed on quote issuance |
 | `MetricsSink` | memory sink | bounded-label metrics, no principal/address labels |
@@ -52,3 +54,5 @@ reason disclosure, signer call and verification failure, strict audit fail-close
 retry without re-signing, incident
 hook isolation, PII-free audit redaction, bounded metrics, successful quote
 issuance and idempotent replay.
+It also proves unauthenticated requests cannot trigger policy resolution and that
+the server-owned resolved policy is included in the EIP-712 v2 quote.

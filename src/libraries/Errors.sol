@@ -16,6 +16,7 @@ library Errors {
     error NonceUsed();
     error DecisionExpired();
     error DecisionMismatch(); // decisionHash != recomputed
+    error ExecutionBindingMismatch(address subject, bytes32 expectedCodeHash, bytes32 actualCodeHash);
     error MaxAmountExceeded();
     error SlippageExceeded();
     error AMMPoolTokenMismatch();

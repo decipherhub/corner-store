@@ -20,7 +20,7 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
     using SafeERC20 for IERC20;
 
     bytes32 public constant RFQ_QUOTE_TYPEHASH = keccak256(
-        "RFQQuote(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,uint256 nonce,uint64 expiry)"
+        "RFQQuote(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,bytes32 policyId,uint256 nonce,uint64 expiry)"
     );
 
     address public router;
@@ -44,7 +44,7 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
         _;
     }
 
-    constructor(IMakerAuthorizer makerAuthorizer_) EIP712("CornerStoreRFQ", "1") {
+    constructor(IMakerAuthorizer makerAuthorizer_) EIP712("CornerStoreRFQ", "2") {
         if (address(makerAuthorizer_) == address(0)) revert Errors.ZeroAddress();
         makerAuthorizer = makerAuthorizer_;
     }
@@ -61,7 +61,7 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
 
     /// @notice Executes a full-fill RFQ quote for a single router request.
     /// @dev `req.venueData` ABI-encodes `(RFQQuote quote, bytes signature)`.
-    function execute(ExecutionRequest calldata req, ComplianceDecision calldata)
+    function execute(ExecutionRequest calldata req, ComplianceDecision calldata decision)
         external
         onlyRouter
         returns (ExecutionResult memory)
@@ -69,7 +69,7 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
         (RFQQuote memory quote, bytes memory signature) = abi.decode(req.venueData, (RFQQuote, bytes));
 
         bytes32 quoteHash = hashQuote(quote);
-        _validateQuote(req, quote, quoteHash, signature);
+        _validateQuote(req, decision, quote, quoteHash, signature);
 
         usedQuoteNonce[quote.maker][quote.nonce] = true;
 
@@ -117,6 +117,7 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
                     quote.amountIn,
                     quote.amountOut,
                     quote.venue,
+                    quote.policyId,
                     quote.nonce,
                     quote.expiry
                 )
@@ -126,6 +127,7 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
 
     function _validateQuote(
         ExecutionRequest calldata req,
+        ComplianceDecision calldata decision,
         RFQQuote memory quote,
         bytes32 quoteHash,
         bytes memory signature
@@ -141,7 +143,8 @@ contract RFQAdapter is IRFQAdapter, Governed, EIP712 {
         if (
             quote.maker == address(0) || quote.taker == address(0) || quote.tokenIn == address(0)
                 || quote.tokenOut == address(0) || quote.venue == address(0) || quote.amountIn == 0
-                || quote.amountOut == 0 || quote.taker != req.context.initiator || quote.taker != req.context.buyer
+                || quote.amountOut == 0 || quote.policyId == bytes32(0) || quote.policyId != decision.policyId
+                || quote.taker != req.context.initiator || quote.taker != req.context.buyer
                 || quote.maker != req.context.seller || quote.tokenIn != req.context.tokenIn
                 || quote.tokenOut != req.context.tokenOut || quote.amountIn != req.context.amountIn
                 || quote.amountOut != req.context.amountOut || quote.venue != req.context.venue

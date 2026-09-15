@@ -10,6 +10,7 @@ export interface RFQQuote {
   amountIn: string;
   amountOut: string;
   venue: Address;
+  policyId: Hex;
   nonce: string;
   expiry: number;
 }
@@ -29,6 +30,7 @@ export interface RFQQuoteRequest {
   amountIn: UintLike;
   amountOut: UintLike;
   venue: Address;
+  policyId: Hex;
   ttlSeconds?: number;
   nonce?: UintLike;
 }
@@ -40,6 +42,7 @@ export interface RFQQuoteIntent {
   tokenOut: Address;
   amountIn: UintLike;
   venue: Address;
+  policyId: Hex;
   ttlSeconds?: number;
 }
 

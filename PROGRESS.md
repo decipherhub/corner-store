@@ -11,11 +11,22 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. 다음 production-core slice는 ADR-010 의존성 순서에 따라 별도 branch에서
-시작한다.
+없음
 
 ## Completed
 
+- `CORE-010 — Policy Execution Binding`: logical policy와 chain/Engine/Registry/
+  Recipe/Element runtime deployment를 domain-separated hash로 결합하고, Registry가
+  등록 시점 code hash를 고정해 live drift를 fail-closed하도록 했다. final
+  `policyId`는 `decisionHash`와 RFQ EIP-712 v2 quote에 포함되며 host가 인증·rate-limit
+  이후 server-owned resolver로 현재 값을 가져온다. settlement는 fresh decision과
+  quote policy가 다르면 token 이동 전에 거부한다. 기본 production 경계는 immutable
+  implementation이며 CREATE2 주소 예측은 runtime 검증을 대체하지 않는다.
+  검증: PolicyHash/DecisionHash 4/4, Engine 42/42, RFQAdapter 25/25, RFQFlow 8/8,
+  RFQ/host/CLI/demo/testnet/Toolkit smoke, full Foundry 897/897, 전체
+  `scripts/check.sh`, clean SDK consumer, deploy-v3 10/10, BUIDL-like/Reg-D E2E 각각
+  7/7 및 dashboard/CLI/RFQ buy/sell. ComplianceEngine runtime 18,640 bytes,
+  TokenPolicyRegistry 24,035 bytes(EIP-170 margin 541 bytes).
 - `CORE-009 — Bounded Predicate and Element Conformance`: Element metadata에
   PII-free evidence source class와 immutable default enforcement를 포함하고,
   Registry가 metadata/default 불일치를 fail-closed하도록 고정했다. exact-length와

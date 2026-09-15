@@ -13,6 +13,7 @@ contract RecipeRegistry is IRecipeRegistry, Governed {
     mapping(uint16 => bytes32) internal _legacyKeys;
     mapping(bytes32 => uint16) internal _latestVersions;
     mapping(bytes32 => mapping(uint16 => address)) internal _recipes;
+    mapping(bytes32 => mapping(uint16 => bytes32)) internal _runtimeCodeHashes;
     mapping(bytes32 => bytes32) internal _aliasToKey;
     mapping(bytes32 => bytes32) internal _keyToAlias;
     mapping(bytes32 => uint16) internal _keyToRecipeId;
@@ -73,6 +74,7 @@ contract RecipeRegistry is IRecipeRegistry, Governed {
         if (legacyKey == bytes32(0)) _legacyKeys[recipeId] = recipeKey;
         if (existingRecipeId == 0) _keyToRecipeId[recipeKey] = recipeId;
         _recipes[recipeKey][version] = recipe;
+        _runtimeCodeHashes[recipeKey][version] = recipe.codehash;
         if (version > _latestVersions[recipeKey]) _latestVersions[recipeKey] = version;
 
         emit Events.RecipeRegistered(recipeId, version, recipe);
@@ -81,6 +83,10 @@ contract RecipeRegistry is IRecipeRegistry, Governed {
 
     function recipeOf(bytes32 recipeKey, uint16 version) external view returns (address) {
         return _recipes[recipeKey][version];
+    }
+
+    function runtimeCodeHashOf(bytes32 recipeKey, uint16 version) external view returns (bytes32) {
+        return _runtimeCodeHashes[recipeKey][version];
     }
 
     function latestRegisteredVersionOf(bytes32 recipeKey) external view returns (uint16) {

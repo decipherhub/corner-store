@@ -12,6 +12,7 @@ struct RFQQuote {
     uint256 amountIn;
     uint256 amountOut;
     address venue;
+    bytes32 policyId;
     uint256 nonce;
     uint64 expiry;
 }

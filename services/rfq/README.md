@@ -7,6 +7,8 @@ It is **not** a production RFQ server and Corner Store does not operate a hosted
 ## What the SDK does
 
 - Builds the RFQ quote shape expected by `RFQAdapter`.
+- Uses EIP-712 domain version `2`; every quote signs the current execution-bound
+  `policyId` and cannot be filled under a different fresh policy.
 - Builds the EIP-712 typed data with the correct domain and field order.
 - Binds quotes to `chainId`, `verifyingContract`, maker, taker, token pair, venue, nonce and expiry.
 - Rejects unsafe JavaScript `number` inputs for on-chain integer fields.
@@ -141,6 +143,10 @@ The Toolkit integration generator and package boundary are documented in
 ## Low-level API
 
 Advanced callers can still use `RFQQuoteService.createSignedQuote()` when they already know `maker`, `amountOut`, `nonce` and expiry policy. This preserves the original reference-service behavior.
+
+Callers must also supply a canonical nonzero `bytes32 policyId`. In production it
+must come from a trusted on-chain Engine resolver, not from unauthenticated client
+input. The hardened host package owns that resolution boundary.
 
 ## Test
 

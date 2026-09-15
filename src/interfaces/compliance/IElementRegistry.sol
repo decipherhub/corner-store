@@ -16,5 +16,7 @@ interface IElementRegistry {
 
     function versionHashOf(bytes32 elementId) external view returns (bytes32);
 
+    function runtimeCodeHashOf(bytes32 elementId) external view returns (bytes32);
+
     function defaultActionOf(bytes32 elementId) external view returns (EnforcementAction);
 }

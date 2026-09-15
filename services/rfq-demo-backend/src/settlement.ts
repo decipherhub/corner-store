@@ -28,7 +28,8 @@ const ROUTER_ABI = [
   "error ComplianceRejected(bytes32 reasonCode)"
 ];
 const ENGINE_ABI = [
-  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))"
+  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))",
+  "function policyHashesOf(address token) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)"
 ];
 const ERC20_ABI = [
   "function balanceOf(address account) view returns (uint256)",
@@ -52,7 +53,7 @@ const QP_ABI = [
 ];
 const POLICY_ABI = ["function statusOf(address token) view returns (uint8)"];
 const QUOTE_TUPLE =
-  "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,uint256 nonce,uint64 expiry)";
+  "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,bytes32 policyId,uint256 nonce,uint64 expiry)";
 const RFQ_MAKER_NOT_APPROVED_SELECTOR = id("RFQMakerNotApproved()").slice(0, 10).toLowerCase();
 const COMPLIANCE_REJECTED_SELECTOR = id("ComplianceRejected(bytes32)").slice(0, 10).toLowerCase();
 const NOT_AUTHORIZED_SELECTOR = id("NotAuthorized()").slice(0, 10).toLowerCase();
@@ -548,7 +549,8 @@ export class DemoSettlementService {
       tokenIn: asAddress(this.config.artifact.quote, "artifact quote"),
       tokenOut: asAddress(this.config.artifact.rwaToken, "artifact rwaToken"),
       amountIn,
-      venue: asAddress(this.config.artifact.rfqVenue, "artifact rfqVenue")
+      venue: asAddress(this.config.artifact.rfqVenue, "artifact rfqVenue"),
+      policyId: await this.currentPolicyId()
     });
     const wallet = this.validateQuote(signed);
     const side = this.sideOf(signed.quote);
@@ -617,7 +619,7 @@ export class DemoSettlementService {
     if (!latest) throw new Error("cannot read latest block for demo settlement");
     const venueData = AbiCoder.defaultAbiCoder().encode(
       [QUOTE_TUPLE, "bytes"],
-      [[q.maker, q.taker, q.tokenIn, q.tokenOut, q.amountIn, q.amountOut, q.venue, q.nonce, q.expiry], signed.signature]
+      [[q.maker, q.taker, q.tokenIn, q.tokenOut, q.amountIn, q.amountOut, q.venue, q.policyId, q.nonce, q.expiry], signed.signature]
     );
     const request = [
       this.context(investorAddress, q.amountIn, q.amountOut, side),
@@ -1000,20 +1002,20 @@ export class DemoSettlementService {
     if (
       !domain
       || domain.name !== "CornerStoreRFQ"
-      || domain.version !== "1"
+      || domain.version !== "2"
       || Number(domain.chainId) !== this.config.chainId
       || asAddress(domain.verifyingContract, "quote verifyingContract").toLowerCase() !== expected.verifyingContract.toLowerCase()
     ) throw new Error("quote domain does not match the deployment artifact");
     if (signed.typedData.primaryType !== "RFQQuote" || !signed.typedData.message) {
       throw new Error("quote typed data is malformed");
     }
-    for (const key of ["maker", "taker", "tokenIn", "tokenOut", "venue", "amountIn", "amountOut", "nonce", "expiry"] as const) {
+    for (const key of ["maker", "taker", "tokenIn", "tokenOut", "venue", "amountIn", "amountOut", "policyId", "nonce", "expiry"] as const) {
       if (String(signed.typedData.message[key]).toLowerCase() !== String(q[key]).toLowerCase()) {
         throw new Error(`quote typed data ${key} does not match the signed quote`);
       }
     }
     const recovered = verifyTypedData(
-      {name: "CornerStoreRFQ", version: "1", chainId: this.config.chainId, verifyingContract: expected.verifyingContract},
+      {name: "CornerStoreRFQ", version: "2", chainId: this.config.chainId, verifyingContract: expected.verifyingContract},
       RFQ_QUOTE_TYPES,
       q,
       signed.signature
@@ -1022,6 +1024,16 @@ export class DemoSettlementService {
       throw new Error("quote signature does not recover the approved maker");
     }
     return wallet;
+  }
+
+  private async currentPolicyId(): Promise<`0x${string}`> {
+    const engine = new Contract(this.requiredArtifact("engine"), ENGINE_ABI, this.provider);
+    const hashes = await engine.policyHashesOf(this.config.artifact.rwaToken);
+    const policyId = String(hashes.policyId ?? hashes[2]);
+    if (!/^0x[0-9a-fA-F]{64}$/.test(policyId) || /^0x0{64}$/i.test(policyId)) {
+      throw new Error("current policyId is unavailable");
+    }
+    return policyId as `0x${string}`;
   }
 
   private sideOf(quote: SignedRFQQuote["quote"]): DemoTradeSide {

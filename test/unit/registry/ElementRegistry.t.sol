@@ -151,6 +151,7 @@ contract ElementRegistryTest is Test {
         reg.registerElement(ELEMENT_ID, address(element));
         assertEq(uint256(reg.defaultActionOf(ELEMENT_ID)), uint256(EnforcementAction.BLOCK));
         assertEq(reg.versionHashOf(ELEMENT_ID), keccak256(bytes("1.0.0")));
+        assertEq(reg.runtimeCodeHashOf(ELEMENT_ID), address(element).codehash);
         assertTrue(reg.metadataHashOf(ELEMENT_ID) != bytes32(0));
 
         MockElement replacement = new MockElement(ELEMENT_ID);

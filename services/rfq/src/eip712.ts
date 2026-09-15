@@ -1,7 +1,7 @@
 import {EIP712Domain, RFQQuote, RFQTypedData} from "./types";
 
 export const RFQ_DOMAIN_NAME = "CornerStoreRFQ";
-export const RFQ_DOMAIN_VERSION = "1";
+export const RFQ_DOMAIN_VERSION = "2";
 
 export const RFQ_QUOTE_TYPES: RFQTypedData["types"] = {
   RFQQuote: [
@@ -12,6 +12,7 @@ export const RFQ_QUOTE_TYPES: RFQTypedData["types"] = {
     {name: "amountIn", type: "uint256"},
     {name: "amountOut", type: "uint256"},
     {name: "venue", type: "address"},
+    {name: "policyId", type: "bytes32"},
     {name: "nonce", type: "uint256"},
     {name: "expiry", type: "uint64"}
   ]

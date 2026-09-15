@@ -54,6 +54,7 @@ const signed = {
     amountIn: "100",
     amountOut: "99",
     venue: artifact.rfqVenue as `0x${string}`,
+    policyId: `0x${"77".repeat(32)}` as `0x${string}`,
     nonce: "7",
     expiry: 999
   },
@@ -61,7 +62,7 @@ const signed = {
   typedData: {
     domain: {
       name: "CornerStoreRFQ",
-      version: "1",
+      version: "2",
       chainId: 31337,
       verifyingContract: artifact.rfqAdapter as `0x${string}`
     },

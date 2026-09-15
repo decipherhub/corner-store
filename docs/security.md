@@ -128,7 +128,7 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   등록되면 Router를 타더라도 settlement 결과가 왜곡될 수 있으므로 governance와
   preflight 검증 대상이다.
 - RFQ와 Order Book signature flow는 chain id, verifying contract, maker/taker,
-  token pair, venue, policy/manifest version, nonce와 expiry를 binding해야 한다.
+  token pair, venue, final policy ID, nonce와 expiry를 binding해야 한다.
 - Slippage, deadline과 amount cap은 서로 다른 축이다. `amountIn`, RWA 수량,
   quote notional과 investor/fund/offering cap의 기준을 혼동하지 않는다.
 - External call, callback, token transfer가 포함된 경로는 access control,
@@ -139,10 +139,13 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 
 - RFQ settlement는 Router-only 진입점이어야 하며 direct adapter call로 compliance
   evaluation을 우회할 수 없어야 한다.
-- signed quote는 chainId, verifyingContract, maker, taker, tokenIn, tokenOut,
-  amountIn, amountOut, venue, nonce와 expiry에 바인딩한다.
+- RFQ EIP-712 v2 signed quote는 chainId, verifyingContract, maker, taker, tokenIn,
+  tokenOut, amountIn, amountOut, venue, quote-time `policyId`, nonce와 expiry에
+  바인딩한다. host는 authenticated request 이후 신뢰된 on-chain resolver로
+  `policyId`를 구하며 client가 임의로 공급한 값을 서명하지 않는다.
 - quote 생성 backend는 compliance 판단을 하지 않는다. fill 시점의 최신
-  `ComplianceEngine.evaluate()`가 최종 gate다.
+  `ComplianceEngine.evaluate()`가 최종 gate이고 quote의 `policyId`와 fresh decision의
+  값이 다르면 settlement를 거부한다.
 - JavaScript service에서 온체인 정수는 unsafe `number`를 거부하고 `bigint` 또는
   decimal string을 사용한다.
 - 기본 nonce 생성은 같은 millisecond 내 quote 충돌을 만들지 않는 단조 증가 fallback을
@@ -157,6 +160,19 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   필요하다.
 - partial fill은 새 quote/adapter version과 별도 accounting/replay 검증 전까지
   활성화하지 않는다.
+
+## Policy Execution Binding Safety
+
+- `logicalPolicyHash`와 `executionBindingHash`는 서로 다른 domain을 사용하며 final
+  `policyId`가 둘을 결합한다.
+- execution binding은 chain ID, Engine/Registry 주소와 runtime code hash, exact
+  Recipe와 compiled Element의 주소/code hash/version/metadata/parameter commitment를
+  포함한다.
+- Element/Recipe 등록 시점 code hash와 평가 시점 code hash가 다르거나 구현 주소가
+  없으면 fail-closed한다. 배포 전 CREATE2 주소 예측만으로 활성화하지 않는다.
+- 현재 production 지원 기본값은 immutable implementation이다. proxy runtime
+  code hash는 implementation slot 변경을 증명하지 못하므로 별도 proxy-aware
+  verifier가 없는 proxy 배포는 지원 대상으로 간주하지 않는다.
 
 ## Production Onboarding Safety
 
