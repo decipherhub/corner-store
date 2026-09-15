@@ -9,7 +9,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
@@ -179,6 +181,8 @@ contract Affiliate is BaseElement, Governed {
                 decidability: Decidability.ATTESTATION_BASED,
                 timing: ObligationTiming.EX_ANTE_VERIFY,
                 statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.PROVIDER_ATTESTATION,
+                defaultEnforcement: EnforcementAction.BLOCK,
                 parameterSchemaId: bytes32(0),
                 parameterSchemaVersion: 0,
                 maxParameterBytes: 0,

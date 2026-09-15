@@ -8,7 +8,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 import {Errors} from "../../libraries/Errors.sol";
@@ -194,6 +196,8 @@ contract FraudSurveillance is BaseStatefulElement {
                 decidability: Decidability.MONITORING_BASED,
                 timing: ObligationTiming.EX_POST_TRIGGER,
                 statefulness: Statefulness.STATEFUL,
+                evidenceType: EvidenceType.ONCHAIN_STATE,
+                defaultEnforcement: EnforcementAction.BLOCK,
                 parameterSchemaId: bytes32(0),
                 parameterSchemaVersion: 0,
                 maxParameterBytes: 0,

@@ -167,15 +167,16 @@ claims. Those require issuer/TA evidence and separate Safe-reviewed onboarding:
    user access.
 
 The Toolkit accepts explicit, versioned production onboarding files. Legacy v1
-input remains accepted for local/demo compatibility; production onboarding
-should use v2 canonical policy fields such
+input remains accepted for local/demo compatibility, and v2 remains readable for
+existing canonical Recipe/enforcement plans. New production onboarding should
+use v3 canonical policy and evidence fields such
 as
 [`services/toolkit/examples/corner-store.production-onboarding.json`](../services/toolkit/examples/corner-store.production-onboarding.json).
 It generates deterministic calldata and Safe-compatible unsigned drafts for the
 reviewed Element, Recipe, Manifest, venue, maker and signer activation sequence.
-The v2 onboarding config must include governance Safe metadata (`safe` and bounded
+The v3 onboarding config must include governance Safe metadata (`safe` and bounded
 `requiredApprovals`), an explicit `operatorExecutor`, each Element's default
-enforcement action, each Recipe's normalized alias/aliasHash/recipeKey and
+enforcement action and evidence type, each Recipe's normalized alias/aliasHash/recipeKey and
 required Element set, bounded strengthen-only enforcement overrides, at least one active
 venue and at least one read-only inventory requirement. Active RFQ venues additionally require an approved maker,
 a signer delegate for an approved maker and inventory for an approved maker:

@@ -11,10 +11,24 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. 다음 feature는 별도 `origin/main` 기반 branch에서 활성화한다.
+없음. 다음 production-core slice는 ADR-010 의존성 순서에 따라 별도 branch에서
+시작한다.
 
 ## Completed
 
+- `CORE-009 — Bounded Predicate and Element Conformance`: Element metadata에
+  PII-free evidence source class와 immutable default enforcement를 포함하고,
+  Registry가 metadata/default 불일치를 fail-closed하도록 고정했다. exact-length와
+  range를 검증하는 BoolClaim/BoundedUint/TimestampWindow/SetMembership primitive와
+  Manifest-owned parameter를 사용하는 generic `MinimumTradeAmount`를 추가했다.
+  Toolkit onboarding schema v3는 evidence type을 검증하며 v1/v2를 재해석 없이
+  읽는다. 범용 DSL과 BUIDL-like 실제 profile migration(#109)은 범위 밖으로 유지했다.
+  검증: targeted ElementRegistry 11/11, PredicateValidation 4/4,
+  MinimumTradeAmount 2/2, Engine 40/40, existing Element 579/579,
+  TokenPolicyRegistry 56/56, Factory 11/11, full Foundry 891/891, 전체
+  `scripts/check.sh`, clean SDK consumer, deploy-v3 10/10, BUIDL-like/Reg-D E2E
+  각각 7/7 및 dashboard/CLI/RFQ flow. `TokenPolicyRegistry` runtime은 24,035
+  bytes(EIP-170 margin 541 bytes)다.
 - `CORE-008 — Exact Recipe Key and Version Resolution`: 모호한 latest-address 및
   numeric-address Recipe 조회를 제거하고 Registry, TokenPolicyRegistry, Engine,
   CLI와 Toolkit을 canonical `recipeKey + exact version`으로 통일했다. numeric

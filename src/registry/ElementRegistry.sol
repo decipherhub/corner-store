@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {Governed} from "../auth/Governed.sol";
 import {IElementRegistry} from "../interfaces/compliance/IElementRegistry.sol";
 import {IComplianceElement} from "../interfaces/compliance/IComplianceElement.sol";
-import {ElementMetadata, EnforcementAction} from "../types/ComplianceTypes.sol";
+import {ElementMetadata, EvidenceType, EnforcementAction} from "../types/ComplianceTypes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Events} from "../libraries/Events.sol";
 
@@ -17,14 +17,19 @@ contract ElementRegistry is IElementRegistry, Governed {
     mapping(bytes32 => EnforcementAction) internal _defaultActions;
 
     function registerElement(bytes32 elementId, address element) external onlyOwner {
-        _registerElement(elementId, element, EnforcementAction.BLOCK);
+        _registerElement(elementId, element, EnforcementAction.BLOCK, false);
     }
 
     function registerElement(bytes32 elementId, address element, EnforcementAction defaultAction) external onlyOwner {
-        _registerElement(elementId, element, defaultAction);
+        _registerElement(elementId, element, defaultAction, true);
     }
 
-    function _registerElement(bytes32 elementId, address element, EnforcementAction defaultAction) internal {
+    function _registerElement(
+        bytes32 elementId,
+        address element,
+        EnforcementAction requestedDefaultAction,
+        bool callerSpecifiedDefault
+    ) internal {
         if (elementId == bytes32(0) || element == address(0) || element.code.length == 0) {
             revert Errors.InvalidElementMetadata(elementId);
         }
@@ -33,7 +38,8 @@ contract ElementRegistry is IElementRegistry, Governed {
         ElementMetadata memory metadata = IComplianceElement(element).elementMetadata();
         if (
             metadata.elementId != elementId || bytes(metadata.version).length == 0
-                || !_validParameterCapability(metadata)
+                || metadata.evidenceType == EvidenceType.UNSPECIFIED || !_validParameterCapability(metadata)
+                || (callerSpecifiedDefault && requestedDefaultAction != metadata.defaultEnforcement)
         ) {
             revert Errors.InvalidElementMetadata(elementId);
         }
@@ -48,6 +54,8 @@ contract ElementRegistry is IElementRegistry, Governed {
                 metadata.decidability,
                 metadata.timing,
                 metadata.statefulness,
+                metadata.evidenceType,
+                metadata.defaultEnforcement,
                 metadata.parameterSchemaId,
                 metadata.parameterSchemaVersion,
                 metadata.maxParameterBytes,
@@ -57,10 +65,10 @@ contract ElementRegistry is IElementRegistry, Governed {
         _elements[elementId] = element;
         _metadataHashes[elementId] = metadataHash;
         _versionHashes[elementId] = versionHash;
-        _defaultActions[elementId] = defaultAction;
+        _defaultActions[elementId] = metadata.defaultEnforcement;
 
         emit Events.ElementRegistered(elementId, element);
-        emit Events.ElementRegisteredV2(elementId, element, metadataHash, versionHash, defaultAction);
+        emit Events.ElementRegisteredV2(elementId, element, metadataHash, versionHash, metadata.defaultEnforcement);
     }
 
     function _validParameterCapability(ElementMetadata memory metadata) internal pure returns (bool) {

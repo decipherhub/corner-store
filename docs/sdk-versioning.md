@@ -68,3 +68,20 @@ upgrade-discovery metadata only. It must be labelled separately from the active
 Manifest version and must never select an execution implementation. Upgrading an
 asset requires the normal Manifest semantic-update, review, timelock and activation
 lifecycle; registering a new Recipe version alone has no effect on active policy.
+
+### Element metadata and onboarding schema v3 migration
+
+`ElementMetadata` now commits `evidenceType` and `defaultEnforcement`. This is a
+contract ABI change: regenerate ABI/types and deploy a new immutable Element and
+Registry set rather than treating an older deployment as compatible. Element
+registration fails when evidence type is `UNSPECIFIED` or an explicitly supplied
+default action differs from metadata.
+
+Production onboarding schema v3 requires every Element entry to declare its
+PII-free evidence source class. Schema v1 and v2 inputs remain parseable under
+their original meanings; the Toolkit does not silently add evidence types to old
+files. Migrate by copying a reviewed v2 file, setting `schemaVersion` to `3`,
+adding one of `TRANSACTION_CONTEXT`, `ONCHAIN_STATE`, `PROVIDER_ATTESTATION` or
+`COMPOSITE` to each Element, regenerating metadata hashes and running the read-only
+production verifier. The verifier compares both evidence type and metadata default
+against live Registry metadata before activation material is accepted.

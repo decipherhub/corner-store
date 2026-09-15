@@ -130,6 +130,16 @@ enum TemporalNature {
     CUMULATIVE
 }
 
+// Source class whose commitment or runtime state supports an Element decision.
+// This describes the evidence boundary, never the raw evidence or PII itself.
+enum EvidenceType {
+    UNSPECIFIED,
+    TRANSACTION_CONTEXT,
+    ONCHAIN_STATE,
+    PROVIDER_ATTESTATION,
+    COMPOSITE
+}
+
 struct ElementMetadata {
     bytes32 elementId;
     ElementCategory category;
@@ -138,6 +148,8 @@ struct ElementMetadata {
     Decidability decidability;
     ObligationTiming timing;
     Statefulness statefulness;
+    EvidenceType evidenceType;
+    EnforcementAction defaultEnforcement;
     // Zero identifies a parameterless Element. A non-zero schema ID is bound
     // to exactly one immutable version and an explicit calldata size bound.
     bytes32 parameterSchemaId;

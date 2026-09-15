@@ -23,7 +23,8 @@ import {
     ElementEnforcementOverride,
     ElementPolicyParameter,
     ManifestPolicyConfig,
-    CompiledElementRule
+    CompiledElementRule,
+    EvidenceType
 } from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 import {Events} from "../../../src/libraries/Events.sol";
@@ -43,7 +44,7 @@ contract TokenPolicyRegistryElementMock is IComplianceElement {
         return (true, bytes32(0));
     }
 
-    function elementMetadata() external view returns (ElementMetadata memory m) {
+    function elementMetadata() public view virtual returns (ElementMetadata memory m) {
         m.elementId = _id;
         m.category = ElementCategory.INVESTOR_ATTRIBUTE;
         m.version = "1.0.0";
@@ -51,6 +52,17 @@ contract TokenPolicyRegistryElementMock is IComplianceElement {
         m.decidability = Decidability.DETERMINISTIC;
         m.timing = ObligationTiming.AT_TRADE_GATE;
         m.statefulness = Statefulness.STATELESS;
+        m.evidenceType = EvidenceType.TRANSACTION_CONTEXT;
+        m.defaultEnforcement = EnforcementAction.BLOCK;
+    }
+}
+
+contract TokenPolicyRegistryFlagElementMock is TokenPolicyRegistryElementMock {
+    constructor(bytes32 id_) TokenPolicyRegistryElementMock(id_) {}
+
+    function elementMetadata() public view override returns (ElementMetadata memory m) {
+        m = super.elementMetadata();
+        m.defaultEnforcement = EnforcementAction.FLAG_ONLY;
     }
 }
 
@@ -79,6 +91,8 @@ contract TokenPolicyRegistryParameterizedElementMock is IComplianceElement {
         m.decidability = Decidability.DETERMINISTIC;
         m.timing = ObligationTiming.AT_TRADE_GATE;
         m.statefulness = Statefulness.STATELESS;
+        m.evidenceType = EvidenceType.TRANSACTION_CONTEXT;
+        m.defaultEnforcement = EnforcementAction.BLOCK;
         m.parameterSchemaId = _schemaId;
         m.parameterSchemaVersion = 1;
         m.maxParameterBytes = 32;
@@ -781,7 +795,7 @@ contract TokenPolicyRegistryTest is Test {
     function test_forceFlagOnly_allowed_only_when_element_default_is_flagOnly() public {
         bytes32 flagElement = bytes32("TP-FLAG-v1");
         elementReg.registerElement(
-            flagElement, address(new TokenPolicyRegistryElementMock(flagElement)), EnforcementAction.FLAG_ONLY
+            flagElement, address(new TokenPolicyRegistryFlagElementMock(flagElement)), EnforcementAction.FLAG_ONLY
         );
         recipeReg.registerRecipe(9, 1, address(new TokenPolicyRegistryRecipeMock(9, 1, flagElement)));
         RecipeBinding[] memory bindings = new RecipeBinding[](1);

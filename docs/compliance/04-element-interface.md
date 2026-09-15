@@ -59,12 +59,33 @@ struct ElementMetadata {
     ObligationTiming timing;          // 언제 작동하나
     Statefulness     statefulness;    // 무엇을 보고 판정하나
 
+    // ── immutable evidence / enforcement boundary ──
+    EvidenceType evidenceType;        // 원본 PII가 아닌 증빙 source class
+    EnforcementAction defaultEnforcement;
+
     // ── immutable parameter capability ──
     bytes32 parameterSchemaId;        // 0이면 parameterless
     uint16  parameterSchemaVersion;   // schemaId=0이면 반드시 0
     uint32  maxParameterBytes;        // schemaId=0이면 0, 전역 상한 4096 bytes
     bool    parametersRequired;       // schemaId=0이면 false
 }
+
+enum EvidenceType {
+    UNSPECIFIED,          // Registry 등록 불가
+    TRANSACTION_CONTEXT,  // 현재 거래 context/amount
+    ONCHAIN_STATE,        // contract state와 registry wiring
+    PROVIDER_ATTESTATION, // provider-signed/committed evidence
+    COMPOSITE             // 둘 이상의 source class
+}
+
+`evidenceType`은 증빙 원문이나 PII가 아니라 검증 boundary의 분류다. Registry는
+`UNSPECIFIED`를 거부하고 `defaultEnforcement`를 metadata hash에 포함한다. 명시적인
+registration default가 metadata와 다르면 fail-closed한다.
+
+공통 parameter decoder는 exact byte length와 range를 검증한다. 현재 반복 primitive는
+canonical bool, bounded uint, timestamp window와 duplicate-free bounded bytes32 set이다.
+이 helper는 법률 규칙을 조합하는 DSL이 아니며 개별 Element identity와 reason code를
+대체하지 않는다.
 
 enum Decidability {
     DETERMINISTIC,     // 온체인 데이터로 기계 판정 (직접 구현)

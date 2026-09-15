@@ -44,10 +44,14 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
   `(recipeKey, version)` implementation만 사용한다. catalog latest version은 활성
   정책 선택에 사용하지 않는다.
 - Element는 하나의 `check(..., context, parameters)` ABI를 사용하고 immutable
-  metadata로 parameter schema ID/version/required/max bytes capability를 선언한다.
+  metadata로 evidence type, default enforcement와 parameter schema
+  ID/version/required/max bytes capability를 선언한다. Registry는 caller가 지정한
+  default와 metadata가 다르거나 evidence type이 미지정이면 등록을 거부한다.
   자산별 실제 정책값은 versioned `ManifestPolicyConfig`가 소유하며 Manifest와
   동일한 proposal/timelock/activation에서만 원자적으로 변경된다. Engine은 Registry가
   activation 전에 검증·정렬한 compiled parameters만 소비한다.
+- 반복되는 bool/uint/time-window/set parameter shape는 exact-length와 bound를
+  검증하는 `PredicateValidation` primitive를 재사용하되 범용 DSL은 만들지 않는다.
 - `REQUIRED_BLOCKING`은 AND, 같은 `pathGroupId`의 `PATH_OPTION`은 OR,
   서로 다른 path group은 AND로 평가하며 `FLAG_ONLY` 실패는 기록만 한다.
 - `tokenIn`과 `tokenOut` 양쪽의 classification과 Manifest를 평가한다.
