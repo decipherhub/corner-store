@@ -41,6 +41,7 @@ authenticated taker
   → request validation / idempotency lookup
   → pricing snapshot
   → inventory and risk eligibility
+  → current on-chain policy ID resolution
   → atomic nonce + time-bounded inventory reservation
   → external signer
   → audit persistence
@@ -68,6 +69,7 @@ size/json/schema validation
   → authenticator principal+taker claim
   → exact normalized taker binding
   → hashed-principal rate limit
+  → trusted current policyId resolution
   → durable coordinator quoteWithEvidence
     (actual pricing result + actual risk decision freshness before reserve/sign)
   → strict PII-free audit
@@ -111,12 +113,16 @@ Client-supplied fields:
 - TTL preference within operator limits
 - idempotency key
 
+Client는 `policyId`를 선택하지 않는다. Host가 인증과 rate-limit 이후 신뢰된 Engine
+read로 값을 해석한다.
+
 Server-owned fields:
 
 - maker
 - amountOut
 - nonce
 - effective TTL/expiry
+- current execution-bound `policyId`
 - pricing/risk/signer module versions
 
 Unsafe JavaScript number, caller-supplied maker/nonce/amountOut, unknown token/venue와
@@ -323,7 +329,8 @@ The operator owns retention, access control and WORM export.
 
 1. Implement durable nonce/idempotency reference adapter and hostile concurrency tests. **Implemented by RFQ-004 for the SDK/reference coordinator boundary; HA production must still provide a transactional DB store.**
 2. Add external signer adapter contract and local signature verification. **Local signature verification implemented by RFQ-004 for direct-maker EIP-712; production authorizer-specific verification remains operator integration work.**
-3. Add versioned `IMakerAuthorizer` and migrate RFQ Adapter without changing v1 quote fields.
+3. Add versioned `IMakerAuthorizer`; this originally preserved v1 quote fields, but
+   CORE-010 intentionally supersedes them with the EIP-712 v2 `policyId` field.
 4. Fix Router regulated-quantity cap before enabling finite caps.
 5. Add production pricing/risk metadata envelope and audit record.
 6. Add service auth/rate-limit/observability reference middleware.

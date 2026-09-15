@@ -1438,6 +1438,12 @@ export async function cmdRfqQuote(opts: GlobalOpts & {
     if (opts.makerAccount === undefined) throw new CliError("--maker-account is required without --backend");
     if (!opts.amountOut) throw new CliError("--amount-out is required without --backend");
     const maker = walletForAccount(Number(opts.makerAccount)).connect(provider);
+    const engine = new Contract(
+      a.engine,
+      ["function policyHashesOf(address) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)"],
+      provider
+    );
+    const policyHashes = await engine.policyHashesOf(a.rwaToken);
 
     const service = new RFQQuoteService(
       {
@@ -1460,6 +1466,7 @@ export async function cmdRfqQuote(opts: GlobalOpts & {
       amountIn,
       amountOut: parseEther(opts.amountOut).toString(),
       venue: a.rfqVenue as `0x${string}`,
+      policyId: String(policyHashes.policyId ?? policyHashes[2]) as `0x${string}`,
       ttlSeconds: ttl
     });
   }

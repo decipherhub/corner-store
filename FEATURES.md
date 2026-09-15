@@ -10,6 +10,40 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## CORE-010 — Policy Execution Binding
+
+### Behavior
+
+- `logicalPolicyHash`와 `executionBindingHash`를 domain-separated hash로 분리하고
+  최종 `policyId`가 두 값을 모두 결합한다.
+- execution binding은 chain ID, Engine/Registry/Recipe/Element 배포 주소와 runtime
+  code hash, exact version/metadata/schema/parameter commitment를 포함한다.
+- `decisionHash`는 최종 `policyId`를 직접 포함한다.
+- RFQ maker quote는 quote-time `policyId`를 서명하고 settlement의 fresh decision과
+  다르면 fail-closed한다.
+- CREATE2 expected address는 배포 전 검증 수단으로만 사용하고 배포 후 runtime code
+  hash 검증을 생략하지 않는다. 기본 production 경로는 immutable 구현이다.
+
+### Verification
+
+- PolicyHashLib 2/2와 DecisionHashLib 2/2 deterministic/domain-separation tests pass
+- Engine 42/42: chain/Engine address binding, single-token quoteable policy ID와
+  Recipe runtime-code drift fail-closed pass
+- RFQAdapter 25/25와 RFQFlow 8/8: stale-policy rejection 및 Router settlement pass
+- RFQ SDK/host/CLI/demo/testnet/Toolkit targeted smoke와 clean generated-project
+  conformance pass
+- full `scripts/check.sh`: Foundry 897/897, all services/packages, standalone clean
+  SDK consumer와 deploy-v3 10/10 pass
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ buy/sell flow pass
+- runtime sizes: ComplianceEngine 18,640 bytes, ElementRegistry 4,260 bytes,
+  RecipeRegistry 3,588 bytes, TokenPolicyRegistry 24,035 bytes(EIP-170 margin 541)
+- `git diff --check` pass
+
+### State
+
+passing
+
+
 ## CORE-009 — Bounded Predicate and Element Conformance
 
 ### Behavior

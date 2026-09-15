@@ -344,6 +344,7 @@ async function main() {
     amountIn: "120000000000000000000",
     amountOut: "200000000000000000000",
     venue: "0x000000000000000000000000000000000000F00D",
+    policyId: `0x${"77".repeat(32)}`,
     ttlSeconds: 3600
   });
   assert(signed.signature.length === 132, "65-byte signature");

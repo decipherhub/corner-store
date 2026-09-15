@@ -19,6 +19,14 @@ contract MockComplianceEngine is IComplianceEngine {
         return _decision;
     }
 
+    function policyHashesOf(address)
+        external
+        view
+        returns (bytes32 logicalPolicyHash, bytes32 executionBindingHash, bytes32 policyId)
+    {
+        return (bytes32(0), bytes32(0), _decision.policyId);
+    }
+
     function commit(ComplianceContext calldata ctx) external {
         committed = true;
         commitCount++;

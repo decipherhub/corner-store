@@ -157,8 +157,24 @@ contract RFQFlowTest is IntegrationBase {
         req.venueData = abi.encode(q, _sign(q));
     }
 
+    function _bindCurrentPolicy(RFQQuote memory q) internal view returns (RFQQuote memory) {
+        ComplianceContext memory ctx;
+        ctx.initiator = alice;
+        ctx.buyer = alice;
+        ctx.seller = maker;
+        ctx.tokenIn = q.tokenIn;
+        ctx.tokenOut = q.tokenOut;
+        ctx.amountIn = q.amountIn;
+        ctx.amountOut = q.amountOut;
+        ctx.venueType = VenueType.RFQ;
+        ctx.venue = RFQ_VENUE;
+        ctx.flowType = FlowType.SECONDARY_TRADE;
+        q.policyId = engine.evaluate(ctx).policyId;
+        return q;
+    }
+
     function _validRequest(uint256 quoteNonce) internal returns (RFQQuote memory q, ExecutionRequest memory req) {
-        q = _quote(quoteNonce, uint64(block.timestamp + 1 hours));
+        q = _bindCurrentPolicy(_quote(quoteNonce, uint64(block.timestamp + 1 hours)));
         req = _buildRfqRequest(q);
     }
 
@@ -233,6 +249,7 @@ contract RFQFlowTest is IntegrationBase {
         q.tokenOut = address(quote);
         q.amountIn = RWA_OUT;
         q.amountOut = QUOTE_IN;
+        q = _bindCurrentPolicy(q);
 
         ExecutionRequest memory req = _buildRfqRequest(q);
         req.context.tokenIn = q.tokenIn;

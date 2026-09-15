@@ -9,6 +9,8 @@ interface IRecipeRegistry {
 
     function recipeOf(bytes32 recipeKey, uint16 version) external view returns (address);
 
+    function runtimeCodeHashOf(bytes32 recipeKey, uint16 version) external view returns (bytes32);
+
     function latestRegisteredVersionOf(bytes32 recipeKey) external view returns (uint16);
 
     function recipeKeyOf(uint16 recipeId) external view returns (bytes32);

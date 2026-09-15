@@ -19,8 +19,17 @@ contract DecisionHashLibTest is Test {
         context.venue = address(6);
         context.flowType = FlowType.PRIMARY_DISTRIBUTION;
 
-        bytes32 actual = DecisionHashLib.compute(context, 300, address(10), 5, bytes32(uint256(7)), 8, 9);
+        bytes32 actual =
+            DecisionHashLib.compute(context, bytes32(uint256(11)), 300, address(10), 5, bytes32(uint256(7)), 8, 9);
 
-        assertEq(actual, 0x9846cf7862a80bb9629750d8823762e2dfe3e2584fdeef36fa712b4e118812ae);
+        assertEq(actual, 0xa78d923d9dd34020e42c2b9a91ead62482bbd4def295d15a418b8da515dcd654);
+    }
+
+    function test_compute_bindsPolicyId() public pure {
+        ComplianceContext memory context;
+        context.initiator = address(1);
+        bytes32 first = DecisionHashLib.compute(context, bytes32(uint256(1)), 2, address(3), 4, bytes32(0), 5, 6);
+        bytes32 second = DecisionHashLib.compute(context, bytes32(uint256(2)), 2, address(3), 4, bytes32(0), 5, 6);
+        assertTrue(first != second);
     }
 }

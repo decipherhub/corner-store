@@ -30,6 +30,7 @@ const TOKEN_IN = "0x3000000000000000000000000000000000000003";
 const TOKEN_OUT = "0x4000000000000000000000000000000000000004";
 const VENUE = "0x5000000000000000000000000000000000000005";
 const ADAPTER = "0x6000000000000000000000000000000000000006";
+const POLICY_ID = `0x${"77".repeat(32)}` as `0x${string}`;
 const childProcess = require("child_process");
 const fs = require("fs");
 const os = require("os");
@@ -81,7 +82,8 @@ async function lowLevelQuoteServiceSmoke() {
     tokenOut: TOKEN_OUT as `0x${string}`,
     amountIn: 100n,
     amountOut: 250n,
-    venue: VENUE
+    venue: VENUE,
+    policyId: POLICY_ID
   });
 
   assert(signed.quote.maker === MAKER.toLowerCase(), "maker normalized");
@@ -128,7 +130,8 @@ async function highLevelSdkSmoke() {
     tokenIn: TOKEN_IN as `0x${string}`,
     tokenOut: TOKEN_OUT as `0x${string}`,
     amountIn: "1000000000000000000",
-    venue: VENUE
+    venue: VENUE,
+    policyId: POLICY_ID
   });
 
   assert(signed.quote.maker === MAKER.toLowerCase(), "SDK maker from config");
@@ -153,11 +156,12 @@ async function highLevelSdkSmoke() {
     tokenIn: TOKEN_IN as `0x${string}`,
     tokenOut: TOKEN_OUT as `0x${string}`,
     amountIn: 10n,
-    venue: VENUE
+    venue: VENUE,
+    policyId: POLICY_ID
   });
   assert(chainTimed.quote.expiry === 1_800_000_060, "SDK supports async chain clock");
 
-  const second = await rfq.quote({taker: TAKER, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, amountIn: 10n, venue: VENUE});
+  const second = await rfq.quote({taker: TAKER, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, amountIn: 10n, venue: VENUE, policyId: POLICY_ID});
   assert(BigInt(second.quote.nonce) > BigInt(signed.quote.nonce), "SDK nonce store is monotonic");
 
   const otherTaker = await rfq.quote({
@@ -165,7 +169,8 @@ async function highLevelSdkSmoke() {
     tokenIn: TOKEN_IN,
     tokenOut: TOKEN_OUT,
     amountIn: 10n,
-    venue: VENUE
+    venue: VENUE,
+    policyId: POLICY_ID
   });
   assert(BigInt(otherTaker.quote.nonce) > BigInt(second.quote.nonce), "SDK nonce is maker-scoped like RFQAdapter");
 
@@ -180,13 +185,13 @@ async function highLevelSdkSmoke() {
   });
 
   await assertRejects(
-    () => rejecting.quote({taker: TAKER, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, amountIn: 1n, venue: VENUE}),
+    () => rejecting.quote({taker: TAKER, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, amountIn: 1n, venue: VENUE, policyId: POLICY_ID}),
     "risk rejection"
   );
   assert(rejectingSigner.calls === 0, "risk check rejects before signing");
 
   await assertRejects(
-    () => rfq.quote({taker: TAKER, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, amountIn: Number.MAX_SAFE_INTEGER + 1, venue: VENUE}),
+    () => rfq.quote({taker: TAKER, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, amountIn: Number.MAX_SAFE_INTEGER + 1, venue: VENUE, policyId: POLICY_ID}),
     "SDK unsafe amount"
   );
 }
@@ -213,6 +218,7 @@ async function moduleConformanceSmoke() {
     tokenIn: TOKEN_IN,
     tokenOut: TOKEN_OUT,
     venue: VENUE as `0x${string}`,
+    policyId: POLICY_ID,
     amountIn: "100",
     now: 1_700_000_000,
     ttlSeconds: 60
@@ -532,7 +538,7 @@ async function strictFreshnessEvidenceSmoke(maker: `0x${string}`, makerWallet: W
   const legacyPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-legacy-")), "store.json");
   const legacyStore = () => new LocalFileQuoteCoordinatorStore({filePath: legacyPath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]});
   const legacyIntent = {...durableIntent("legacy-no-evidence"), amountIn: "1"};
-  const request = {taker: legacyIntent.taker, tokenIn: legacyIntent.tokenIn, tokenOut: legacyIntent.tokenOut, amountIn: legacyIntent.amountIn, venue: legacyIntent.venue, ttlSeconds: legacyIntent.ttlSeconds};
+  const request = {taker: legacyIntent.taker, tokenIn: legacyIntent.tokenIn, tokenOut: legacyIntent.tokenOut, amountIn: legacyIntent.amountIn, venue: legacyIntent.venue, policyId: legacyIntent.policyId, ttlSeconds: legacyIntent.ttlSeconds};
   const scope = {chainId: 31337, adapter: ADAPTER.toLowerCase() as `0x${string}`, maker: maker.toLowerCase() as `0x${string}`};
   const sourceSignedQuote = await coordinator().quote({...durableIntent("tmp-sign"), amountIn: "1"});
   const signedQuote = {
@@ -594,7 +600,7 @@ async function strictReservedReplayEvidenceSmoke(maker: `0x${string}`, makerWall
   const stalePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-reserved-stale-")), "store.json");
   const staleStore = () => new LocalFileQuoteCoordinatorStore({filePath: stalePath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]});
   const staleIntent = {...durableIntent("reserved-stale-evidence"), amountIn: "1"};
-  const staleRequest = {taker: staleIntent.taker, tokenIn: staleIntent.tokenIn, tokenOut: staleIntent.tokenOut, amountIn: staleIntent.amountIn, venue: staleIntent.venue, ttlSeconds: staleIntent.ttlSeconds};
+  const staleRequest = {taker: staleIntent.taker, tokenIn: staleIntent.tokenIn, tokenOut: staleIntent.tokenOut, amountIn: staleIntent.amountIn, venue: staleIntent.venue, policyId: staleIntent.policyId, ttlSeconds: staleIntent.ttlSeconds};
   await staleStore().reserveOrReturnExisting({
     scope,
     idempotencyKeyHash: hashCanonical({value: staleIntent.idempotencyKey}),
@@ -627,7 +633,7 @@ async function strictReservedReplayEvidenceSmoke(maker: `0x${string}`, makerWall
   const freshPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corner-rfq-reserved-fresh-")), "store.json");
   const freshStore = () => new LocalFileQuoteCoordinatorStore({filePath: freshPath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]});
   const freshIntent = {...durableIntent("reserved-fresh-evidence"), amountIn: "1"};
-  const freshRequest = {taker: freshIntent.taker, tokenIn: freshIntent.tokenIn, tokenOut: freshIntent.tokenOut, amountIn: freshIntent.amountIn, venue: freshIntent.venue, ttlSeconds: freshIntent.ttlSeconds};
+  const freshRequest = {taker: freshIntent.taker, tokenIn: freshIntent.tokenIn, tokenOut: freshIntent.tokenOut, amountIn: freshIntent.amountIn, venue: freshIntent.venue, policyId: freshIntent.policyId, ttlSeconds: freshIntent.ttlSeconds};
   await freshStore().reserveOrReturnExisting({
     scope,
     idempotencyKeyHash: hashCanonical({value: freshIntent.idempotencyKey}),
@@ -739,7 +745,7 @@ async function crashAfterReserveResumeSmoke(maker: `0x${string}`, makerWallet: W
     inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "50"}]
   });
   const quoteIntent = {...durableIntent("crash-resume"), amountIn: "10"};
-  const request = {taker: quoteIntent.taker, tokenIn: quoteIntent.tokenIn, tokenOut: quoteIntent.tokenOut, amountIn: quoteIntent.amountIn, venue: quoteIntent.venue, ttlSeconds: quoteIntent.ttlSeconds};
+  const request = {taker: quoteIntent.taker, tokenIn: quoteIntent.tokenIn, tokenOut: quoteIntent.tokenOut, amountIn: quoteIntent.amountIn, venue: quoteIntent.venue, policyId: quoteIntent.policyId, ttlSeconds: quoteIntent.ttlSeconds};
   await store().reserveOrReturnExisting({
     scope: {chainId: 31337, adapter: ADAPTER.toLowerCase() as `0x${string}`, maker: maker.toLowerCase() as `0x${string}`},
     idempotencyKeyHash: hashCanonical({value: "crash-resume"}),
@@ -770,7 +776,7 @@ async function duplicateResumePublishesOneQuoteSmoke(maker: `0x${string}`) {
     inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "50"}]
   });
   const quoteIntent = {...durableIntent("duplicate-resume"), amountIn: "10"};
-  const request = {taker: quoteIntent.taker, tokenIn: quoteIntent.tokenIn, tokenOut: quoteIntent.tokenOut, amountIn: quoteIntent.amountIn, venue: quoteIntent.venue, ttlSeconds: quoteIntent.ttlSeconds};
+  const request = {taker: quoteIntent.taker, tokenIn: quoteIntent.tokenIn, tokenOut: quoteIntent.tokenOut, amountIn: quoteIntent.amountIn, venue: quoteIntent.venue, policyId: quoteIntent.policyId, ttlSeconds: quoteIntent.ttlSeconds};
   const scope = {chainId: 31337, adapter: ADAPTER.toLowerCase() as `0x${string}`, maker: maker.toLowerCase() as `0x${string}`};
   await store().reserveOrReturnExisting({
     scope,
@@ -856,6 +862,7 @@ function durableIntent(idempotencyKey: string) {
     tokenOut: TOKEN_OUT as `0x${string}`,
     amountIn: "1",
     venue: VENUE as `0x${string}`,
+    policyId: POLICY_ID,
     ttlSeconds: 60
   };
 }
@@ -892,7 +899,8 @@ function baseRequest(): RFQQuoteRequest {
     tokenOut: TOKEN_OUT as `0x${string}`,
     amountIn: 100n,
     amountOut: 250n,
-    venue: VENUE
+    venue: VENUE,
+    policyId: POLICY_ID
   };
 }
 

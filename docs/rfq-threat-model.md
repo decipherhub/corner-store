@@ -60,9 +60,10 @@ RFQ settlement에 한정한 actor, asset, trust boundary와 threat/mitigation을
 
 | Threat | Mitigation | Status |
 | ------ | ---------- | ------ |
-| Forged/altered quote | EIP-712 typed hashing + current maker-authorizer + `req.context` 전체 필드 대조(`RFQQuoteMismatch`) | mitigated |
+| Forged/altered quote | EIP-712 v2 typed hashing + current maker-authorizer + `req.context` 전체 필드와 fresh `policyId` 대조(`RFQQuoteMismatch`) | mitigated |
 | Quote replay | per-maker `usedQuoteNonce`(`RFQQuoteUsed`) | mitigated |
 | Stale/expired quote | `expiry` 검사(`RFQQuoteExpired`); ops 권고: 짧은 expiry | mitigated |
+| Policy/implementation changed after quote | server-owned current `policyId`를 서명하고 fill-time fresh decision과 equality 검사; runtime code drift는 Engine에서 fail-closed | mitigated for immutable implementations; proxies unsupported without separate verifier |
 | Settlement outside compliance path | `onlyRouter` + router initiator/nonce/compliance gate | mitigated |
 | Venue-type misreporting | router venue-type binding 검사(`VenueTypeMismatch`) | mitigated |
 | Rogue/unvetted maker | operator `approvedMaker` allowlist(`RFQMakerNotApproved`) | mitigated |

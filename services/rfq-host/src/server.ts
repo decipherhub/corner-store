@@ -10,6 +10,7 @@ import {
   SignedRFQQuote,
   hashCanonical,
   normalizeAddress,
+  normalizeBytes32,
   normalizeTtlSeconds,
   toPositiveUintString
 } from "@corner-store/rfq-service";
@@ -23,6 +24,7 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 
 type JsonRecord = Record<string, unknown>;
 type NormalizedHostQuoteIntent = QuoteCoordinatorIntent & {amountIn: string; ttlSeconds: number};
+type NormalizedHostQuoteBody = Omit<NormalizedHostQuoteIntent, "policyId">;
 
 export interface AuthPrincipal {
   principalId: string;
@@ -74,6 +76,7 @@ export interface ProductionRFQHostConfig {
   port?: number;
   coordinator: RFQQuoteCoordinator;
   authenticator: RFQAuthenticator;
+  resolvePolicyId(request: NormalizedHostQuoteBody): Promise<Hex> | Hex;
   rateLimiter?: RateLimiter;
   audit: AuditSink;
   metrics?: MetricsSink;
@@ -291,21 +294,21 @@ async function handleRequest(
     }
 
     const body = await readJsonBody(req, config.maxBodyBytes);
-    normalized = normalizeQuoteBody(body);
+    const normalizedBody = normalizeQuoteBody(body);
     requestHash = hashCanonical({
-      taker: normalized.taker,
-      tokenIn: normalized.tokenIn,
-      tokenOut: normalized.tokenOut,
-      amountIn: normalized.amountIn,
-      venue: normalized.venue,
-      ttlSeconds: normalized.ttlSeconds
+      taker: normalizedBody.taker,
+      tokenIn: normalizedBody.tokenIn,
+      tokenOut: normalizedBody.tokenOut,
+      amountIn: normalizedBody.amountIn,
+      venue: normalizedBody.venue,
+      ttlSeconds: normalizedBody.ttlSeconds
     });
-    idempotencyKeyHash = hashCanonical({idempotencyKey: normalized.idempotencyKey});
+    idempotencyKeyHash = hashCanonical({idempotencyKey: normalizedBody.idempotencyKey});
 
     const principal = await config.authenticator.authenticate({headers: req.headers, method: req.method ?? "", url: req.url ?? ""});
     const principalTaker = normalizeAddress(principal.taker, "authenticated taker");
     principalHash = hashCanonical({principalId: principal.principalId});
-    if (principalTaker !== normalized.taker) throw new ForbiddenError("authenticated taker does not match request taker");
+    if (principalTaker !== normalizedBody.taker) throw new ForbiddenError("authenticated taker does not match request taker");
 
     const rate = await config.rateLimiter.check({
       principalHash,
@@ -320,6 +323,26 @@ async function handleRequest(
       metric(config, "rfq_host_http_requests_total", {route: "quote", outcome: "rate_limited"});
       return;
     }
+
+    let policyId: Hex;
+    try {
+      policyId = normalizeBytes32(await config.resolvePolicyId(normalizedBody), "policyId");
+    } catch {
+      throw Object.assign(new Error("policy resolver unavailable"), {
+        dependencyModule: "policy",
+        dependencyReason: "unavailable"
+      });
+    }
+    normalized = {...normalizedBody, policyId};
+    requestHash = hashCanonical({
+      taker: normalized.taker,
+      tokenIn: normalized.tokenIn,
+      tokenOut: normalized.tokenOut,
+      amountIn: normalized.amountIn,
+      venue: normalized.venue,
+      policyId: normalized.policyId,
+      ttlSeconds: normalized.ttlSeconds
+    });
 
     const issued = await config.coordinator.quoteWithEvidence(normalized, {now: config.now(), futureSkewSeconds: config.futureSkewSeconds});
     const signed = issued.signedQuote;
@@ -367,7 +390,7 @@ async function handleRequest(
   }
 }
 
-function normalizeQuoteBody(body: unknown): NormalizedHostQuoteIntent {
+function normalizeQuoteBody(body: unknown): NormalizedHostQuoteBody {
   if (!isRecord(body)) throw new Error("request body must be a JSON object");
   if (typeof body.idempotencyKey !== "string" || body.idempotencyKey.length > 256) {
     throw new Error("idempotencyKey must be a 1-256 character string");
@@ -506,6 +529,16 @@ function classifyError(error: unknown): {status: number; publicError: string; re
   if (error instanceof ForbiddenError) return {status: 403, publicError: "forbidden", reason: "taker_binding_mismatch", module: "auth", incident: "auth_abuse"};
   const tagged = error as {statusCode?: number; dependencyReason?: string; dependencyModule?: string; auditFailure?: boolean; message?: string};
   if (tagged.statusCode === 413) return {status: 413, publicError: "request_too_large", reason: "request_too_large", module: "validation"};
+  if (tagged.dependencyModule && tagged.dependencyReason) {
+    const reason = tagged.dependencyReason === "stale" ? "stale" : "unavailable";
+    return {
+      status: 503,
+      publicError: "dependency_unavailable",
+      reason,
+      module: tagged.dependencyModule,
+      incident: reason === "stale" ? "dependency_stale" : "dependency_unavailable"
+    };
+  }
   if (error instanceof RFQCoordinatorError) {
     if (error.code === "RISK_REJECTED") {
       return {status: 422, publicError: "risk_rejected", reason: "risk_rejected", module: "risk"};

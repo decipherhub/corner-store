@@ -61,6 +61,8 @@ Before any production mutation, collect and freeze:
 - operator address, emergency role address and allowed role transitions
 - ERC-3643 token address, identity registry address and trusted issuer evidence
 - legal-approved Element, Recipe and Asset Compliance Manifest bundle hash
+- ComplianceEngine/Registry and exact Recipe/Element implementation addresses plus
+  expected runtime code hashes for final policy execution binding
 - venue address set and maker/signer/inventory activation plan
 - monitoring, alerting and incident-response endpoints
 
@@ -136,12 +138,19 @@ recipes are not production approval.
 For each package, record:
 
 - Element IDs, versions, implementation addresses and source hashes
-- Recipe IDs, versions, required Element set and path/flag behavior
+- Recipe IDs, versions, implementation addresses/runtime code hashes, required
+  Element set and path/flag behavior
 - Asset Compliance Manifest version, binding list and full manifest hash
 - legal approval reference and approval date
 - data-source requirements for each Element
 - fail-closed behavior for stale, missing or invalid provider data
 - operator responsibilities for attestations, pause, suspend, resume and retire
+
+The current supported production profile uses immutable ComplianceEngine,
+Registry, Recipe and Element implementations. CREATE2 expected addresses are
+pre-deployment review aids only; activation evidence must include deployed runtime
+code hashes. Proxy deployments require a separate approved implementation-slot
+verifier and are not covered by the current readiness claim.
 
 No Element, Recipe or Manifest should be activated because it appears in a demo
 profile. Production activation starts from legal approval, then maps to the
@@ -301,7 +310,9 @@ trade flow.
 2. ERC-3643 onboarding verified: token, identity registry and trusted issuers
    match issuer evidence.
 3. Manifest activation: legal-approved Asset Compliance Manifest is registered,
-   approved and active with the expected hash/version.
+   approved and active with the expected hash/version. Read
+   `policyHashesOf(token)` and archive its logical hash, execution binding hash and
+   final policy ID.
 4. Venue activation: venue address and adapter are registered, not paused and
    match the approved profile.
 5. Maker activation: maker settlement account is approved only after inventory
@@ -322,6 +333,8 @@ Minimum monitoring evidence:
 - finality-aware event indexer status and last finalized block
 - owner/operator role snapshot
 - Manifest status, version and full hash
+- logical policy hash, execution binding hash and final policy ID for each active
+  regulated token, with runtime code-hash verification evidence
 - venue registry and pause status
 - maker approval and signer authorization status
 - RFQ nonce/idempotency health if RFQ is enabled

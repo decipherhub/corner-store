@@ -85,3 +85,23 @@ adding one of `TRANSACTION_CONTEXT`, `ONCHAIN_STATE`, `PROVIDER_ATTESTATION` or
 `COMPOSITE` to each Element, regenerating metadata hashes and running the read-only
 production verifier. The verifier compares both evidence type and metadata default
 against live Registry metadata before activation material is accepted.
+
+### RFQ EIP-712 v2 policy binding migration
+
+RFQ quote schema and EIP-712 domain version changed from `1` to `2`. `RFQQuote`,
+`RFQQuoteRequest` and `RFQQuoteIntent` now require a `bytes32 policyId` immediately
+before `nonce`. Existing v1 signatures cannot be replayed as v2 signatures and must
+not be translated or re-signed without issuing a fresh quote.
+
+Production hosts must resolve `policyId` from a trusted on-chain
+`ComplianceEngine.policyHashesOf(regulatedToken)` path after authentication and
+rate limiting. The client does not choose this field. Settlement compares the
+signed value with the fresh `ComplianceDecision.policyId` and rejects a mismatch.
+
+Migration steps:
+
+1. deploy/use the v2 RFQAdapter and regenerate ABI/types;
+2. add the host `resolvePolicyId` integration and fail closed on RPC/read errors;
+3. pass the resolved value through coordinator persistence and signing;
+4. expire or cancel outstanding v1 quotes rather than converting them;
+5. run RFQ SDK/host conformance, Foundry RFQ tests and a Router settlement E2E.

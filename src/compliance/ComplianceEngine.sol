@@ -19,6 +19,7 @@ import {
     Statefulness
 } from "../types/ComplianceTypes.sol";
 import {DecisionHashLib} from "../libraries/DecisionHashLib.sol";
+import {PolicyHashLib} from "../libraries/PolicyHashLib.sol";
 import {ReasonCodes} from "../libraries/ReasonCodes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Governed} from "../auth/Governed.sol";
@@ -62,6 +63,9 @@ contract ComplianceEngine is IComplianceEngine, Governed {
     ITokenPolicyRegistry public immutable policyReg;
     IElementRegistry public immutable elementReg;
     IRecipeRegistry public immutable recipeReg;
+    bytes32 public immutable policyRegistryCodeHash;
+    bytes32 public immutable elementRegistryCodeHash;
+    bytes32 public immutable recipeRegistryCodeHash;
     address public router;
 
     modifier onlyRouter() {
@@ -73,6 +77,9 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         policyReg = policyReg_;
         elementReg = elementReg_;
         recipeReg = recipeReg_;
+        policyRegistryCodeHash = address(policyReg_).codehash;
+        elementRegistryCodeHash = address(elementReg_).codehash;
+        recipeRegistryCodeHash = address(recipeReg_).codehash;
     }
 
     function setRouter(address r) external onlyOwner {
@@ -88,6 +95,17 @@ contract ComplianceEngine is IComplianceEngine, Governed {
             return _passThrough(ctx);
         }
         return _evaluateActivePair(ctx, statusIn, statusOut);
+    }
+
+    function policyHashesOf(address token)
+        public
+        view
+        override
+        returns (bytes32 logicalPolicyHash, bytes32 executionBindingHash, bytes32 policyId)
+    {
+        ManifestCore memory manifest = policyReg.manifestOf(token);
+        RecipeBinding[] memory bindings = policyReg.recipeBindingsOf(token);
+        return _policyHashes(token, manifest, bindings);
     }
 
     function _isPermitted(PolicyStatus status) private pure returns (bool) {
@@ -308,7 +326,14 @@ contract ComplianceEngine is IComplianceEngine, Governed {
 
     function _hash(ComplianceContext calldata ctx, ComplianceDecision memory d) private pure returns (bytes32) {
         return DecisionHashLib.compute(
-            ctx, d.maxAmount, d.maxAmountToken, d.allowedVenueTypes, d.allowedVenuesHash, d.policyVersion, d.validUntil
+            ctx,
+            d.policyId,
+            d.maxAmount,
+            d.maxAmountToken,
+            d.allowedVenueTypes,
+            d.allowedVenuesHash,
+            d.policyVersion,
+            d.validUntil
         );
     }
 
@@ -486,18 +511,75 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         ManifestCore memory manifest,
         RecipeBinding[] memory bindings
     ) private view returns (bytes32) {
-        bindings;
-        return keccak256(
-            abi.encode(
-                acc,
-                token,
-                policyReg.compiledPlanHashOf(token),
-                manifest.supportedEngines,
-                manifest.factsPacked,
-                manifest.coverageScope,
-                manifest.fullManifestHash
-            )
+        (,, bytes32 tokenPolicyId) = _policyHashes(token, manifest, bindings);
+        if (acc == bytes32(0)) return tokenPolicyId;
+        return PolicyHashLib.accumulate(acc, token, tokenPolicyId);
+    }
+
+    function _policyHashes(address token, ManifestCore memory manifest, RecipeBinding[] memory bindings)
+        private
+        view
+        returns (bytes32 logicalPolicyHash, bytes32 executionBindingHash, bytes32 policyId)
+    {
+        logicalPolicyHash = PolicyHashLib.logicalPolicyHash(
+            token,
+            policyReg.compiledPlanHashOf(token),
+            manifest.supportedEngines,
+            manifest.factsPacked,
+            manifest.coverageScope,
+            manifest.fullManifestHash
         );
+
+        _assertRuntimeCode(address(policyReg), policyRegistryCodeHash);
+        _assertRuntimeCode(address(elementReg), elementRegistryCodeHash);
+        _assertRuntimeCode(address(recipeReg), recipeRegistryCodeHash);
+        executionBindingHash = PolicyHashLib.executionRoot(
+            block.chainid,
+            address(this),
+            address(this).codehash,
+            address(policyReg),
+            policyRegistryCodeHash,
+            address(elementReg),
+            elementRegistryCodeHash,
+            address(recipeReg),
+            recipeRegistryCodeHash
+        );
+
+        for (uint256 i = 0; i < bindings.length; i++) {
+            (RecipeBinding memory binding, bytes32 recipeKey,) = policyReg.compiledBindingOf(token, i);
+            address recipe = recipeReg.recipeOf(recipeKey, binding.recipeVersion);
+            bytes32 recipeCodeHash = recipeReg.runtimeCodeHashOf(recipeKey, binding.recipeVersion);
+            _assertRuntimeCode(recipe, recipeCodeHash);
+            executionBindingHash = PolicyHashLib.bindRecipe(
+                executionBindingHash, recipeKey, binding.recipeVersion, recipe, recipeCodeHash
+            );
+
+            CompiledElementRule[] memory rules = policyReg.compiledRulesOf(token, i);
+            bytes[] memory parameters = policyReg.compiledParametersOf(token, i);
+            if (rules.length != parameters.length) revert Errors.InvalidRecipeBinding();
+            for (uint256 j = 0; j < rules.length; j++) {
+                address element = elementReg.elementOf(rules[j].elementId);
+                bytes32 elementCodeHash = elementReg.runtimeCodeHashOf(rules[j].elementId);
+                _assertRuntimeCode(element, elementCodeHash);
+                executionBindingHash = PolicyHashLib.bindElement(
+                    executionBindingHash,
+                    rules[j].elementId,
+                    element,
+                    elementCodeHash,
+                    elementReg.versionHashOf(rules[j].elementId),
+                    elementReg.metadataHashOf(rules[j].elementId),
+                    keccak256(parameters[j])
+                );
+            }
+        }
+        policyId = PolicyHashLib.policyId(logicalPolicyHash, executionBindingHash);
+    }
+
+    function _assertRuntimeCode(address subject, bytes32 expected) private view {
+        bytes32 actual = subject.codehash;
+        if (subject == address(0) || expected == bytes32(0) || actual != expected) {
+            revert Errors.ExecutionBindingMismatch(subject, expected, actual);
+        }
     }
 
     function _max64(uint64 a, uint64 b) private pure returns (uint64) {

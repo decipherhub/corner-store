@@ -25,11 +25,14 @@ const VENUE = "0x5000000000000000000000000000000000000005" as const;
 const ADAPTER = "0x6000000000000000000000000000000000000006" as const;
 const GOOD_TOKEN = "secret-production-token";
 const DUMMY_SIG = `0x${"11".repeat(65)}` as const;
+const POLICY_ID = `0x${"77".repeat(32)}` as const;
 
 async function main(): Promise<void> {
   await rejectsPublicBindWithoutAcknowledgement();
   await rejects401And403();
   await rejectsMalformedOversizeAndRateLimit();
+  await policyResolverRunsOnlyAfterAuthAndRateLimit();
+  await rejectsUnavailableOrZeroPolicyBeforeSigning();
   await limiterCapacityPreventsPrincipalSpray();
   await rejectsStaleMissingFutureFreshnessBeforeSigning();
   await rejectsFreshRiskDecisionWith422();
@@ -79,6 +82,52 @@ async function rejectsMalformedOversizeAndRateLimit(): Promise<void> {
     assert(rateCtx.incident.incidents.some((event) => event.type === "rate_limited" && event.principalHash?.startsWith("sha256:")));
   } finally {
     await rateCtx.close();
+  }
+}
+
+async function policyResolverRunsOnlyAfterAuthAndRateLimit(): Promise<void> {
+  let calls = 0;
+  const config = baseConfig({rateLimiter: new InMemoryRateLimiter({windowMs: 60_000, maxRequests: 1})});
+  config.resolvePolicyId = () => {
+    calls += 1;
+    return POLICY_ID;
+  };
+  const ctx = await start(config);
+  try {
+    assert.equal((await post(ctx.baseUrl, quoteBody("policy-unauth-a"))).status, 401);
+    assert.equal(calls, 0, "unauthenticated request called policy resolver");
+
+    const issued = await post(ctx.baseUrl, quoteBody("policy-auth-a"), GOOD_TOKEN);
+    assert.equal(issued.status, 200);
+    assert.equal(issued.body.quote.policyId, POLICY_ID);
+    assert.equal(calls, 1);
+
+    assert.equal((await post(ctx.baseUrl, quoteBody("policy-rate-a"), GOOD_TOKEN)).status, 429);
+    assert.equal(calls, 1, "rate-limited request called policy resolver");
+  } finally {
+    await ctx.close();
+  }
+}
+
+async function rejectsUnavailableOrZeroPolicyBeforeSigning(): Promise<void> {
+  for (const [name, resolver] of [
+    ["unavailable", () => { throw new Error("RPC secret details"); }],
+    ["zero", () => `0x${"00".repeat(32)}` as const]
+  ] as const) {
+    const config = baseConfig();
+    config.resolvePolicyId = resolver;
+    const ctx = await start(config);
+    try {
+      const response = await post(ctx.baseUrl, quoteBody(`policy-${name}-a`), GOOD_TOKEN);
+      assert.equal(response.status, 503, name);
+      assert.equal(response.body.error, "dependency_unavailable", name);
+      assert.equal(config.signer.signCount, 0, name);
+      assert.deepEqual(readRecords(config.storePath), [], name);
+      assert(ctx.incident.incidents.some((event) => event.type === "dependency_unavailable" && event.module === "policy"), name);
+      assert(!JSON.stringify(ctx.audit.events).includes("RPC secret details"), name);
+    } finally {
+      await ctx.close();
+    }
   }
 }
 
@@ -274,6 +323,7 @@ function baseConfig(overrides: Partial<ProductionRFQHostConfig> & {
     host: "127.0.0.1",
     coordinator,
     authenticator: new StaticBearerAuthenticator([{token: GOOD_TOKEN, taker: TAKER}]),
+    resolvePolicyId: () => POLICY_ID,
     rateLimiter: overrides.rateLimiter,
     audit,
     metrics,

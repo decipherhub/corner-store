@@ -1,7 +1,7 @@
 import {verifyTypedData} from "ethers";
 
 import {createRFQServiceFromModules, validateRFQModuleSet} from "./modules";
-import {Address, RFQModuleSet, SignedRFQQuote} from "./types";
+import {Address, Hex, RFQModuleSet, SignedRFQQuote} from "./types";
 
 export interface RFQConformanceFixture {
   chainId: number;
@@ -12,6 +12,7 @@ export interface RFQConformanceFixture {
   tokenIn: Address;
   tokenOut: Address;
   venue: Address;
+  policyId: Hex;
   amountIn: string;
   now: number;
   ttlSeconds: number;
@@ -200,7 +201,8 @@ function intent(fixture: RFQConformanceFixture, taker: Address) {
     tokenIn: fixture.tokenIn,
     tokenOut: fixture.tokenOut,
     amountIn: fixture.amountIn,
-    venue: fixture.venue
+    venue: fixture.venue,
+    policyId: fixture.policyId
   };
 }
 

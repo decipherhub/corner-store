@@ -52,6 +52,7 @@ contract RecipeRegistryTest is Test {
         bytes32 key = reg.recipeKeyOf(7);
         assertTrue(key != bytes32(0));
         assertEq(reg.recipeOf(key, 1), recipe);
+        assertEq(reg.runtimeCodeHashOf(key, 1), recipe.codehash);
         assertEq(reg.latestRegisteredVersionOf(key), 1);
     }
 

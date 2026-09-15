@@ -83,6 +83,29 @@ parameters는 검토 가능하되 timelock activation 전까지 active evaluatio
 Manifest의 active `recipeVersion`과 별도 필드로 표시해야 하며 실행 주소를 latest로
 추론해서는 안 된다.
 
+## Policy And Execution Identity
+
+정책의 법적·상품 의미와 실제 실행 배포 identity를 별도 domain으로 계산한다.
+
+- `logicalPolicyHash`: token, compiled plan hash, supported engines, facts, coverage와
+  full Manifest hash
+- `executionBindingHash`: chain ID, ComplianceEngine와 세 Registry의 주소/runtime
+  code hash, Manifest가 선택한 exact Recipe 주소/version/code hash, 각 compiled
+  Element의 주소/code hash/version hash/metadata hash/parameter hash
+- `policyId`: 위 두 hash를 domain-separated 방식으로 결합한 최종 식별자
+
+Element/Recipe Registry는 등록 순간의 runtime code hash를 고정한다. Engine은
+평가 시점의 code hash가 고정값과 다르면 `ExecutionBindingMismatch`로 fail-closed한다.
+CREATE2 expected address는 배포 전 주소 예측일 뿐이며 이 runtime 검증을 대체하지
+않는다. 현재 지원 경계는 immutable implementation이고 proxy implementation slot
+추적은 지원하지 않는다.
+
+regulated token이 하나면 decision의 `policyId`는 `policyHashesOf(token)`의 final
+값과 같다. 두 regulated token을 함께 평가하면 두 번째 token 주소와 token별
+`policyId`를 순서대로 누적한다. 최종 `decisionHash`는 이 pair policy ID까지
+포함하므로 동일 거래 context를 다른 chain, Engine 또는 구현 배포에서 재사용할 수
+없다.
+
 ## Inputs and Outputs
 
 입력 context:
@@ -131,7 +154,8 @@ struct ComplianceDecision {
   Recipe를 합쳐 평가한다.
 - `ACTIVE` Manifest의 invalid reference나 unsupported engine은 거부한다.
 - decision은 actor, token, amount, venue, Manifest version, canonical recipe key,
-  compiled Element enforcement plan, nonce와 expiry에 바인딩된다.
+  compiled Element enforcement plan, 최종 execution-bound `policyId`, nonce와 expiry에
+  바인딩된다.
 - preview decision을 settlement 권한으로 사용하지 않는다.
 - settlement 직전에 최신 Manifest와 actor/operator 상태를 평가한다.
 - ERC-3643 transfer 실패를 성공으로 변환하지 않는다.
@@ -154,6 +178,9 @@ struct ComplianceDecision {
   config를 동적으로 해석하지 않고 rules와 정렬된 compiled bytes를 전달한다.
 - Element가 nonzero reasonCode를 반환하면 Engine/CLI가 그 값을 그대로 전달한다.
   zero reason만 recipe-scoped generic code `1`로 fallback한다.
+- logical policy와 execution binding을 domain-separated hash로 유지하고 final
+  `policyId`를 decision과 RFQ EIP-712 quote에 고정한다. Registry가 고정한 runtime
+  code hash와 live code가 다르면 평가를 중단한다.
 - Asset Manifest가 기존 single Recipe mapping/Token Policy 역할을 확장한다.
 - 온체인은 검증·게이팅·집행, 오프체인은 재량 판단·민감 정보·대량 연산을 맡는다.
 - 발행 측 사실은 coverage delta 방식으로 재사용한다.

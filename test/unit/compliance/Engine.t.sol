@@ -66,6 +66,7 @@ contract EngineTest is Test {
     Lockup internal lockup; // C-01-v1
     FormDFiling internal formD; // E-01-v1
     MockAcquisitionSource internal acqSource;
+    RegD506cRecipe internal regdRecipe;
 
     bytes32 internal constant ALLOWED_JX = bytes32("US");
     bytes32 internal constant REG_D_CLASS = bytes32("REG_D");
@@ -117,9 +118,9 @@ contract EngineTest is Test {
         // time pass C-01. (No deadlines are built in these unit tests.)
         vm.warp(uint256(LOCKUP_SECONDS) + 1);
 
-        RegD506cRecipe regd = new RegD506cRecipe();
+        regdRecipe = new RegD506cRecipe();
         Fund3c7Recipe fund = new Fund3c7Recipe();
-        recipeReg.registerRecipe(1, 2, address(regd));
+        recipeReg.registerRecipe(1, 2, address(regdRecipe));
         recipeReg.registerRecipe(2, 1, address(fund));
 
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
@@ -622,6 +623,41 @@ contract EngineTest is Test {
         c.amountIn = c.amountIn + 1;
         ComplianceDecision memory d2 = engine.evaluate(c);
         assertTrue(d1.decisionHash != d2.decisionHash);
+    }
+
+    function test_policyId_bindsChainAndEngineAddress() public {
+        _registerRWA(0, 0);
+        _makeBuyerCompliant();
+
+        ComplianceDecision memory baseline = engine.evaluate(_ctxBuy());
+        (,, bytes32 tokenPolicyId) = engine.policyHashesOf(RWA);
+        assertEq(baseline.policyId, tokenPolicyId, "single regulated token must expose quoteable policy id");
+        ComplianceEngine secondEngine = new ComplianceEngine(policyReg, elementReg, recipeReg);
+        ComplianceDecision memory otherEngine = secondEngine.evaluate(_ctxBuy());
+        assertTrue(baseline.policyId != otherEngine.policyId, "engine address must bind policy identity");
+
+        vm.chainId(block.chainid + 1);
+        ComplianceDecision memory otherChain = engine.evaluate(_ctxBuy());
+        assertTrue(baseline.policyId != otherChain.policyId, "chain id must bind policy identity");
+        assertTrue(baseline.decisionHash != otherChain.decisionHash, "decision must bind final policy identity");
+    }
+
+    function test_executionBindingHash_changesWhenRecipeRuntimeCodeDrifts() public {
+        _registerRWA(0, 0);
+        (bytes32 logicalBefore, bytes32 executionBefore, bytes32 policyBefore) = engine.policyHashesOf(RWA);
+        assertTrue(logicalBefore != bytes32(0) && executionBefore != bytes32(0) && policyBefore != bytes32(0));
+
+        bytes32 expectedCodeHash = recipeReg.runtimeCodeHashOf(recipeReg.recipeKeyOf(1), 2);
+        vm.etch(address(regdRecipe), hex"00");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Errors.ExecutionBindingMismatch.selector,
+                address(regdRecipe),
+                expectedCodeHash,
+                address(regdRecipe).codehash
+            )
+        );
+        engine.policyHashesOf(RWA);
     }
 
     function test_element_not_registered_reverts() public {

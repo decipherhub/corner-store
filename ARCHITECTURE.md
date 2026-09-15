@@ -55,6 +55,10 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - `REQUIRED_BLOCKING`은 AND, 같은 `pathGroupId`의 `PATH_OPTION`은 OR,
   서로 다른 path group은 AND로 평가하며 `FLAG_ONLY` 실패는 기록만 한다.
 - `tokenIn`과 `tokenOut` 양쪽의 classification과 Manifest를 평가한다.
+- 정책 identity는 의미와 실행 배포를 분리한다. `logicalPolicyHash`는 Manifest와
+  compiled plan을, `executionBindingHash`는 chain ID와 Engine/Registry/Recipe/Element의
+  주소·등록 시점 runtime code hash를 고정하며 최종 `policyId`가 둘을 결합한다.
+  `decisionHash`와 RFQ quote는 이 최종 `policyId`를 포함한다.
 - Asset Compliance Manifest는 자산별 Recipe, engine, version과 발행 측 coverage를
   binding한다.
 - compliance evaluation은 venue 실행과 분리한다.
@@ -68,6 +72,9 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - Router 밖 경로는 발행자 token-level enforcement에 위임하거나, controlled
   venue/settlement로 제한하거나, 명시적으로 제품 범위 밖으로 선언해야 한다.
 - 무거운 자료와 재량 판단은 오프체인, 검증·게이팅·집행은 온체인에 둔다.
+- production Compliance Core는 immutable implementation을 기본으로 한다. 현재
+  execution binding은 proxy implementation slot을 해석하지 않으므로 proxy를
+  immutable 구현과 동등한 검증 대상으로 주장하지 않는다.
 - `tools/deploy-v3`는 Corner Store 제품 코드와 분리된 vendored 인프라다.
 
 현재 세부 경계:

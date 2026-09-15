@@ -39,6 +39,12 @@ inspection과 timelock 원자 교체를 검증한다. `Engine.t.sol`은 binding 
 index의 compiled bytes가 실제 Element 판정에 전달되는지 검증한다. 기존 demo
 Manifest의 empty config 경로도 full Foundry와 두 Anvil profile E2E에서 회귀한다.
 
+정책 실행 identity는 `PolicyHashLib.t.sol`, `DecisionHashLib.t.sol`과 `Engine.t.sol`에서
+domain separation, deterministic vector, chain/Engine 주소 차이, Recipe runtime code
+drift fail-closed와 decision의 final `policyId` binding을 검증한다. `RFQAdapter.t.sol`은
+quote-time policy와 settlement 직전 fresh decision policy가 다를 때 체결 전
+거부되는지 확인한다.
+
 RFQ TypeScript SDK smoke test:
 
 ```sh
@@ -47,7 +53,9 @@ npm ci
 npm test
 ```
 
-이 smoke test는 EIP-712 typed-data shape, high-level SDK quote flow, pricing/nonce/risk seams, expiry/nonce 부여, unsafe JavaScript number 거부와 monotonic nonce fallback을 검증한다.
+이 smoke test는 EIP-712 v2 typed-data의 `policyId` shape, high-level SDK quote flow,
+pricing/nonce/risk seams, expiry/nonce 부여, unsafe JavaScript number 거부와 monotonic
+nonce fallback을 검증한다.
 
 RFQ demo backend와 CLI smoke test:
 
@@ -69,6 +77,9 @@ RESERVED replay evidence 재검증/terminal release, signer call/verification
 failure, strict audit failure 후 같은 quote/no-resign retry, incident-hook
 failure isolation, PII-free audit redaction, bounded metrics, successful quote와
 idempotent replay를 검증한다.
+또한 unauthenticated 요청은 policy resolver를 호출하지 않고, 인증·rate-limit 이후
+server-owned resolver가 반환한 canonical `policyId`만 coordinator와 signature에
+전달되는지 검증한다.
 
 
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote

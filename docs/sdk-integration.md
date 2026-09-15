@@ -179,7 +179,7 @@ corner-store test-module dist/module-conformance.js
 ```
 
 The suite verifies capability declarations, positive base-unit pricing,
-maker/domain/field binding, expiry, module order, risk fail-closed behavior,
+maker/domain/current-policy field binding, expiry, module order, risk fail-closed behavior,
 65-byte signature shape and maker recovery, and maker-scoped monotonic nonce
 behavior.
 

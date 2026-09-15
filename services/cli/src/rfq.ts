@@ -92,7 +92,7 @@ function postJson(urlValue: string, value: unknown): Promise<{status: number; bo
 
 const coder = AbiCoder.defaultAbiCoder();
 const RFQ_QUOTE_TUPLE =
-  "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,uint256 nonce,uint64 expiry)";
+  "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,bytes32 policyId,uint256 nonce,uint64 expiry)";
 
 // ABI-encode (RFQQuote, signature) exactly as RFQAdapter.execute decodes it.
 export function encodeVenueData(quote: RFQQuote, signature: string): string {
@@ -107,6 +107,7 @@ export function encodeVenueData(quote: RFQQuote, signature: string): string {
         quote.amountIn,
         quote.amountOut,
         quote.venue,
+        quote.policyId,
         quote.nonce,
         quote.expiry
       ],
