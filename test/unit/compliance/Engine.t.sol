@@ -35,6 +35,9 @@ import {
     ObligationTiming,
     Statefulness,
     EnforcementAction,
+    ElementEnforcementOverride,
+    ElementPolicyParameter,
+    ManifestPolicyConfig,
     VenueType,
     FlowType
 } from "../../../src/types/ComplianceTypes.sol";
@@ -408,6 +411,26 @@ contract EngineTest is Test {
         ComplianceDecision memory d = engine.evaluate(_ctxBuy());
         assertFalse(d.allowed);
         assertEq(d.reasonCode, keccak256(abi.encode(uint16(10), elementId, uint32(1))));
+    }
+
+    function test_engine_deliversManifestPolicyParametersToElement() public {
+        bytes32 elementId = bytes32("B-PARAM-v1");
+        bytes32 schemaId = keccak256("corner-store.test.max-amount.v1");
+        elementReg.registerElement(elementId, address(new ParameterLimitElement(elementId, schemaId)));
+        _registerSingleElementRecipe(12, elementId);
+
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] = ElementPolicyParameter(0, elementId, schemaId, 1, abi.encode(uint256(40)));
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _singleBinding(12, 1), overrides_, config);
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+
+        ComplianceDecision memory decision = engine.evaluate(_ctxBuy());
+        assertFalse(decision.allowed, "50 RWA must exceed configured limit 40");
+        assertEq(decision.reasonCode, bytes32("PARAM_LIMIT"));
     }
 
     function test_elementLevelFlagOnly_in_requiredBinding_setsBit_without_blocking_or_commit() public {
@@ -803,6 +826,41 @@ contract FailingElement is IComplianceElement {
             parameterSchemaVersion: 0,
             maxParameterBytes: 0,
             parametersRequired: false
+        });
+    }
+}
+
+contract ParameterLimitElement is IComplianceElement {
+    bytes32 internal immutable _id;
+    bytes32 internal immutable _schemaId;
+
+    constructor(bytes32 id_, bytes32 schemaId_) {
+        _id = id_;
+        _schemaId = schemaId_;
+    }
+
+    function check(address, address, address, uint256 amount, bytes calldata, bytes calldata parameters)
+        external
+        pure
+        returns (bool, bytes32)
+    {
+        if (amount > abi.decode(parameters, (uint256))) return (false, bytes32("PARAM_LIMIT"));
+        return (true, bytes32(0));
+    }
+
+    function elementMetadata() external view returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: _id,
+            category: ElementCategory.ASSET_ATTRIBUTE,
+            version: "parameter-limit-v1",
+            temporal: TemporalNature.ONE_TIME,
+            decidability: Decidability.DETERMINISTIC,
+            timing: ObligationTiming.AT_TRADE_GATE,
+            statefulness: Statefulness.STATELESS,
+            parameterSchemaId: _schemaId,
+            parameterSchemaVersion: 1,
+            maxParameterBytes: 32,
+            parametersRequired: true
         });
     }
 }

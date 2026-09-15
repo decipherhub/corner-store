@@ -74,6 +74,19 @@ struct CompiledElementRule {
     EnforcementAction action;
 }
 
+struct ElementPolicyParameter {
+    uint8 bindingIndex;
+    bytes32 elementId;
+    bytes32 schemaId;
+    uint16 schemaVersion;
+    bytes parameters;
+}
+
+struct ManifestPolicyConfig {
+    uint16 schemaVersion;
+    ElementPolicyParameter[] elementParameters;
+}
+
 struct RecipeBinding {
     uint16 recipeId;
     uint16 recipeVersion;
