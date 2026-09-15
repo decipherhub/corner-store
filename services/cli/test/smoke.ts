@@ -10,7 +10,7 @@ import {
   resolveAssetProfile,
   resolveAssetProfileForArtifact
 } from "../src/assetProfiles";
-import {decodeReason, encodeReason, tableSize} from "../src/reason";
+import {decodeReason, encodeReason, INVALID_ELEMENT_PARAMETERS, tableSize} from "../src/reason";
 import {
   copyDeploymentArtifact,
   doctor,
@@ -283,18 +283,20 @@ async function main() {
 
   // table = (recipe-scoped: 3 recipes x codes-per-element-sum) + (direct
   // element-level: 1 x codes-per-element-sum, recipeId 0 — the reasonCode an
-  // element's own `check()` actually self-encodes) + 6 policy statuses.
-  // codes-per-element-sum is each of the 23 elements' code count, where an
+  // element's own `check()` actually self-encodes) + one invalid-parameter
+  // code per Element + 6 policy statuses.
+  // Invalid-parameter entries add one direct code for each of 24 Elements.
+  // codes-per-element-sum is each of the 24 elements' code count, where an
   // element without a richer ELEMENT_CODE_NAMES table contributes 1.
   // Wave-2b upgraded 6 elements to multi-code taxonomies (A-01:10, A-03:9,
   // A-04:9, A-13:9, B-01:6, B-02:6); the wave-2 illustrative elements
   // (A-08:8, A-09:2, A-11:5, B-03:6, B-04:7, D-01:4) and the wave-3
   // illustrative elements (A-06:4, A-12:8, E-03:9, F-01:3, F-03:4, F-04:5) are
-  // also enumerated; the remaining 5 single-code mocks (A-02, A-05, C-01,
-  // E-01, F-02) contribute 1 each.
+  // also enumerated; the remaining 6 single-code Elements (A-02, A-05, C-01,
+  // E-01, F-02, BUIDL-MIN-v1) contribute 1 each.
   const CODES_PER_ELEMENT =
-    10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5; // = 119
-  assert(tableSize() === 4 * CODES_PER_ELEMENT + 6, "reason table size");
+    10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 1; // = 120
+  assert(tableSize() === 4 * CODES_PER_ELEMENT + 24 + 6, "reason table size");
 
   const jur = decodeReason(A02_RECIPE1);
   assert(jur.label.includes("Jurisdiction") && jur.label.includes("A-02-v1"), "decodes A-02 to Jurisdiction");
@@ -322,6 +324,10 @@ async function main() {
   // Legacy code-1 meaning is preserved across the wave-2b upgrade (doc says
   // code 1 keeps the pre-upgrade "blocked wallet" semantics for A-01).
   assert(decodeReason(encodeReason(0, "A-01-v1", 1)).label.includes("FAIL_SDN_WALLET_MATCH"), "A-01 code 1 preserved");
+  assert(
+    decodeReason(encodeReason(0, "A-02-v1", INVALID_ELEMENT_PARAMETERS)).label.includes("invalid parameters"),
+    "common invalid-parameter reason decodes"
+  );
 
   // --- quote-file round-trip ---------------------------------------------
   const maker = new Wallet("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");

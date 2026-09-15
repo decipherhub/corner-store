@@ -187,7 +187,7 @@ contract FraudSurveillanceTest is Test {
         assertEq(element.reasonCodeOf(1), _code(2)); // STRUCTURING_EVASION => code 2
 
         // Party-facing surface reveals nothing (doc §6.4/§7.5).
-        (bool passed, bytes32 rc) = element.check(w3, buyer, address(0), 2000, "");
+        (bool passed, bytes32 rc) = element.check(w3, buyer, address(0), 2000, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -243,7 +243,7 @@ contract FraudSurveillanceTest is Test {
         element.onTransfer(w1, buyer, 500000); // QP buys BUIDL $500K, ordinary
 
         assertEq(element.flagCount(), 0); // above threshold, but no category hit
-        (bool passed, bytes32 rc) = element.check(w1, buyer, address(0), 500000, "");
+        (bool passed, bytes32 rc) = element.check(w1, buyer, address(0), 500000, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -320,8 +320,8 @@ contract FraudSurveillanceTest is Test {
         element.attestSuspicion(w1, FraudSurveillance.SuspicionCategory.ILLICIT_FUNDS, 100000, false, true);
 
         // check() returns clean for the flagged subject and for anyone else.
-        (bool passed1, bytes32 rc1) = element.check(w1, buyer, address(0), 100000, "");
-        (bool passed2, bytes32 rc2) = element.check(buyer, w1, address(0), 1, "");
+        (bool passed1, bytes32 rc1) = element.check(w1, buyer, address(0), 100000, "", "");
+        (bool passed2, bytes32 rc2) = element.check(buyer, w1, address(0), 1, "", "");
         assertTrue(passed1);
         assertTrue(passed2);
         assertEq(rc1, bytes32(0));

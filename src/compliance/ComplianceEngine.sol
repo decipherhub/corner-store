@@ -240,7 +240,7 @@ contract ComplianceEngine is IComplianceEngine, Governed {
     ) private view returns (bool elementPassed, bytes32 elementReason) {
         address element = elementReg.elementOf(elementId);
         if (element == address(0)) revert Errors.ElementNotRegistered(elementId);
-        return IComplianceElement(element).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext);
+        return IComplianceElement(element).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext, "");
     }
 
     function _reasonOrFallback(bytes32 elementReason, uint16 recipeId, bytes32 elementId)

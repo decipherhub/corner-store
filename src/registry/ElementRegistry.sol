@@ -9,6 +9,8 @@ import {Errors} from "../libraries/Errors.sol";
 import {Events} from "../libraries/Events.sol";
 
 contract ElementRegistry is IElementRegistry, Governed {
+    uint32 public constant MAX_ELEMENT_PARAMETER_BYTES = 4096;
+
     mapping(bytes32 => address) internal _elements;
     mapping(bytes32 => bytes32) internal _metadataHashes;
     mapping(bytes32 => bytes32) internal _versionHashes;
@@ -29,7 +31,10 @@ contract ElementRegistry is IElementRegistry, Governed {
         if (_elements[elementId] != address(0)) revert Errors.ElementAlreadyRegistered(elementId);
 
         ElementMetadata memory metadata = IComplianceElement(element).elementMetadata();
-        if (metadata.elementId != elementId || bytes(metadata.version).length == 0) {
+        if (
+            metadata.elementId != elementId || bytes(metadata.version).length == 0
+                || !_validParameterCapability(metadata)
+        ) {
             revert Errors.InvalidElementMetadata(elementId);
         }
 
@@ -42,7 +47,11 @@ contract ElementRegistry is IElementRegistry, Governed {
                 metadata.temporal,
                 metadata.decidability,
                 metadata.timing,
-                metadata.statefulness
+                metadata.statefulness,
+                metadata.parameterSchemaId,
+                metadata.parameterSchemaVersion,
+                metadata.maxParameterBytes,
+                metadata.parametersRequired
             )
         );
         _elements[elementId] = element;
@@ -52,6 +61,15 @@ contract ElementRegistry is IElementRegistry, Governed {
 
         emit Events.ElementRegistered(elementId, element);
         emit Events.ElementRegisteredV2(elementId, element, metadataHash, versionHash, defaultAction);
+    }
+
+    function _validParameterCapability(ElementMetadata memory metadata) internal pure returns (bool) {
+        if (metadata.parameterSchemaId == bytes32(0)) {
+            return
+                metadata.parameterSchemaVersion == 0 && metadata.maxParameterBytes == 0 && !metadata.parametersRequired;
+        }
+        return metadata.parameterSchemaVersion != 0 && metadata.maxParameterBytes != 0
+            && metadata.maxParameterBytes <= MAX_ELEMENT_PARAMETER_BYTES;
     }
 
     function elementOf(bytes32 elementId) external view returns (address) {

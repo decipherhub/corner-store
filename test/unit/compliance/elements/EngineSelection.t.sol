@@ -63,7 +63,7 @@ contract EngineSelectionTest is Test {
         view
         returns (bool passed, bytes32 reasonCode)
     {
-        return element.check(seller, buyer_, asset_, 0, _ctx(v, buyer_, affiliate));
+        return element.check(seller, buyer_, asset_, 0, _ctx(v, buyer_, affiliate), "");
     }
 
     // ── metadata / construction ─────────────────────────────────────────────
@@ -251,7 +251,7 @@ contract EngineSelectionTest is Test {
 
     // ── empty context => code 3 (fail-closed safety pin) ─────────────────────
     function test_emptyContext_fails3() public {
-        (bool passed, bytes32 rc) = element.check(seller, buyer, asset, 0, "");
+        (bool passed, bytes32 rc) = element.check(seller, buyer, asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, _reason(3));
     }

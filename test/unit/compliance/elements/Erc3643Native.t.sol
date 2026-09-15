@@ -154,7 +154,7 @@ contract Erc3643NativeTest is Test {
     }
 
     function test_check_fails_when_unattested_default_state() public {
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, asset, 100, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, asset, 100, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(1));
     }
@@ -163,7 +163,7 @@ contract Erc3643NativeTest is Test {
         vm.prank(operator);
         element.setErc3643Native(asset, true);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, asset, 100, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, asset, 100, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -171,12 +171,12 @@ contract Erc3643NativeTest is Test {
     function test_check_fails_after_attestation_revoked() public {
         vm.prank(operator);
         element.setErc3643Native(asset, true);
-        (bool passed,) = element.check(user, counterparty, asset, 100, "");
+        (bool passed,) = element.check(user, counterparty, asset, 100, "", "");
         assertTrue(passed);
 
         vm.prank(operator);
         element.setErc3643Native(asset, false);
-        (bool passedAfterRevoke, bytes32 reasonCode) = element.check(user, counterparty, asset, 100, "");
+        (bool passedAfterRevoke, bytes32 reasonCode) = element.check(user, counterparty, asset, 100, "", "");
         assertFalse(passedAfterRevoke);
         assertEq(reasonCode, _code(1));
     }
@@ -185,14 +185,14 @@ contract Erc3643NativeTest is Test {
         vm.prank(operator);
         element.setErc3643Native(asset, true);
 
-        (bool passedA,) = element.check(user, counterparty, asset, 1, "");
-        (bool passedB,) = element.check(address(0x1234), address(0x5678), asset, 999_999, "");
+        (bool passedA,) = element.check(user, counterparty, asset, 1, "", "");
+        (bool passedB,) = element.check(address(0x1234), address(0x5678), asset, 999_999, "", "");
         assertTrue(passedA);
         assertTrue(passedB);
 
         // A different, unattested asset still fails regardless of user/counterparty.
         address otherAsset = address(0x9999);
-        (bool passedC,) = element.check(address(0x1234), address(0x5678), otherAsset, 1, "");
+        (bool passedC,) = element.check(address(0x1234), address(0x5678), otherAsset, 1, "", "");
         assertFalse(passedC);
     }
 
@@ -242,7 +242,7 @@ contract Erc3643NativeTest is Test {
 
     function test_live_happy_path_passes() public {
         address tokenAddr = _standUpLiveToken();
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -250,7 +250,7 @@ contract Erc3643NativeTest is Test {
     function test_live_drift_identityRegistry_code2() public {
         address tokenAddr = _standUpLiveToken();
         token.setIdentityRegistry(address(0xBAD)); // token now reports a different IR
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(2));
     }
@@ -258,7 +258,7 @@ contract Erc3643NativeTest is Test {
     function test_live_drift_compliance_code2() public {
         address tokenAddr = _standUpLiveToken();
         token.setCompliance(address(0xBAD));
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(2));
     }
@@ -268,7 +268,7 @@ contract Erc3643NativeTest is Test {
         // Re-register with a wrong expected codehash => implementation drift.
         vm.prank(operator);
         element.registerWiring(tokenAddr, address(ir), address(mc), bytes32("wrong-codehash"));
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(2));
     }
@@ -276,7 +276,7 @@ contract Erc3643NativeTest is Test {
     function test_live_paused_code3() public {
         address tokenAddr = _standUpLiveToken();
         token.setPaused(true);
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(3));
     }
@@ -284,7 +284,7 @@ contract Erc3643NativeTest is Test {
     function test_live_frozen_seller_code4() public {
         address tokenAddr = _standUpLiveToken();
         token.setFrozen(counterparty, true);
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(4));
     }
@@ -292,7 +292,7 @@ contract Erc3643NativeTest is Test {
     function test_live_frozen_buyer_code4() public {
         address tokenAddr = _standUpLiveToken();
         token.setFrozen(user, true);
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(4));
     }
@@ -301,7 +301,7 @@ contract Erc3643NativeTest is Test {
         address tokenAddr = _standUpLiveToken();
         token.setBalance(counterparty, 1000);
         token.setFrozenTokens(counterparty, 500); // free = 500
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertTrue(passed); // INCLUSIVE >= : exactly-equal free balance passes
         assertEq(reasonCode, bytes32(0));
     }
@@ -310,7 +310,7 @@ contract Erc3643NativeTest is Test {
         address tokenAddr = _standUpLiveToken();
         token.setBalance(counterparty, 1000);
         token.setFrozenTokens(counterparty, 501); // free = 499, need 500
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(5));
     }
@@ -320,7 +320,7 @@ contract Erc3643NativeTest is Test {
         // Seller has zero free balance, but amount 0 has nothing to clear => passes.
         token.setBalance(counterparty, 0);
         token.setFrozenTokens(counterparty, 0);
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -328,7 +328,7 @@ contract Erc3643NativeTest is Test {
     function test_live_unverified_buyer_code6() public {
         address tokenAddr = _standUpLiveToken();
         ir.setVerified(user, false);
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(6));
     }
@@ -336,7 +336,7 @@ contract Erc3643NativeTest is Test {
     function test_live_canTransfer_false_code6() public {
         address tokenAddr = _standUpLiveToken();
         mc.setAllow(false); // compliance module rejects
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(6));
     }
@@ -348,7 +348,7 @@ contract Erc3643NativeTest is Test {
         element.setErc3643Native(eoa, true);
         element.registerWiring(eoa, address(1), address(2), bytes32(0));
         vm.stopPrank();
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, eoa, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, eoa, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(1));
     }
@@ -360,7 +360,7 @@ contract Erc3643NativeTest is Test {
         element.setErc3643Native(tokenAddr, true);
         element.registerWiring(tokenAddr, address(1), address(2), tokenAddr.codehash);
         vm.stopPrank();
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed); // first probe (identityRegistry()) reverts => fail-closed
         assertEq(reasonCode, _code(1));
     }
@@ -369,7 +369,7 @@ contract Erc3643NativeTest is Test {
         address tokenAddr = _standUpLiveToken();
         // Break a live gate (pause) so live-regime check would fail with code 3...
         token.setPaused(true);
-        (bool pausedFail, bytes32 rc3) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool pausedFail, bytes32 rc3) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(pausedFail);
         assertEq(rc3, _code(3));
 
@@ -379,7 +379,7 @@ contract Erc3643NativeTest is Test {
         vm.prank(operator);
         element.clearWiring(tokenAddr);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
 
@@ -399,7 +399,7 @@ contract Erc3643NativeTest is Test {
         address tokenAddr = _standUpLiveToken();
         vm.prank(operator);
         element.setErc3643Native(tokenAddr, false);
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, tokenAddr, 500, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(1));
     }

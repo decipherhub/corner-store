@@ -125,6 +125,12 @@ struct ElementMetadata {
     Decidability decidability;
     ObligationTiming timing;
     Statefulness statefulness;
+    // Zero identifies a parameterless Element. A non-zero schema ID is bound
+    // to exactly one immutable version and an explicit calldata size bound.
+    bytes32 parameterSchemaId;
+    uint16 parameterSchemaVersion;
+    uint32 maxParameterBytes;
+    bool parametersRequired;
 }
 
 struct ManifestCore {

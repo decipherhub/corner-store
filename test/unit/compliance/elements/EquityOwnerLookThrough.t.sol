@@ -74,7 +74,7 @@ contract EquityOwnerLookThroughTest is Test {
     function test_check_defaultStatusIsNone_andPasses() public {
         assertEq(uint256(element.statusOf(subject)), uint256(LookThroughStatus.NONE));
 
-        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -84,7 +84,7 @@ contract EquityOwnerLookThroughTest is Test {
     function test_check_passesWhenCompleted() public {
         element.setLookThroughStatus(subject, LookThroughStatus.COMPLETED);
 
-        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -92,7 +92,7 @@ contract EquityOwnerLookThroughTest is Test {
     function test_check_failsWithCode1WhenPending() public {
         element.setLookThroughStatus(subject, LookThroughStatus.PENDING);
 
-        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(1));
     }
@@ -100,7 +100,7 @@ contract EquityOwnerLookThroughTest is Test {
     function test_check_failsWithCode2WhenFailed() public {
         element.setLookThroughStatus(subject, LookThroughStatus.FAILED);
 
-        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(2));
     }
@@ -109,14 +109,14 @@ contract EquityOwnerLookThroughTest is Test {
 
     function test_statusTransition_pendingToCompleted_thenCheckPasses() public {
         element.setLookThroughStatus(subject, LookThroughStatus.PENDING);
-        (bool passedPending,) = element.check(subject, address(0), address(0), 0, "");
+        (bool passedPending,) = element.check(subject, address(0), address(0), 0, "", "");
         assertFalse(passedPending);
 
         vm.expectEmit(true, false, false, true);
         emit LookThroughStatusSet(subject, LookThroughStatus.COMPLETED);
         element.setLookThroughStatus(subject, LookThroughStatus.COMPLETED);
 
-        (bool passedCompleted,) = element.check(subject, address(0), address(0), 0, "");
+        (bool passedCompleted,) = element.check(subject, address(0), address(0), 0, "", "");
         assertTrue(passedCompleted);
     }
 
@@ -131,19 +131,19 @@ contract EquityOwnerLookThroughTest is Test {
 
         assertEq(uint256(element.statusOf(subject)), uint256(LookThroughStatus.NONE));
 
-        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(subject, address(0), address(0), 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
 
     function test_revocation_failedBackToNone_unblocksCheck() public {
         element.setLookThroughStatus(subject, LookThroughStatus.FAILED);
-        (bool blocked,) = element.check(subject, address(0), address(0), 0, "");
+        (bool blocked,) = element.check(subject, address(0), address(0), 0, "", "");
         assertFalse(blocked);
 
         element.setLookThroughStatus(subject, LookThroughStatus.NONE);
 
-        (bool passed,) = element.check(subject, address(0), address(0), 0, "");
+        (bool passed,) = element.check(subject, address(0), address(0), 0, "", "");
         assertTrue(passed);
     }
 
@@ -159,8 +159,8 @@ contract EquityOwnerLookThroughTest is Test {
     function test_check_ignoresCounterpartyAssetAmountAndContext() public {
         element.setLookThroughStatus(subject, LookThroughStatus.COMPLETED);
 
-        (bool passed1,) = element.check(subject, address(0), address(0), 0, "");
-        (bool passed2,) = element.check(subject, address(0xDEAD), address(0xBEEF), 12345, "abc");
+        (bool passed1,) = element.check(subject, address(0), address(0), 0, "", "");
+        (bool passed2,) = element.check(subject, address(0xDEAD), address(0xBEEF), 12345, "abc", "");
         assertTrue(passed1);
         assertTrue(passed2);
         assertEq(passed1, passed2);

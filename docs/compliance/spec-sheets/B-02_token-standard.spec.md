@@ -91,7 +91,7 @@ B-02가 발행 측 규칙의 적법성까지 보는지가 문제된다. B-02가 
 
 ```solidity
 // 판정 (view). user=매수인(to), counterparty=매도인(from)
-function check(address user, address counterparty, address asset, uint256 amount, bytes)
+function check(address user, address counterparty, address asset, uint256 amount, bytes context, bytes parameters)
     external view returns (bool passed, bytes32 reasonCode);
 
 // 운영자 설정 (onlyOperator, Governed)
@@ -99,6 +99,9 @@ function setErc3643Native(address asset, bool native_) external;                
 function registerWiring(address asset, address identityRegistry_, address compliance_, bytes32 implCodehash) external; // 배선 봉인 → 게이트 ②~⑤
 function clearWiring(address asset) external;                                       // 선언 전용 복귀
 ```
+
+B-02-v1은 parameterless Element이므로 `parameters`는 반드시 empty bytes여야 한다.
+non-empty 입력은 `BaseElement`의 공통 invalid-parameter reason으로 fail-closed한다.
 
 프로브 대상 표준 표면: `identityRegistry()·compliance()·paused()·isFrozen()·getFrozenTokens()·balanceOf()`(토큰), `isVerified()`(Identity Registry), `canTransfer()`(Compliance). 모든 외부 프로브는 try/catch로 감싸며, 어떠한 revert·비적합 대상도 코드 1로 귀결한다(fail-closed).
 

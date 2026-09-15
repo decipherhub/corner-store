@@ -2,8 +2,6 @@
 pragma solidity 0.8.17;
 
 import {BaseStatefulElement} from "./BaseStatefulElement.sol";
-import {BaseElement} from "./BaseElement.sol";
-import {IComplianceElement} from "../../interfaces/compliance/IComplianceElement.sol";
 import {
     ElementMetadata,
     ElementCategory,
@@ -195,7 +193,11 @@ contract FraudSurveillance is BaseStatefulElement {
                 temporal: TemporalNature.CUMULATIVE,
                 decidability: Decidability.MONITORING_BASED,
                 timing: ObligationTiming.EX_POST_TRIGGER,
-                statefulness: Statefulness.STATEFUL
+                statefulness: Statefulness.STATEFUL,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -227,10 +229,10 @@ contract FraudSurveillance is BaseStatefulElement {
     /// @notice F-03 is not a gate: `check()` always passes. It is `pure` so it
     ///         is compiler-guaranteed unable to read flag state — the §6.4
     ///         no-tipping-off guarantee on the party-facing surface (doc §7.5).
-    function check(address, address, address, uint256, bytes calldata)
-        external
+    function _check(address, address, address, uint256, bytes calldata, bytes calldata)
+        internal
         pure
-        override(BaseElement, IComplianceElement)
+        override
         returns (bool passed, bytes32 reasonCode)
     {
         return (true, bytes32(0));

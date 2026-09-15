@@ -92,7 +92,7 @@ contract EntityEligibilityTest is Test {
     }
 
     function _check() internal view returns (bool passed, bytes32 reasonCode) {
-        return element.check(buyer, address(0), asset, 0, "");
+        return element.check(buyer, address(0), asset, 0, "", "");
     }
 
     function _assertFail(uint32 n) internal {

@@ -31,12 +31,16 @@ contract BuidlMinimumInvestment is BaseElement {
                 temporal: TemporalNature.REALTIME,
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
-    function check(address, address, address, uint256 amount, bytes calldata)
-        external
+    function _check(address, address, address, uint256 amount, bytes calldata, bytes calldata)
+        internal
         pure
         override
         returns (bool passed, bytes32 reasonCode)

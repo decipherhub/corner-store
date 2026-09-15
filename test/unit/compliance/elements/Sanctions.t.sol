@@ -64,7 +64,7 @@ contract SanctionsTest is Test {
     }
 
     function _check() internal view returns (bool passed, bytes32 reasonCode) {
-        return s.check(buyer, seller, asset, 0, "");
+        return s.check(buyer, seller, asset, 0, "", "");
     }
 
     function _assertPass() internal {
@@ -195,7 +195,7 @@ contract SanctionsTest is Test {
 
     function test_wallet_unlistedCounterpartyPasses() public {
         // An unlisted counterparty (e.g. AMM pool) does not block a clean buyer.
-        (bool passed,) = s.check(buyer, address(0xF00D), asset, 0, "");
+        (bool passed,) = s.check(buyer, address(0xF00D), asset, 0, "", "");
         assertTrue(passed);
     }
 

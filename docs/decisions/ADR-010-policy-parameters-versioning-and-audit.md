@@ -81,9 +81,9 @@ in-repo Element, Recipe, mock과 local Anvil 흐름을 다음 하나의 ABI로 m
 
 ```solidity
 function check(
+    address user,
+    address counterparty,
     address asset,
-    address from,
-    address to,
     uint256 amount,
     bytes calldata context,
     bytes calldata parameters

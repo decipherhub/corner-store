@@ -45,7 +45,7 @@ const QP_ABI = [
   "function qp(address user) view returns (bool)",
   "function claimOf(address user) view returns (uint8 basis,bool signatureValid,bool issuerTrusted,uint64 verifiedAt,uint8 ltStatus,bytes32 coveredCompany)",
   "function freshnessCap() view returns (uint64)",
-  "function check(address user,address counterparty,address asset,uint256 amount,bytes data) view returns (bool passed,bytes32 reasonCode)",
+  "function check(address user,address counterparty,address asset,uint256 amount,bytes context,bytes parameters) view returns (bool passed,bytes32 reasonCode)",
   "function setQp(address user,bool isQp)",
   "function setQpClaim(address user,(uint8 basis,bool signatureValid,bool issuerTrusted,uint64 verifiedAt,uint8 ltStatus,bytes32 coveredCompany) claim)",
   "function setFreshnessCap(uint64 cap)"
@@ -766,7 +766,14 @@ export class DemoSettlementService {
     const qp = new Contract(this.requiredArtifact("qualifiedPurchaser"), QP_ABI, this.provider);
     const claim = await qp.claimOf(address);
     const cap = Number(await qp.freshnessCap());
-    const [eligible] = await qp.check(address, "0x0000000000000000000000000000000000000000", this.config.artifact.rwaToken, 0, "0x");
+    const [eligible] = await qp.check(
+      address,
+      "0x0000000000000000000000000000000000000000",
+      this.config.artifact.rwaToken,
+      0,
+      "0x",
+      "0x"
+    );
     const present = Number(claim.basis) !== 0;
     const verifiedAt = present ? Number(claim.verifiedAt) : undefined;
     const latest = await this.latestBlock();

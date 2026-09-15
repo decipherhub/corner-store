@@ -28,6 +28,11 @@ RFQ adapter와 TREX fixture 기반 integration path를 포함한다.
 `--offline`은 외부 시그니처 조회를 차단해 로컬 검증을 결정적으로 유지하고,
 일부 macOS 환경의 Foundry nightly 프록시 초기화 충돌을 피한다.
 
+Element interface 변경은 `BaseElement.t.sol`에서 parameterless/required/optional/
+oversized envelope를, `ElementRegistry.t.sol`에서 schema capability와 metadata hash
+binding을 검증한다. 모든 기존 Element는 empty parameters에서 기존 판정과 reason
+code를 유지해야 한다.
+
 RFQ TypeScript SDK smoke test:
 
 ```sh
@@ -66,8 +71,8 @@ API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
 검증 경로, `production-onboarding-plan --out` immutable export/overwrite
 refusal, v2 canonical recipe alias/key derivation, compiled plan replay,
 strengthen-only override rejection, legacy v1 plan acceptance,
-`production-onboarding-verify` fail-closed mismatch behavior and exact nonzero
-Element reason decode를 함께 검증한다.
+`production-onboarding-verify` fail-closed mismatch behavior, exact nonzero
+Element reason과 공통 invalid-parameter reason decode를 함께 검증한다.
 
 Standalone SDK integration smoke:
 

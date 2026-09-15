@@ -35,7 +35,7 @@ const RFQ_ADAPTER_ABI = [
 ];
 const POLICY_ABI = ["function statusOf(address token) view returns (uint8)"];
 const QP_ABI = [
-  "function check(address user,address counterparty,address asset,uint256 amount,bytes data) view returns (bool passed,bytes32 reasonCode)"
+  "function check(address user,address counterparty,address asset,uint256 amount,bytes context,bytes parameters) view returns (bool passed,bytes32 reasonCode)"
 ];
 const QUOTE_TUPLE =
   "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,uint256 nonce,uint64 expiry)";
@@ -180,7 +180,7 @@ export class TestnetRfqRuntime {
       quote.balanceOf(taker),
       rwa.allowance(taker, a.rfqAdapter),
       quote.allowance(taker, a.rfqAdapter),
-      qp.check(taker, "0x0000000000000000000000000000000000000000", a.rwaToken, 0, "0x")
+      qp.check(taker, "0x0000000000000000000000000000000000000000", a.rwaToken, 0, "0x", "0x")
     ]);
     return {
       address: taker,

@@ -10,7 +10,7 @@
 | 구분 | 내용 | 상태 |
 |------|------|------|
 | `IComplianceElement` 인터페이스 | `check()` + `elementMetadata()` + `onTransfer`(예약) | ✅ 안정 (build 대상) |
-| `ElementMetadata` + 3-axis enum | Decidability · ObligationTiming · Statefulness | ✅ 안정 |
+| `ElementMetadata` + parameter capability + 3-axis enum | schema/bound + Decidability · ObligationTiming · Statefulness | ✅ 안정 |
 | `ElementCategory` (A~G) | 7 카테고리 | ✅ 안정 |
 | 4단계 연역 / 분류 방법 | 법조문 → 요건 분해 → 원자 검증 → 인터페이스 | ✅ 안정 |
 | STATEFUL 처리 모델 | Manifest orchestrate / Element execute / Router commit | ✅ 안정 |
@@ -37,7 +37,8 @@ interface IComplianceElement {
         address counterparty,
         address asset,
         uint256 amount,
-        bytes calldata context   // tx context + 토큰별 compliance facts 전달
+        bytes calldata context,  // tx context + 동적 compliance facts
+        bytes calldata parameters // Manifest가 소유하는 자산별 정책값
     ) external view returns (bool passed, bytes32 reasonCode);
 
     function elementMetadata() external view returns (ElementMetadata);
@@ -51,13 +52,18 @@ struct ElementMetadata {
     bytes32 elementId;          // versioned 예: "A-03-v2.1"
     ElementCategory category;
     string version;
-    DataSource[] dataSources;
     TemporalNature temporal;    // 데이터 신선도: ONE_TIME / PERIODIC / REALTIME / CUMULATIVE
 
     // ── 판정 차원 3 axis ──
     Decidability     decidability;    // 누가 판정하나
     ObligationTiming timing;          // 언제 작동하나
     Statefulness     statefulness;    // 무엇을 보고 판정하나
+
+    // ── immutable parameter capability ──
+    bytes32 parameterSchemaId;        // 0이면 parameterless
+    uint16  parameterSchemaVersion;   // schemaId=0이면 반드시 0
+    uint32  maxParameterBytes;        // schemaId=0이면 0, 전역 상한 4096 bytes
+    bool    parametersRequired;       // schemaId=0이면 false
 }
 
 enum Decidability {
@@ -86,6 +92,16 @@ enum ElementCategory {
 ```
 
 `check()`는 순수 view 함수입니다(상태 mutation X, 외부 의존성은 읽기 전용). 상태가 필요한 누적 규제만 `onTransfer` commit hook을 별도로 씁니다(§6).
+
+`context`와 `parameters`는 책임이 다릅니다. `context`는 거래 시점 사실이고,
+`parameters`는 Manifest/Config가 승인한 자산별 정책값입니다. Registry는 schema
+capability의 정합성과 4096-byte 전역 상한을 등록 전에 확인합니다. `BaseElement`는
+parameterless Element의 non-empty 입력, required schema의 empty 입력과 선언된 최대
+길이 초과를 공통 `INVALID_ELEMENT_PARAMETERS` reason으로 fail-closed합니다. 실제
+typed decode는 각 Element가 담당하며 exact ABI 길이·범위·enum과 canonical encoding을
+검사해야 합니다. schema ID/version과 parameter hash를 Manifest에 저장하고 전달하는
+경로는 `ManifestPolicyConfig` feature에서 활성화합니다. 그 전까지 Engine은 empty
+parameters만 전달합니다.
 
 ---
 

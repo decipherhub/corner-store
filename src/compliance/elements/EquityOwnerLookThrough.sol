@@ -55,7 +55,11 @@ contract EquityOwnerLookThrough is BaseElement, Governed, ILookThroughSource {
                 temporal: TemporalNature.ONE_TIME,
                 decidability: Decidability.ATTESTATION_BASED,
                 timing: ObligationTiming.EX_ANTE_VERIFY,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -68,8 +72,8 @@ contract EquityOwnerLookThrough is BaseElement, Governed, ILookThroughSource {
 
     /// @dev NONE/COMPLETED PASS; PENDING/FAILED FAIL with the collapsed codes
     ///      documented on the contract (doc §6.2).
-    function check(address user, address, address, uint256, bytes calldata)
-        external
+    function _check(address user, address, address, uint256, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

@@ -155,7 +155,7 @@ contract TransferRestrictionMetadataTest is Test {
     function test_check_passes_onFullyCompliantDeclaration() public {
         element.setDeclaration(asset, _validRestrictedDecl());
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -163,8 +163,8 @@ contract TransferRestrictionMetadataTest is Test {
     function test_check_ignoresNonAssetParameters() public {
         element.setDeclaration(asset, _validRestrictedDecl());
 
-        (bool passed1,) = element.check(address(0x1), address(0), asset, 0, "");
-        (bool passed2,) = element.check(address(0x2), address(0x3), asset, 999, hex"1234");
+        (bool passed1,) = element.check(address(0x1), address(0), asset, 0, "", "");
+        (bool passed2,) = element.check(address(0x2), address(0x3), asset, 999, hex"1234", "");
         assertTrue(passed1);
         assertTrue(passed2);
     }
@@ -174,7 +174,7 @@ contract TransferRestrictionMetadataTest is Test {
     // ---------------------------------------------------------------------
 
     function test_check_fails_declMissing_whenUndeclared() public {
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), undeclaredAsset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), undeclaredAsset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(1));
     }
@@ -190,7 +190,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.unrestrictBasisRef = bytes32(0); // even absent, ② fires first
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(2));
     }
@@ -205,7 +205,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.unrestrictBasisRef = BASIS_REF;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(2));
     }
@@ -222,7 +222,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.issuanceFramework = REG_A;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -237,7 +237,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.enabledResalePaths = 0;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(3));
     }
@@ -251,7 +251,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.enabledResalePaths = PATH_RULE144 | PATH_UNKNOWN;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(4));
     }
@@ -266,7 +266,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.holdingPeriodMonths = 9;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(4));
     }
@@ -280,7 +280,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.reportingStatus = TransferRestrictionMetadata.ReportingStatus.UNSET;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(3));
     }
@@ -290,7 +290,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.classRef = bytes32("WRONG-CLASS");
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(3));
     }
@@ -300,7 +300,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.legendRef = bytes32(0);
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(3));
     }
@@ -315,7 +315,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.holdingPeriodMonths = 6;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(5));
     }
@@ -332,7 +332,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.currentInfoRequired = true;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -344,7 +344,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.currentInfoRequired = true;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -360,7 +360,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.currentInfoRequired = false;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(5));
     }
@@ -379,7 +379,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.currentInfoRequired = true;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -396,7 +396,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.unrestrictBasisRef = bytes32(0);
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(6));
     }
@@ -410,7 +410,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.unrestrictBasisRef = BASIS_REF; // never approved
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _reasonCode(6));
     }
@@ -424,7 +424,7 @@ contract TransferRestrictionMetadataTest is Test {
         decl.unrestrictBasisRef = BASIS_REF;
         element.setDeclaration(asset, decl);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }

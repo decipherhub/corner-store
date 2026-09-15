@@ -1083,7 +1083,7 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
     }
     const el = new Contract(elAddr, ELEMENT_ABI, provider);
     try {
-      const [passed] = await el.check(subject, a.pool, a.rwaToken, parseEther("1"), elementContext);
+      const [passed] = await el.check(subject, a.pool, a.rwaToken, parseEther("1"), elementContext, "0x");
       elements.push({id, label, passed});
     } catch {
       elements.push({id, label, passed: false});
@@ -1611,7 +1611,8 @@ export async function cmdCheck(
           seller,
           a.rwaToken,
           amount,
-          elementContext
+          elementContext,
+          "0x"
         );
         // The engine now propagates an Element's exact nonzero reasonCode. Only
         // zero element reasons fall back to the recipe-scoped code-1 generic.

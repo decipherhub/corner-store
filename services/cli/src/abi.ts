@@ -88,9 +88,9 @@ export const EVENTS_ABI = [
   "event SurveillanceFlag(bytes32 indexed elementId, address indexed subject, bytes32 reasonCode)"
 ];
 
-// IComplianceElement.check(user, counterparty, asset, amount, context).
+// IComplianceElement.check(user, counterparty, asset, amount, context, parameters).
 export const ELEMENT_ABI = [
-  "function check(address user, address counterparty, address asset, uint256 amount, bytes context) view returns (bool passed, bytes32 reasonCode)"
+  "function check(address user, address counterparty, address asset, uint256 amount, bytes context, bytes parameters) view returns (bool passed, bytes32 reasonCode)"
 ];
 
 // Per-element setters (write-gated to the operator). Grouped so a single Contract
