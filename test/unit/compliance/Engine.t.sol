@@ -245,6 +245,25 @@ contract EngineTest is Test {
         assertEq(d.maxAmountToken, RWA, "single regulated output binds the cap axis");
     }
 
+    function test_registeringNewRecipeVersion_doesNotChangeActiveManifestPolicy() public {
+        _registerRWA(0, 0);
+        _makeBuyerCompliant();
+
+        ComplianceDecision memory before_ = engine.evaluate(_ctxBuy());
+        assertTrue(before_.allowed);
+
+        bytes32 recipeKey = recipeReg.recipeKeyOf(1);
+        bytes32[] memory latestElements = new bytes32[](1);
+        latestElements[0] = bytes32("A-13-v1");
+        recipeReg.registerRecipe(1, 3, address(new VersionedTestRecipe(1, 3, latestElements)));
+
+        assertEq(recipeReg.latestRegisteredVersionOf(recipeKey), 3, "catalog latest should advance");
+        ComplianceDecision memory after_ = engine.evaluate(_ctxBuy());
+        assertTrue(after_.allowed, "active manifest remains bound to recipe v2");
+        assertEq(after_.policyId, before_.policyId, "catalog registration cannot mutate policy identity");
+        assertEq(after_.policyVersion, before_.policyVersion, "catalog registration cannot mutate policy version");
+    }
+
     function test_singleRegulatedInput_bindsCapAxisToTokenIn() public {
         _registerRWA(0, 0);
         _makeBuyerCompliant();
@@ -1042,6 +1061,36 @@ contract UnregisteredElementRecipe {
 
     function version() external pure returns (uint16) {
         return 1;
+    }
+
+    function isApplicable(bytes calldata) external pure returns (bool) {
+        return true;
+    }
+
+    function requiredElements() external view returns (bytes32[] memory) {
+        return _elements;
+    }
+}
+
+/// @dev Test-only recipe used to prove that catalog latest-version metadata is
+///      never substituted for an active manifest's exact version binding.
+contract VersionedTestRecipe {
+    uint16 internal immutable _recipeId;
+    uint16 internal immutable _version;
+    bytes32[] internal _elements;
+
+    constructor(uint16 recipeId_, uint16 version_, bytes32[] memory elements) {
+        _recipeId = recipeId_;
+        _version = version_;
+        _elements = elements;
+    }
+
+    function recipeId() external view returns (uint16) {
+        return _recipeId;
+    }
+
+    function version() external view returns (uint16) {
+        return _version;
     }
 
     function isApplicable(bytes calldata) external pure returns (bool) {

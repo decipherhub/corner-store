@@ -195,7 +195,8 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         uint256 bindingIndex,
         bytes memory recipeContext
     ) internal view returns (bool applicable, bool passed, bool flagged, bytes32 reasonCode) {
-        address recipeAddress = recipeReg.recipeOf(binding.recipeId, binding.recipeVersion);
+        bytes32 recipeKey = recipeReg.recipeKeyOf(binding.recipeId);
+        address recipeAddress = recipeReg.recipeOf(recipeKey, binding.recipeVersion);
         if (recipeAddress == address(0)) revert Errors.RecipeNotRegistered(binding.recipeId);
         IRecipe recipe = IRecipe(recipeAddress);
         uint16 actualVersion = recipe.version();
@@ -411,7 +412,8 @@ contract ComplianceEngine is IComplianceEngine, Governed {
     }
 
     function _validatedRecipe(RecipeBinding memory binding) private view returns (IRecipe recipe) {
-        address recipeAddress = recipeReg.recipeOf(binding.recipeId, binding.recipeVersion);
+        bytes32 recipeKey = recipeReg.recipeKeyOf(binding.recipeId);
+        address recipeAddress = recipeReg.recipeOf(recipeKey, binding.recipeVersion);
         if (recipeAddress == address(0)) revert Errors.RecipeNotRegistered(binding.recipeId);
         recipe = IRecipe(recipeAddress);
         uint16 actualVersion = recipe.version();

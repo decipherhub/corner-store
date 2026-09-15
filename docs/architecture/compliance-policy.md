@@ -57,6 +57,9 @@ Recipe는 하나의 법률효과를 표현하는 Element 집합과 활성화 log
 - post-trade stateful commit은 선택된 path만 반영하고 같은 asset/Element를 중복
   반영하지 않는다.
 - 어떤 Recipe 또는 Element가 실패했는지 구조화된 reason으로 반환한다.
+- 각 binding의 numeric id는 immutable canonical key alias로만 사용하며, Engine은
+  Manifest에 고정된 exact `(recipeKey, recipeVersion)` implementation을 평가한다.
+  새 catalog version 등록은 ACTIVE Manifest를 자동 승격하지 않는다.
 
 Manifest에 선언되지 않은 Recipe를 암묵적으로 선택하지 않는다.
 
@@ -76,6 +79,9 @@ Manifest를 거래 context에 함께 적용한다.
 `ManifestPolicyConfig`는 Manifest와 별도로 갱신할 수 없으며, pending config와 compiled
 parameters는 검토 가능하되 timelock activation 전까지 active evaluation에 영향을
 주지 않는다.
+`latestRegisteredVersionOf(recipeKey)`는 catalog/UI discovery metadata다. UI는 이를
+Manifest의 active `recipeVersion`과 별도 필드로 표시해야 하며 실행 주소를 latest로
+추론해서는 안 된다.
 
 ## Inputs and Outputs
 

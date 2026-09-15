@@ -68,9 +68,10 @@ struct RecipeBinding {
   `flagsBitmap` bit와 Router event를 남긴다.
 
 빈 plan, 8개 초과, 중복 recipe, version 0, 잘못된 path group과 blocking gate가
-전혀 없는 plan은 등록 시 거부한다. Recipe 주소와 실제 version, Recipe당 최대 32개
-Element는 평가 시 다시 fail-closed로 검증한다. binding 변경은 Manifest hash 변경,
-timelock, version/history 증가를 거친 뒤에만 활성화된다.
+전혀 없는 plan은 등록 시 거부한다. Recipe 주소는 numeric id를 immutable canonical
+key로 변환한 뒤 exact `(recipeKey, recipeVersion)`으로 조회하며, 실제 version과
+Recipe당 최대 32개 Element는 평가 시 다시 fail-closed로 검증한다. binding 변경은
+Manifest hash 변경, timelock, version/history 증가를 거친 뒤에만 활성화된다.
 
 Production onboarding v2 additionally binds each numeric `recipeId` to a
 version-independent canonical `bytes32 recipeKey`. Operators review a normalized
@@ -81,8 +82,11 @@ version overwrites. The canonical recipe family is bijective with the legacy
 numeric id: neither `recipeId -> recipeKey` nor `recipeKey -> recipeId` can be
 rebound, and the same key across later versions must keep its first registered
 `recipeId`. The legacy numeric id remains a compatibility alias for current
-demos and call sites, but production review material should quote both the
-normalized alias and the derived key.
+Manifest bindings, but it has no latest-address lookup semantics. Production
+review material should quote both the normalized alias and the derived key.
+`latestRegisteredVersionOf(recipeKey)` is catalog metadata only; active version
+always comes from the token's Manifest binding. Registering a newer version does
+not change an ACTIVE Manifest, compiled plan or policy identity.
 
 Manifest registration/update compiles per-binding Element enforcement rules from
 the immutable Element defaults and bounded overrides. Runtime evaluation uses the

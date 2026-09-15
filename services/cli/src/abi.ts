@@ -50,13 +50,11 @@ export const ELEMENT_REGISTRY_ABI = [
   "function registerElement(bytes32 elementId,address element,uint8 defaultAction)"
 ];
 
-// RecipeRegistry.recipeOf(id) -> recipe address; the recipe exposes its required
-// element id list (IRecipe.requiredElements). Used by `check` to enumerate the
-// active manifest's per-element preflight set.
+// Active recipes are resolved from each manifest binding's exact canonical key
+// and version. latestRegisteredVersionOf is discovery metadata only.
 export const RECIPE_REGISTRY_ABI = [
-  "function recipeOf(uint16 recipeId) view returns (address)",
-  "function recipeOf(uint16 recipeId,uint16 version) view returns (address)",
   "function recipeOf(bytes32 recipeKey,uint16 version) view returns (address)",
+  "function latestRegisteredVersionOf(bytes32 recipeKey) view returns (uint16)",
   "function recipeKeyOf(uint16 recipeId) view returns (bytes32)",
   "function recipeKeyOfAlias(bytes32 aliasHash) view returns (bytes32)",
   "function aliasHashOf(bytes32 recipeKey) view returns (bytes32)",

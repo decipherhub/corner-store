@@ -500,7 +500,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         returns (bytes32 recipeKey, bytes32[] memory required)
     {
         recipeKey = recipeReg.recipeKeyOf(binding.recipeId);
-        address recipeAddress = recipeReg.recipeOf(binding.recipeId, binding.recipeVersion);
+        address recipeAddress = recipeReg.recipeOf(recipeKey, binding.recipeVersion);
         if (recipeAddress == address(0) || recipeKey == bytes32(0)) {
             revert Errors.RecipeNotRegistered(binding.recipeId);
         }

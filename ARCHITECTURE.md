@@ -39,7 +39,10 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - ERC-3643과 ONCHAINID는 외부 token/identity trust boundary다.
 - Element, Recipe, Manifest, Operator의 이름 기반 4-Layer compliance model을
   사용한다.
-- Manifest는 bounded `RecipeBinding[]`로 Recipe/version/mode를 고정한다.
+- Manifest는 bounded `RecipeBinding[]`로 Recipe/version/mode를 고정한다. 실행 경로는
+  numeric id를 immutable canonical `recipeKey`로 해석한 뒤 exact
+  `(recipeKey, version)` implementation만 사용한다. catalog latest version은 활성
+  정책 선택에 사용하지 않는다.
 - Element는 하나의 `check(..., context, parameters)` ABI를 사용하고 immutable
   metadata로 parameter schema ID/version/required/max bytes capability를 선언한다.
   자산별 실제 정책값은 versioned `ManifestPolicyConfig`가 소유하며 Manifest와
