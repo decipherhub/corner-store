@@ -94,6 +94,15 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   입력, required parameter 누락과 선언 길이 초과는 concrete 판정 전에 공통
   reason으로 fail-closed한다. Element별 decoder는 exact typed encoding과 값 범위를
   별도로 검증해야 한다.
+- `ManifestPolicyConfig`는 schema v1, 최대 256개 entry와 총 16,384 bytes로 제한한다.
+  각 entry는 실제 Recipe binding의 required Element여야 하며 중복, out-of-range
+  binding, schema 불일치, parameterless 값 공급과 required 값 누락을 registration/
+  update compile 전에 거부한다. config에는 PII나 provider 원본을 넣지 않는다.
+- active policy config를 직접 바꾸는 setter는 두지 않는다. semantic update는 pending
+  config hash/compiled parameters를 함께 저장하고 최소 1일 timelock 후 Manifest
+  version과 원자적으로 활성화한다. config 원문은 Safe calldata와 PII-free artifact에
+  보관하고 온체인은 hash와 실행 bytes를 보존한다. config hash와 bytes는 compiled plan/history/policy ID에
+  포함되어 quote 이후 변경도 fill-time 재평가에서 감지된다.
 - Manifest와 `UNREGULATED` 분류가 모두 없는 자산은 `UNKNOWN`으로 거부한다.
 - `tokenIn`과 `tokenOut` 양쪽을 분류하며, 양쪽 모두 명시적 `UNREGULATED`인
   경우에만 regulated evaluation을 생략한다.

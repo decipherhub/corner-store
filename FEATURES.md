@@ -10,6 +10,37 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## CORE-007 — Versioned Manifest Policy Config
+
+### Behavior
+
+- 자산별 Element 정책값은 schema-versioned `ManifestPolicyConfig`가 소유하며
+  Manifest 등록 또는 semantic update와 함께만 변경된다.
+- Registry는 parameter entry 수, 전체 bytes, binding/Element membership,
+  immutable schema ID/version, required 여부와 Element별 최대 길이를 activation
+  전에 fail-closed로 검증한다.
+- binding별 compiled plan은 enforcement rule과 정확히 정렬된 parameter bytes를
+  저장하며 config hash와 parameter bytes를 plan hash에 포함한다.
+- pending config/compiled plan hash와 compiled parameters는 read-only 검토할 수 있고, timelock activation에서
+  Manifest version, bindings, enforcement와 parameters가 원자적으로 교체된다.
+- Engine은 동적 config lookup 없이 compiled parameters를 해당 Element에 전달한다.
+  기존 parameterless Element와 local Anvil demo는 empty config 호환 경로를 유지한다.
+
+### Verification
+
+- TokenPolicyRegistry targeted tests: 56/56
+- ComplianceEngine targeted tests: 38/38
+- full `forge test --offline`: 881/881
+- full `scripts/check.sh`: Foundry, all services, clean SDK consumer와 deploy-v3 10/10 통과
+- `forge build --sizes`: TokenPolicyRegistry 23,980 bytes, EIP-170 margin 596 bytes
+- BUIDL-like와 Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ flow 통과
+- `git diff --check` 통과
+
+### State
+
+passing
+
+
 ## CORE-006 — Unified Element Parameter Interface
 
 ### Behavior

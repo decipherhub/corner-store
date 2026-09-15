@@ -33,6 +33,12 @@ oversized envelope를, `ElementRegistry.t.sol`에서 schema capability와 metada
 binding을 검증한다. 모든 기존 Element는 empty parameters에서 기존 판정과 reason
 code를 유지해야 한다.
 
+Manifest policy parameter 변경은 `TokenPolicyRegistry.t.sol`에서 schema/version,
+required/membership/duplicate/size bounds, deterministic config/plan hash, pending
+inspection과 timelock 원자 교체를 검증한다. `Engine.t.sol`은 binding rule과 같은
+index의 compiled bytes가 실제 Element 판정에 전달되는지 검증한다. 기존 demo
+Manifest의 empty config 경로도 full Foundry와 두 Anvil profile E2E에서 회귀한다.
+
 RFQ TypeScript SDK smoke test:
 
 ```sh

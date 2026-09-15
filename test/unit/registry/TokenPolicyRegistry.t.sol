@@ -21,6 +21,8 @@ import {
     EnforcementAction,
     EnforcementOverrideMode,
     ElementEnforcementOverride,
+    ElementPolicyParameter,
+    ManifestPolicyConfig,
     CompiledElementRule
 } from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
@@ -49,6 +51,38 @@ contract TokenPolicyRegistryElementMock is IComplianceElement {
         m.decidability = Decidability.DETERMINISTIC;
         m.timing = ObligationTiming.AT_TRADE_GATE;
         m.statefulness = Statefulness.STATELESS;
+    }
+}
+
+contract TokenPolicyRegistryParameterizedElementMock is IComplianceElement {
+    bytes32 internal immutable _id;
+    bytes32 internal immutable _schemaId;
+
+    constructor(bytes32 id_, bytes32 schemaId_) {
+        _id = id_;
+        _schemaId = schemaId_;
+    }
+
+    function check(address, address, address, uint256 amount, bytes calldata, bytes calldata parameters)
+        external
+        pure
+        returns (bool, bytes32)
+    {
+        return (amount <= abi.decode(parameters, (uint256)), bytes32(0));
+    }
+
+    function elementMetadata() external view returns (ElementMetadata memory m) {
+        m.elementId = _id;
+        m.category = ElementCategory.ASSET_ATTRIBUTE;
+        m.version = "1.0.0";
+        m.temporal = TemporalNature.ONE_TIME;
+        m.decidability = Decidability.DETERMINISTIC;
+        m.timing = ObligationTiming.AT_TRADE_GATE;
+        m.statefulness = Statefulness.STATELESS;
+        m.parameterSchemaId = _schemaId;
+        m.parameterSchemaVersion = 1;
+        m.maxParameterBytes = 32;
+        m.parametersRequired = true;
     }
 }
 
@@ -86,6 +120,9 @@ contract TokenPolicyRegistryTest is Test {
     ElementRegistry internal elementReg;
     RecipeRegistry internal recipeReg;
     bytes32 internal constant ELEMENT_ID = bytes32("TP-ELEMENT-v1");
+    bytes32 internal constant PARAM_ELEMENT_ID = bytes32("TP-PARAM-v1");
+    bytes32 internal constant PARAM_SCHEMA_ID = keccak256("corner-store.test.max-amount.v1");
+    bytes32 internal constant POLICY_CONFIG_DOMAIN = keccak256("CORNER_STORE_MANIFEST_POLICY_CONFIG_V1");
 
     address internal owner = address(this);
     address internal operator = address(0xBEEF);
@@ -110,9 +147,33 @@ contract TokenPolicyRegistryTest is Test {
         bindings[0] = RecipeBinding(7, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
     }
 
+    function _parameterBindings() internal pure returns (RecipeBinding[] memory bindings) {
+        bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(10, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+    }
+
+    function _policyConfig(uint256 maxAmount) internal pure returns (ManifestPolicyConfig memory config) {
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] =
+            ElementPolicyParameter(0, PARAM_ELEMENT_ID, PARAM_SCHEMA_ID, 1, abi.encode(maxAmount));
+    }
+
+    function _emptyOverrides() internal pure returns (ElementEnforcementOverride[] memory overrides_) {
+        overrides_ = new ElementEnforcementOverride[](0);
+    }
+
+    function _registerManifest(address t, ManifestCore memory manifest) internal {
+        reg.registerManifest(t, manifest, _bindings());
+    }
+
+    function _scheduleManifestUpdate(address t, ManifestCore memory manifest, bytes32 reasonCode) internal {
+        reg.scheduleManifestUpdate(t, manifest, _bindings(), reasonCode);
+    }
+
     /// @dev Drive a token to ACTIVE the legal way (register -> approve).
     function _activate(address t) internal {
-        reg.registerManifest(t, _manifest());
+        _registerManifest(t, _manifest());
         vm.prank(operator);
         reg.approveManifest(t);
     }
@@ -127,7 +188,7 @@ contract TokenPolicyRegistryTest is Test {
 
     function test_register_lands_PROPOSED_ignoring_caller_status() public {
         ManifestCore memory m = _manifest(); // m.status == ACTIVE on purpose
-        reg.registerManifest(token, m);
+        _registerManifest(token, m);
 
         ManifestCore memory got = reg.manifestOf(token);
         assertEq(uint256(got.status), uint256(PolicyStatus.PROPOSED), "always PROPOSED");
@@ -143,20 +204,20 @@ contract TokenPolicyRegistryTest is Test {
     function test_register_records_caller_as_declaredBy() public {
         ManifestCore memory m = _manifest();
         m.declaredBy = stranger; // caller-supplied value must be overwritten
-        reg.registerManifest(token, m);
+        _registerManifest(token, m);
         assertEq(reg.manifestOf(token).declaredBy, owner);
     }
 
     function test_registerManifest_reverts_for_non_owner() public {
         vm.prank(stranger);
         vm.expectRevert(); // Ownable: caller is not the owner
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
     }
 
     // --- approve ----------------------------------------------------------
 
     function test_approve_PROPOSED_to_ACTIVE_records_approver() public {
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
         vm.expectEmit(true, false, false, true);
         emit Events.ManifestStatusChanged(token, PolicyStatus.ACTIVE, bytes32(0));
         vm.prank(operator);
@@ -214,7 +275,7 @@ contract TokenPolicyRegistryTest is Test {
     }
 
     function test_approve_reverts_for_non_operator() public {
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
         vm.prank(stranger);
         vm.expectRevert(Errors.NotAuthorized.selector);
         reg.approveManifest(token);
@@ -334,28 +395,28 @@ contract TokenPolicyRegistryTest is Test {
         vm.prank(operator);
         reg.retireManifest(token, bytes32("EOL"));
         // Re-issue: allowed from RETIRED, lands PROPOSED again with a fresh slate.
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
         assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.PROPOSED));
         assertEq(reg.manifestOf(token).approvedBy, address(0), "approver cleared on re-register");
         assertEq(reg.manifestVersionOf(token), 2, "reissue increments semantic version");
     }
 
     function test_reregister_from_PROPOSED_reverts() public {
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
         vm.expectRevert(Errors.InvalidManifestTransition.selector);
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
     }
 
     function test_reregister_from_ACTIVE_reverts() public {
         _activate(token);
         vm.expectRevert(Errors.InvalidManifestTransition.selector);
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
     }
 
     function test_reregister_over_UNREGULATED_reverts() public {
         reg.setUnregulated(token);
         vm.expectRevert(Errors.InvalidManifestTransition.selector);
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
     }
 
     // --- setUnregulated ---------------------------------------------------
@@ -368,7 +429,7 @@ contract TokenPolicyRegistryTest is Test {
     }
 
     function test_setUnregulated_reverts_when_not_UNKNOWN() public {
-        reg.registerManifest(token, _manifest()); // now PROPOSED
+        _registerManifest(token, _manifest()); // now PROPOSED
         vm.expectRevert(Errors.InvalidManifestTransition.selector);
         reg.setUnregulated(token);
     }
@@ -403,7 +464,7 @@ contract TokenPolicyRegistryTest is Test {
     function test_clearUnregulated_then_register_ok() public {
         reg.setUnregulated(token);
         reg.clearUnregulated(token);
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
         assertEq(uint256(reg.statusOf(token)), uint256(PolicyStatus.PROPOSED));
     }
 
@@ -414,7 +475,7 @@ contract TokenPolicyRegistryTest is Test {
     }
 
     function test_clearUnregulated_reverts_when_PROPOSED() public {
-        reg.registerManifest(token, _manifest()); // PROPOSED
+        _registerManifest(token, _manifest()); // PROPOSED
         vm.expectRevert(Errors.InvalidManifestTransition.selector);
         reg.clearUnregulated(token);
     }
@@ -452,7 +513,7 @@ contract TokenPolicyRegistryTest is Test {
         } else if (from == PolicyStatus.UNREGULATED) {
             reg.setUnregulated(token);
         } else if (from == PolicyStatus.PROPOSED) {
-            reg.registerManifest(token, _manifest());
+            _registerManifest(token, _manifest());
         } else if (from == PolicyStatus.ACTIVE) {
             _activate(token);
         } else if (from == PolicyStatus.SUSPENDED) {
@@ -542,7 +603,7 @@ contract TokenPolicyRegistryTest is Test {
     // --- setFact (unchanged strengthen-only behavior) ---------------------
 
     function test_setFact_strengthen_ok() public {
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
         vm.startPrank(operator);
         reg.setFact(token, 0x0F); // 0000_1111
         reg.setFact(token, 0x1F); // superset: 0001_1111
@@ -551,7 +612,7 @@ contract TokenPolicyRegistryTest is Test {
     }
 
     function test_setFact_loosen_reverts() public {
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
         vm.startPrank(operator);
         reg.setFact(token, 0x0F);
         vm.expectRevert(Errors.LooseningForbidden.selector);
@@ -560,7 +621,7 @@ contract TokenPolicyRegistryTest is Test {
     }
 
     function test_setFact_reverts_for_non_operator() public {
-        reg.registerManifest(token, _manifest());
+        _registerManifest(token, _manifest());
         vm.prank(stranger);
         vm.expectRevert(Errors.NotAuthorized.selector);
         reg.setFact(token, 0x0F);
@@ -586,6 +647,95 @@ contract TokenPolicyRegistryTest is Test {
         address token2 = address(0x7001);
         reg.registerManifest(token2, _manifest(), bindings);
         assertEq(reg.compiledPlanHashOf(token2), firstHash, "same bindings compile deterministically");
+    }
+
+    function test_register_bindsVersionedConfigIntoCompiledPlan() public {
+        elementReg.registerElement(
+            PARAM_ELEMENT_ID,
+            address(new TokenPolicyRegistryParameterizedElementMock(PARAM_ELEMENT_ID, PARAM_SCHEMA_ID))
+        );
+        recipeReg.registerRecipe(10, 1, address(new TokenPolicyRegistryRecipeMock(10, 1, PARAM_ELEMENT_ID)));
+        ManifestPolicyConfig memory config = _policyConfig(100);
+
+        reg.registerManifest(token, _manifest(), _parameterBindings(), _emptyOverrides(), config);
+
+        assertEq(reg.policyConfigHashOf(token), keccak256(abi.encode(POLICY_CONFIG_DOMAIN, config)));
+        bytes[] memory parameters = reg.compiledParametersOf(token, 0);
+        assertEq(parameters.length, 1);
+        assertEq(abi.decode(parameters[0], (uint256)), 100);
+
+        address token2 = address(0x7001);
+        reg.registerManifest(token2, _manifest(), _parameterBindings(), _emptyOverrides(), _policyConfig(200));
+        assertNotEq(reg.compiledPlanHashOf(token2), reg.compiledPlanHashOf(token), "config must bind plan hash");
+    }
+
+    function test_register_rejectsMissingDuplicateAndSchemaMismatchedParameters() public {
+        elementReg.registerElement(
+            PARAM_ELEMENT_ID,
+            address(new TokenPolicyRegistryParameterizedElementMock(PARAM_ELEMENT_ID, PARAM_SCHEMA_ID))
+        );
+        recipeReg.registerRecipe(10, 1, address(new TokenPolicyRegistryRecipeMock(10, 1, PARAM_ELEMENT_ID)));
+
+        ManifestPolicyConfig memory unsupportedVersion = _policyConfig(100);
+        unsupportedVersion.schemaVersion = 2;
+        vm.expectRevert(Errors.InvalidPolicyConfig.selector);
+        reg.registerManifest(token, _manifest(), _parameterBindings(), _emptyOverrides(), unsupportedVersion);
+
+        ManifestPolicyConfig memory missing;
+        missing.schemaVersion = 1;
+        missing.elementParameters = new ElementPolicyParameter[](0);
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidPolicyParameter.selector, uint256(0), PARAM_ELEMENT_ID));
+        reg.registerManifest(token, _manifest(), _parameterBindings(), _emptyOverrides(), missing);
+
+        ManifestPolicyConfig memory wrongSchema = _policyConfig(100);
+        wrongSchema.elementParameters[0].schemaId = keccak256("wrong");
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidPolicyParameter.selector, uint256(0), PARAM_ELEMENT_ID));
+        reg.registerManifest(token, _manifest(), _parameterBindings(), _emptyOverrides(), wrongSchema);
+
+        ManifestPolicyConfig memory oversized = _policyConfig(100);
+        oversized.elementParameters[0].parameters = new bytes(33);
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidPolicyParameter.selector, uint256(0), PARAM_ELEMENT_ID));
+        reg.registerManifest(token, _manifest(), _parameterBindings(), _emptyOverrides(), oversized);
+
+        ManifestPolicyConfig memory duplicate = _policyConfig(100);
+        duplicate.elementParameters = new ElementPolicyParameter[](2);
+        duplicate.elementParameters[0] =
+            ElementPolicyParameter(0, PARAM_ELEMENT_ID, PARAM_SCHEMA_ID, 1, abi.encode(uint256(100)));
+        duplicate.elementParameters[1] = duplicate.elementParameters[0];
+        vm.expectRevert(abi.encodeWithSelector(Errors.DuplicatePolicyParameter.selector, uint256(0), PARAM_ELEMENT_ID));
+        reg.registerManifest(token, _manifest(), _parameterBindings(), _emptyOverrides(), duplicate);
+    }
+
+    function test_manifestUpdate_swapsConfigAndCompiledParametersAtomically() public {
+        elementReg.registerElement(
+            PARAM_ELEMENT_ID,
+            address(new TokenPolicyRegistryParameterizedElementMock(PARAM_ELEMENT_ID, PARAM_SCHEMA_ID))
+        );
+        recipeReg.registerRecipe(10, 1, address(new TokenPolicyRegistryRecipeMock(10, 1, PARAM_ELEMENT_ID)));
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("parameter-manifest-v1");
+        reg.registerManifest(token, initial, _parameterBindings(), _emptyOverrides(), _policyConfig(100));
+        vm.prank(operator);
+        reg.approveManifest(token);
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("parameter-manifest-v2");
+        ManifestPolicyConfig memory nextConfig = _policyConfig(200);
+        reg.scheduleManifestUpdate(
+            token, next, _parameterBindings(), _emptyOverrides(), nextConfig, bytes32("PARAMETER_UPDATE")
+        );
+
+        assertEq(abi.decode(reg.compiledParametersOf(token, 0)[0], (uint256)), 100, "active remains unchanged");
+        assertNotEq(reg.pendingCompiledPlanHashOf(token), reg.compiledPlanHashOf(token), "pending is inspectable");
+
+        (,, uint64 effectiveTime,) = reg.pendingManifestUpdateOf(token);
+        vm.warp(effectiveTime);
+        vm.prank(operator);
+        reg.activateManifestUpdate(token);
+
+        assertEq(abi.decode(reg.compiledParametersOf(token, 0)[0], (uint256)), 200);
+        assertEq(reg.policyConfigHashOf(token), keccak256(abi.encode(POLICY_CONFIG_DOMAIN, nextConfig)));
+        assertEq(reg.manifestVersionOf(token), 2);
     }
 
     function test_overrides_reject_length_above_bounded_limit_before_compilation() public {
@@ -648,7 +798,7 @@ contract TokenPolicyRegistryTest is Test {
     function test_manifestUpdate_activatesAfterDelayAndIncrementsVersion() public {
         ManifestCore memory initial = _manifest();
         initial.fullManifestHash = keccak256("manifest-v1");
-        reg.registerManifest(token, initial);
+        _registerManifest(token, initial);
         vm.prank(operator);
         reg.approveManifest(token);
         bytes32 historyBefore = reg.manifestHistoryHashOf(token);
@@ -656,7 +806,7 @@ contract TokenPolicyRegistryTest is Test {
         ManifestCore memory next = initial;
         next.issuanceRecipeVersion = 2;
         next.fullManifestHash = keccak256("manifest-v2");
-        reg.scheduleManifestUpdate(token, next, bytes32("REGULATORY_UPDATE"));
+        _scheduleManifestUpdate(token, next, bytes32("REGULATORY_UPDATE"));
 
         (,, uint64 effectiveTime, bytes32 reasonCode) = reg.pendingManifestUpdateOf(token);
         assertEq(reasonCode, bytes32("REGULATORY_UPDATE"));
@@ -703,7 +853,7 @@ contract TokenPolicyRegistryTest is Test {
     function test_manifestUpdate_preservesSuspendedState() public {
         ManifestCore memory initial = _manifest();
         initial.fullManifestHash = keccak256("manifest-v1");
-        reg.registerManifest(token, initial);
+        _registerManifest(token, initial);
         vm.startPrank(operator);
         reg.approveManifest(token);
         reg.suspendManifest(token, bytes32("INCIDENT"));
@@ -711,7 +861,7 @@ contract TokenPolicyRegistryTest is Test {
 
         ManifestCore memory next = initial;
         next.fullManifestHash = keccak256("manifest-v2");
-        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+        _scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
         vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
         vm.prank(operator);
         reg.activateManifestUpdate(token);
@@ -722,7 +872,7 @@ contract TokenPolicyRegistryTest is Test {
         _activate(token);
         ManifestCore memory next = _manifest();
         vm.expectRevert(Errors.InvalidManifestHash.selector);
-        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+        _scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
     }
 
     function test_manifestUpdate_scheduleRevertsForNonOwner() public {
@@ -731,20 +881,20 @@ contract TokenPolicyRegistryTest is Test {
         next.fullManifestHash = keccak256("manifest-v2");
         vm.prank(operator);
         vm.expectRevert("Ownable: caller is not the owner");
-        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+        _scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
     }
 
     function test_manifestUpdate_cancelPreservesManifestAndVersion() public {
         ManifestCore memory initial = _manifest();
         initial.fullManifestHash = keccak256("manifest-v1");
         bytes32 initialHash = initial.fullManifestHash;
-        reg.registerManifest(token, initial);
+        _registerManifest(token, initial);
         vm.prank(operator);
         reg.approveManifest(token);
 
         ManifestCore memory next = initial;
         next.fullManifestHash = keccak256("manifest-v2");
-        reg.scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
+        _scheduleManifestUpdate(token, next, bytes32("RECIPE_UPDATE"));
         reg.cancelManifestUpdate(token);
         vm.warp(block.timestamp + reg.MIN_MANIFEST_DELAY());
         vm.prank(operator);

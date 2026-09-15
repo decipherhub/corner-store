@@ -36,6 +36,11 @@ stateful Element는 읽기 검사와 settlement 후 `commit()`을 분리한다. 
 Router 성공 경로에서만 호출하고, off-chain person-group state는 execution id에
 동일 내용이면 no-op, 다른 내용이면 reject하는 idempotency를 적용한다.
 
+Element 구현은 자산별 허용값을 storage에 하드코딩하지 않는다. immutable metadata로
+parameter schema ID/version/required/max bytes를 선언하고, Engine이 Manifest lifecycle에
+고정된 binding별 compiled parameter를 전달한다. 동적 KYC/TA/provider state와 PII는
+parameter가 아니라 외부 evidence boundary에 남는다.
+
 ## Recipe
 
 Recipe는 하나의 법률효과를 표현하는 Element 집합과 활성화 logic이다. 한 거래에는
@@ -68,6 +73,9 @@ Manifest를 거래 context에 함께 적용한다.
 
 `ACTIVE` Manifest가 존재하면 누락된 Recipe, invalid version, 지원하지 않는 engine
 또는 불완전 reference는 허용 기본값으로 처리하지 않는다.
+`ManifestPolicyConfig`는 Manifest와 별도로 갱신할 수 없으며, pending config와 compiled
+parameters는 검토 가능하되 timelock activation 전까지 active evaluation에 영향을
+주지 않는다.
 
 ## Inputs and Outputs
 
@@ -133,6 +141,9 @@ struct ComplianceDecision {
 - Element default enforcement와 onboarding override는 registration/update 시점에
   bounded compiled plan으로 고정한다. 일반 onboarding은 strengthen-only이며
   `FORCE_FLAG_ONLY` downgrade는 허용하지 않는다.
+- 자산별 Element parameter는 versioned `ManifestPolicyConfig`로 관리하고 immutable
+  Element schema capability와 Recipe membership을 compile 전에 검증한다. Engine은
+  config를 동적으로 해석하지 않고 rules와 정렬된 compiled bytes를 전달한다.
 - Element가 nonzero reasonCode를 반환하면 Engine/CLI가 그 값을 그대로 전달한다.
   zero reason만 recipe-scoped generic code `1`로 fallback한다.
 - Asset Manifest가 기존 single Recipe mapping/Token Policy 역할을 확장한다.

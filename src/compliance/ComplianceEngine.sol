@@ -215,14 +215,16 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         returns (bool passed, bool flagged, bytes32 reasonCode)
     {
         CompiledElementRule[] memory rules = policyReg.compiledRulesOf(token, bindingIndex);
+        bytes[] memory parameters = policyReg.compiledParametersOf(token, bindingIndex);
         if (rules.length == 0 || rules.length > MAX_ELEMENTS_PER_RECIPE) {
             revert Errors.TooManyRecipeElements(recipeId, rules.length, MAX_ELEMENTS_PER_RECIPE);
         }
+        if (parameters.length != rules.length) revert Errors.InvalidPolicyConfig();
         bytes memory elementContext = abi.encode(ctx);
         uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
         for (uint256 i = 0; i < rules.length; i++) {
             (bool elementPassed, bytes32 elementReason) =
-                _checkElementRule(ctx, token, rwaAmount, elementContext, rules[i].elementId);
+                _checkElementRule(ctx, token, rwaAmount, elementContext, rules[i].elementId, parameters[i]);
             if (elementPassed) continue;
             flagged = true;
             if (rules[i].action == EnforcementAction.FLAG_ONLY) continue;
@@ -236,11 +238,12 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         address token,
         uint256 rwaAmount,
         bytes memory elementContext,
-        bytes32 elementId
+        bytes32 elementId,
+        bytes memory parameters
     ) private view returns (bool elementPassed, bytes32 elementReason) {
         address element = elementReg.elementOf(elementId);
         if (element == address(0)) revert Errors.ElementNotRegistered(elementId);
-        return IComplianceElement(element).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext, "");
+        return IComplianceElement(element).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext, parameters);
     }
 
     function _reasonOrFallback(bytes32 elementReason, uint16 recipeId, bytes32 elementId)

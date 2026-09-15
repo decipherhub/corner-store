@@ -15,6 +15,23 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `CORE-007 — Versioned Manifest Policy Config`: 자산별 Element 정책값을 schema v1
+  `ManifestPolicyConfig`로 분리하고 Manifest 등록/semantic update에만 결합했다.
+  Registry는 최대 256 entry, 총 16,384 bytes, binding/Recipe membership, 중복,
+  immutable schema ID/version, required와 Element별 길이 상한을 activation 전에
+  fail-closed 검증한다. config hash와 binding별 aligned parameter bytes는 compiled
+  plan/history/Engine policy ID에 포함되고, Engine은 동적 lookup 없이 정확한 bytes를
+  Element에 전달한다. pending plan은 timelock 동안 active 상태와 분리되며 activation
+  transaction에서 Manifest version/bindings/enforcement/config hash/parameters가 함께
+  교체된다. config 원문은 Safe calldata/PII-free artifact 경계에 남기고 온체인은
+  active hash와 실행 bytes만 보존한다. EIP-170 초과를 E2E에서 발견해 legacy
+  contract-only overload와 중복 config storage/getter를 제거했으며 최종
+  TokenPolicyRegistry runtime은 23,980 bytes(596-byte margin)로 실제 배포됐다.
+  검증: Registry 56/56, Engine 38/38, full Foundry 881/881, 전체
+  `scripts/check.sh`, BUIDL-like/Reg-D E2E 각각 7/7 및 dashboard/CLI/RFQ flow,
+  `git diff --check` 통과. full check에서는 main의 기존 두 script formatter drift만
+  검증 중 임시 포맷 후 원복했다.
+
 - `CORE-006 — Unified Element Parameter Interface`: 모든 in-repo Element와
   Engine/CLI/demo call site를 단일 `check(..., context, parameters)` ABI로
   migration했다. immutable metadata가 schema ID/version, required와 최대 bytes를
