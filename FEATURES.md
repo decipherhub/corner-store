@@ -10,6 +10,28 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## DOCS-011 — ADR-010 Production Policy Decisions
+
+### Behavior
+
+- Q1~Q8과 D-5의 최종 결정을 하나의 accepted ADR로 기록한다.
+- ManifestPolicyConfig, 단일 Element ABI, 주소+runtime-code binding, 온체인
+  lifecycle+PII-free artifact 감사, 안전우선 긴급 교체, exact Recipe version과
+  제한적 predicate 정규화 경계를 구분한다.
+- Q8의 단계적 구현 순서를 GitHub epic #101과 하위 이슈 #102~#110으로 추적한다.
+- 실제 BUIDL 상품값, provider/보관 운영과 Safe 구성은 외부 승인 없이 확정하지 않는다.
+
+### Verification
+
+- ADR/decision index/documentation links review
+- GitHub issue #101 checklist and #102~#110 existence
+- `git diff --check`
+
+### State
+
+passing
+
+
 ## CORE-005 — Compliance Core Production Hardening
 
 ### Behavior

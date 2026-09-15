@@ -21,6 +21,7 @@
 | **ADR-007** | PD-1~PD-7 Phase 1 architecture baseline accepted | 개발팀 | Manifest/Recipe/state/claims/enforcement/governance/lifecycle |
 | **ADR-008** | 취득 출처·상태 카운팅·거절 로깅·라우터 밖 감시 seam | 리걸/PM + 개발팀 | off-chain compliance data layer 기준 |
 | **ADR-009** | production RFQ dealer/settlement baseline | 개발팀 | non-custodial exact full-fill, signer/nonce/risk 운영 경계 |
+| **ADR-010** | 정책 parameter 소유권, 단일 Element ABI, immutable version, 실행 binding과 PII-free 감사 경계 | 소유자 + 개발팀 | Q1~Q8·D-5 확정, 구현 epic #101 |
 
 ## 2. ✅ 확정 — 사용자(리걸/PM) 비준 [스코프·정책]
 
@@ -87,3 +88,4 @@
 
 - [2026-07-14] ADR-007 accepted PD-1~PD-7 Phase 1 architecture baseline. Section 3 moved from proposed/development-team pending to accepted.
 - [2026-07-30] ADR-008 compliance data seam과 ADR-009 production RFQ policy를 accepted index에 추가.
+- [2026-09-15] ADR-010 정책 parameter/version/execution binding/audit 결정을 accepted index에 추가.

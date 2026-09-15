@@ -44,6 +44,8 @@ Uniswap v3 배포 도구의 실제 포함 범위와 의존성은
   activation evidence: `deployment-production.md`
 - feature 상태와 세션 진행: `FEATURES.md`, `PROGRESS.md`
 - 결정 이유와 품질 상태: `DECISIONS.md`, `QUALITY.md`
+- 정책 parameter·immutable version·실행 binding·감사 결정:
+  [`ADR-010`](./decisions/ADR-010-policy-parameters-versioning-and-audit.md)
 
 문서 간 내용이 충돌하면 더 구체적인 책임 문서를 우선하고, 충돌 자체를 방치하지
 않는다. 아키텍처를 바꾸면 제품 baseline과 해당 책임 문서를 함께 갱신하고, 구현
