@@ -15,6 +15,14 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DOCS-011 — ADR-010 Production Policy Decisions`: Q1~Q8과 D-5에서 선택한
+  Manifest-owned versioned config, bounded parameter 단일 Element ABI,
+  주소+runtime code hash execution binding, 온체인 lifecycle+PII-free artifact
+  감사, 안전우선 불변 버전 교체, exact Recipe version과 제한적 predicate
+  정규화를 accepted ADR로 기록했다. 구현은 GitHub epic #101 및 #102~#110의
+  의존성 순서로 분리했다. 이 slice는 문서·이슈 추적만 변경하므로 executable
+  test와 E2E는 실행하지 않고 link/status review와 `git diff --check`로 검증한다.
+
 - `CMP-005 — A-12 Registration Safety`: opt-in wave-3 배포 스크립트가 A-12를
   2-인자 기본 `BLOCK` 경로로 등록하던 문제를 수정해 명시적 `FLAG_ONLY`로
   등록한다. wave-3가 기본 Foundry compile graph 밖에 있는 경계를 유지하면서도

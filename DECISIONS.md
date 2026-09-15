@@ -1,5 +1,55 @@
 # Decisions
 
+## D018 — 정책 파라미터와 실행 인스턴스를 versioned commitment로 고정한다
+
+Date: 2026-09-15
+
+### Context
+
+자산별 정책값을 Element 구현에 하드코딩하면 같은 규칙을 상품마다 다시 배포하게
+되고 Manifest governance 밖에서 의미가 달라질 수 있다. 반면 모든 규칙을 범용
+DSL로 만들면 법률 의미, 타입, gas와 compiler 검증 범위가 과도하게 커진다.
+
+### Decision
+
+ADR-010을 accepted decision으로 채택한다. 자산별 정책값은 versioned
+`ManifestPolicyConfig`가 소유하며 Manifest와 원자적으로 활성화한다. Element는
+bounded parameter를 받는 하나의 ABI로 통일하고 반복 primitive만 제한적으로
+정규화한다. 정책 식별자는 exact Recipe/Element/schema/parameter뿐 아니라 chain,
+배포 주소와 runtime code hash를 함께 고정하며 `decisionHash`가 이를 참조한다.
+
+정책 lifecycle은 온체인 event로 보존하고 상세 자료는 PII-free canonical 감사
+아티팩트로 관리한다. 긴급 Element 교체는 pause 후 새 불변 version과 정상
+timelock을 사용한다. production Recipe 조회는 exact `recipeKey + version`으로
+통일하고 모호한 latest-address API를 제거한다.
+
+### Alternatives Considered
+
+- Element별 자산값 유지: Manifest history와 분리되므로 제외
+- 공통 ABI에 Element별 struct 노출: 새 Element마다 core 타입이 바뀌므로 제외
+- runtime code hash 또는 주소 중 하나만 고정: 코드와 배포 인스턴스를 동시에
+  증명하지 못하므로 제외
+- 모든 감사 자료 온체인 저장 또는 event replay만 사용: 비용·PII 또는 복원 운영
+  위험이 커서 온체인 이력과 PII-free 아티팩트를 결합
+- Safe break-glass와 같은-ID 구현 교체: timelock 우회와 과거 의미 변경 때문에 제외
+- 범용 정책 DSL: 현재 반복 근거에 비해 compiler·gas·감사 범위가 과도해 제외
+
+### Consequences
+
+- 기존 GIWA 배포 ABI 호환 대신 저장소 전체를 하나의 interface로 migration한다.
+- local Anvil demo는 유지하지만 ABI/schema/latest call site를 함께 갱신해야 한다.
+- 구현은 GitHub epic #101의 하위 이슈별 feature branch와 PR로 분리한다.
+- 실제 상품값, 보관 기간, provider/Safe 운영자는 외부 승인 전 production에서
+  fail-closed한다.
+
+### Related Files
+
+- `docs/decisions/ADR-010-policy-parameters-versioning-and-audit.md`
+- `docs/decisions/decision-register.md`
+- `FEATURES.md`
+- `PROGRESS.md`
+- GitHub issues #101–#110
+
 ## D010 — Configuration-driven Toolkit is the operator entry point
 
 Date: 2026-07-22
