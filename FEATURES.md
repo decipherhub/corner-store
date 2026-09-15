@@ -10,6 +10,37 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## CORE-009 — Bounded Predicate and Element Conformance
+
+### Behavior
+
+- 공통 Element ABI는 그대로 유지하고 metadata에 evidence type과 immutable default
+  enforcement를 명시적으로 고정한다.
+- Registry는 등록자가 지정한 default enforcement와 Element metadata가 다르면
+  fail-closed한다.
+- `BoolClaim`, `BoundedUint`, `TimestampWindow`, `SetMembership`의 bounded decoder를
+  제공하되 범용 DSL/AST/interpreter는 만들지 않는다.
+- generic `MinimumTradeAmount` Element는 threshold를 구현에 하드코딩하지 않고
+  `ManifestPolicyConfig` parameter에서 읽는다.
+- 실제 BUIDL-like profile migration과 값 승인은 별도 `#109`에서 수행한다.
+
+### Verification
+
+- ElementRegistry 11/11, PredicateValidation 4/4, MinimumTradeAmount 2/2,
+  Engine 40/40 targeted tests pass
+- existing Element 579/579, TokenPolicyRegistry 56/56, Factory 11/11 regressions pass
+- full `forge test --offline`: 891/891
+- full `scripts/check.sh`: Foundry, all service/package smoke, standalone clean SDK
+  consumer와 deploy-v3 10/10 pass
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ flow pass
+- `TokenPolicyRegistry` runtime 24,035 bytes(EIP-170 margin 541 bytes),
+  `git diff --check` pass
+
+### State
+
+passing
+
+
 ## CORE-008 — Exact Recipe Key and Version Resolution
 
 ### Behavior

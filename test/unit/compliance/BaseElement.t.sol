@@ -9,7 +9,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../../src/types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../../src/libraries/ReasonCodes.sol";
 
@@ -23,6 +25,8 @@ contract ParameterCapabilityElement is BaseElement {
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
                 statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+                defaultEnforcement: EnforcementAction.BLOCK,
                 parameterSchemaId: schemaId,
                 parameterSchemaVersion: schemaVersion,
                 maxParameterBytes: maxBytes,

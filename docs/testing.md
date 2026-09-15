@@ -158,6 +158,11 @@ yarn test
 
 Foundry integration tests는 mock/ERC-3643 fixture를 사용해 regulated swap,
 multi-Recipe, surveillance, emergency pause와 invariant path를 검증한다.
+`PredicateValidation.t.sol`은 bool/uint/time-window/set의 exact encoding, inclusive
+boundary, duplicate와 최대 entry 제한을 검증한다. `MinimumTradeAmount.t.sol`은
+Manifest-owned threshold와 missing/zero/trailing parameter fail-closed를 검증하고,
+`ElementRegistry.t.sol`은 evidence type 및 metadata-declared default enforcement
+불일치를 거부하는지 확인한다.
 `tools/deploy-v3`의 Corner Store profile은 unit test로 구성과 순서를 검증하며,
 canonical Uniswap v3 integration test는 같은 pinned package artifact로 factory와
 pool을 배포해 CREATE2, mint/swap callback과 실제 ERC-3643 transfer를 검증한다.

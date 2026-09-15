@@ -145,7 +145,9 @@ struct ComplianceDecision {
 - Recipe는 canonical `bytes32 recipeKey`와 immutable `(recipeKey, version)`으로
   등록하며 legacy numeric id는 compatibility alias로만 유지한다.
 - Element default enforcement와 onboarding override는 registration/update 시점에
-  bounded compiled plan으로 고정한다. 일반 onboarding은 strengthen-only이며
+  bounded compiled plan으로 고정한다. default enforcement와 PII-free evidence
+  source class는 Element metadata commitment에 포함되고 Registry/Toolkit이 등록
+  입력과의 일치를 검증한다. 일반 onboarding은 strengthen-only이며
   `FORCE_FLAG_ONLY` downgrade는 허용하지 않는다.
 - 자산별 Element parameter는 versioned `ManifestPolicyConfig`로 관리하고 immutable
   Element schema capability와 Recipe membership을 compile 전에 검증한다. Engine은
@@ -158,6 +160,16 @@ struct ComplianceDecision {
 - ADR-008의 acquisition lot, reject logging과 Router 밖 surveillance는
   provider-neutral off-chain data layer로 연결한다. 온체인에는 expiring snapshot과
   PII-free hash만 둔다.
+
+### Bounded predicate boundary
+
+`PredicateValidation`은 canonical ABI bool, inclusive bounded uint, inclusive
+timestamp window와 duplicate-free packed bytes32 set만 exact length/상한으로
+decode한다. 이는 Element 내부 구현 helper이며 임의 predicate graph, AST,
+interpreter 또는 무제한 boolean composition을 제공하지 않는다. 법률 의미와
+reason taxonomy는 개별 Element에 남는다. `MinimumTradeAmount`는 이 경계를 사용하는
+generic Element이고 실제 threshold는 `ManifestPolicyConfig`가 소유한다. 기존
+BUIDL-like demo wiring migration은 #109의 별도 검증 범위다.
 
 ## Open Decisions
 

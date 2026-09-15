@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "chainId": 42161,
   "configHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "artifactHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -31,12 +31,14 @@
     {
       "elementId": "0x0101010101010101010101010101010101010101010101010101010101010101",
       "implementation": "0x2000000000000000000000000000000000000001",
+      "evidenceType": "PROVIDER_ATTESTATION",
       "defaultAction": "BLOCK",
       "versionHash": "0x0505050505050505050505050505050505050505050505050505050505050505"
     },
     {
       "elementId": "0x0606060606060606060606060606060606060606060606060606060606060606",
       "implementation": "0x2000000000000000000000000000000000000003",
+      "evidenceType": "ONCHAIN_STATE",
       "defaultAction": "FLAG_ONLY"
     }
   ],

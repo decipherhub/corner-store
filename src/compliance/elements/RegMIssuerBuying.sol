@@ -11,7 +11,9 @@ import {
     ObligationTiming,
     Statefulness,
     ComplianceContext,
-    FlowType
+    FlowType,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
@@ -192,6 +194,8 @@ contract RegMIssuerBuying is BaseElement, Governed {
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
                 statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.ONCHAIN_STATE,
+                defaultEnforcement: EnforcementAction.BLOCK,
                 parameterSchemaId: bytes32(0),
                 parameterSchemaVersion: 0,
                 maxParameterBytes: 0,

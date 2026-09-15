@@ -4,6 +4,7 @@ import {keccak256} from "ethers";
 import {
   createProductionOnboardingPlan,
   deriveRecipeKey,
+  EVIDENCE_TYPE,
   ENFORCEMENT_ACTION,
   MAX_ENFORCEMENT_OVERRIDES,
   normalizeRecipeAlias,
@@ -308,7 +309,7 @@ assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, gove
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, governance: {...onboardingConfig.governance, extra: true} as any}), "unknown governance field rejected");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, codeHashes: {...onboardingConfig.codeHashes, unknownAddress: `0x${"06".repeat(32)}`}}), "unsupported codeHashes key rejected");
 
-// --- production onboarding v2: canonical recipe key + compiled enforcement ---
+// --- production onboarding v3: canonical policy + evidence metadata ---
 const normalizedAlias = normalizeRecipeAlias(" Reg_D.506c Issuance ");
 assert(normalizedAlias === "reg-d-506c-issuance", "recipe alias normalization");
 const aliasHash = recipeAliasHash(normalizedAlias);
@@ -316,12 +317,12 @@ const recipeKey = deriveRecipeKey(aliasHash);
 assert(recipeKey === deriveRecipeKey(aliasHash), "recipe key derivation is deterministic");
 assertThrows(() => normalizeRecipeAlias("규제"), "non-ASCII alias rejected");
 assertThrows(() => normalizeRecipeAlias(".".repeat(80)), "empty/too-long alias rejected");
-const onboardingConfigV2 = validateProductionOnboardingConfig({
+const onboardingConfigV3 = validateProductionOnboardingConfig({
   ...onboardingConfig,
-  schemaVersion: 2,
+  schemaVersion: 3,
   elements: [
-    {...onboardingConfig.elements[0], defaultAction: "BLOCK", versionHash: `0x${"05".repeat(32)}`},
-    {elementId: `0x${"06".repeat(32)}`, implementation: "0x2000000000000000000000000000000000000003", defaultAction: "FLAG_ONLY"}
+    {...onboardingConfig.elements[0], evidenceType: "PROVIDER_ATTESTATION", defaultAction: "BLOCK", versionHash: `0x${"05".repeat(32)}`},
+    {elementId: `0x${"06".repeat(32)}`, implementation: "0x2000000000000000000000000000000000000003", evidenceType: "ONCHAIN_STATE", defaultAction: "FLAG_ONLY"}
   ],
   recipes: [{
     ...onboardingConfig.recipes[0],
@@ -333,26 +334,33 @@ const onboardingConfigV2 = validateProductionOnboardingConfig({
   }],
   enforcementOverrides: [{bindingIndex: 0, elementId: `0x${"06".repeat(32)}`, mode: "ESCALATE_TO_BLOCK"}]
 });
-const onboardingPlanV2 = createProductionOnboardingPlan(onboardingConfigV2, "2026-08-23T00:00:00.000Z");
-assert(onboardingPlanV2.schemaVersion === 2, "v2 onboarding plan carries schemaVersion");
-assert(onboardingPlanV2.recipeKeyCommitments?.[0].normalizedAlias === normalizedAlias && onboardingPlanV2.recipeKeyCommitments[0].recipeKey === recipeKey, "v2 plan records canonical recipe key commitment");
-assert(onboardingPlanV2.compiledPlan?.bindings[0].rules.map((rule) => rule.action).join(",") === "BLOCK,BLOCK", "v2 plan records compiled strengthened rules");
-assert(!JSON.stringify(onboardingPlanV2).includes("Reg_D.506c Issuance"), "v2 immutable plan stores normalized alias only");
-const decodedElementV2 = ifaces.ELEMENT_REGISTRY.decodeFunctionData("registerElement(bytes32,address,uint8)", onboardingPlanV2.transactions[0].data);
-assert(Number(decodedElementV2[2]) === ENFORCEMENT_ACTION.BLOCK, "v2 element calldata includes default action");
-const decodedRecipeV2 = ifaces.RECIPE_REGISTRY.decodeFunctionData("registerRecipe(bytes32,bytes32,uint16,uint16,address)", onboardingPlanV2.transactions[2].data);
-assert(decodedRecipeV2[0] === aliasHash && decodedRecipeV2[1] === recipeKey, "v2 recipe calldata includes canonical alias/key");
-const decodedManifestV2 = ifaces.POLICY_REGISTRY.decodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[])", onboardingPlanV2.transactions[3].data);
-assert(decodedManifestV2[3].length === 1 && Number(decodedManifestV2[3][0][2]) === 2, "v2 manifest calldata includes bounded override");
+const onboardingPlanV3 = createProductionOnboardingPlan(onboardingConfigV3, "2026-08-23T00:00:00.000Z");
+const onboardingConfigV2Compat = validateProductionOnboardingConfig({
+  ...onboardingConfigV3,
+  schemaVersion: 2,
+  elements: onboardingConfigV3.elements.map(({evidenceType: _evidenceType, ...element}) => element)
+});
+assert(onboardingConfigV2Compat.schemaVersion === 2, "existing schemaVersion 2 remains readable without evidenceType reinterpretation");
+assert(onboardingPlanV3.schemaVersion === 3, "v3 onboarding plan carries schemaVersion");
+assert(onboardingPlanV3.recipeKeyCommitments?.[0].normalizedAlias === normalizedAlias && onboardingPlanV3.recipeKeyCommitments[0].recipeKey === recipeKey, "v3 plan records canonical recipe key commitment");
+assert(onboardingPlanV3.compiledPlan?.bindings[0].rules.map((rule) => rule.action).join(",") === "BLOCK,BLOCK", "v3 plan records compiled strengthened rules");
+assert(!JSON.stringify(onboardingPlanV3).includes("Reg_D.506c Issuance"), "v3 immutable plan stores normalized alias only");
+const decodedElementV2 = ifaces.ELEMENT_REGISTRY.decodeFunctionData("registerElement(bytes32,address,uint8)", onboardingPlanV3.transactions[0].data);
+assert(Number(decodedElementV2[2]) === ENFORCEMENT_ACTION.BLOCK, "v3 element calldata includes default action");
+const decodedRecipeV2 = ifaces.RECIPE_REGISTRY.decodeFunctionData("registerRecipe(bytes32,bytes32,uint16,uint16,address)", onboardingPlanV3.transactions[2].data);
+assert(decodedRecipeV2[0] === aliasHash && decodedRecipeV2[1] === recipeKey, "v3 recipe calldata includes canonical alias/key");
+const decodedManifestV2 = ifaces.POLICY_REGISTRY.decodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[])", onboardingPlanV3.transactions[3].data);
+assert(decodedManifestV2[3].length === 1 && Number(decodedManifestV2[3][0][2]) === 2, "v3 manifest calldata includes bounded override");
 assert(createProductionOnboardingPlan(onboardingConfig).schemaVersion === 1, "legacy plan version matches legacy calldata mode");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, elements: [{...onboardingConfig.elements[0], defaultAction: "BLOCK"}]} as any), "schemaVersion 1 rejects v2 element fields");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, elements: onboardingConfigV3.elements.map(({evidenceType: _evidenceType, ...element}) => element)} as any), "schemaVersion 3 requires evidence type");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, recipes: [{...onboardingConfig.recipes[0], alias: "reg-d-506c-issuance"}]} as any), "schemaVersion 1 rejects v2 recipe fields");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, enforcementOverrides: []} as any), "schemaVersion 1 rejects v2 overrides");
-assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, recipes: [{...onboardingConfigV2.recipes[0], alias: "reg_d 506c.issuance"}, {...onboardingConfigV2.recipes[0], recipeId: 2, implementation: "0x2000000000000000000000000000000000000004", alias: "REG-D-506C-ISSUANCE"}]}), "canonical alias collision rejected");
-assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, recipes: [{...onboardingConfigV2.recipes[0], aliasHash: `0x${"09".repeat(32)}`}] as any}), "aliasHash mismatch rejected");
-assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, enforcementOverrides: [{bindingIndex: 0, elementId: onboardingConfig.elements[0].elementId, mode: "FORCE_FLAG_ONLY"}]}), "loosening BLOCK override rejected locally");
-assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, enforcementOverrides: [{bindingIndex: 8, elementId: onboardingConfig.elements[0].elementId, mode: "ESCALATE_TO_BLOCK"}]}), "out-of-range override rejected locally");
-assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV2, enforcementOverrides: Array.from({length: MAX_ENFORCEMENT_OVERRIDES + 1}, () => ({bindingIndex: 0, elementId: onboardingConfigV2.elements[1].elementId, mode: "ESCALATE_TO_BLOCK"}))}), "257 overrides rejected locally");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, recipes: [{...onboardingConfigV3.recipes[0], alias: "reg_d 506c.issuance"}, {...onboardingConfigV3.recipes[0], recipeId: 2, implementation: "0x2000000000000000000000000000000000000004", alias: "REG-D-506C-ISSUANCE"}]}), "canonical alias collision rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, recipes: [{...onboardingConfigV3.recipes[0], aliasHash: `0x${"09".repeat(32)}`}] as any}), "aliasHash mismatch rejected");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, enforcementOverrides: [{bindingIndex: 0, elementId: onboardingConfig.elements[0].elementId, mode: "FORCE_FLAG_ONLY"}]}), "loosening BLOCK override rejected locally");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, enforcementOverrides: [{bindingIndex: 8, elementId: onboardingConfig.elements[0].elementId, mode: "ESCALATE_TO_BLOCK"}]}), "out-of-range override rejected locally");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, enforcementOverrides: Array.from({length: MAX_ENFORCEMENT_OVERRIDES + 1}, () => ({bindingIndex: 0, elementId: onboardingConfigV3.elements[1].elementId, mode: "ESCALATE_TO_BLOCK"}))}), "257 overrides rejected locally");
 
 const ammOnlyConfig = validateProductionOnboardingConfig({
   ...onboardingConfig,
@@ -413,22 +421,41 @@ const onboardingVerificationPromise = verifyProductionOnboarding(onboardingConfi
   return verifyProductionOnboarding(onboardingConfig, operatorUnavailableReader);
 }).then((operatorUnavailableVerify) => {
   assert(!operatorUnavailableVerify.ready && operatorUnavailableVerify.checks.some((check) => check.name === "token-policy-operator" && !check.pass), "token policy operator role unavailable fails closed");
-  const expectedCompiled = onboardingPlanV2.compiledPlan!;
-  const okReaderV2 = {
+  const expectedCompiled = onboardingPlanV3.compiledPlan!;
+  const okReaderV3 = {
     ...okReader,
     async call(address: string, abi: string[], fn: string, args: unknown[] = []) {
       if (fn === "elementOf") {
         const id = String(args[0]).toLowerCase();
-        const element = onboardingConfigV2.elements.find((entry) => entry.elementId.toLowerCase() === id);
+        const element = onboardingConfigV3.elements.find((entry) => entry.elementId.toLowerCase() === id);
         return element?.implementation ?? ZERO_ADDR;
       }
       if (fn === "defaultActionOf") {
         const id = String(args[0]).toLowerCase();
-        const element = onboardingConfigV2.elements.find((entry) => entry.elementId.toLowerCase() === id);
+        const element = onboardingConfigV3.elements.find((entry) => entry.elementId.toLowerCase() === id);
         return element ? ENFORCEMENT_ACTION[element.defaultAction as keyof typeof ENFORCEMENT_ACTION] : 0;
       }
-      if (fn === "versionHashOf") return onboardingConfigV2.elements[0].versionHash;
-      if (fn === "recipeOf" && args.length === 2 && String(args[0]).startsWith("0x")) return onboardingConfigV2.recipes[0].implementation;
+      if (fn === "metadataOf") {
+        const id = String(args[0]).toLowerCase();
+        const element = onboardingConfigV3.elements.find((entry) => entry.elementId.toLowerCase() === id)!;
+        return [
+          element.elementId,
+          0,
+          "1.0.0",
+          0,
+          0,
+          1,
+          0,
+          EVIDENCE_TYPE[element.evidenceType as keyof typeof EVIDENCE_TYPE],
+          ENFORCEMENT_ACTION[element.defaultAction as keyof typeof ENFORCEMENT_ACTION],
+          `0x${"00".repeat(32)}`,
+          0,
+          0,
+          false
+        ];
+      }
+      if (fn === "versionHashOf") return onboardingConfigV3.elements[0].versionHash;
+      if (fn === "recipeOf" && args.length === 2 && String(args[0]).startsWith("0x")) return onboardingConfigV3.recipes[0].implementation;
       if (fn === "recipeOf") return "0x20000000000000000000000000000000000000ff";
       if (fn === "recipeKeyOfAlias") return recipeKey;
       if (fn === "aliasHashOf") return aliasHash;
@@ -447,13 +474,13 @@ const onboardingVerificationPromise = verifyProductionOnboarding(onboardingConfi
       return okReader.call(address, abi, fn, args);
     }
   };
-  return verifyProductionOnboarding(onboardingConfigV2, okReaderV2);
-}).then((v2Verify) => {
-  assert(v2Verify.ready, `v2 onboarding verifier should pass: ${JSON.stringify(v2Verify.checks)}`);
+  return verifyProductionOnboarding(onboardingConfigV3, okReaderV3);
+}).then((v3Verify) => {
+  assert(v3Verify.ready, `v3 onboarding verifier should pass: ${JSON.stringify(v3Verify.checks)}`);
   const mismatchReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "compiledPlanHashOf") return `0x${"ff".repeat(32)}`; return (okReader as any).call(address, abi, fn, args); }};
-  return verifyProductionOnboarding(onboardingConfigV2, mismatchReader);
-}).then((v2MismatchVerify) => {
-  assert(!v2MismatchVerify.ready && v2MismatchVerify.checks.some((check) => check.name === "compiled-plan-hash" && !check.pass), "v2 compiled plan mismatch fails closed");
+  return verifyProductionOnboarding(onboardingConfigV3, mismatchReader);
+}).then((v3MismatchVerify) => {
+  assert(!v3MismatchVerify.ready && v3MismatchVerify.checks.some((check) => check.name === "compiled-plan-hash" && !check.pass), "v3 compiled plan mismatch fails closed");
   const pendingReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "isDelegate") return false; if (fn === "pendingDelegateReadyAt") return 123n; return okReader.call(address, abi, fn, args); }};
   return verifyProductionOnboarding(onboardingConfig, pendingReader);
 }).then((pendingVerify) => {

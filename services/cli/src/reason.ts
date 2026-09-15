@@ -1,6 +1,6 @@
 import {AbiCoder, encodeBytes32String, keccak256} from "ethers";
 
-// Element id (bytes32 string) -> human label — 24 in-repo elements. The first
+// Element id (bytes32 string) -> human label — in-repo elements. The first
 // 11 (A-01, A-02, A-03, A-04, A-05, B-01, B-02, C-01, E-01, A-13, F-02) are the
 // original illustrative elements — six of which (A-01, A-03, A-04, A-13, B-01,
 // B-02) were upgraded in place to the walkthrough-doc failure-code taxonomy
@@ -37,7 +37,8 @@ export const ELEMENT_LABELS: Record<string, string> = {
   "F-01-v1": "Operator Self-Dealing",
   "F-03-v1": "Fraud Surveillance",
   "F-04-v1": "Reg M Issuer Buying",
-  "BUIDL-MIN-v1": "Minimum Investment"
+  "BUIDL-MIN-v1": "Minimum Investment",
+  "MIN-AMOUNT-v1": "Minimum Trade Amount"
 };
 
 // Recipe id -> human label. Recipes registered by DeployStack.
@@ -64,6 +65,9 @@ export const POLICY_STATUS: Record<number, string> = {
 // code 1 -> the element's human label, exactly the file's original behavior
 // (see buildTable below).
 export const ELEMENT_CODE_NAMES: Record<string, Record<number, string>> = {
+  "MIN-AMOUNT-v1": {
+    1: "BELOW_MINIMUM_TRADE_AMOUNT"
+  },
   // A-01-v1 Sanctions (src/compliance/elements/Sanctions.sol header table).
   "A-01-v1": {
     1: "FAIL_SDN_WALLET_MATCH",
@@ -267,13 +271,13 @@ interface TableEntry {
 
 // Precompute every known reason code from four sources:
 //
-//  1. Recipe-scoped fallback verdicts: (recipeId in {1,2,7}) x (24 elementIds) x
+//  1. Recipe-scoped fallback verdicts: (recipeId in {1,2,7}) x (known elementIds) x
 //     (every code in that element's ELEMENT_CODE_NAMES table, or just code 1
 //     for elements without one). `ComplianceEngine._runChecks` preserves a
 //     non-zero Element reason exactly; recipe-scoped
 //     code 1 remains the fallback for Elements that return a zero reason.
 //     Richer recipe-scoped combinations remain precomputed for compatibility.
-//  2. Direct element-level codes: (recipeId 0) x (24 elementIds) x (every
+//  2. Direct element-level codes: (recipeId 0) x (known elementIds) x (every
 //     code in ELEMENT_CODE_NAMES, or code 1 for elements without one). Every
 //     element's own `check()` self-encodes with `ReasonCodes.encode(0,
 //     ELEMENT_ID, n)` (see e.g. Sanctions.sol, HolderCount.sol) — this is
@@ -282,7 +286,7 @@ interface TableEntry {
 //     HolderCount.onTransfer), and by monitoring-flag events (e.g.
 //     SurveillanceFlag). THIS is where the wave-2b codes 2-10 are genuinely
 //     decodable today.
-//  3. Common invalid-parameter failures: (recipeId 0) x (24 elementIds).
+//  3. Common invalid-parameter failures: (recipeId 0) x (known elementIds).
 //  4. The engine's policy-status rejections (recipeId 0, sentinel element
 //     "POLICY"): `ComplianceEngine._rejectPolicy`: encode(0, "POLICY", uint32(status)).
 function buildTable(): Map<string, TableEntry> {

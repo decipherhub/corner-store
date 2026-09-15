@@ -24,7 +24,9 @@ import {
     PolicyStatus,
     RecipeBinding,
     RecipeBindingMode,
-    VenueType
+    VenueType,
+    EvidenceType,
+    EnforcementAction
 } from "../../../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../../../src/types/VenueTypes.sol";
 
@@ -51,6 +53,8 @@ contract FactoryElementMock is IComplianceElement {
         m.decidability = Decidability.DETERMINISTIC;
         m.timing = ObligationTiming.AT_TRADE_GATE;
         m.statefulness = Statefulness.STATELESS;
+        m.evidenceType = EvidenceType.TRANSACTION_CONTEXT;
+        m.defaultEnforcement = EnforcementAction.BLOCK;
     }
 }
 

@@ -8,17 +8,21 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
 /// @dev BUIDL-like demo minimum investment threshold.
 ///
-/// This is a test-issuance rule for the Giwa MVP profile, not a claim that the
+/// This is a legacy test-issuance rule for the Giwa MVP profile, not a claim that the
 /// live BlackRock/Securitize BUIDL token can be integrated through this element.
 /// The engine passes the regulated asset quantity as `amount`; in this demo the
 /// BUIDL-like unit is treated as a $1 NAV share, so 5,000,000 tokens models the
 /// public $5M minimum-investment fact documented in the product spec.
+/// New profiles use parameterized MinimumTradeAmount; migration of the existing
+/// demo profile remains isolated in issue #109.
 contract BuidlMinimumInvestment is BaseElement {
     bytes32 internal constant ELEMENT_ID = "BUIDL-MIN-v1";
     uint256 public constant MINIMUM_AMOUNT = 5_000_000 ether;
@@ -32,6 +36,8 @@ contract BuidlMinimumInvestment is BaseElement {
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
                 statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+                defaultEnforcement: EnforcementAction.BLOCK,
                 parameterSchemaId: bytes32(0),
                 parameterSchemaVersion: 0,
                 maxParameterBytes: 0,

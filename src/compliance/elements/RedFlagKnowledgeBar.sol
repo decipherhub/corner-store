@@ -9,7 +9,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 import {Events} from "../../libraries/Events.sol";
@@ -157,6 +159,8 @@ contract RedFlagKnowledgeBar is BaseElement, Governed {
                 decidability: Decidability.MONITORING_BASED, // Pattern C — human judges legality
                 timing: ObligationTiming.AT_TRADE_GATE, // pre-trade screen (doc §2 Timing)
                 statefulness: Statefulness.STATELESS, // doc §2 meta box (accrual is F-02/F-03)
+                evidenceType: EvidenceType.ONCHAIN_STATE,
+                defaultEnforcement: EnforcementAction.BLOCK,
                 parameterSchemaId: bytes32(0),
                 parameterSchemaVersion: 0,
                 maxParameterBytes: 0,

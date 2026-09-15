@@ -17,6 +17,7 @@ import {UsTaxResident} from "../../../src/compliance/elements/UsTaxResident.sol"
 import {AssetClassification} from "../../../src/compliance/elements/AssetClassification.sol";
 import {Erc3643Native} from "../../../src/compliance/elements/Erc3643Native.sol";
 import {FormDFiling} from "../../../src/compliance/elements/FormDFiling.sol";
+import {MinimumTradeAmount} from "../../../src/compliance/elements/MinimumTradeAmount.sol";
 import {IAcquisitionSource} from "../../../src/interfaces/compliance/IAcquisitionSource.sol";
 import {IComplianceElement, IStatefulElement} from "../../../src/interfaces/compliance/IComplianceElement.sol";
 import {RegD506cRecipe} from "../../../src/compliance/recipes/RegD506cRecipe.sol";
@@ -39,10 +40,12 @@ import {
     ElementPolicyParameter,
     ManifestPolicyConfig,
     VenueType,
-    FlowType
+    FlowType,
+    EvidenceType
 } from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 import {Events} from "../../../src/libraries/Events.sol";
+import {ReasonCodes} from "../../../src/libraries/ReasonCodes.sol";
 
 contract EngineTest is Test {
     ElementRegistry internal elementReg;
@@ -452,6 +455,34 @@ contract EngineTest is Test {
         assertEq(decision.reasonCode, bytes32("PARAM_LIMIT"));
     }
 
+    function test_genericMinimumTradeAmount_matchesManifestConfigAtEngineBoundary() public {
+        MinimumTradeAmount minimum = new MinimumTradeAmount();
+        elementReg.registerElement(minimum.ELEMENT_ID(), address(minimum));
+        _registerSingleElementRecipe(13, minimum.ELEMENT_ID());
+
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] = ElementPolicyParameter({
+            bindingIndex: 0,
+            elementId: minimum.ELEMENT_ID(),
+            schemaId: minimum.PARAMETER_SCHEMA_ID(),
+            schemaVersion: 1,
+            parameters: abi.encode(uint256(40))
+        });
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _singleBinding(13, 1), overrides_, config);
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+
+        assertTrue(engine.evaluate(_ctxBuy()).allowed, "amountOut 50 meets configured threshold 40");
+        ComplianceContext memory below = _ctxBuy();
+        below.amountOut = 39;
+        ComplianceDecision memory rejected = engine.evaluate(below);
+        assertFalse(rejected.allowed);
+        assertEq(rejected.reasonCode, ReasonCodes.encode(0, minimum.ELEMENT_ID(), 1));
+    }
+
     function test_elementLevelFlagOnly_in_requiredBinding_setsBit_without_blocking_or_commit() public {
         bytes32 elementId = bytes32("F-ELEMFLAG-v1");
         elementReg.registerElement(
@@ -841,6 +872,8 @@ contract FailingElement is IComplianceElement {
             decidability: Decidability.MONITORING_BASED,
             timing: ObligationTiming.AT_TRADE_GATE,
             statefulness: Statefulness.STATELESS,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
             parameterSchemaId: bytes32(0),
             parameterSchemaVersion: 0,
             maxParameterBytes: 0,
@@ -876,6 +909,8 @@ contract ParameterLimitElement is IComplianceElement {
             decidability: Decidability.DETERMINISTIC,
             timing: ObligationTiming.AT_TRADE_GATE,
             statefulness: Statefulness.STATELESS,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
             parameterSchemaId: _schemaId,
             parameterSchemaVersion: 1,
             maxParameterBytes: 32,
@@ -908,6 +943,8 @@ contract FailingStatefulFlagElement is IStatefulElement {
             decidability: Decidability.MONITORING_BASED,
             timing: ObligationTiming.EX_POST_TRIGGER,
             statefulness: Statefulness.STATEFUL,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.FLAG_ONLY,
             parameterSchemaId: bytes32(0),
             parameterSchemaVersion: 0,
             maxParameterBytes: 0,
@@ -939,6 +976,8 @@ contract RevertingStatefulElement is IStatefulElement {
             decidability: Decidability.MONITORING_BASED,
             timing: ObligationTiming.EX_POST_TRIGGER,
             statefulness: Statefulness.STATEFUL,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
             parameterSchemaId: bytes32(0),
             parameterSchemaVersion: 0,
             maxParameterBytes: 0,
@@ -977,6 +1016,8 @@ contract ParamStatefulElement is IStatefulElement {
             decidability: Decidability.DETERMINISTIC,
             timing: ObligationTiming.EX_POST_TRIGGER,
             statefulness: Statefulness.STATEFUL,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
             parameterSchemaId: bytes32(0),
             parameterSchemaVersion: 0,
             maxParameterBytes: 0,
@@ -1012,6 +1053,8 @@ contract RecordingStatefulElement is IStatefulElement {
             decidability: Decidability.DETERMINISTIC,
             timing: ObligationTiming.EX_POST_TRIGGER,
             statefulness: Statefulness.STATEFUL,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
             parameterSchemaId: bytes32(0),
             parameterSchemaVersion: 0,
             maxParameterBytes: 0,

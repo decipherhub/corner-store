@@ -8,7 +8,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 import {Errors} from "../../libraries/Errors.sol";
@@ -128,6 +130,8 @@ contract HolderCount is BaseStatefulElement {
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
                 statefulness: Statefulness.STATEFUL,
+                evidenceType: EvidenceType.ONCHAIN_STATE,
+                defaultEnforcement: EnforcementAction.BLOCK,
                 parameterSchemaId: bytes32(0),
                 parameterSchemaVersion: 0,
                 maxParameterBytes: 0,

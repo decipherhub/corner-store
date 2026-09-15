@@ -3,13 +3,14 @@ import {readFileSync} from "fs";
 import {resolve} from "path";
 import {AbiCoder, Interface, keccak256, toUtf8Bytes} from "ethers";
 
-export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 2;
+export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 3;
 export const MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION = 1;
 export const POLICY_STATUS = {UNKNOWN: 0, UNREGULATED: 1, ACTIVE: 2, SUSPENDED: 3, PROPOSED: 4, RETIRED: 5} as const;
 export const VENUE_TYPE = {AMM: 0, ORDER_BOOK: 1, RFQ: 2} as const;
 export const CUSTODY_MODEL = {NONE: 0, POOL: 1, ESCROW: 2, OPERATOR: 3} as const;
 export const RECIPE_BINDING_MODE = {REQUIRED_BLOCKING: 0, PATH_OPTION: 1, FLAG_ONLY: 2} as const;
 export const ENFORCEMENT_ACTION = {FLAG_ONLY: 0, OPERATOR_REVIEW: 1, BLOCK: 2} as const;
+export const EVIDENCE_TYPE = {TRANSACTION_CONTEXT: 1, ONCHAIN_STATE: 2, PROVIDER_ATTESTATION: 3, COMPOSITE: 4} as const;
 export const ENFORCEMENT_OVERRIDE_MODE = {USE_ELEMENT_DEFAULT: 0, ESCALATE_TO_OPERATOR_REVIEW: 1, ESCALATE_TO_BLOCK: 2, FORCE_FLAG_ONLY: 3} as const;
 export const MAX_ENFORCEMENT_OVERRIDES = 256;
 export const RECIPE_KEY_DOMAIN = keccak256(toUtf8Bytes("corner-store.recipe-key.v1"));
@@ -55,6 +56,7 @@ export interface ProductionOnboardingConfig {
 export interface ElementInput {
   elementId: string;
   implementation: string;
+  evidenceType?: keyof typeof EVIDENCE_TYPE | number;
   defaultAction?: keyof typeof ENFORCEMENT_ACTION | number;
   versionHash?: string;
   metadataHash?: string;
@@ -272,8 +274,10 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("production onboarding config must be an object");
   assertKnownKeys(value, ["schemaVersion", "chainId", "configHash", "artifactHash", "legalPackageHash", "governance", "addresses", "codeHashes", "elements", "recipes", "manifest", "recipeBindings", "enforcementOverrides", "venues", "rfq", "inventory"], "onboarding");
   const c = value as Partial<ProductionOnboardingConfig>;
-  if (c.schemaVersion !== MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION && c.schemaVersion !== PRODUCTION_ONBOARDING_SCHEMA_VERSION) throw new Error(`schemaVersion must be ${MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION} or ${PRODUCTION_ONBOARDING_SCHEMA_VERSION}`);
+  const schemaVersion = c.schemaVersion;
+  if (typeof schemaVersion !== "number" || !Number.isInteger(schemaVersion) || schemaVersion < MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION || schemaVersion > PRODUCTION_ONBOARDING_SCHEMA_VERSION) throw new Error(`schemaVersion must be between ${MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION} and ${PRODUCTION_ONBOARDING_SCHEMA_VERSION}`);
   const v2 = isV2Onboarding(c);
+  const v3 = isV3Onboarding(c);
   if (!Number.isSafeInteger(c.chainId) || Number(c.chainId) <= 0) throw new Error("chainId must be a positive integer");
   if (!isSha(c.configHash)) throw new Error("configHash must be a sha256 hash");
   if (!isSha(c.artifactHash)) throw new Error("artifactHash must be a sha256 hash");
@@ -302,12 +306,15 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   if (!Array.isArray(c.elements) || c.elements.length === 0) throw new Error("elements must contain at least one element");
   const elementIds = new Set<string>();
   for (const [index, element] of c.elements.entries()) {
-    assertKnownKeys(element, ["elementId", "implementation", "defaultAction", "versionHash", "metadataHash"], `elements[${index}]`);
+    assertKnownKeys(element, ["elementId", "implementation", "evidenceType", "defaultAction", "versionHash", "metadataHash"], `elements[${index}]`);
     if (!isHash32(element?.elementId)) throw new Error(`elements[${index}].elementId must be bytes32`);
     if (!isAddress(element?.implementation)) throw new Error(`elements[${index}].implementation must be a non-zero address`);
+    if (element.evidenceType !== undefined) enumValue(element.evidenceType, EVIDENCE_TYPE, `elements[${index}].evidenceType`);
     if (element.defaultAction !== undefined) enumValue(element.defaultAction, ENFORCEMENT_ACTION, `elements[${index}].defaultAction`);
-    if (v2 && element.defaultAction === undefined) throw new Error(`elements[${index}].defaultAction is required for schemaVersion 2 onboarding`);
-    if (!v2 && (element.defaultAction !== undefined || element.versionHash !== undefined || element.metadataHash !== undefined)) throw new Error("schemaVersion 1 elements must not include v2 enforcement/version fields");
+    if (v3 && element.evidenceType === undefined) throw new Error(`elements[${index}].evidenceType is required for schemaVersion 3 onboarding`);
+    if (v2 && element.defaultAction === undefined) throw new Error(`elements[${index}].defaultAction is required for schemaVersion 2 or later onboarding`);
+    if (!v2 && (element.evidenceType !== undefined || element.defaultAction !== undefined || element.versionHash !== undefined || element.metadataHash !== undefined)) throw new Error("schemaVersion 1 elements must not include v2 evidence/enforcement/version fields");
+    if (v2 && !v3 && element.evidenceType !== undefined) throw new Error("schemaVersion 2 elements must not include schemaVersion 3 evidenceType");
     if (element.versionHash !== undefined && !isHash32(element.versionHash)) throw new Error(`elements[${index}].versionHash must be bytes32`);
     if (element.metadataHash !== undefined && !isHash32(element.metadataHash)) throw new Error(`elements[${index}].metadataHash must be bytes32`);
     const key = element.elementId.toLowerCase();
@@ -577,6 +584,24 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
   for (const [index, element] of selected.elements.entries()) {
     await verifyCallAddress(reader, selected.addresses.elementRegistry, ["function elementOf(bytes32) view returns (address)"], "elementOf", [element.elementId], element.implementation, `element-${index + 1}-${digestId(element.elementId)}`, check);
     if (isV2Onboarding(selected)) {
+      if (isV3Onboarding(selected)) {
+        try {
+          const metadata = await reader.call(
+            selected.addresses.elementRegistry,
+            ["function metadataOf(bytes32) view returns (tuple(bytes32 elementId,uint8 category,string version,uint8 temporal,uint8 decidability,uint8 timing,uint8 statefulness,uint8 evidenceType,uint8 defaultEnforcement,bytes32 parameterSchemaId,uint16 parameterSchemaVersion,uint32 maxParameterBytes,bool parametersRequired))"],
+            "metadataOf",
+            [element.elementId]
+          );
+          const actualEvidenceType = Number(metadata.evidenceType ?? metadata[7]);
+          const actualDefaultEnforcement = Number(metadata.defaultEnforcement ?? metadata[8]);
+          const expectedEvidenceType = enumValue(element.evidenceType, EVIDENCE_TYPE, "evidenceType");
+          const expectedDefaultEnforcement = enumValue(element.defaultAction, ENFORCEMENT_ACTION, "defaultAction");
+          check(`element-${index + 1}-evidence-type`, actualEvidenceType === expectedEvidenceType, `expected=${expectedEvidenceType}; actual=${actualEvidenceType}`);
+          check(`element-${index + 1}-metadata-default`, actualDefaultEnforcement === expectedDefaultEnforcement, `expected=${expectedDefaultEnforcement}; actual=${actualDefaultEnforcement}`);
+        } catch (err: any) {
+          check(`element-${index + 1}-metadata-conformance`, false, `unavailable: ${err.message}`);
+        }
+      }
       await verifyCallUint(reader, selected.addresses.elementRegistry, ["function defaultActionOf(bytes32) view returns (uint8)"], "defaultActionOf", [element.elementId], enumValue(element.defaultAction, ENFORCEMENT_ACTION, "defaultAction"), `element-${index + 1}-default-action`, check);
       if (element.versionHash) await verifyCallHash(reader, selected.addresses.elementRegistry, ["function versionHashOf(bytes32) view returns (bytes32)"], "versionHashOf", [element.elementId], element.versionHash, `element-${index + 1}-version-hash`, check);
       if (element.metadataHash) await verifyCallHash(reader, selected.addresses.elementRegistry, ["function metadataHashOf(bytes32) view returns (bytes32)"], "metadataHashOf", [element.elementId], element.metadataHash, `element-${index + 1}-metadata-hash`, check);
@@ -708,7 +733,11 @@ export function deriveRecipeKey(aliasHash: string): string {
 }
 
 function isV2Onboarding(config: Partial<ProductionOnboardingConfig>): boolean {
-  return config.schemaVersion === PRODUCTION_ONBOARDING_SCHEMA_VERSION;
+  return typeof config.schemaVersion === "number" && config.schemaVersion >= 2;
+}
+
+function isV3Onboarding(config: Partial<ProductionOnboardingConfig>): boolean {
+  return typeof config.schemaVersion === "number" && config.schemaVersion >= 3;
 }
 
 function recipeCommitments(recipes: RecipeInput[]): RecipeKeyCommitment[] {
