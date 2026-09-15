@@ -130,7 +130,11 @@ contract EntityEligibility is BaseElement, Governed {
                 temporal: TemporalNature.ONE_TIME,
                 decidability: Decidability.ATTESTATION_BASED,
                 timing: ObligationTiming.EX_ANTE_VERIFY,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {
         if (address(lookThroughSource_) == address(0)) {
@@ -163,8 +167,8 @@ contract EntityEligibility is BaseElement, Governed {
     /// @dev Buyer-facing gate. `user` is the buyer entity; `asset` selects the
     ///      active tracks. Returns the first failing reason code; code 8 when both
     ///      tracks are active and either fails (per-track detail via `diagnose`).
-    function check(address user, address, address asset, uint256, bytes calldata)
-        external
+    function _check(address user, address, address asset, uint256, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

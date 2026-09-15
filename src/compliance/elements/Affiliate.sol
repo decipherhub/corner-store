@@ -178,7 +178,11 @@ contract Affiliate is BaseElement, Governed {
                 temporal: TemporalNature.PERIODIC,
                 decidability: Decidability.ATTESTATION_BASED,
                 timing: ObligationTiming.EX_ANTE_VERIFY,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -229,8 +233,8 @@ contract Affiliate is BaseElement, Governed {
     ///      (the RWA token the engine is checking), so no context decode is needed.
     ///      Determination-succeeded (AFFILIATE or NON_AFFILIATE) passes this gate;
     ///      only undeterminable/uncertain states fail (doc §5.3).
-    function check(address user, address, address asset, uint256, bytes calldata)
-        external
+    function _check(address user, address, address asset, uint256, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

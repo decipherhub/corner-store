@@ -4,10 +4,18 @@ pragma solidity 0.8.17;
 import {ElementMetadata} from "../../types/ComplianceTypes.sol";
 
 interface IComplianceElement {
-    function check(address user, address counterparty, address asset, uint256 amount, bytes calldata context)
-        external
-        view
-        returns (bool passed, bytes32 reasonCode);
+    /// @notice Evaluate one immutable Element implementation.
+    /// @dev `context` carries transaction facts selected by the Engine, while
+    ///      `parameters` carries Manifest-owned policy values conforming to the
+    ///      schema declared by `elementMetadata()`.
+    function check(
+        address user,
+        address counterparty,
+        address asset,
+        uint256 amount,
+        bytes calldata context,
+        bytes calldata parameters
+    ) external view returns (bool passed, bytes32 reasonCode);
 
     function elementMetadata() external view returns (ElementMetadata memory);
 }

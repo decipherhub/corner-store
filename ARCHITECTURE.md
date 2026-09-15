@@ -40,6 +40,9 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - Element, Recipe, Manifest, Operator의 이름 기반 4-Layer compliance model을
   사용한다.
 - Manifest는 bounded `RecipeBinding[]`로 Recipe/version/mode를 고정한다.
+- Element는 하나의 `check(..., context, parameters)` ABI를 사용하고 immutable
+  metadata로 parameter schema ID/version/required/max bytes capability를 선언한다.
+  자산별 실제 정책값의 소유·활성화는 ManifestPolicyConfig 책임이다.
 - `REQUIRED_BLOCKING`은 AND, 같은 `pathGroupId`의 `PATH_OPTION`은 OR,
   서로 다른 path group은 AND로 평가하며 `FLAG_ONLY` 실패는 기록만 한다.
 - `tokenIn`과 `tokenOut` 양쪽의 classification과 Manifest를 평가한다.

@@ -28,7 +28,8 @@ contract RegD506cElementsTest is IntegrationBase {
                 req.context.seller,
                 req.context.tokenOut,
                 req.context.amountOut,
-                abi.encode(req.context)
+                abi.encode(req.context),
+                ""
             );
     }
 

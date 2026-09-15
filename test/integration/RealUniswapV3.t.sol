@@ -109,7 +109,12 @@ contract RealUniswapV3Test is IntegrationBase {
         ExecutionRequest memory req = _realPoolBuyRequest(alice, 100 ether);
 
         (, bytes32 reason) = accredited.check(
-            req.context.buyer, req.context.seller, req.context.tokenOut, req.context.amountOut, abi.encode(req.context)
+            req.context.buyer,
+            req.context.seller,
+            req.context.tokenOut,
+            req.context.amountOut,
+            abi.encode(req.context),
+            ""
         );
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Errors.ComplianceRejected.selector, reason));

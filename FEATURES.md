@@ -10,6 +10,32 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## CORE-006 — Unified Element Parameter Interface
+
+### Behavior
+
+- 모든 in-repo Element가 bounded `parameters`를 받는 하나의
+  `IComplianceElement.check` ABI를 구현한다.
+- immutable Element metadata가 schema ID/version, 최대 parameter bytes와 required
+  여부를 선언하며 Registry가 잘못된 capability를 등록 전에 거절한다.
+- 현재 parameterless Element는 empty bytes에서 기존 동작을 유지하고 non-empty
+  parameter를 공통 reason code로 fail-closed한다.
+- Manifest별 parameter 저장과 compiled-plan 전달은 후속 #103 범위로 유지한다.
+
+### Verification
+
+- BaseElement 5/5, Registry 9/9, Engine 37/37, all-Element 577/577
+- full `forge test --offline`: 877/877
+- CLI, Toolkit, RFQ demo backend와 public-testnet demo package tests 통과
+- 전체 `scripts/check.sh` 통과
+- `buidl-like`와 `reg-d` Anvil E2E 각각 7/7 + dashboard/CLI/RFQ flow 통과
+- `git diff --check` 통과
+
+### State
+
+passing
+
+
 ## DOCS-011 — ADR-010 Production Policy Decisions
 
 ### Behavior

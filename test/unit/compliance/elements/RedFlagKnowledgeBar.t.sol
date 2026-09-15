@@ -113,7 +113,7 @@ contract RedFlagKnowledgeBarTest is Test {
     // ---------------------------------------------------------------
 
     function test_check_passes_whenClear() public {
-        (bool passed, bytes32 reasonCode) = element.check(buyer, seller, address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(buyer, seller, address(0), 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -121,7 +121,7 @@ contract RedFlagKnowledgeBarTest is Test {
     function test_check_passes_evenWhenFlagged_andLeaksNothing() public {
         element.raiseFlag(seller, buyer, RedFlagKnowledgeBar.RedFlag.WASH_CLUSTER);
         // Engine calls check(ctx.buyer, ctx.seller, ...): user=buyer, counterparty=seller.
-        (bool passed, bytes32 reasonCode) = element.check(buyer, seller, address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(buyer, seller, address(0), 0, "", "");
         assertTrue(passed); // A-12 alone never rejects a trade
         assertEq(reasonCode, bytes32(0)); // party-facing surface carries no red-flag detail
     }
@@ -136,7 +136,7 @@ contract RedFlagKnowledgeBarTest is Test {
         assertEq(mask, 0);
         assertFalse(element.routesToReview(seller, buyer));
 
-        (bool passed,) = element.check(buyer, seller, address(0), 0, "");
+        (bool passed,) = element.check(buyer, seller, address(0), 0, "", "");
         assertTrue(passed);
     }
 
@@ -156,7 +156,7 @@ contract RedFlagKnowledgeBarTest is Test {
         assertEq(mask, _bit(RedFlagKnowledgeBar.RedFlag.RESALE_INTENT));
         assertTrue(element.routesToReview(seller, buyer)); // doc §7 "→ REVIEW" (routed)
 
-        (bool passed,) = element.check(buyer, seller, address(0), 0, "");
+        (bool passed,) = element.check(buyer, seller, address(0), 0, "", "");
         assertTrue(passed); // not blocked by A-12
     }
 
@@ -176,7 +176,7 @@ contract RedFlagKnowledgeBarTest is Test {
         assertEq(mask, _bit(RedFlagKnowledgeBar.RedFlag.STRUCTURING));
         assertTrue(element.routesToReview(seller, buyer));
 
-        (bool passed,) = element.check(buyer, seller, address(0), 0, "");
+        (bool passed,) = element.check(buyer, seller, address(0), 0, "", "");
         assertTrue(passed);
     }
 
@@ -194,7 +194,7 @@ contract RedFlagKnowledgeBarTest is Test {
         assertEq(mask, _bit(RedFlagKnowledgeBar.RedFlag.WASH_CLUSTER));
         assertTrue(element.routesToReview(seller, buyer));
 
-        (bool passed,) = element.check(buyer, seller, address(0), 0, "");
+        (bool passed,) = element.check(buyer, seller, address(0), 0, "", "");
         assertTrue(passed);
     }
 
@@ -223,7 +223,7 @@ contract RedFlagKnowledgeBarTest is Test {
         assertFalse(uncertain);
         assertEq(uint256(res), uint256(RedFlagKnowledgeBar.Resolution.CLEARED_FALSE_POSITIVE));
 
-        (bool passed,) = element.check(buyer, seller, address(0), 0, "");
+        (bool passed,) = element.check(buyer, seller, address(0), 0, "", "");
         assertTrue(passed);
     }
 
@@ -241,7 +241,7 @@ contract RedFlagKnowledgeBarTest is Test {
         assertEq(uint256(d), uint256(RedFlagKnowledgeBar.Disposition.REVIEW));
         assertTrue(element.routesToReview(seller, buyer));
 
-        (bool passed,) = element.check(buyer, seller, address(0), 0, "");
+        (bool passed,) = element.check(buyer, seller, address(0), 0, "", "");
         assertTrue(passed);
     }
 
@@ -318,7 +318,7 @@ contract RedFlagKnowledgeBarTest is Test {
         assertEq(uint256(d), uint256(RedFlagKnowledgeBar.Disposition.FLAG)); // still flagged
         assertTrue(element.routesToReview(seller, buyer));
 
-        (bool passed,) = element.check(buyer, seller, address(0), 0, "");
+        (bool passed,) = element.check(buyer, seller, address(0), 0, "", "");
         assertTrue(passed); // A-12 never blocks, even on confirmed risk
     }
 

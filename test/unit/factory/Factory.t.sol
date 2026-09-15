@@ -35,7 +35,11 @@ contract FactoryElementMock is IComplianceElement {
         _id = id_;
     }
 
-    function check(address, address, address, uint256, bytes calldata) external pure returns (bool, bytes32) {
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
+        external
+        pure
+        returns (bool, bytes32)
+    {
         return (true, bytes32(0));
     }
 

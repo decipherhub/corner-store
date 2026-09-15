@@ -104,7 +104,7 @@ contract IdentityUniquenessTest is Test {
     // --- check pass/fail ---
 
     function test_check_fails_when_unbound() public view {
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertTrue(rc != bytes32(0));
     }
@@ -113,7 +113,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.bindIdentity(wallet, identityId);
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -125,7 +125,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.unbindIdentity(wallet);
 
-        (bool passed,) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed,) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
     }
 
@@ -197,7 +197,7 @@ contract IdentityUniquenessTest is Test {
     // --- legacy code-1 meaning + bind seeding invariant ---
 
     function test_check_unbound_returnsCode1() public view {
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(1));
     }
@@ -232,7 +232,7 @@ contract IdentityUniquenessTest is Test {
 
         // Re-bind must restore the legacy guarantee: bound => passes.
         bind(wallet);
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -243,7 +243,7 @@ contract IdentityUniquenessTest is Test {
         assertEq(uint256(id.identityStatusOf(identityId)), uint256(IdentityUniqueness.IdentityStatus.ACTIVE));
         assertEq(uint256(id.dedupStatusOf(identityId)), uint256(IdentityUniqueness.DedupStatus.UNIQUE));
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -317,7 +317,7 @@ contract IdentityUniquenessTest is Test {
         bind(wallet);
         setClaim(identityId, false, false, false, 0, 0);
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(2));
     }
@@ -326,7 +326,7 @@ contract IdentityUniquenessTest is Test {
         bind(wallet);
         setClaim(identityId, true, false, true, uint64(block.timestamp), 0);
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(3));
     }
@@ -335,7 +335,7 @@ contract IdentityUniquenessTest is Test {
         bind(wallet);
         setClaim(identityId, true, true, false, uint64(block.timestamp), 0);
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(4));
     }
@@ -346,7 +346,7 @@ contract IdentityUniquenessTest is Test {
         setClaim(identityId, true, true, true, 1000, 100);
 
         vm.warp(1101); // age 101 > maxAge 100
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(5));
     }
@@ -357,7 +357,7 @@ contract IdentityUniquenessTest is Test {
         setClaim(identityId, true, true, true, 1000, 100);
 
         vm.warp(1100); // age 100 == maxAge — strict `>` discipline: still fresh
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -367,7 +367,7 @@ contract IdentityUniquenessTest is Test {
         bind(wallet);
 
         vm.warp(1000 + 3650 days);
-        (bool passed,) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed,) = id.check(wallet, address(0), asset, 0, "", "");
         assertTrue(passed);
     }
 
@@ -379,7 +379,7 @@ contract IdentityUniquenessTest is Test {
         bind(wallet);
         setClaim(identityId, true, true, true, 5000, 100); // anchor 4000s in the future
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -389,7 +389,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setIdentityStatus(identityId, IdentityUniqueness.IdentityStatus.FROZEN);
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(6));
     }
@@ -399,7 +399,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setIdentityStatus(identityId, IdentityUniqueness.IdentityStatus.REVOKED);
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(7));
     }
@@ -411,7 +411,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setIdentityStatus(identityId, IdentityUniqueness.IdentityStatus.ACTIVE);
 
-        (bool passed,) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed,) = id.check(wallet, address(0), asset, 0, "", "");
         assertTrue(passed);
     }
 
@@ -420,7 +420,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setDedupStatus(identityId, IdentityUniqueness.DedupStatus.CONFIRMED_DUPLICATE);
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(8));
     }
@@ -432,7 +432,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setDedupStatus(identityId, IdentityUniqueness.DedupStatus.SUSPECTED_DUPLICATE);
 
-        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(9));
     }
@@ -444,7 +444,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setDedupStatus(identityId, IdentityUniqueness.DedupStatus.UNIQUE);
 
-        (bool passed,) = id.check(wallet, address(0), asset, 0, "");
+        (bool passed,) = id.check(wallet, address(0), asset, 0, "", "");
         assertTrue(passed);
     }
 
@@ -454,7 +454,7 @@ contract IdentityUniquenessTest is Test {
         bind(wallet);
         setClaim(identityId, true, false, false, uint64(block.timestamp), 0);
 
-        (, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertEq(rc, code(3));
     }
 
@@ -466,7 +466,7 @@ contract IdentityUniquenessTest is Test {
         id.setIdentityStatus(identityId, IdentityUniqueness.IdentityStatus.FROZEN);
 
         vm.warp(2000);
-        (, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertEq(rc, code(5));
     }
 
@@ -477,7 +477,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setDedupStatus(identityId, IdentityUniqueness.DedupStatus.CONFIRMED_DUPLICATE);
 
-        (, bytes32 rc) = id.check(wallet, address(0), asset, 0, "");
+        (, bytes32 rc) = id.check(wallet, address(0), asset, 0, "", "");
         assertEq(rc, code(6));
     }
 
@@ -488,7 +488,7 @@ contract IdentityUniquenessTest is Test {
         assertFalse(id.enforceCounterparty());
 
         // e.g. an AMM pool address with no identity — must not block the trade.
-        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -498,7 +498,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setEnforceCounterparty(true);
 
-        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(1));
     }
@@ -510,7 +510,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setEnforceCounterparty(true);
 
-        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -524,7 +524,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setEnforceCounterparty(true);
 
-        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(8));
     }
@@ -538,7 +538,7 @@ contract IdentityUniquenessTest is Test {
         vm.prank(operator);
         id.setEnforceCounterparty(true);
 
-        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "");
+        (bool passed, bytes32 rc) = id.check(wallet, otherWallet, asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, code(1));
     }

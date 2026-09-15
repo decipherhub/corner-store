@@ -156,7 +156,11 @@ contract RedFlagKnowledgeBar is BaseElement, Governed {
                 temporal: TemporalNature.REALTIME, // per-trade, not accrued (doc §5.4)
                 decidability: Decidability.MONITORING_BASED, // Pattern C — human judges legality
                 timing: ObligationTiming.AT_TRADE_GATE, // pre-trade screen (doc §2 Timing)
-                statefulness: Statefulness.STATELESS // doc §2 meta box (accrual is F-02/F-03)
+                statefulness: Statefulness.STATELESS, // doc §2 meta box (accrual is F-02/F-03)
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -208,8 +212,8 @@ contract RedFlagKnowledgeBar is BaseElement, Governed {
     ///      neutral reason code. The disposition/flags are read out-of-band via
     ///      `screen`. All params ignored — the party-facing surface carries no
     ///      red-flag detail (message separation, doc §6.4).
-    function check(address, address, address, uint256, bytes calldata)
-        external
+    function _check(address, address, address, uint256, bytes calldata, bytes calldata)
+        internal
         pure
         override
         returns (bool passed, bytes32 reasonCode)

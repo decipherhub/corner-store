@@ -23,7 +23,11 @@ contract MockElement is IComplianceElement {
         id = id_;
     }
 
-    function check(address, address, address, uint256, bytes calldata) external pure returns (bool, bytes32) {
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
+        external
+        pure
+        returns (bool, bytes32)
+    {
         return (true, bytes32(0));
     }
 
@@ -35,6 +39,44 @@ contract MockElement is IComplianceElement {
         m.decidability = Decidability.DETERMINISTIC;
         m.timing = ObligationTiming.AT_TRADE_GATE;
         m.statefulness = Statefulness.STATELESS;
+    }
+}
+
+contract MockCapabilityElement is IComplianceElement {
+    bytes32 internal immutable id;
+    bytes32 internal immutable schemaId;
+    uint16 internal immutable schemaVersion;
+    uint32 internal immutable maxBytes;
+    bool internal immutable required;
+
+    constructor(bytes32 id_, bytes32 schemaId_, uint16 schemaVersion_, uint32 maxBytes_, bool required_) {
+        id = id_;
+        schemaId = schemaId_;
+        schemaVersion = schemaVersion_;
+        maxBytes = maxBytes_;
+        required = required_;
+    }
+
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
+        external
+        pure
+        returns (bool, bytes32)
+    {
+        return (true, bytes32(0));
+    }
+
+    function elementMetadata() external view returns (ElementMetadata memory m) {
+        m.elementId = id;
+        m.category = ElementCategory.INVESTOR_ATTRIBUTE;
+        m.version = "1.0.0";
+        m.temporal = TemporalNature.ONE_TIME;
+        m.decidability = Decidability.DETERMINISTIC;
+        m.timing = ObligationTiming.AT_TRADE_GATE;
+        m.statefulness = Statefulness.STATELESS;
+        m.parameterSchemaId = schemaId;
+        m.parameterSchemaVersion = schemaVersion;
+        m.maxParameterBytes = maxBytes;
+        m.parametersRequired = required;
     }
 }
 
@@ -74,6 +116,10 @@ contract ElementRegistryTest is Test {
         assertEq(uint256(m.category), uint256(ElementCategory.INVESTOR_ATTRIBUTE));
         assertEq(m.version, "1.0.0");
         assertEq(uint256(m.statefulness), uint256(Statefulness.STATELESS));
+        assertEq(m.parameterSchemaId, bytes32(0));
+        assertEq(m.parameterSchemaVersion, 0);
+        assertEq(m.maxParameterBytes, 0);
+        assertFalse(m.parametersRequired);
     }
 
     function test_registerElement_is_immutable_and_stores_default_action() public {
@@ -99,5 +145,52 @@ contract ElementRegistryTest is Test {
     function test_metadataOf_reverts_when_unregistered() public {
         vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, bytes32("NOPE")));
         reg.metadataOf(bytes32("NOPE"));
+    }
+
+    function test_registerElement_accepts_bounded_parameter_schema_and_binds_metadata_hash() public {
+        bytes32 schemaId = keccak256("corner-store.test.schema");
+        MockCapabilityElement capable = new MockCapabilityElement(ELEMENT_ID, schemaId, 2, 128, true);
+
+        reg.registerElement(ELEMENT_ID, address(capable));
+
+        ElementMetadata memory m = reg.metadataOf(ELEMENT_ID);
+        assertEq(m.parameterSchemaId, schemaId);
+        assertEq(m.parameterSchemaVersion, 2);
+        assertEq(m.maxParameterBytes, 128);
+        assertTrue(m.parametersRequired);
+        assertEq(
+            reg.metadataHashOf(ELEMENT_ID),
+            keccak256(
+                abi.encode(
+                    m.elementId,
+                    m.category,
+                    keccak256(bytes(m.version)),
+                    m.temporal,
+                    m.decidability,
+                    m.timing,
+                    m.statefulness,
+                    m.parameterSchemaId,
+                    m.parameterSchemaVersion,
+                    m.maxParameterBytes,
+                    m.parametersRequired
+                )
+            )
+        );
+    }
+
+    function test_registerElement_rejects_incoherent_parameter_capabilities() public {
+        bytes32 schemaId = keccak256("corner-store.test.schema");
+
+        _expectInvalid(new MockCapabilityElement(ELEMENT_ID, bytes32(0), 1, 0, false));
+        _expectInvalid(new MockCapabilityElement(ELEMENT_ID, bytes32(0), 0, 1, false));
+        _expectInvalid(new MockCapabilityElement(ELEMENT_ID, bytes32(0), 0, 0, true));
+        _expectInvalid(new MockCapabilityElement(ELEMENT_ID, schemaId, 0, 1, false));
+        _expectInvalid(new MockCapabilityElement(ELEMENT_ID, schemaId, 1, 0, false));
+        _expectInvalid(new MockCapabilityElement(ELEMENT_ID, schemaId, 1, reg.MAX_ELEMENT_PARAMETER_BYTES() + 1, false));
+    }
+
+    function _expectInvalid(IComplianceElement invalidElement) internal {
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidElementMetadata.selector, ELEMENT_ID));
+        reg.registerElement(ELEMENT_ID, address(invalidElement));
     }
 }

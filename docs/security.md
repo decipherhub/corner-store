@@ -89,6 +89,11 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   구분한다.
 - `ACTIVE` Manifest의 invalid Recipe/reference, unsupported engine와 version
   mismatch는 fail-closed로 처리한다.
+- Element Registry는 parameter schema ID/version/required/max-length capability의
+  정합성과 4096-byte 전역 상한을 검증한다. parameterless Element의 non-empty
+  입력, required parameter 누락과 선언 길이 초과는 concrete 판정 전에 공통
+  reason으로 fail-closed한다. Element별 decoder는 exact typed encoding과 값 범위를
+  별도로 검증해야 한다.
 - Manifest와 `UNREGULATED` 분류가 모두 없는 자산은 `UNKNOWN`으로 거부한다.
 - `tokenIn`과 `tokenOut` 양쪽을 분류하며, 양쪽 모두 명시적 `UNREGULATED`인
   경우에만 regulated evaluation을 생략한다.

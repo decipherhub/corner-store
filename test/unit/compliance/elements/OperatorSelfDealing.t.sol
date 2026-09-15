@@ -168,7 +168,7 @@ contract OperatorSelfDealingTest is Test {
     function test_T1_bothClean_pass() public {
         // Whitelist investor A (seller) -> whitelist investor B (buyer). Neither on
         // the roster => OP_CLEAR (step 5).
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -178,7 +178,7 @@ contract OperatorSelfDealingTest is Test {
     function test_T2_operatorEntityBuyer_fails3() public {
         // Decipher legal entity buys for its own account (secondary) => blocked.
         f01.setRestrictedParty(buyer, OperatorSelfDealing.OperatorRole.OPERATOR_ENTITY);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(3));
     }
@@ -186,7 +186,7 @@ contract OperatorSelfDealingTest is Test {
     function test_T2_operatorEntitySeller_fails3() public {
         // Same block regardless of which side the operator entity sits on (§5.3).
         f01.setRestrictedParty(seller, OperatorSelfDealing.OperatorRole.OPERATOR_ENTITY);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(3));
     }
@@ -198,7 +198,7 @@ contract OperatorSelfDealingTest is Test {
         // settled control off-chain and it landed on the roster; on-chain is a
         // pure membership screen. from (seller) restricted => blocked.
         f01.setRestrictedParty(seller, OperatorSelfDealing.OperatorRole.OPERATOR_AFFILIATE);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(3));
     }
@@ -208,7 +208,7 @@ contract OperatorSelfDealingTest is Test {
         // (doc §3.11 boundary — F-01 does not distinguish one-side vs both-sides).
         f01.setRestrictedParty(buyer, OperatorSelfDealing.OperatorRole.OPERATOR_CONTROLLED_ACCOUNT);
         f01.setRestrictedParty(seller, OperatorSelfDealing.OperatorRole.OPERATOR_ENTITY);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(3));
     }
@@ -221,7 +221,8 @@ contract OperatorSelfDealingTest is Test {
         // exception clears it (OP_EXEMPT_PRIMARY).
         f01.setRestrictedParty(seller, OperatorSelfDealing.OperatorRole.OPERATOR_ENTITY);
         f01.setPrimaryDistributor(seller, true);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _ctx(FlowType.PRIMARY_DISTRIBUTION, address(0)));
+        (bool passed, bytes32 rc) =
+            f01.check(buyer, seller, asset, 0, _ctx(FlowType.PRIMARY_DISTRIBUTION, address(0)), "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -231,7 +232,7 @@ contract OperatorSelfDealingTest is Test {
         // as a party is NOT the primary path => blocked.
         f01.setRestrictedParty(seller, OperatorSelfDealing.OperatorRole.OPERATOR_ENTITY);
         f01.setPrimaryDistributor(seller, true);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(3));
     }
@@ -241,7 +242,8 @@ contract OperatorSelfDealingTest is Test {
         // from/seller must be a Manifest-designated distributor. Not designated =>
         // blocked.
         f01.setRestrictedParty(seller, OperatorSelfDealing.OperatorRole.OPERATOR_ENTITY);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _ctx(FlowType.PRIMARY_DISTRIBUTION, address(0)));
+        (bool passed, bytes32 rc) =
+            f01.check(buyer, seller, asset, 0, _ctx(FlowType.PRIMARY_DISTRIBUTION, address(0)), "");
         assertFalse(passed);
         assertEq(rc, _code(3));
     }
@@ -253,7 +255,8 @@ contract OperatorSelfDealingTest is Test {
         // recovery authority (doc §6.3②) => OP_EXEMPT_INVOLUNTARY.
         f01.setRestrictedParty(buyer, OperatorSelfDealing.OperatorRole.OPERATOR_CONTROLLED_ACCOUNT);
         f01.setInvoluntaryAgent(recoveryAgent, true);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _ctx(FlowType.SECONDARY_TRADE, recoveryAgent));
+        (bool passed, bytes32 rc) =
+            f01.check(buyer, seller, asset, 0, _ctx(FlowType.SECONDARY_TRADE, recoveryAgent), "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -261,7 +264,8 @@ contract OperatorSelfDealingTest is Test {
     function test_involuntary_unregisteredInitiator_fails3() public {
         // An unregistered initiator does not earn the involuntary exception.
         f01.setRestrictedParty(buyer, OperatorSelfDealing.OperatorRole.OPERATOR_CONTROLLED_ACCOUNT);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _ctx(FlowType.SECONDARY_TRADE, recoveryAgent));
+        (bool passed, bytes32 rc) =
+            f01.check(buyer, seller, asset, 0, _ctx(FlowType.SECONDARY_TRADE, recoveryAgent), "");
         assertFalse(passed);
         assertEq(rc, _code(3));
     }
@@ -278,7 +282,7 @@ contract OperatorSelfDealingTest is Test {
         // structural weakness, not something this element closes alone.
         f01.setRestrictedParty(employee, OperatorSelfDealing.OperatorRole.OPERATOR_ASSOCIATED_PERSON);
         address freshWallet = address(0xF9E54);
-        (bool passed, bytes32 rc) = f01.check(freshWallet, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(freshWallet, seller, asset, 0, _secondaryCtx(), "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -290,7 +294,7 @@ contract OperatorSelfDealingTest is Test {
         // complete (doc §10 Layer 1-2).
         address freshWallet = address(0xF9E54);
         f01.setRestrictedParty(freshWallet, OperatorSelfDealing.OperatorRole.OPERATOR_ASSOCIATED_PERSON);
-        (bool passed, bytes32 rc) = f01.check(freshWallet, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(freshWallet, seller, asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(3));
     }
@@ -298,13 +302,13 @@ contract OperatorSelfDealingTest is Test {
     // --- code 1: identity unresolved (fail-closed, A-04 upstream seam) ---
 
     function test_code1_zeroBuyer_fails1() public {
-        (bool passed, bytes32 rc) = f01.check(address(0), seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(address(0), seller, asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(1));
     }
 
     function test_code1_zeroSeller_fails1() public {
-        (bool passed, bytes32 rc) = f01.check(buyer, address(0), asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(buyer, address(0), asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(1));
     }
@@ -316,7 +320,7 @@ contract OperatorSelfDealingTest is Test {
         // closed with OP_REGISTRY_UNAVAILABLE even with two clean parties (doc
         // §5.5/§8.3 — uncertainty resolves to a block, never a pass).
         OperatorSelfDealing fresh = new OperatorSelfDealing();
-        (bool passed, bytes32 rc) = fresh.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = fresh.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(2));
     }
@@ -326,7 +330,7 @@ contract OperatorSelfDealingTest is Test {
         // party returns code 2, not code 3, while the roster is unloaded.
         f01.setRegistryAvailable(false);
         f01.setRestrictedParty(buyer, OperatorSelfDealing.OperatorRole.OPERATOR_ENTITY);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertFalse(passed);
         assertEq(rc, _code(2));
     }
@@ -337,14 +341,14 @@ contract OperatorSelfDealingTest is Test {
         // A short/absent context cannot be decoded => no exception path is available
         // => a restricted party is blocked (fail-closed), never accidentally exempt.
         f01.setRestrictedParty(seller, OperatorSelfDealing.OperatorRole.OPERATOR_AFFILIATE);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, "");
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, "", "");
         assertFalse(passed);
         assertEq(rc, _code(3));
     }
 
     function test_shortContext_cleanParties_pass() public {
         // With no restricted party the context is never decoded and the trade clears.
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, "");
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -353,12 +357,12 @@ contract OperatorSelfDealingTest is Test {
 
     function test_roster_addThenRemove_roundTrip() public {
         f01.setRestrictedParty(seller, OperatorSelfDealing.OperatorRole.OPERATOR_ENTITY);
-        (bool blocked,) = f01.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool blocked,) = f01.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertFalse(blocked);
 
         // Relationship ends: removal takes effect for trades after the change (§5.4).
         f01.setRestrictedParty(seller, OperatorSelfDealing.OperatorRole.NONE);
-        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx());
+        (bool passed, bytes32 rc) = f01.check(buyer, seller, asset, 0, _secondaryCtx(), "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }

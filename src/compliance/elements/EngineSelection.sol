@@ -97,7 +97,11 @@ contract EngineSelection is BaseElement, Governed {
                 temporal: TemporalNature.REALTIME,
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {
         // Current legally-confirmed sets are both {RFQ} (doc §3.16, §3.4, §3.8).
@@ -159,8 +163,8 @@ contract EngineSelection is BaseElement, Governed {
     ///      overlay (G④) and the affiliate overlay (G⑤) are active the engine must
     ///      satisfy BOTH — the two sequential fail-fast gates realise an
     ///      INTERSECTION, never a union (doc §5.3 last row).
-    function check(address, address, address asset, uint256, bytes calldata context)
-        external
+    function _check(address, address, address asset, uint256, bytes calldata context, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

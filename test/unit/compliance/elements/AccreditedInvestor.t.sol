@@ -69,7 +69,7 @@ contract AccreditedInvestorTest is Test {
     }
 
     function _check() internal view returns (bool passed, bytes32 rc) {
-        return element.check(user, address(0), asset, 0, "");
+        return element.check(user, address(0), asset, 0, "", "");
     }
 
     // ---------------------------------------------------------------
@@ -288,7 +288,7 @@ contract AccreditedInvestorTest is Test {
         assertEq(rc, _code(5));
 
         // Other assets unaffected (per-asset activation).
-        (passed,) = element.check(user, address(0), address(0xCAFE), 0, "");
+        (passed,) = element.check(user, address(0), address(0xCAFE), 0, "", "");
         assertTrue(passed);
     }
 

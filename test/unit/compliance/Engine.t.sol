@@ -782,7 +782,11 @@ contract FailingElement is IComplianceElement {
         _reason = reason_;
     }
 
-    function check(address, address, address, uint256, bytes calldata) external view returns (bool, bytes32) {
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
+        external
+        view
+        returns (bool, bytes32)
+    {
         return (false, _reason);
     }
 
@@ -794,7 +798,11 @@ contract FailingElement is IComplianceElement {
             temporal: TemporalNature.REALTIME,
             decidability: Decidability.MONITORING_BASED,
             timing: ObligationTiming.AT_TRADE_GATE,
-            statefulness: Statefulness.STATELESS
+            statefulness: Statefulness.STATELESS,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
         });
     }
 }
@@ -806,7 +814,11 @@ contract FailingStatefulFlagElement is IStatefulElement {
         _id = id_;
     }
 
-    function check(address, address, address, uint256, bytes calldata) external pure returns (bool, bytes32) {
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
+        external
+        pure
+        returns (bool, bytes32)
+    {
         return (false, bytes32("FLAG"));
     }
 
@@ -818,7 +830,11 @@ contract FailingStatefulFlagElement is IStatefulElement {
             temporal: TemporalNature.CUMULATIVE,
             decidability: Decidability.MONITORING_BASED,
             timing: ObligationTiming.EX_POST_TRIGGER,
-            statefulness: Statefulness.STATEFUL
+            statefulness: Statefulness.STATEFUL,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
         });
     }
 
@@ -828,7 +844,7 @@ contract FailingStatefulFlagElement is IStatefulElement {
 }
 
 contract RevertingStatefulElement is IStatefulElement {
-    function check(address, address, address, uint256, bytes calldata)
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
         external
         pure
         override
@@ -845,7 +861,11 @@ contract RevertingStatefulElement is IStatefulElement {
             temporal: TemporalNature.CUMULATIVE,
             decidability: Decidability.MONITORING_BASED,
             timing: ObligationTiming.EX_POST_TRIGGER,
-            statefulness: Statefulness.STATEFUL
+            statefulness: Statefulness.STATEFUL,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
         });
     }
 
@@ -862,7 +882,12 @@ contract ParamStatefulElement is IStatefulElement {
         _id = id_;
     }
 
-    function check(address, address, address, uint256, bytes calldata) external pure override returns (bool, bytes32) {
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
+        external
+        pure
+        override
+        returns (bool, bytes32)
+    {
         return (true, bytes32(0));
     }
 
@@ -874,7 +899,11 @@ contract ParamStatefulElement is IStatefulElement {
             temporal: TemporalNature.CUMULATIVE,
             decidability: Decidability.DETERMINISTIC,
             timing: ObligationTiming.EX_POST_TRIGGER,
-            statefulness: Statefulness.STATEFUL
+            statefulness: Statefulness.STATEFUL,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
         });
     }
 
@@ -888,7 +917,7 @@ contract RecordingStatefulElement is IStatefulElement {
     address public lastTo;
     uint256 public lastAmount;
 
-    function check(address, address, address, uint256, bytes calldata)
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
         external
         pure
         override
@@ -905,7 +934,11 @@ contract RecordingStatefulElement is IStatefulElement {
             temporal: TemporalNature.CUMULATIVE,
             decidability: Decidability.DETERMINISTIC,
             timing: ObligationTiming.EX_POST_TRIGGER,
-            statefulness: Statefulness.STATEFUL
+            statefulness: Statefulness.STATEFUL,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
         });
     }
 

@@ -134,7 +134,11 @@ contract AssetClassification is BaseElement, Governed {
                 temporal: TemporalNature.ONE_TIME,
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {
         if (requiredClassification_ == bytes32(0)) {
@@ -199,8 +203,8 @@ contract AssetClassification is BaseElement, Governed {
     ///      INV-C classification mismatch(5) -> freshness(6, STRICT `>`, opposite
     ///      boundary direction to the time-lock). `user`/`counterparty`/`amount`
     ///      are ignored — this is an asset-side, not investor-side, check.
-    function check(address, address, address asset, uint256, bytes calldata)
-        external
+    function _check(address, address, address asset, uint256, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

@@ -69,7 +69,7 @@ contract RegMIssuerBuyingTest is Test {
         view
         returns (bool passed, bytes32 rc)
     {
-        return e.check(buyer_, seller_, asset, amount, _ctx(buyer_, seller_, flow));
+        return e.check(buyer_, seller_, asset, amount, _ctx(buyer_, seller_, flow), "");
     }
 
     /// @dev A covered asset in an active continuous offering, profile NONE.
@@ -460,7 +460,7 @@ contract RegMIssuerBuyingTest is Test {
         e.setRestrictedRole(asset, issuer, RegMIssuerBuying.RestrictedRole.ISSUER);
         // An empty context cannot be decoded for FlowType; the relaxation is skipped
         // and the issuer buy is blocked (fail-closed direction).
-        (bool passed, bytes32 rc) = e.check(issuer, seller, asset, 1, "");
+        (bool passed, bytes32 rc) = e.check(issuer, seller, asset, 1, "", "");
         assertFalse(passed);
         assertEq(rc, _code(4));
     }

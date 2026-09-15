@@ -91,7 +91,7 @@ contract JurisdictionTest is Test {
         j.setJurisdictionAllowed(US, true);
         vm.stopPrank();
 
-        (bool passed, bytes32 reasonCode) = j.check(user, address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = j.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -101,7 +101,7 @@ contract JurisdictionTest is Test {
     function test_check_fails_when_jurisdiction_unset() public view {
         // Default/unset jurisdiction is bytes32(0) — fail-closed even though
         // nothing has explicitly disallowed the investor.
-        (bool passed, bytes32 reasonCode) = j.check(user, address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = j.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertTrue(reasonCode != bytes32(0));
     }
@@ -111,7 +111,7 @@ contract JurisdictionTest is Test {
         j.setJurisdiction(user, KP);
         // KP was never added to the allowed set.
 
-        (bool passed, bytes32 reasonCode) = j.check(user, address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = j.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertTrue(reasonCode != bytes32(0));
     }
@@ -123,7 +123,7 @@ contract JurisdictionTest is Test {
         vm.prank(operator);
         j.setJurisdictionAllowed(bytes32(0), true);
 
-        (bool passed,) = j.check(user, address(0), asset, 0, "");
+        (bool passed,) = j.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
     }
 
@@ -135,13 +135,13 @@ contract JurisdictionTest is Test {
         j.setJurisdictionAllowed(US, true);
         vm.stopPrank();
 
-        (bool passed,) = j.check(user, address(0), asset, 0, "");
+        (bool passed,) = j.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
 
         vm.prank(operator);
         j.setJurisdictionAllowed(US, false);
 
-        (passed,) = j.check(user, address(0), asset, 0, "");
+        (passed,) = j.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
     }
 }

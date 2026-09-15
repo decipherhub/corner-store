@@ -109,7 +109,11 @@ contract Erc3643Native is BaseElement, Governed {
                 // pure staticcall/compare against onchain state (doc §5.5).
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -148,8 +152,8 @@ contract Erc3643Native is BaseElement, Governed {
     /// @dev ASSET-side check. Regime (1): declaration-only — attested PASSes,
     ///      unattested => 1. Regime (2): live-wiring — gates ②–⑤ (doc §5.4).
     ///      user=buyer, counterparty=seller.
-    function check(address user, address counterparty, address asset, uint256 amount, bytes calldata)
-        external
+    function _check(address user, address counterparty, address asset, uint256 amount, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

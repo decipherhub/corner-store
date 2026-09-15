@@ -60,12 +60,12 @@ contract ElementsTest is Test {
 
     function test_sanctions_pass_and_fail_and_metadata() public {
         Sanctions s = new Sanctions();
-        (bool passed, bytes32 rc) = s.check(user, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = s.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
 
         s.setBlocked(user, true);
-        (passed, rc) = s.check(user, address(0), asset, 0, "");
+        (passed, rc) = s.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertTrue(rc != bytes32(0));
 
@@ -95,11 +95,11 @@ contract ElementsTest is Test {
 
     function test_accredited_pass_fail_metadata() public {
         AccreditedInvestor a = new AccreditedInvestor();
-        (bool passed,) = a.check(user, address(0), asset, 0, "");
+        (bool passed,) = a.check(user, address(0), asset, 0, "", "");
         assertFalse(passed); // default not accredited
 
         a.setAccredited(user, true);
-        (passed,) = a.check(user, address(0), asset, 0, "");
+        (passed,) = a.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
 
         ElementMetadata memory m = a.elementMetadata();
@@ -126,11 +126,11 @@ contract ElementsTest is Test {
 
     function test_qp_pass_fail_metadata() public {
         QualifiedPurchaser q = new QualifiedPurchaser();
-        (bool passed,) = q.check(user, address(0), asset, 0, "");
+        (bool passed,) = q.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
 
         q.setQp(user, true);
-        (passed,) = q.check(user, address(0), asset, 0, "");
+        (passed,) = q.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
 
         ElementMetadata memory m = q.elementMetadata();
@@ -159,18 +159,18 @@ contract ElementsTest is Test {
         Lockup l = new Lockup(address(src), lockupSeconds);
 
         // Not acquired → blocked.
-        (bool passed,) = l.check(user, address(0), asset, 0, "");
+        (bool passed,) = l.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
 
         // Acquired now → still within lockup.
         vm.warp(1000);
         src.set(user, asset, 1000);
-        (passed,) = l.check(user, address(0), asset, 0, "");
+        (passed,) = l.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
 
         // After lockup elapses → passes.
         vm.warp(1000 + lockupSeconds);
-        (passed,) = l.check(user, address(0), asset, 0, "");
+        (passed,) = l.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
 
         ElementMetadata memory m = l.elementMetadata();
@@ -184,7 +184,7 @@ contract ElementsTest is Test {
         Lockup l = new Lockup(address(src), 100);
         src.setBroken(user, asset);
 
-        (bool passed, bytes32 reasonCode) = l.check(user, address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = l.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, keccak256(abi.encode(uint16(0), bytes32("C-01-v1"), uint32(2))));
     }
@@ -192,7 +192,7 @@ contract ElementsTest is Test {
     function test_surveillance_never_blocks_and_flags_over_threshold() public {
         SurveillanceFlag f = new SurveillanceFlag();
         f.setEngine(address(this)); // authorize this test as the onTransfer caller
-        (bool passed, bytes32 rc) = f.check(user, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = f.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
 
@@ -205,7 +205,7 @@ contract ElementsTest is Test {
         assertEq(f.transferCount(), 1);
 
         // check still passes after a transfer (flag-not-block).
-        (passed,) = f.check(user, address(0), asset, 0, "");
+        (passed,) = f.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
 
         ElementMetadata memory m = f.elementMetadata();

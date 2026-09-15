@@ -1,6 +1,6 @@
 import {AbiCoder, encodeBytes32String, keccak256} from "ethers";
 
-// Element id (bytes32 string) -> human label — 23 labeled elements. The first
+// Element id (bytes32 string) -> human label — 24 in-repo elements. The first
 // 11 (A-01, A-02, A-03, A-04, A-05, B-01, B-02, C-01, E-01, A-13, F-02) are the
 // original illustrative elements — six of which (A-01, A-03, A-04, A-13, B-01,
 // B-02) were upgraded in place to the walkthrough-doc failure-code taxonomy
@@ -8,8 +8,8 @@ import {AbiCoder, encodeBytes32String, keccak256} from "ethers";
 // B-04, D-01) are the wave-2 illustrative elements (CMP-003); the last 6 (A-06,
 // A-12, E-03, F-01, F-03, F-04) are the wave-3 illustrative elements (CMP-004).
 // These are NOT all DeployStack-registered: script/DeployStack.s.sol's
-// _deployAndRegisterElements registers only 12 — the 11 originals labeled here
-// PLUS BUIDL-MIN-v1 (which is itself NOT labeled here). The wave-2 (CMP-003)
+// _deployAndRegisterElements registers 12 — the 11 originals plus the generic
+// BUIDL-like demo minimum element. The wave-2 (CMP-003)
 // and wave-3 (CMP-004) sets are registered opt-in via tools/deploy-wave2 and
 // tools/deploy-wave3 respectively — not by DeployStack, and not wired into any
 // recipe's `requiredElements`.
@@ -36,7 +36,8 @@ export const ELEMENT_LABELS: Record<string, string> = {
   "E-03-v1": "Bad Actor Disqualification",
   "F-01-v1": "Operator Self-Dealing",
   "F-03-v1": "Fraud Surveillance",
-  "F-04-v1": "Reg M Issuer Buying"
+  "F-04-v1": "Reg M Issuer Buying",
+  "BUIDL-MIN-v1": "Minimum Investment"
 };
 
 // Recipe id -> human label. Recipes registered by DeployStack.
@@ -247,6 +248,7 @@ export const ELEMENT_CODE_NAMES: Record<string, Record<number, string>> = {
 };
 
 const coder = AbiCoder.defaultAbiCoder();
+export const INVALID_ELEMENT_PARAMETERS = 0xffffffff;
 
 // ComplianceEngine._runChecks / ReasonCodes.encode:
 //   reasonCode = keccak256(abi.encode(uint16 recipeId, bytes32 elementId, uint32 code))
@@ -263,20 +265,15 @@ interface TableEntry {
   label: string;
 }
 
-// Precompute every known reason code from THREE sources:
+// Precompute every known reason code from four sources:
 //
-//  1. Engine-propagated verdicts: (recipeId in {1,2,7}) x (23 elementIds) x
+//  1. Recipe-scoped fallback verdicts: (recipeId in {1,2,7}) x (24 elementIds) x
 //     (every code in that element's ELEMENT_CODE_NAMES table, or just code 1
-//     for elements without one). `ComplianceEngine._runChecks` currently
-//     re-encodes every per-element failure as `encode(contributingRecipe,
-//     elementId, 1)` (code hardcoded to 1 regardless of the element's actual
-//     failure), so code 1 is the only one of these actually reachable via
-//     `evaluate()`/`ExecutionRouter`'s `ComplianceRejected` today — codes 2+
-//     are precomputed anyway (matching this file's existing precedent of
-//     covering known combos ahead of use, per the audit-matching rationale in
-//     ReasonCodes.sol) so decoding stays correct if/when richer propagation
-//     lands.
-//  2. Direct element-level codes: (recipeId 0) x (23 elementIds) x (every
+//     for elements without one). `ComplianceEngine._runChecks` preserves a
+//     non-zero Element reason exactly; recipe-scoped
+//     code 1 remains the fallback for Elements that return a zero reason.
+//     Richer recipe-scoped combinations remain precomputed for compatibility.
+//  2. Direct element-level codes: (recipeId 0) x (24 elementIds) x (every
 //     code in ELEMENT_CODE_NAMES, or code 1 for elements without one). Every
 //     element's own `check()` self-encodes with `ReasonCodes.encode(0,
 //     ELEMENT_ID, n)` (see e.g. Sanctions.sol, HolderCount.sol) — this is
@@ -285,7 +282,8 @@ interface TableEntry {
 //     HolderCount.onTransfer), and by monitoring-flag events (e.g.
 //     SurveillanceFlag). THIS is where the wave-2b codes 2-10 are genuinely
 //     decodable today.
-//  3. The engine's policy-status rejections (recipeId 0, sentinel element
+//  3. Common invalid-parameter failures: (recipeId 0) x (24 elementIds).
+//  4. The engine's policy-status rejections (recipeId 0, sentinel element
 //     "POLICY"): `ComplianceEngine._rejectPolicy`: encode(0, "POLICY", uint32(status)).
 function buildTable(): Map<string, TableEntry> {
   const table = new Map<string, TableEntry>();
@@ -321,7 +319,15 @@ function buildTable(): Map<string, TableEntry> {
     (elementId, codeNum, name) => `element check (recipeId 0) / ${elementId} / code ${codeNum} -> ${name}`
   );
 
-  // 3. Policy-status rejections carry recipeId 0 and the sentinel element "POLICY".
+  // 3. BaseElement rejects absent required, unexpected, and oversized
+  // parameter payloads before running the concrete policy judgment.
+  for (const elementId of Object.keys(ELEMENT_LABELS)) {
+    table.set(encodeReason(0, elementId, INVALID_ELEMENT_PARAMETERS), {
+      label: `element check (recipeId 0) / ${elementId} / invalid parameters`
+    });
+  }
+
+  // 4. Policy-status rejections carry recipeId 0 and the sentinel element "POLICY".
   for (const status of Object.keys(POLICY_STATUS).map(Number)) {
     const code = encodeReason(0, "POLICY", status);
     table.set(code, {

@@ -15,6 +15,20 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `CORE-006 — Unified Element Parameter Interface`: 모든 in-repo Element와
+  Engine/CLI/demo call site를 단일 `check(..., context, parameters)` ABI로
+  migration했다. immutable metadata가 schema ID/version, required와 최대 bytes를
+  선언하고 Registry가 incoherent 또는 4096-byte 초과 capability를 등록 전에
+  거절한다. `BaseElement`는 parameterless non-empty, required empty와 선언 길이
+  초과를 공통 reason으로 fail-closed하며 CLI도 이를 decode한다. 현재 Engine은
+  #103 전까지 empty parameters만 전달해 기존 Element 판정과 reason code를
+  유지한다. 검증: BaseElement 5/5, Registry 9/9, Engine 37/37, 전체 Element
+  577/577, full Foundry 877/877, CLI/Toolkit/RFQ demo/testnet package tests,
+  전체 `scripts/check.sh`, `buidl-like`와 `reg-d` Anvil E2E 각각 7/7 및
+  dashboard/CLI/RFQ flow, `git diff --check` 통과. 로컬 nightly formatter가
+  main의 기존 두 script와 다른 형식을 요구해 full check 동안만 임시 포맷하고
+  이후 원복했다. Manifest별 schema/parameter 저장·hash·전달은 #103 범위다.
+
 - `DOCS-011 — ADR-010 Production Policy Decisions`: Q1~Q8과 D-5에서 선택한
   Manifest-owned versioned config, bounded parameter 단일 Element ABI,
   주소+runtime code hash execution binding, 온체인 lifecycle+PII-free artifact

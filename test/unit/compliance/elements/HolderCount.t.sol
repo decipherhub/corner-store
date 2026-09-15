@@ -121,7 +121,7 @@ contract HolderCountTest is Test {
         // Even in a mode with the asset gate on, a zero-amount trade never counts.
         vm.prank(operator);
         hc.setAssetGateMet(true);
-        (bool passed, bytes32 rc) = hc.check(_wallet(1), address(0), address(0), 0, "");
+        (bool passed, bytes32 rc) = hc.check(_wallet(1), address(0), address(0), 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -129,7 +129,7 @@ contract HolderCountTest is Test {
     function test_check_capModeNone_passesEverything() public {
         vm.prank(operator);
         hc.setCapMode(HolderCount.CapMode.NONE);
-        (bool passed,) = hc.check(_wallet(1), address(0), address(0), 1, "");
+        (bool passed,) = hc.check(_wallet(1), address(0), address(0), 1, "", "");
         assertTrue(passed);
     }
 
@@ -138,7 +138,7 @@ contract HolderCountTest is Test {
         // and commit never reverts, even past the total cap.
         assertFalse(hc.assetGateMet());
         for (uint256 i = 0; i < 5; i++) {
-            (bool passed,) = hc.check(_wallet(i), address(0), address(0), 1, "");
+            (bool passed,) = hc.check(_wallet(i), address(0), address(0), 1, "", "");
             assertTrue(passed);
             _mint(_wallet(i));
         }
@@ -159,7 +159,7 @@ contract HolderCountTest is Test {
         assertEq(hc.holderCount(), 35);
 
         // A transfer to an already-counted holder passes even at the cap...
-        (bool passed, bytes32 rc) = hc.check(_wallet(0), address(0), address(0), 1, "");
+        (bool passed, bytes32 rc) = hc.check(_wallet(0), address(0), address(0), 1, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
 
@@ -190,7 +190,7 @@ contract HolderCountTest is Test {
 
         // A second unit to the same bound wallet: same identity already holds =>
         // P1 pass, no new holder.
-        (bool passed,) = hc.check(wP, address(0), address(0), 1, "");
+        (bool passed,) = hc.check(wP, address(0), address(0), 1, "", "");
         assertTrue(passed);
         vm.prank(engine);
         hc.onTransfer(address(0), wP, 1);
@@ -224,14 +224,14 @@ contract HolderCountTest is Test {
         assertEq(hc.holderCount(), 99);
 
         // 100th new person: resulting 100, 100 > 100 is false => PASS.
-        (bool pass100, bytes32 rc100) = hc.check(_wallet(99), address(0), address(0), 1, "");
+        (bool pass100, bytes32 rc100) = hc.check(_wallet(99), address(0), address(0), 1, "", "");
         assertTrue(pass100);
         assertEq(rc100, bytes32(0));
         _mint(_wallet(99));
         assertEq(hc.holderCount(), 100);
 
         // 101st new person: resulting 101 > 100 => FAIL code 3.
-        (bool pass101, bytes32 rc101) = hc.check(_wallet(100), address(0), address(0), 1, "");
+        (bool pass101, bytes32 rc101) = hc.check(_wallet(100), address(0), address(0), 1, "", "");
         assertFalse(pass101);
         assertEq(rc101, _code(3));
     }
@@ -247,12 +247,12 @@ contract HolderCountTest is Test {
         for (uint256 i = 0; i < 34; i++) {
             _mint(_wallet(i));
         }
-        (bool pass35,) = hc.check(_wallet(34), address(0), address(0), 1, "");
+        (bool pass35,) = hc.check(_wallet(34), address(0), address(0), 1, "", "");
         assertTrue(pass35);
         _mint(_wallet(34));
         assertEq(hc.holderCount(), 35);
 
-        (bool pass36, bytes32 rc36) = hc.check(_wallet(35), address(0), address(0), 1, "");
+        (bool pass36, bytes32 rc36) = hc.check(_wallet(35), address(0), address(0), 1, "", "");
         assertFalse(pass36);
         assertEq(rc36, _code(4));
     }
@@ -275,7 +275,7 @@ contract HolderCountTest is Test {
         // An AI buyer passes (total 500 < 2000) and does NOT touch the non-AI budget.
         address aiBuyer = _wallet(1000);
         air.setAccredited(aiBuyer, true);
-        (bool passAi,) = hc.check(aiBuyer, address(0), address(0), 1, "");
+        (bool passAi,) = hc.check(aiBuyer, address(0), address(0), 1, "", "");
         assertTrue(passAi);
         _mint(aiBuyer);
         assertEq(hc.holderCount(), 500);
@@ -283,7 +283,7 @@ contract HolderCountTest is Test {
 
         // A further non-AI buyer: nonAi 499 + 1 == 500 >= 500 => FAIL code 2,
         // even though total (501) is far below 2000.
-        (bool passNon, bytes32 rc) = hc.check(_wallet(2000), address(0), address(0), 1, "");
+        (bool passNon, bytes32 rc) = hc.check(_wallet(2000), address(0), address(0), 1, "", "");
         assertFalse(passNon);
         assertEq(rc, _code(2));
     }
@@ -308,7 +308,7 @@ contract HolderCountTest is Test {
         // The 2000th new person: resulting 2000 >= 2000 => FAIL code 1.
         address next = _wallet(5000);
         air.setAccredited(next, true);
-        (bool passed, bytes32 rc) = hc.check(next, address(0), address(0), 1, "");
+        (bool passed, bytes32 rc) = hc.check(next, address(0), address(0), 1, "", "");
         assertFalse(passed);
         assertEq(rc, _code(1));
     }
@@ -345,7 +345,7 @@ contract HolderCountTest is Test {
         assertEq(hc.holderCount(), 35);
 
         // 36th new entrant is blocked.
-        (bool blocked,) = hc.check(_wallet(100), address(0), address(0), 1, "");
+        (bool blocked,) = hc.check(_wallet(100), address(0), address(0), 1, "", "");
         assertFalse(blocked);
 
         // Holder 0 sells out to an EXISTING holder (1): no new entry, holder 0 exits.
@@ -354,7 +354,7 @@ contract HolderCountTest is Test {
         assertEq(hc.holderCount(), 34);
 
         // Now the previously-blocked entrant passes and can commit.
-        (bool nowOk,) = hc.check(_wallet(100), address(0), address(0), 1, "");
+        (bool nowOk,) = hc.check(_wallet(100), address(0), address(0), 1, "", "");
         assertTrue(nowOk);
         _mint(_wallet(100));
         assertEq(hc.holderCount(), 35);

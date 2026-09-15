@@ -25,13 +25,13 @@ contract AcquisitionSourceTest is Test {
 
     function test_validSnapshot_passesAfterLockup() public {
         _setValid(800, 2_000);
-        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
 
     function test_missingSnapshot_failsClosed() public view {
-        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, ReasonCodes.encode(0, bytes32("C-01-v1"), 1));
     }
@@ -41,7 +41,7 @@ contract AcquisitionSourceTest is Test {
         source.setSnapshot(
             holder, asset, 0, 2_000, keccak256("broken"), IAcquisitionSource.AcquisitionStatus.LINEAGE_BROKEN
         );
-        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, ReasonCodes.encode(0, bytes32("C-01-v1"), 2));
     }
@@ -49,14 +49,14 @@ contract AcquisitionSourceTest is Test {
     function test_expiredSnapshot_failsClosed() public {
         _setValid(800, 1_100);
         vm.warp(1_101);
-        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, ReasonCodes.encode(0, bytes32("C-01-v1"), 3));
     }
 
     function test_immatureSnapshot_failsClosed() public {
         _setValid(950, 2_000);
-        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = lockup.check(holder, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, ReasonCodes.encode(0, bytes32("C-01-v1"), 4));
     }
