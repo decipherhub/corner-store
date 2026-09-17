@@ -255,6 +255,7 @@ reference/demo 구현을 실제 상품 승인으로 표현하지 않는다.
 
 ## Related
 
+- [`ADR-010 최초 문제 분석과 대안 기록`](./context/ADR-010-origin-analysis.md)
 - [`ADR-006`](./ADR-006-asset-agnostic-component.md)
 - [`ADR-007`](./ADR-007-pd-architecture-decisions.md)
 - [`ADR-008`](./ADR-008-compliance-seam-decisions.md)
