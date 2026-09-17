@@ -10,6 +10,7 @@ export interface RFQQuote {
   amountIn: string;
   amountOut: string;
   venue: Address;
+  policyId: Hex;
   nonce: string;
   expiry: number;
 }
@@ -29,6 +30,7 @@ export interface RFQQuoteRequest {
   amountIn: UintLike;
   amountOut: UintLike;
   venue: Address;
+  policyId: Hex;
   ttlSeconds?: number;
   nonce?: UintLike;
 }
@@ -40,6 +42,7 @@ export interface RFQQuoteIntent {
   tokenOut: Address;
   amountIn: UintLike;
   venue: Address;
+  policyId: Hex;
   ttlSeconds?: number;
 }
 
@@ -84,7 +87,15 @@ export interface RFQPriceRequest {
   venue: Address;
 }
 
-export interface RFQPrice {
+export interface RFQFreshnessEvidence {
+  snapshotId: string;
+  version: string;
+  observedAt: number;
+  validUntil: number;
+  available: boolean;
+}
+
+export interface RFQPrice extends Partial<RFQFreshnessEvidence> {
   amountOut: UintLike;
 }
 
@@ -92,8 +103,13 @@ export interface PricingProvider {
   price(request: RFQPriceRequest): Promise<RFQPrice> | RFQPrice;
 }
 
+export interface RFQRiskDecision extends Partial<RFQFreshnessEvidence> {
+  decision?: "passed" | "rejected";
+  reason?: string;
+}
+
 export interface InventoryRiskCheck {
-  check(request: RFQPriceRequest, price: { amountOut: string }): Promise<void> | void;
+  check(request: RFQPriceRequest, price: { amountOut: string }): Promise<void | RFQRiskDecision> | void | RFQRiskDecision;
 }
 
 export interface RFQServiceConfig {

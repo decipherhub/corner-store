@@ -1,6 +1,7 @@
 import {domain, typedData} from "./eip712";
 import {
   Address,
+  Hex,
   InventoryRiskCheck,
   NonceStore,
   RFQBackendSDKConfig,
@@ -14,6 +15,7 @@ import {
 } from "./types";
 import {
   assertHex,
+  normalizeBytes32,
   normalizeAddress,
   normalizeChainId,
   normalizeTtlSeconds,
@@ -30,6 +32,7 @@ interface NormalizedQuoteIntent {
   tokenOut: Address;
   amountIn: string;
   venue: Address;
+  policyId: Hex;
   ttlSeconds: number;
 }
 
@@ -76,6 +79,7 @@ export class RFQQuoteService {
       amountIn: toPositiveUintString(request.amountIn, "amountIn"),
       amountOut: toPositiveUintString(request.amountOut, "amountOut"),
       venue: normalizeAddress(request.venue, "venue"),
+      policyId: normalizeBytes32(request.policyId, "policyId"),
       nonce: toUintString(request.nonce ?? this.config.nextNonce(), "nonce"),
       expiry: now + ttlSeconds
     };
@@ -142,6 +146,7 @@ export class RFQBackendSDK {
       amountIn: normalized.amountIn,
       amountOut,
       venue: normalized.venue,
+      policyId: normalized.policyId,
       ttlSeconds: normalized.ttlSeconds,
       nonce
     });
@@ -154,6 +159,7 @@ export class RFQBackendSDK {
       tokenOut: normalizeAddress(intent.tokenOut, "tokenOut"),
       amountIn: toPositiveUintString(intent.amountIn, "amountIn"),
       venue: normalizeAddress(intent.venue, "venue"),
+      policyId: normalizeBytes32(intent.policyId, "policyId"),
       ttlSeconds: normalizeTtlSeconds(intent.ttlSeconds ?? this.defaultTtlSeconds)
     };
   }

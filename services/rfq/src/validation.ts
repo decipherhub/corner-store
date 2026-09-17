@@ -13,6 +13,13 @@ export function assertHex(value: Hex, field: string): Hex {
   return value;
 }
 
+export function normalizeBytes32(value: Hex, field: string): Hex {
+  if (!/^0x[a-fA-F0-9]{64}$/.test(value) || /^0x0{64}$/i.test(value)) {
+    throw new Error(`${field} must be a non-zero 32-byte hex value`);
+  }
+  return value.toLowerCase() as Hex;
+}
+
 export function normalizeChainId(value: number): number {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error("chainId must be a positive safe integer");
   return value;

@@ -79,7 +79,7 @@ contract BadActorDisqualificationTest is Test {
     }
 
     function _run() internal view returns (bool passed, bytes32 reasonCode) {
-        return element.check(buyer, seller, asset, 0, "");
+        return element.check(buyer, seller, asset, 0, "", "");
     }
 
     /// @dev A fully-clean offering: roster declared+complete, valid clearance
@@ -359,13 +359,13 @@ contract BadActorDisqualificationTest is Test {
     /// verdict for the same asset.
     function test_check_isPerAsset_notPerBuyer() public {
         _declareCleanOffering();
-        (bool p1,) = element.check(buyer, seller, asset, 0, "");
-        (bool p2,) = element.check(address(0xDEAD), address(0xF00D), asset, 0, "");
+        (bool p1,) = element.check(buyer, seller, asset, 0, "", "");
+        (bool p2,) = element.check(address(0xDEAD), address(0xF00D), asset, 0, "", "");
         assertTrue(p1);
         assertTrue(p2);
 
         // A different, undeclared asset fails closed (roster missing).
-        (bool p3, bytes32 rc3) = element.check(buyer, seller, address(0xABCD), 0, "");
+        (bool p3, bytes32 rc3) = element.check(buyer, seller, address(0xABCD), 0, "", "");
         assertFalse(p3);
         assertEq(rc3, _code(N_ROSTER_MISSING));
     }

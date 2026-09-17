@@ -11,7 +11,9 @@ import {
     ObligationTiming,
     Statefulness,
     ComplianceContext,
-    FlowType
+    FlowType,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
@@ -142,7 +144,13 @@ contract OperatorSelfDealing is BaseElement, Governed {
                 temporal: TemporalNature.REALTIME,
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.ONCHAIN_STATE,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -176,8 +184,8 @@ contract OperatorSelfDealing is BaseElement, Governed {
     /// @dev doc §5.2 order. `asset`/`amount` are unused — F-01 is party-scoped and
     ///      never looks at eligibility or amount. `user` == ctx.buyer (to),
     ///      `counterparty` == ctx.seller (from).
-    function check(address user, address counterparty, address, uint256, bytes calldata context)
-        external
+    function _check(address user, address counterparty, address, uint256, bytes calldata context, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

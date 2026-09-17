@@ -17,6 +17,7 @@ import {UsTaxResident} from "../../../src/compliance/elements/UsTaxResident.sol"
 import {AssetClassification} from "../../../src/compliance/elements/AssetClassification.sol";
 import {Erc3643Native} from "../../../src/compliance/elements/Erc3643Native.sol";
 import {FormDFiling} from "../../../src/compliance/elements/FormDFiling.sol";
+import {MinimumTradeAmount} from "../../../src/compliance/elements/MinimumTradeAmount.sol";
 import {IAcquisitionSource} from "../../../src/interfaces/compliance/IAcquisitionSource.sol";
 import {IComplianceElement, IStatefulElement} from "../../../src/interfaces/compliance/IComplianceElement.sol";
 import {RegD506cRecipe} from "../../../src/compliance/recipes/RegD506cRecipe.sol";
@@ -34,11 +35,17 @@ import {
     Decidability,
     ObligationTiming,
     Statefulness,
+    EnforcementAction,
+    ElementEnforcementOverride,
+    ElementPolicyParameter,
+    ManifestPolicyConfig,
     VenueType,
-    FlowType
+    FlowType,
+    EvidenceType
 } from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 import {Events} from "../../../src/libraries/Events.sol";
+import {ReasonCodes} from "../../../src/libraries/ReasonCodes.sol";
 
 contract EngineTest is Test {
     ElementRegistry internal elementReg;
@@ -59,6 +66,7 @@ contract EngineTest is Test {
     Lockup internal lockup; // C-01-v1
     FormDFiling internal formD; // E-01-v1
     MockAcquisitionSource internal acqSource;
+    RegD506cRecipe internal regdRecipe;
 
     bytes32 internal constant ALLOWED_JX = bytes32("US");
     bytes32 internal constant REG_D_CLASS = bytes32("REG_D");
@@ -73,7 +81,7 @@ contract EngineTest is Test {
     function setUp() public {
         elementReg = new ElementRegistry();
         recipeReg = new RecipeRegistry();
-        policyReg = new TokenPolicyRegistry();
+        policyReg = new TokenPolicyRegistry(recipeReg, elementReg);
 
         sanctions = new Sanctions();
         accredited = new AccreditedInvestor();
@@ -110,9 +118,9 @@ contract EngineTest is Test {
         // time pass C-01. (No deadlines are built in these unit tests.)
         vm.warp(uint256(LOCKUP_SECONDS) + 1);
 
-        RegD506cRecipe regd = new RegD506cRecipe();
+        regdRecipe = new RegD506cRecipe();
         Fund3c7Recipe fund = new Fund3c7Recipe();
-        recipeReg.registerRecipe(1, 2, address(regd));
+        recipeReg.registerRecipe(1, 2, address(regdRecipe));
         recipeReg.registerRecipe(2, 1, address(fund));
 
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
@@ -177,7 +185,7 @@ contract EngineTest is Test {
     function _registerSingleElementRecipe(uint16 recipeId, bytes32 elementId) internal {
         bytes32[] memory elements = new bytes32[](1);
         elements[0] = elementId;
-        recipeReg.registerRecipe(recipeId, 1, address(new UnregisteredElementRecipe(elements)));
+        recipeReg.registerRecipe(recipeId, 1, address(new UnregisteredElementRecipe(recipeId, elements)));
     }
 
     function _registerRWA(uint16 fundRecipeId, uint256 factsPacked) internal {
@@ -239,6 +247,25 @@ contract EngineTest is Test {
         assertTrue(d.policyId != bytes32(0));
         assertEq(d.policyVersion, 1);
         assertEq(d.maxAmountToken, RWA, "single regulated output binds the cap axis");
+    }
+
+    function test_registeringNewRecipeVersion_doesNotChangeActiveManifestPolicy() public {
+        _registerRWA(0, 0);
+        _makeBuyerCompliant();
+
+        ComplianceDecision memory before_ = engine.evaluate(_ctxBuy());
+        assertTrue(before_.allowed);
+
+        bytes32 recipeKey = recipeReg.recipeKeyOf(1);
+        bytes32[] memory latestElements = new bytes32[](1);
+        latestElements[0] = bytes32("A-13-v1");
+        recipeReg.registerRecipe(1, 3, address(new VersionedTestRecipe(1, 3, latestElements)));
+
+        assertEq(recipeReg.latestRegisteredVersionOf(recipeKey), 3, "catalog latest should advance");
+        ComplianceDecision memory after_ = engine.evaluate(_ctxBuy());
+        assertTrue(after_.allowed, "active manifest remains bound to recipe v2");
+        assertEq(after_.policyId, before_.policyId, "catalog registration cannot mutate policy identity");
+        assertEq(after_.policyVersion, before_.policyVersion, "catalog registration cannot mutate policy version");
     }
 
     function test_singleRegulatedInput_bindsCapAxisToTokenIn() public {
@@ -386,11 +413,95 @@ contract EngineTest is Test {
         engine.commit(_ctxBuy());
     }
 
+    function test_detailed_nonzero_element_reason_is_preserved_exactly() public {
+        bytes32 elementId = bytes32("F-DETAIL-v1");
+        bytes32 exactReason = keccak256("provider-specific-reason");
+        elementReg.registerElement(elementId, address(new FailingElement(elementId, exactReason)));
+        _registerSingleElementRecipe(9, elementId);
+        _registerBindings(_singleBinding(9, 1));
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertFalse(d.allowed);
+        assertEq(d.reasonCode, exactReason);
+    }
+
+    function test_zero_element_reason_uses_legacy_fallback() public {
+        bytes32 elementId = bytes32("F-ZERO-v1");
+        elementReg.registerElement(elementId, address(new FailingElement(elementId, bytes32(0))));
+        _registerSingleElementRecipe(10, elementId);
+        _registerBindings(_singleBinding(10, 1));
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertFalse(d.allowed);
+        assertEq(d.reasonCode, keccak256(abi.encode(uint16(10), elementId, uint32(1))));
+    }
+
+    function test_engine_deliversManifestPolicyParametersToElement() public {
+        bytes32 elementId = bytes32("B-PARAM-v1");
+        bytes32 schemaId = keccak256("corner-store.test.max-amount.v1");
+        elementReg.registerElement(elementId, address(new ParameterLimitElement(elementId, schemaId)));
+        _registerSingleElementRecipe(12, elementId);
+
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] = ElementPolicyParameter(0, elementId, schemaId, 1, abi.encode(uint256(40)));
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _singleBinding(12, 1), overrides_, config);
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+
+        ComplianceDecision memory decision = engine.evaluate(_ctxBuy());
+        assertFalse(decision.allowed, "50 RWA must exceed configured limit 40");
+        assertEq(decision.reasonCode, bytes32("PARAM_LIMIT"));
+    }
+
+    function test_genericMinimumTradeAmount_matchesManifestConfigAtEngineBoundary() public {
+        MinimumTradeAmount minimum = new MinimumTradeAmount();
+        elementReg.registerElement(minimum.ELEMENT_ID(), address(minimum));
+        _registerSingleElementRecipe(13, minimum.ELEMENT_ID());
+
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] = ElementPolicyParameter({
+            bindingIndex: 0,
+            elementId: minimum.ELEMENT_ID(),
+            schemaId: minimum.PARAMETER_SCHEMA_ID(),
+            schemaVersion: 1,
+            parameters: abi.encode(uint256(40))
+        });
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _singleBinding(13, 1), overrides_, config);
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+
+        assertTrue(engine.evaluate(_ctxBuy()).allowed, "amountOut 50 meets configured threshold 40");
+        ComplianceContext memory below = _ctxBuy();
+        below.amountOut = 39;
+        ComplianceDecision memory rejected = engine.evaluate(below);
+        assertFalse(rejected.allowed);
+        assertEq(rejected.reasonCode, ReasonCodes.encode(0, minimum.ELEMENT_ID(), 1));
+    }
+
+    function test_elementLevelFlagOnly_in_requiredBinding_setsBit_without_blocking_or_commit() public {
+        bytes32 elementId = bytes32("F-ELEMFLAG-v1");
+        elementReg.registerElement(
+            elementId, address(new FailingStatefulFlagElement(elementId)), EnforcementAction.FLAG_ONLY
+        );
+        _registerSingleElementRecipe(11, elementId);
+        _registerBindings(_singleBinding(11, 1));
+
+        ComplianceDecision memory d = engine.evaluate(_ctxBuy());
+        assertTrue(d.allowed);
+        assertEq(d.flagsBitmap, 1);
+        engine.commit(_ctxBuy());
+    }
+
     function test_recipeVersionMismatch_failsClosed() public {
         RecipeBinding[] memory bindings = _singleBinding(2, 2);
-        _registerBindings(bindings);
-        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeVersionMismatch.selector, uint16(2), uint16(2), uint16(1)));
-        engine.evaluate(_ctxBuy());
+        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeNotRegistered.selector, uint16(2)));
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), bindings);
     }
 
     function test_oversizedRecipeElementSet_failsClosedWithoutTruncation() public {
@@ -398,15 +509,13 @@ contract EngineTest is Test {
         for (uint256 i = 0; i < elements.length; i++) {
             elements[i] = bytes32(i + 1);
         }
-        recipeReg.registerRecipe(3, 1, address(new UnregisteredElementRecipe(elements)));
-        _registerBindings(_singleBinding(3, 1));
-
+        UnregisteredElementRecipe oversized = new UnregisteredElementRecipe(3, elements);
         vm.expectRevert(
             abi.encodeWithSelector(
                 Errors.TooManyRecipeElements.selector, uint16(3), elements.length, engine.MAX_ELEMENTS_PER_RECIPE()
             )
         );
-        engine.evaluate(_ctxBuy());
+        recipeReg.registerRecipe(3, 1, address(oversized));
     }
 
     function test_unknown_token_fails_closed() public {
@@ -516,30 +625,57 @@ contract EngineTest is Test {
         assertTrue(d1.decisionHash != d2.decisionHash);
     }
 
+    function test_policyId_bindsChainAndEngineAddress() public {
+        _registerRWA(0, 0);
+        _makeBuyerCompliant();
+
+        ComplianceDecision memory baseline = engine.evaluate(_ctxBuy());
+        (,, bytes32 tokenPolicyId) = engine.policyHashesOf(RWA);
+        assertEq(baseline.policyId, tokenPolicyId, "single regulated token must expose quoteable policy id");
+        ComplianceEngine secondEngine = new ComplianceEngine(policyReg, elementReg, recipeReg);
+        ComplianceDecision memory otherEngine = secondEngine.evaluate(_ctxBuy());
+        assertTrue(baseline.policyId != otherEngine.policyId, "engine address must bind policy identity");
+
+        vm.chainId(block.chainid + 1);
+        ComplianceDecision memory otherChain = engine.evaluate(_ctxBuy());
+        assertTrue(baseline.policyId != otherChain.policyId, "chain id must bind policy identity");
+        assertTrue(baseline.decisionHash != otherChain.decisionHash, "decision must bind final policy identity");
+    }
+
+    function test_executionBindingHash_changesWhenRecipeRuntimeCodeDrifts() public {
+        _registerRWA(0, 0);
+        (bytes32 logicalBefore, bytes32 executionBefore, bytes32 policyBefore) = engine.policyHashesOf(RWA);
+        assertTrue(logicalBefore != bytes32(0) && executionBefore != bytes32(0) && policyBefore != bytes32(0));
+
+        bytes32 expectedCodeHash = recipeReg.runtimeCodeHashOf(recipeReg.recipeKeyOf(1), 2);
+        vm.etch(address(regdRecipe), hex"00");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Errors.ExecutionBindingMismatch.selector,
+                address(regdRecipe),
+                expectedCodeHash,
+                address(regdRecipe).codehash
+            )
+        );
+        engine.policyHashesOf(RWA);
+    }
+
     function test_element_not_registered_reverts() public {
         // Recipe 3 references an element id that is not registered.
         bytes32[] memory missing = new bytes32[](1);
         missing[0] = bytes32("Z-99-v1");
-        UnregisteredElementRecipe bad = new UnregisteredElementRecipe(missing);
+        UnregisteredElementRecipe bad = new UnregisteredElementRecipe(3, missing);
         recipeReg.registerRecipe(3, 1, address(bad));
 
         ManifestCore memory m = _activeManifest(0, 0);
-        policyReg.registerManifest(RWA, m, _singleBinding(3, 1));
-        policyReg.approveManifest(RWA);
-        _registerCashUnregulated();
-
         vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, bytes32("Z-99-v1")));
-        engine.evaluate(_ctxBuy());
+        policyReg.registerManifest(RWA, m, _singleBinding(3, 1));
     }
 
     function test_missing_issuance_recipe_reverts() public {
         ManifestCore memory m = _activeManifest(0, 0);
-        policyReg.registerManifest(RWA, m, _singleBinding(77, 1));
-        policyReg.approveManifest(RWA);
-        _registerCashUnregulated();
-
         vm.expectRevert(abi.encodeWithSelector(Errors.RecipeNotRegistered.selector, uint16(77)));
-        engine.evaluate(_ctxBuy());
+        policyReg.registerManifest(RWA, m, _singleBinding(77, 1));
     }
 
     function test_regulated_regulated_pair_evaluates_both_sides() public {
@@ -565,7 +701,7 @@ contract EngineTest is Test {
         bytes32[] memory els = new bytes32[](2);
         els[0] = bytes32("A-03-v1");
         els[1] = bytes32("F-02-v1");
-        UnregisteredElementRecipe surveilRecipe = new UnregisteredElementRecipe(els);
+        UnregisteredElementRecipe surveilRecipe = new UnregisteredElementRecipe(4, els);
         recipeReg.registerRecipe(4, 1, address(surveilRecipe));
 
         ManifestCore memory m = _activeManifest(0, 0);
@@ -586,10 +722,8 @@ contract EngineTest is Test {
     }
 
     function test_commit_pathOption_updatesOnlyDeterministicallySelectedPath() public {
-        SurveillanceFlag lowerPriority = new SurveillanceFlag();
-        SurveillanceFlag higherPriority = new SurveillanceFlag();
-        lowerPriority.setEngine(address(engine));
-        higherPriority.setEngine(address(engine));
+        ParamStatefulElement lowerPriority = new ParamStatefulElement(bytes32("F-PATH-A"));
+        ParamStatefulElement higherPriority = new ParamStatefulElement(bytes32("F-PATH-B"));
         elementReg.registerElement(bytes32("F-PATH-A"), address(lowerPriority));
         elementReg.registerElement(bytes32("F-PATH-B"), address(higherPriority));
         _registerSingleElementRecipe(3, bytes32("F-PATH-A"));
@@ -671,7 +805,7 @@ contract EngineTest is Test {
     function test_dedup_shared_element_across_recipes() public {
         bytes32[] memory overlap = new bytes32[](1);
         overlap[0] = bytes32("A-01-v1"); // shared with RegD506c's sanctions element
-        UnregisteredElementRecipe shared = new UnregisteredElementRecipe(overlap);
+        UnregisteredElementRecipe shared = new UnregisteredElementRecipe(5, overlap);
         recipeReg.registerRecipe(5, 1, address(shared));
 
         // issuance=RegD506c (1), fund=overlapping recipe (5), applicable regardless of facts.
@@ -721,18 +855,13 @@ contract EngineTest is Test {
     // injection seam. Register Lockup (C-01-v1) wired to a MockAcquisitionSource and a
     // recipe that requires it. Before lockup elapses → reject; after warp → allow.
     function test_lockup_through_engine_time_gated() public {
-        uint64 lockupSeconds = 365 days;
+        uint64 lockupSeconds = LOCKUP_SECONDS;
         uint64 acquiredAt = uint64(block.timestamp);
-
-        MockAcquisitionSource acqSource = new MockAcquisitionSource();
         acqSource.setAcquiredAt(BUYER, RWA, acquiredAt);
-
-        Lockup lockup = new Lockup(address(acqSource), lockupSeconds);
-        elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
 
         bytes32[] memory els = new bytes32[](1);
         els[0] = bytes32("C-01-v1");
-        UnregisteredElementRecipe lockupRecipe = new UnregisteredElementRecipe(els);
+        UnregisteredElementRecipe lockupRecipe = new UnregisteredElementRecipe(6, els);
         recipeReg.registerRecipe(6, 1, address(lockupRecipe));
 
         ManifestCore memory m = _activeManifest(0, 0);
@@ -753,8 +882,119 @@ contract EngineTest is Test {
     }
 }
 
+contract FailingElement is IComplianceElement {
+    bytes32 internal immutable _id;
+    bytes32 internal immutable _reason;
+
+    constructor(bytes32 id_, bytes32 reason_) {
+        _id = id_;
+        _reason = reason_;
+    }
+
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
+        external
+        view
+        returns (bool, bytes32)
+    {
+        return (false, _reason);
+    }
+
+    function elementMetadata() external view returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: _id,
+            category: ElementCategory.CONDUCT_MONITORING,
+            version: "failing-v1",
+            temporal: TemporalNature.REALTIME,
+            decidability: Decidability.MONITORING_BASED,
+            timing: ObligationTiming.AT_TRADE_GATE,
+            statefulness: Statefulness.STATELESS,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
+        });
+    }
+}
+
+contract ParameterLimitElement is IComplianceElement {
+    bytes32 internal immutable _id;
+    bytes32 internal immutable _schemaId;
+
+    constructor(bytes32 id_, bytes32 schemaId_) {
+        _id = id_;
+        _schemaId = schemaId_;
+    }
+
+    function check(address, address, address, uint256 amount, bytes calldata, bytes calldata parameters)
+        external
+        pure
+        returns (bool, bytes32)
+    {
+        if (amount > abi.decode(parameters, (uint256))) return (false, bytes32("PARAM_LIMIT"));
+        return (true, bytes32(0));
+    }
+
+    function elementMetadata() external view returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: _id,
+            category: ElementCategory.ASSET_ATTRIBUTE,
+            version: "parameter-limit-v1",
+            temporal: TemporalNature.ONE_TIME,
+            decidability: Decidability.DETERMINISTIC,
+            timing: ObligationTiming.AT_TRADE_GATE,
+            statefulness: Statefulness.STATELESS,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
+            parameterSchemaId: _schemaId,
+            parameterSchemaVersion: 1,
+            maxParameterBytes: 32,
+            parametersRequired: true
+        });
+    }
+}
+
+contract FailingStatefulFlagElement is IStatefulElement {
+    bytes32 internal immutable _id;
+
+    constructor(bytes32 id_) {
+        _id = id_;
+    }
+
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
+        external
+        pure
+        returns (bool, bytes32)
+    {
+        return (false, bytes32("FLAG"));
+    }
+
+    function elementMetadata() external view returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: _id,
+            category: ElementCategory.CONDUCT_MONITORING,
+            version: "flag-stateful-v1",
+            temporal: TemporalNature.CUMULATIVE,
+            decidability: Decidability.MONITORING_BASED,
+            timing: ObligationTiming.EX_POST_TRIGGER,
+            statefulness: Statefulness.STATEFUL,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.FLAG_ONLY,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
+        });
+    }
+
+    function onTransfer(address, address, uint256) external pure {
+        revert("FLAG_ONLY_ELEMENT_HOOK_MUST_NOT_RUN");
+    }
+}
+
 contract RevertingStatefulElement is IStatefulElement {
-    function check(address, address, address, uint256, bytes calldata)
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
         external
         pure
         override
@@ -771,7 +1011,13 @@ contract RevertingStatefulElement is IStatefulElement {
             temporal: TemporalNature.CUMULATIVE,
             decidability: Decidability.MONITORING_BASED,
             timing: ObligationTiming.EX_POST_TRIGGER,
-            statefulness: Statefulness.STATEFUL
+            statefulness: Statefulness.STATEFUL,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
         });
     }
 
@@ -780,12 +1026,52 @@ contract RevertingStatefulElement is IStatefulElement {
     }
 }
 
+contract ParamStatefulElement is IStatefulElement {
+    bytes32 internal immutable _id;
+    uint256 public transferCount;
+
+    constructor(bytes32 id_) {
+        _id = id_;
+    }
+
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
+        external
+        pure
+        override
+        returns (bool, bytes32)
+    {
+        return (true, bytes32(0));
+    }
+
+    function elementMetadata() external view override returns (ElementMetadata memory) {
+        return ElementMetadata({
+            elementId: _id,
+            category: ElementCategory.CONDUCT_MONITORING,
+            version: "param-stateful-v1",
+            temporal: TemporalNature.CUMULATIVE,
+            decidability: Decidability.DETERMINISTIC,
+            timing: ObligationTiming.EX_POST_TRIGGER,
+            statefulness: Statefulness.STATEFUL,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
+        });
+    }
+
+    function onTransfer(address, address, uint256) external override {
+        transferCount++;
+    }
+}
+
 contract RecordingStatefulElement is IStatefulElement {
     address public lastFrom;
     address public lastTo;
     uint256 public lastAmount;
 
-    function check(address, address, address, uint256, bytes calldata)
+    function check(address, address, address, uint256, bytes calldata, bytes calldata)
         external
         pure
         override
@@ -802,7 +1088,13 @@ contract RecordingStatefulElement is IStatefulElement {
             temporal: TemporalNature.CUMULATIVE,
             decidability: Decidability.DETERMINISTIC,
             timing: ObligationTiming.EX_POST_TRIGGER,
-            statefulness: Statefulness.STATEFUL
+            statefulness: Statefulness.STATEFUL,
+            evidenceType: EvidenceType.TRANSACTION_CONTEXT,
+            defaultEnforcement: EnforcementAction.BLOCK,
+            parameterSchemaId: bytes32(0),
+            parameterSchemaVersion: 0,
+            maxParameterBytes: 0,
+            parametersRequired: false
         });
     }
 
@@ -834,18 +1126,50 @@ contract MockAcquisitionSource is IAcquisitionSource {
 
 /// @dev Test-only recipe with a configurable required-element list, always applicable.
 contract UnregisteredElementRecipe {
+    uint16 internal immutable _recipeId;
     bytes32[] internal _elements;
 
-    constructor(bytes32[] memory elements) {
+    constructor(uint16 recipeId_, bytes32[] memory elements) {
+        _recipeId = recipeId_;
         _elements = elements;
     }
 
-    function recipeId() external pure returns (uint16) {
-        return 99;
+    function recipeId() external view returns (uint16) {
+        return _recipeId;
     }
 
     function version() external pure returns (uint16) {
         return 1;
+    }
+
+    function isApplicable(bytes calldata) external pure returns (bool) {
+        return true;
+    }
+
+    function requiredElements() external view returns (bytes32[] memory) {
+        return _elements;
+    }
+}
+
+/// @dev Test-only recipe used to prove that catalog latest-version metadata is
+///      never substituted for an active manifest's exact version binding.
+contract VersionedTestRecipe {
+    uint16 internal immutable _recipeId;
+    uint16 internal immutable _version;
+    bytes32[] internal _elements;
+
+    constructor(uint16 recipeId_, uint16 version_, bytes32[] memory elements) {
+        _recipeId = recipeId_;
+        _version = version_;
+        _elements = elements;
+    }
+
+    function recipeId() external view returns (uint16) {
+        return _recipeId;
+    }
+
+    function version() external view returns (uint16) {
+        return _version;
     }
 
     function isApplicable(bytes calldata) external pure returns (bool) {

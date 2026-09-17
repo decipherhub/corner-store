@@ -2,15 +2,15 @@
 pragma solidity 0.8.17;
 
 import {BaseStatefulElement} from "./BaseStatefulElement.sol";
-import {BaseElement} from "./BaseElement.sol";
-import {IComplianceElement} from "../../interfaces/compliance/IComplianceElement.sol";
 import {
     ElementMetadata,
     ElementCategory,
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 import {Events} from "../../libraries/Events.sol";
@@ -32,7 +32,13 @@ contract SurveillanceFlag is BaseStatefulElement {
                 temporal: TemporalNature.CUMULATIVE,
                 decidability: Decidability.MONITORING_BASED,
                 timing: ObligationTiming.EX_POST_TRIGGER,
-                statefulness: Statefulness.STATEFUL
+                statefulness: Statefulness.STATEFUL,
+                evidenceType: EvidenceType.ONCHAIN_STATE,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -41,10 +47,10 @@ contract SurveillanceFlag is BaseStatefulElement {
     }
 
     /// @dev Never blocks — monitoring elements only flag.
-    function check(address, address, address, uint256, bytes calldata)
-        external
+    function _check(address, address, address, uint256, bytes calldata, bytes calldata)
+        internal
         pure
-        override(BaseElement, IComplianceElement)
+        override
         returns (bool passed, bytes32 reasonCode)
     {
         return (true, bytes32(0));

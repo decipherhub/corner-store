@@ -6,6 +6,9 @@ export npm_config_cache=${npm_config_cache:-"${TMPDIR:-/tmp}/corner-store-npm-ca
 
 cd "$ROOT_DIR"
 
+echo "==> Checking opt-in wave-3 element registration policies"
+scripts/check-wave3-element-policies.sh
+
 V3_FACTORY_ARTIFACT="tools/deploy-v3/node_modules/@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.sol/UniswapV3Factory.json"
 if [ ! -f "$V3_FACTORY_ARTIFACT" ]; then
   echo "==> Installing pinned deploy-v3 dependencies required by canonical pool E2E"
@@ -36,6 +39,24 @@ echo "==> Running RFQ service smoke test"
   npm test
 )
 
+echo "==> Running production RFQ host hardening smoke test"
+(
+  cd services/rfq-host
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
+echo "==> Running Toolkit config build + smoke test"
+(
+  cd services/toolkit
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
 echo "==> Running CLI build + smoke test"
 (
   cd services/cli
@@ -57,15 +78,6 @@ echo "==> Running RFQ demo backend build + smoke test"
 echo "==> Running public-testnet RFQ demo build + smoke test"
 (
   cd services/testnet-rfq-demo
-  if [ ! -x node_modules/.bin/tsc ]; then
-    npm ci
-  fi
-  npm test
-)
-
-echo "==> Running Toolkit config build + smoke test"
-(
-  cd services/toolkit
   if [ ! -x node_modules/.bin/tsc ]; then
     npm ci
   fi

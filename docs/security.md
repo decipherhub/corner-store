@@ -89,6 +89,20 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   구분한다.
 - `ACTIVE` Manifest의 invalid Recipe/reference, unsupported engine와 version
   mismatch는 fail-closed로 처리한다.
+- Element Registry는 parameter schema ID/version/required/max-length capability의
+  정합성과 4096-byte 전역 상한을 검증한다. parameterless Element의 non-empty
+  입력, required parameter 누락과 선언 길이 초과는 concrete 판정 전에 공통
+  reason으로 fail-closed한다. Element별 decoder는 exact typed encoding과 값 범위를
+  별도로 검증해야 한다.
+- `ManifestPolicyConfig`는 schema v1, 최대 256개 entry와 총 16,384 bytes로 제한한다.
+  각 entry는 실제 Recipe binding의 required Element여야 하며 중복, out-of-range
+  binding, schema 불일치, parameterless 값 공급과 required 값 누락을 registration/
+  update compile 전에 거부한다. config에는 PII나 provider 원본을 넣지 않는다.
+- active policy config를 직접 바꾸는 setter는 두지 않는다. semantic update는 pending
+  config hash/compiled parameters를 함께 저장하고 최소 1일 timelock 후 Manifest
+  version과 원자적으로 활성화한다. config 원문은 Safe calldata와 PII-free artifact에
+  보관하고 온체인은 hash와 실행 bytes를 보존한다. config hash와 bytes는 compiled plan/history/policy ID에
+  포함되어 quote 이후 변경도 fill-time 재평가에서 감지된다.
 - Manifest와 `UNREGULATED` 분류가 모두 없는 자산은 `UNKNOWN`으로 거부한다.
 - `tokenIn`과 `tokenOut` 양쪽을 분류하며, 양쪽 모두 명시적 `UNREGULATED`인
   경우에만 regulated evaluation을 생략한다.
@@ -114,7 +128,7 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   등록되면 Router를 타더라도 settlement 결과가 왜곡될 수 있으므로 governance와
   preflight 검증 대상이다.
 - RFQ와 Order Book signature flow는 chain id, verifying contract, maker/taker,
-  token pair, venue, policy/manifest version, nonce와 expiry를 binding해야 한다.
+  token pair, venue, final policy ID, nonce와 expiry를 binding해야 한다.
 - Slippage, deadline과 amount cap은 서로 다른 축이다. `amountIn`, RWA 수량,
   quote notional과 investor/fund/offering cap의 기준을 혼동하지 않는다.
 - External call, callback, token transfer가 포함된 경로는 access control,
@@ -125,10 +139,13 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 
 - RFQ settlement는 Router-only 진입점이어야 하며 direct adapter call로 compliance
   evaluation을 우회할 수 없어야 한다.
-- signed quote는 chainId, verifyingContract, maker, taker, tokenIn, tokenOut,
-  amountIn, amountOut, venue, nonce와 expiry에 바인딩한다.
+- RFQ EIP-712 v2 signed quote는 chainId, verifyingContract, maker, taker, tokenIn,
+  tokenOut, amountIn, amountOut, venue, quote-time `policyId`, nonce와 expiry에
+  바인딩한다. host는 authenticated request 이후 신뢰된 on-chain resolver로
+  `policyId`를 구하며 client가 임의로 공급한 값을 서명하지 않는다.
 - quote 생성 backend는 compliance 판단을 하지 않는다. fill 시점의 최신
-  `ComplianceEngine.evaluate()`가 최종 gate다.
+  `ComplianceEngine.evaluate()`가 최종 gate이고 quote의 `policyId`와 fresh decision의
+  값이 다르면 settlement를 거부한다.
 - JavaScript service에서 온체인 정수는 unsafe `number`를 거부하고 `bigint` 또는
   decimal string을 사용한다.
 - 기본 nonce 생성은 같은 millisecond 내 quote 충돌을 만들지 않는 단조 증가 fallback을
@@ -137,13 +154,55 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   nonce-scoped cancel로 활성화되었다. 위협 모델, actor/asset/trust boundary와
   threat table은 `docs/rfq-threat-model.md`를 기준으로 한다.
 - production RFQ는 ADR-009와 `docs/product-specs/production-rfq-policy.md`를
-  따른다. maker-authorizer, durable nonce/idempotency와 production risk module
-  구현 전에는 reference service를 production으로 활성화하지 않는다.
+  따른다. `services/rfq-host`는 demo backend와 분리된 host hardening boundary를
+  제공하지만 production activation에는 operator-owned HA store, signer custody,
+  shared limiter, WORM audit, TLS/proxy와 live pricing/risk freshness integration이
+  필요하다.
 - partial fill은 새 quote/adapter version과 별도 accounting/replay 검증 전까지
   활성화하지 않는다.
 
+## Policy Execution Binding Safety
+
+- `logicalPolicyHash`와 `executionBindingHash`는 서로 다른 domain을 사용하며 final
+  `policyId`가 둘을 결합한다.
+- execution binding은 chain ID, Engine/Registry 주소와 runtime code hash, exact
+  Recipe와 compiled Element의 주소/code hash/version/metadata/parameter commitment를
+  포함한다.
+- Element/Recipe 등록 시점 code hash와 평가 시점 code hash가 다르거나 구현 주소가
+  없으면 fail-closed한다. 배포 전 CREATE2 주소 예측만으로 활성화하지 않는다.
+- 현재 production 지원 기본값은 immutable implementation이다. proxy runtime
+  code hash는 implementation slot 변경을 증명하지 못하므로 별도 proxy-aware
+  verifier가 없는 proxy 배포는 지원 대상으로 간주하지 않는다.
+
+## Production Onboarding Safety
+
+- `production-onboarding-plan`은 unsigned calldata/Safe draft export 전용이다.
+  private key, Safe owner signature, broadcast, token transfer 또는 ERC-20 approval을
+  생성하지 않는다.
+- onboarding config는 exact schema를 사용하고 unknown field, signer-secret shaped
+  key/value, raw contact PII와 중복 address/key를 fail-closed한다. Governance Safe, bounded required approvals,
+  explicit operator executor, canonical recipe alias/key commitments, immutable
+  Element evidence types/default actions, bounded strengthen-only overrides, at least one active venue and at least
+  one inventory requirement are mandatory for production v3. Active RFQ venues additionally require approved maker,
+  signer delegate and approved-maker inventory evidence. Legal/TA evidence는 PII-free
+  hash로만 참조한다.
+- `production-onboarding-verify`는 ERC-3643 token→IdentityRegistry→Compliance
+  wiring, Identity Registry dependencies, Element/Recipe registry state, recipe
+  alias/key mapping, Element evidence types/default actions/version hashes, exact Manifest
+  hash/fields/bindings, compiled plan hash/rules, global/asset/venue pause gates, maker approval,
+  governance Safe ownership of safe-owner targets, active signer delegate,
+  operator executor authorization on TokenPolicyRegistry and RFQAdapter, and inventory balance/allowance minimum을 read-only로 확인한다. Unavailable RPC/read mismatch, safe-owner target owner mismatch, pending signer authorization, paused
+  global/asset/venue state or missing inventory evidence is not production-ready.
+- Inventory mutation은 maker/operator custody process의 책임이다. Corner Store
+  tooling은 inventory-before-service-open 조건을 plan dependency와 verifier evidence로
+  표현할 뿐 transfer/approval/custody transaction을 합성하지 않는다.
+
 ## Logging
 
+- RFQ host audit events must hash principals, request bodies and idempotency keys;
+  they must not store raw bearer tokens, raw idempotency keys, signer refs, raw
+  request bodies, PII or stack traces. Metrics labels must stay bounded and must
+  not contain principals or addresses.
 - 민감한 identity 자료와 법률 문서를 온체인 event나 일반 로그에 기록하지 않는다.
 - audit event에는 필요한 식별자와 상태 변경만 남긴다.
 - 성공한 regulated evaluation은 Manifest version과 applied Recipe set을 추적할 수

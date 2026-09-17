@@ -91,7 +91,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.AI, START, 0);
         vm.warp(START + 2 * 365 days);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -101,7 +101,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.QP, START, 0);
         vm.warp(START + 300 days); // ~10 months
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -111,7 +111,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.AI, START, 0);
         vm.warp(START + 6 * 365 days);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(2));
     }
@@ -121,7 +121,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.QP, START, 0);
         vm.warp(START + 14 * 30 days); // ~14 months
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(3));
     }
@@ -136,7 +136,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.AI, START, 0);
         vm.warp(START + element.CAP_AI());
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -145,7 +145,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.AI, START, 0);
         vm.warp(START + element.CAP_AI() + 1);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(2));
     }
@@ -154,7 +154,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.QP, START, 0);
         vm.warp(START + element.CAP_QP());
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -163,7 +163,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.QP, START, 0);
         vm.warp(START + element.CAP_QP() + 1);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(3));
     }
@@ -178,7 +178,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.AI, START, issuerExpiry);
         vm.warp(START + 13 * 30 days); // ~13 months: past issuer expiry, well within 5y cap
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(4));
     }
@@ -188,7 +188,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.AI, START, issuerExpiry);
         vm.warp(issuerExpiry);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -198,7 +198,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.AI, START, issuerExpiry);
         vm.warp(issuerExpiry + 1);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(4));
     }
@@ -210,7 +210,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.AI, START, issuerExpiry);
         vm.warp(START + 6 * 365 days); // past the 5y regulatory cap, still before issuerExpiry
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(2)); // STALE_AI, not CLAIM_EXPIRED
     }
@@ -221,7 +221,7 @@ contract ClaimFreshnessTest is Test {
 
     function test_check_failsWhenVerifiedAtMissing() public {
         // No setClaim call: default FreshnessClaim{UNKNOWN, 0, 0}.
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(1));
     }
@@ -231,7 +231,7 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.UNKNOWN, START, 0);
         vm.warp(START + 1);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), address(0), 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(5));
     }
@@ -245,8 +245,8 @@ contract ClaimFreshnessTest is Test {
         element.setClaim(user, ClaimFreshness.FreshClaimType.AI, START, 0);
         vm.warp(START + 2 * 365 days);
 
-        (bool passed1,) = element.check(user, address(0), address(0), 0, "");
-        (bool passed2,) = element.check(user, address(0xB0B), address(0xDEAD), 12345, "");
+        (bool passed1,) = element.check(user, address(0), address(0), 0, "", "");
+        (bool passed2,) = element.check(user, address(0xB0B), address(0xDEAD), 12345, "", "");
         assertTrue(passed1);
         assertTrue(passed2);
         assertEq(passed1, passed2);

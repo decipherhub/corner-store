@@ -122,6 +122,7 @@ export interface DemoBackendConfig {
     operatorAccount: number;
   };
   now?: () => number | Promise<number>;
+  resolvePolicyId?: () => Promise<Hex> | Hex;
 }
 
 export function loadConfig(argv = process.argv.slice(2), env = process.env): DemoBackendConfig {

@@ -9,7 +9,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 import {LookThroughStatus} from "../../interfaces/compliance/ILookThroughSource.sol";
@@ -117,7 +119,13 @@ contract Sanctions is BaseElement, Governed {
                 temporal: TemporalNature.REALTIME,
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.PROVIDER_ATTESTATION,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -158,8 +166,8 @@ contract Sanctions is BaseElement, Governed {
     /// @dev Screens both parties (doc §5.2). Order: wallet(user) -> wallet(cpty)
     ///      -> [regime] claim pipeline per subject (user always; cpty iff enforced).
     ///      `asset`/`amount`/`context` are unused — sanctions is party-scoped.
-    function check(address user, address counterparty, address, uint256, bytes calldata)
-        external
+    function _check(address user, address counterparty, address, uint256, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

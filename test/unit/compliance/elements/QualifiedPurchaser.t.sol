@@ -70,7 +70,7 @@ contract QualifiedPurchaserTest is Test {
     }
 
     function _check() internal view returns (bool passed, bytes32 reasonCode) {
-        return qpElement.check(user, address(0), asset, 0, "");
+        return qpElement.check(user, address(0), asset, 0, "", "");
     }
 
     function _assertFail(uint32 n) internal {

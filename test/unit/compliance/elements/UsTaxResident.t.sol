@@ -35,7 +35,7 @@ contract UsTaxResidentTest is Test {
     function test_defaultUnflagged_passes() public {
         UsTaxResident e = new UsTaxResident();
         // No attestation set at all — default-pass shape (mirrors Sanctions' default-pass).
-        (bool passed, bytes32 rc) = e.check(user, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = e.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(rc, bytes32(0));
     }
@@ -68,7 +68,7 @@ contract UsTaxResidentTest is Test {
         UsTaxResident e = new UsTaxResident();
         e.setUsTaxResident(user, true);
 
-        (bool passed, bytes32 rc) = e.check(user, address(0), asset, 0, "");
+        (bool passed, bytes32 rc) = e.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
         assertTrue(rc != bytes32(0));
     }
@@ -77,11 +77,11 @@ contract UsTaxResidentTest is Test {
         UsTaxResident e = new UsTaxResident();
 
         e.setUsTaxResident(user, true);
-        (bool passed,) = e.check(user, address(0), asset, 0, "");
+        (bool passed,) = e.check(user, address(0), asset, 0, "", "");
         assertFalse(passed);
 
         e.setUsTaxResident(user, false);
-        (passed,) = e.check(user, address(0), asset, 0, "");
+        (passed,) = e.check(user, address(0), asset, 0, "", "");
         assertTrue(passed);
     }
 }

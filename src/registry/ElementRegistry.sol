@@ -4,16 +4,82 @@ pragma solidity 0.8.17;
 import {Governed} from "../auth/Governed.sol";
 import {IElementRegistry} from "../interfaces/compliance/IElementRegistry.sol";
 import {IComplianceElement} from "../interfaces/compliance/IComplianceElement.sol";
-import {ElementMetadata} from "../types/ComplianceTypes.sol";
+import {ElementMetadata, EvidenceType, EnforcementAction} from "../types/ComplianceTypes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Events} from "../libraries/Events.sol";
 
 contract ElementRegistry is IElementRegistry, Governed {
+    uint32 public constant MAX_ELEMENT_PARAMETER_BYTES = 4096;
+
     mapping(bytes32 => address) internal _elements;
+    mapping(bytes32 => bytes32) internal _metadataHashes;
+    mapping(bytes32 => bytes32) internal _versionHashes;
+    mapping(bytes32 => bytes32) internal _runtimeCodeHashes;
+    mapping(bytes32 => EnforcementAction) internal _defaultActions;
 
     function registerElement(bytes32 elementId, address element) external onlyOwner {
+        _registerElement(elementId, element, EnforcementAction.BLOCK, false);
+    }
+
+    function registerElement(bytes32 elementId, address element, EnforcementAction defaultAction) external onlyOwner {
+        _registerElement(elementId, element, defaultAction, true);
+    }
+
+    function _registerElement(
+        bytes32 elementId,
+        address element,
+        EnforcementAction requestedDefaultAction,
+        bool callerSpecifiedDefault
+    ) internal {
+        if (elementId == bytes32(0) || element == address(0) || element.code.length == 0) {
+            revert Errors.InvalidElementMetadata(elementId);
+        }
+        if (_elements[elementId] != address(0)) revert Errors.ElementAlreadyRegistered(elementId);
+
+        ElementMetadata memory metadata = IComplianceElement(element).elementMetadata();
+        if (
+            metadata.elementId != elementId || bytes(metadata.version).length == 0
+                || metadata.evidenceType == EvidenceType.UNSPECIFIED || !_validParameterCapability(metadata)
+                || (callerSpecifiedDefault && requestedDefaultAction != metadata.defaultEnforcement)
+        ) {
+            revert Errors.InvalidElementMetadata(elementId);
+        }
+
+        bytes32 versionHash = keccak256(bytes(metadata.version));
+        bytes32 metadataHash = keccak256(
+            abi.encode(
+                metadata.elementId,
+                metadata.category,
+                versionHash,
+                metadata.temporal,
+                metadata.decidability,
+                metadata.timing,
+                metadata.statefulness,
+                metadata.evidenceType,
+                metadata.defaultEnforcement,
+                metadata.parameterSchemaId,
+                metadata.parameterSchemaVersion,
+                metadata.maxParameterBytes,
+                metadata.parametersRequired
+            )
+        );
         _elements[elementId] = element;
+        _metadataHashes[elementId] = metadataHash;
+        _versionHashes[elementId] = versionHash;
+        _runtimeCodeHashes[elementId] = element.codehash;
+        _defaultActions[elementId] = metadata.defaultEnforcement;
+
         emit Events.ElementRegistered(elementId, element);
+        emit Events.ElementRegisteredV2(elementId, element, metadataHash, versionHash, metadata.defaultEnforcement);
+    }
+
+    function _validParameterCapability(ElementMetadata memory metadata) internal pure returns (bool) {
+        if (metadata.parameterSchemaId == bytes32(0)) {
+            return
+                metadata.parameterSchemaVersion == 0 && metadata.maxParameterBytes == 0 && !metadata.parametersRequired;
+        }
+        return metadata.parameterSchemaVersion != 0 && metadata.maxParameterBytes != 0
+            && metadata.maxParameterBytes <= MAX_ELEMENT_PARAMETER_BYTES;
     }
 
     function elementOf(bytes32 elementId) external view returns (address) {
@@ -24,5 +90,25 @@ contract ElementRegistry is IElementRegistry, Governed {
         address element = _elements[elementId];
         if (element == address(0)) revert Errors.ElementNotRegistered(elementId);
         return IComplianceElement(element).elementMetadata();
+    }
+
+    function metadataHashOf(bytes32 elementId) external view returns (bytes32) {
+        if (_elements[elementId] == address(0)) revert Errors.ElementNotRegistered(elementId);
+        return _metadataHashes[elementId];
+    }
+
+    function versionHashOf(bytes32 elementId) external view returns (bytes32) {
+        if (_elements[elementId] == address(0)) revert Errors.ElementNotRegistered(elementId);
+        return _versionHashes[elementId];
+    }
+
+    function runtimeCodeHashOf(bytes32 elementId) external view returns (bytes32) {
+        if (_elements[elementId] == address(0)) revert Errors.ElementNotRegistered(elementId);
+        return _runtimeCodeHashes[elementId];
+    }
+
+    function defaultActionOf(bytes32 elementId) external view returns (EnforcementAction) {
+        if (_elements[elementId] == address(0)) revert Errors.ElementNotRegistered(elementId);
+        return _defaultActions[elementId];
     }
 }

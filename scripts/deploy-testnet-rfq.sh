@@ -12,6 +12,8 @@ PASSWORD_FILE=""
 USE_LEDGER=0
 BROADCAST=0
 VERIFY=0
+VERIFIER=""
+VERIFIER_URL=""
 ARTIFACT="${CORNER_STORE_ARTIFACT:-}"
 FINAL_ARTIFACT=""
 
@@ -20,7 +22,7 @@ usage() {
 Usage:
   scripts/deploy-testnet-rfq.sh --rpc-url URL --chain-id ID \
     (--account NAME | --keystore FILE [--password-file FILE] | --ledger) \
-    [--broadcast] [--verify]
+    [--broadcast] [--verify [--verifier NAME] [--verifier-url URL]]
 
 Required environment:
   CORNER_STORE_TESTNET_DEPLOYER
@@ -59,6 +61,8 @@ while [[ $# -gt 0 ]]; do
     --ledger) USE_LEDGER=1; shift ;;
     --broadcast) BROADCAST=1; shift ;;
     --verify) VERIFY=1; shift ;;
+    --verifier) require_value "$1" "${2-}"; VERIFIER="$2"; shift 2 ;;
+    --verifier-url) require_value "$1" "${2-}"; VERIFIER_URL="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -76,6 +80,10 @@ if [[ "$SIGNER_COUNT" -ne 1 ]]; then
 fi
 if [[ -n "$PASSWORD_FILE" && -z "$KEYSTORE" ]]; then
   echo "ERROR: --password-file requires --keystore" >&2
+  exit 2
+fi
+if [[ ( -n "$VERIFIER" || -n "$VERIFIER_URL" ) && "$VERIFY" -ne 1 ]]; then
+  echo "ERROR: --verifier and --verifier-url require --verify" >&2
   exit 2
 fi
 
@@ -144,6 +152,8 @@ else
 fi
 if [[ "$VERIFY" -eq 1 ]]; then
   MUTATION_ARGS+=(--verify)
+  [[ -n "$VERIFIER" ]] && MUTATION_ARGS+=(--verifier "$VERIFIER")
+  [[ -n "$VERIFIER_URL" ]] && MUTATION_ARGS+=(--verifier-url "$VERIFIER_URL")
 fi
 
 forge script script/DeployTestnetRFQ.s.sol:DeployTestnetRFQ \

@@ -214,8 +214,23 @@ scripts/deploy-testnet-rfq.sh \
   --verify
 ```
 
-Custom explorers may require a verifier URL or Sourcify instead. Use the
-network's official instructions; never commit explorer credentials.
+GIWA Sepolia uses Blockscout and requires its official verifier endpoint:
+
+```sh
+export BLOCKSCOUT_API_URL=https://sepolia-explorer.giwa.io/api
+
+scripts/deploy-testnet-rfq.sh \
+  --rpc-url "$RPC_URL" \
+  --chain-id "$CHAIN_ID" \
+  --account corner-store-giwa \
+  --broadcast \
+  --verify \
+  --verifier blockscout \
+  --verifier-url "$BLOCKSCOUT_API_URL"
+```
+
+Other custom explorers may require a different verifier URL or Sourcify. Use
+the network's official instructions; never commit explorer credentials.
 
 ## Deployment Outputs for a Hackathon Submission
 

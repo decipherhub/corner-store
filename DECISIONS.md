@@ -1,5 +1,55 @@
 # Decisions
 
+## D018 — 정책 파라미터와 실행 인스턴스를 versioned commitment로 고정한다
+
+Date: 2026-09-15
+
+### Context
+
+자산별 정책값을 Element 구현에 하드코딩하면 같은 규칙을 상품마다 다시 배포하게
+되고 Manifest governance 밖에서 의미가 달라질 수 있다. 반면 모든 규칙을 범용
+DSL로 만들면 법률 의미, 타입, gas와 compiler 검증 범위가 과도하게 커진다.
+
+### Decision
+
+ADR-010을 accepted decision으로 채택한다. 자산별 정책값은 versioned
+`ManifestPolicyConfig`가 소유하며 Manifest와 원자적으로 활성화한다. Element는
+bounded parameter를 받는 하나의 ABI로 통일하고 반복 primitive만 제한적으로
+정규화한다. 정책 식별자는 exact Recipe/Element/schema/parameter뿐 아니라 chain,
+배포 주소와 runtime code hash를 함께 고정하며 `decisionHash`가 이를 참조한다.
+
+정책 lifecycle은 온체인 event로 보존하고 상세 자료는 PII-free canonical 감사
+아티팩트로 관리한다. 긴급 Element 교체는 pause 후 새 불변 version과 정상
+timelock을 사용한다. production Recipe 조회는 exact `recipeKey + version`으로
+통일하고 모호한 latest-address API를 제거한다.
+
+### Alternatives Considered
+
+- Element별 자산값 유지: Manifest history와 분리되므로 제외
+- 공통 ABI에 Element별 struct 노출: 새 Element마다 core 타입이 바뀌므로 제외
+- runtime code hash 또는 주소 중 하나만 고정: 코드와 배포 인스턴스를 동시에
+  증명하지 못하므로 제외
+- 모든 감사 자료 온체인 저장 또는 event replay만 사용: 비용·PII 또는 복원 운영
+  위험이 커서 온체인 이력과 PII-free 아티팩트를 결합
+- Safe break-glass와 같은-ID 구현 교체: timelock 우회와 과거 의미 변경 때문에 제외
+- 범용 정책 DSL: 현재 반복 근거에 비해 compiler·gas·감사 범위가 과도해 제외
+
+### Consequences
+
+- 기존 GIWA 배포 ABI 호환 대신 저장소 전체를 하나의 interface로 migration한다.
+- local Anvil demo는 유지하지만 ABI/schema/latest call site를 함께 갱신해야 한다.
+- 구현은 GitHub epic #101의 하위 이슈별 feature branch와 PR로 분리한다.
+- 실제 상품값, 보관 기간, provider/Safe 운영자는 외부 승인 전 production에서
+  fail-closed한다.
+
+### Related Files
+
+- `docs/decisions/ADR-010-policy-parameters-versioning-and-audit.md`
+- `docs/decisions/decision-register.md`
+- `FEATURES.md`
+- `PROGRESS.md`
+- GitHub issues #101–#110
+
 ## D010 — Configuration-driven Toolkit is the operator entry point
 
 Date: 2026-07-22
@@ -832,3 +882,72 @@ Production deployment is a separate operations workflow:
 - `docs/deployment-studio.md`
 - `FEATURES.md`
 - `PROGRESS.md`
+
+## D017 — Compliance Core uses immutable versioned policy objects and compiled enforcement
+
+Date: 2026-08-23
+
+### Context
+
+Production asset onboarding needs stable references to legal-approved Elements,
+Recipes and Manifest bindings. Mutable registry overwrites, ambiguous aliases,
+trade-time override resolution or fabricated generic reason codes would make Safe
+review and post-deployment reconciliation unreliable.
+
+### Decision
+
+1. Element registration is immutable for a given `bytes32 elementId`. The registry
+   stores the implementation, metadata hash, version hash and default enforcement
+   action at registration time.
+2. Recipe registration is immutable per `(recipeKey, version)`. The canonical
+   `recipeKey` is derived as `keccak256(abi.encode(RECIPE_KEY_DOMAIN,
+   aliasHash))`, where `RECIPE_KEY_DOMAIN = keccak256("corner-store.recipe-key.v1")`
+   and Toolkit aliases are ASCII-normalized before hashing. The canonical recipe
+   family is bijective with its legacy numeric `recipeId`: neither
+   `recipeId -> recipeKey` nor `recipeKey -> recipeId` may be rebound, and all
+   later versions under the same key continue to use the first registered
+   `recipeId`.
+3. `TokenPolicyRegistry` compiles Element rules when a Manifest is registered or
+   semantically updated. Runtime evaluation consumes the compiled binding plan and
+   does not perform unbounded alias or override resolution.
+4. Normal onboarding may only strengthen enforcement (`FLAG_ONLY <
+   OPERATOR_REVIEW < BLOCK`). `FORCE_FLAG_ONLY` is not a downgrade escape hatch;
+   it is valid only when the Element's immutable default is already `FLAG_ONLY`.
+5. Compliance rejection should preserve an Element's exact nonzero reason code.
+   Recipe-scoped code `1` is retained only as a fallback for Elements that return
+   `bytes32(0)` on failure.
+6. Production Toolkit/CLI v2 onboarding exports canonical alias/key commitments,
+   compiled plan hashes and bounded override calldata, while legacy v1 input and
+   numeric `recipeId` compatibility remain accepted for existing demos.
+
+### Alternatives Considered
+
+- Mutable in-place Element or Recipe updates: rejected because reviewed Safe
+  payloads and signed quotes could silently point at different policy code.
+- Use raw human-readable aliases in runtime paths: rejected because normalization
+  and collision handling must be resolved before activation.
+- Permit downgrade overrides during normal onboarding: rejected because a token
+  onboarding file should not weaken a legal-approved Element default outside a
+  separate governance process.
+- Always report recipe-scoped generic code `1`: rejected because Elements already
+  expose more precise rejection taxonomies needed for audit and operator support.
+
+### Consequences
+
+- New production onboarding should use v2 alias/key and compiled-plan fields.
+- Existing local Anvil/demo v1 configs continue to work through legacy numeric
+  aliases, but v1 artifacts are compatibility inputs, not production approval.
+- Legal approval, ERC-3643/ONCHAINID issuer wiring and TA/KYC provider evidence
+  remain external trust boundaries; compiled plan hashes prove only technical
+  binding consistency.
+
+### Related Files
+
+- `src/registry/ElementRegistry.sol`
+- `src/registry/RecipeRegistry.sol`
+- `src/registry/TokenPolicyRegistry.sol`
+- `src/compliance/ComplianceEngine.sol`
+- `services/toolkit/src/production-onboarding.ts`
+- `services/cli/src/commands.ts`
+- `docs/architecture/asset-manifest.md`
+- `docs/architecture/compliance-policy.md`

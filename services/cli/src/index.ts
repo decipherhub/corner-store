@@ -162,6 +162,20 @@ program
   .action(run((path, opts, command) => cmd.cmdProductionPreflight(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
 
 program
+  .command("production-onboarding-plan")
+  .description("render unsigned production ERC-3643 asset onboarding plan and Safe drafts")
+  .argument("[path]", "production onboarding config JSON path", "corner-store.production-onboarding.json")
+  .option("--out <path>", "immutable output JSON path")
+  .action(run((path, opts) => cmd.cmdProductionOnboardingPlan(path, {out: opts.out})));
+
+program
+  .command("production-onboarding-verify")
+  .description("fail-closed RPC verification for production ERC-3643 asset onboarding post-state")
+  .argument("[path]", "production onboarding config JSON path", "corner-store.production-onboarding.json")
+  .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
+  .action(run((path, opts, command) => cmd.cmdProductionOnboardingVerify(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
+
+program
   .command("production-deploy")
   .description("run the production Foundry deploy script with frozen evidence and an external signer")
   .argument("[path]", "production config JSON path", "corner-store.production.json")

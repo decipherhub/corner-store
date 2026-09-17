@@ -3,16 +3,16 @@ type: requirement-spec
 project: RWA DEX (Giwa) · corner-store
 element-id: A-12
 element-name: Willful Blindness Blocker (모름 항변 차단 / Red Flag Knowledge Bar)
-status: "v0.1 (2026-07-28) — 2부 구성. 컨트랙트 미구현(target 명세). 법적 실질은 보경 walkthrough."
+status: "v0.2 (2026-09-12) — illustrative reference 컨트랙트 구현. production data source·Recipe 활성화는 미완료."
 substance-sot: "보경 walkthrough — A-12_모름항변차단.md (2026-07-21). 레포 docs 교체 대상."
 umbrella: "SPEC.md — 공유 개념(Element/Recipe·패턴 C 감시형·on/off-chain 경계·off-chain Layer 5)은 여기에 의한다"
 stateful: false
 tags: [requirement-spec, A-12, red-flag, willful-blindness, resale-safe-harbor, antifraud, stateless, R2, R4]
 ---
 
-# A-12 Willful Blindness Blocker (모름 항변 차단) — 요구사항 명세서
+# A-12 Willful Blindness Blocker (모름 항변 차단) — 요구사항 및 reference 구현 명세서
 
-본 문서는 컴플라이언스 부품 A-12(모름 항변 차단, Red Flag Knowledge Bar)의 요구사항 명세서이다. **제1부**는 법적 근거와 논증을, **제2부**는 구현 명세를 규정한다. 법적 실질은 보경 변호사가 검토·작성한 walkthrough에 의한다. 본 부품은 전용 컨트랙트가 아직 구현되지 아니한 법률 전용(legal-only) 부품이므로, **제2부는 목표 규격(target specification)이며 확정된 실장(實裝)이 아니다.** 표시-비차단(flag-not-block) 온체인 패턴은 동일 계열(패턴 C 감시형)인 형제 부품 `SurveillanceFlag.sol`(F-02) 및 F-03을 참조한다. 시스템 공유 개념(Element/Recipe/Manifest·검증 패턴·on/off-chain 경계)은 `SPEC.md`에 의한다.
+본 문서는 컴플라이언스 부품 A-12(모름 항변 차단, Red Flag Knowledge Bar)의 요구사항과 reference 구현 명세서이다. **제1부**는 법적 근거와 논증을, **제2부**는 구현 명세를 규정한다. 법적 실질은 보경 변호사가 검토·작성한 walkthrough에 의한다. illustrative reference 컨트랙트는 `RedFlagKnowledgeBar.sol`로 구현되어 있으나 operator attestation을 사용하는 mock/reference 경계이며, production surveillance data source와 active Recipe 배선은 완료되지 않았다. 표시-비차단(flag-not-block) 온체인 패턴은 동일 계열(패턴 C 감시형)인 형제 부품 `SurveillanceFlag.sol`(F-02) 및 F-03을 참조한다. 시스템 공유 개념(Element/Recipe/Manifest·검증 패턴·on/off-chain 경계)은 `SPEC.md`에 의한다.
 
 본 부품은 자격 증명서를 확인하여 거래를 막는 관문이 아니라, 액면상 유효한 증명서로는 가려지지 않는 객관적 적신호(red flag)를 거래 직전에 스크리닝하여 표시하고, 그 표시를 사람의 판단으로 연결하는 감시 부품이다. 산출물은 "차단"이 아니라 "기록된 주의(documented diligence)"이며, 그 기록이 곧 사후의 모름 항변(willful blindness)에 대한 방어가 된다.
 
@@ -66,7 +66,7 @@ A-12가 인접 자격·감시 부품과 개념이 겹쳐 보여, 어디까지가
 
 ---
 
-# 제2부. 구현 명세 (목표 — 전용 컨트랙트 미구현)
+# 제2부. 구현 명세 (illustrative reference 구현)
 
 ## 5. 시스템 내 위치
 
@@ -252,7 +252,7 @@ Operator(Trust Operations) → FLAG·REVIEW 검토 큐 · reasonable inquiry 기
 | 제9절 (reasonCode) | 파생 | 보경 §6.2 표시 코드 표 |
 | 제10~13절 (불변식·의존성·인수기준·범위) | 목표 | 보경 §7·§9.2 + SPEC.md §10 |
 
-전용 컨트랙트가 구현되면 제2부를 실장 기준으로 갱신한다.
+production surveillance provider와 active Recipe 배선이 확정되면 제2부의 reference 경계를 production 기준으로 갱신한다.
 
 ## B. 근거 문헌
 
@@ -264,5 +264,7 @@ Operator(Trust Operations) → FLAG·REVIEW 검토 큐 · reasonable inquiry 기
 - 판례: SEC v. Ralston Purina Co., 346 U.S. 119 (1953) (public offering 기능적 기준) · recklessness를 10b-5 scienter로 인정해 온 미국 순회법원 판례군(willful blindness — 정확한 기준선은 사실관계별 판단).
 
 ## C. 변경 로그
+
+- [2026-09-12] v0.2 — `RedFlagKnowledgeBar.sol` reference 구현 상태와 production 미배선 경계를 반영. opt-in wave-3 등록 action을 `FLAG_ONLY`로 명시.
 
 - [2026-07-28] v0.1 — 보경 검토본(2026-07-21) 기반. 제1부: 두 축(재판매 안전항 §2(a)(11)·§4(a)(1)·§4(a)(7)+§4(d)·§4(e)(1)(B)·Rule 502(d) + 사기금지 §17(a)·§10(b)/Rule 10b-5·§9(a)) 수렴 · willful blindness(recklessness=scienter, §17(a)(2)·(3) 과실 성립) · 차단 아닌 표시(scienter 비결정성) · reasonable inquiry audit trail = 방어 · 인접 부품(A-06·A-03/A-13·A-04·C-08/D-01·F-02/F-03) 경계. 제2부: 전용 컨트랙트 미구현 → 목표 규격(disposition CLEAR/FLAG/REVIEW·BLOCK 없음 · 8종 reasonCode · pre-trade STATELESS · 패턴 C · moduleCheck 항상 통과 · RedFlagRaised 앵커 · non-tipping). Open issue: "즉시 전매" 경계일(C-01 조율) · recklessness 기준선 · 공모 유발(Ralston Purina) · 운영자/변호사 층(§11·§12 미완).

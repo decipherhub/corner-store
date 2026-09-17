@@ -9,7 +9,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
@@ -37,7 +39,13 @@ contract FormDFiling is BaseElement, Governed {
                 temporal: TemporalNature.ONE_TIME,
                 decidability: Decidability.ATTESTATION_BASED,
                 timing: ObligationTiming.EX_ANTE_VERIFY,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.PROVIDER_ATTESTATION,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -51,8 +59,8 @@ contract FormDFiling is BaseElement, Governed {
 
     /// @dev Issuer-side obligation evaluated per asset: passes iff Form D has been
     ///      filed for the offering in `asset`. Unattested/unset fails closed.
-    function check(address, address, address asset, uint256, bytes calldata)
-        external
+    function _check(address, address, address asset, uint256, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

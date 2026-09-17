@@ -16,6 +16,7 @@ library Errors {
     error NonceUsed();
     error DecisionExpired();
     error DecisionMismatch(); // decisionHash != recomputed
+    error ExecutionBindingMismatch(address subject, bytes32 expectedCodeHash, bytes32 actualCodeHash);
     error MaxAmountExceeded();
     error SlippageExceeded();
     error AMMPoolTokenMismatch();
@@ -41,4 +42,18 @@ library Errors {
     error RecipeVersionMismatch(uint16 recipeId, uint16 expected, uint16 actual);
     error InvalidAuthorizationState();
     error InvalidAmountCapToken();
+    error InvalidElementMetadata(bytes32 elementId);
+    error ElementAlreadyRegistered(bytes32 elementId);
+    error RecipeAlreadyRegistered(bytes32 recipeKey, uint16 version);
+    error RecipeAliasCollision(bytes32 aliasHash, bytes32 recipeKey);
+    error RecipeKeyIdCollision(bytes32 recipeKey, uint16 existingRecipeId, uint16 suppliedRecipeId);
+    error InvalidRecipeAlias(bytes32 aliasHash, bytes32 recipeKey);
+    error InvalidEnforcementOverride();
+    error TooManyEnforcementOverrides(uint256 supplied, uint256 maximum);
+    error DuplicateElementOverride(uint256 bindingIndex, bytes32 elementId);
+    error InvalidPolicyConfig();
+    error InvalidPolicyParameter(uint256 bindingIndex, bytes32 elementId);
+    error DuplicatePolicyParameter(uint256 bindingIndex, bytes32 elementId);
+    error TooManyPolicyParameters(uint256 supplied, uint256 maximum);
+    error PolicyParametersTooLarge(uint256 supplied, uint256 maximum);
 }

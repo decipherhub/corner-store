@@ -60,7 +60,7 @@ reference execution adapters including AMM and RFQ settlement paths.
 
 Required tools:
 
-- Foundry stable (`forge`, `anvil`; live E2E verified with v1.7.1)
+- Foundry v1.7.1 (`forge`, `anvil`; CI and live E2E verification baseline)
 - Node.js and npm for the TypeScript services under `services/`, including RFQ,
   CLI, Toolkit, Operator API and Compliance Data SDK
 - Yarn for `tools/deploy-v3`

@@ -32,18 +32,34 @@ export const ERRORS_ABI = [
   "error TooManyRecipeBindings(uint256 supplied, uint256 maximum)",
   "error TooManyRecipeElements(uint16 recipeId, uint256 supplied, uint256 maximum)",
   "error DuplicateRecipeBinding(uint16 recipeId)",
-  "error RecipeVersionMismatch(uint16 recipeId, uint16 expected, uint16 actual)"
+  "error RecipeVersionMismatch(uint16 recipeId, uint16 expected, uint16 actual)",
+  "error ElementAlreadyRegistered(bytes32 elementId)",
+  "error RecipeAlreadyRegistered(bytes32 recipeKey, uint16 version)",
+  "error RecipeAliasCollision(bytes32 aliasHash, bytes32 existingKey)",
+  "error InvalidRecipeAlias(bytes32 aliasHash, bytes32 recipeKey)",
+  "error InvalidEnforcementOverride()",
+  "error DuplicateElementOverride(uint256 bindingIndex, bytes32 elementId)",
+  "error LooseningForbidden()"
 ];
 
 export const ELEMENT_REGISTRY_ABI = [
-  "function elementOf(bytes32 elementId) view returns (address)"
+  "function elementOf(bytes32 elementId) view returns (address)",
+  "function metadataHashOf(bytes32 elementId) view returns (bytes32)",
+  "function versionHashOf(bytes32 elementId) view returns (bytes32)",
+  "function defaultActionOf(bytes32 elementId) view returns (uint8)",
+  "function registerElement(bytes32 elementId,address element,uint8 defaultAction)"
 ];
 
-// RecipeRegistry.recipeOf(id) -> recipe address; the recipe exposes its required
-// element id list (IRecipe.requiredElements). Used by `check` to enumerate the
-// active manifest's per-element preflight set.
+// Active recipes are resolved from each manifest binding's exact canonical key
+// and version. latestRegisteredVersionOf is discovery metadata only.
 export const RECIPE_REGISTRY_ABI = [
-  "function recipeOf(uint16 recipeId) view returns (address)"
+  "function recipeOf(bytes32 recipeKey,uint16 version) view returns (address)",
+  "function latestRegisteredVersionOf(bytes32 recipeKey) view returns (uint16)",
+  "function recipeKeyOf(uint16 recipeId) view returns (bytes32)",
+  "function recipeKeyOfAlias(bytes32 aliasHash) view returns (bytes32)",
+  "function aliasHashOf(bytes32 recipeKey) view returns (bytes32)",
+  "function deriveRecipeKey(bytes32 aliasHash) pure returns (bytes32)",
+  "function registerRecipe(bytes32 aliasHash,bytes32 recipeKey,uint16 recipeId,uint16 version,address recipe)"
 ];
 export const RECIPE_ABI = [
   "function version() view returns (uint16)",
@@ -70,9 +86,9 @@ export const EVENTS_ABI = [
   "event SurveillanceFlag(bytes32 indexed elementId, address indexed subject, bytes32 reasonCode)"
 ];
 
-// IComplianceElement.check(user, counterparty, asset, amount, context).
+// IComplianceElement.check(user, counterparty, asset, amount, context, parameters).
 export const ELEMENT_ABI = [
-  "function check(address user, address counterparty, address asset, uint256 amount, bytes context) view returns (bool passed, bytes32 reasonCode)"
+  "function check(address user, address counterparty, address asset, uint256 amount, bytes context, bytes parameters) view returns (bool passed, bytes32 reasonCode)"
 ];
 
 // Per-element setters (write-gated to the operator). Grouped so a single Contract
@@ -94,6 +110,10 @@ export const TOKEN_POLICY_REGISTRY_ABI = [
   "function statusOf(address token) view returns (uint8)",
   "function manifestOf(address token) view returns (tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy))",
   "function recipeBindingsOf(address token) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[])",
+  "function compiledPlanHashOf(address token) view returns (bytes32)",
+  "function compiledBindingCountOf(address token) view returns (uint256)",
+  "function compiledBindingOf(address token,uint256 index) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority) binding,bytes32 recipeKey,bytes32 bindingPlanHash)",
+  "function compiledRulesOf(address token,uint256 bindingIndex) view returns (tuple(bytes32 elementId,uint8 action)[])",
   "function suspendManifest(address token, bytes32 reasonCode)",
   "function scheduleManifestResume(address token, bytes32 reasonCode)",
   "function pendingManifestResumeOf(address token) view returns (uint64 effectiveTime,bytes32 reasonCode)",

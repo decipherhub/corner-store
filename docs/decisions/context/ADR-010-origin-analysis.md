@@ -1,11 +1,35 @@
-# ADR-010 — Element 파라미터 소유권과 결정 재현성 (ADR-006 불변식의 구현 정합)
+# ADR-010 배경 분석 — Element 파라미터 소유권과 결정 재현성
 
-- **상태:** Proposed (2026-08-26) — 개발팀 검토 요청
+- **상태:** Historical / Superseded
+- **작성 기준:** 2026-08-26 당시 `main`
+- **최종 결정:** [`ADR-010 — 정책 파라미터, 버전, 실행 바인딩과 감사 경계`](../ADR-010-policy-parameters-versioning-and-audit.md)
+- **논의 추적:** [최초 제안 PR #90](https://github.com/decipherhub/corner-store/pull/90) · [개발 검토 PR #97](https://github.com/decipherhub/corner-store/pull/97) · [최종 결정 PR #111](https://github.com/decipherhub/corner-store/pull/111) · [구현 epic #101](https://github.com/decipherhub/corner-store/issues/101)
 - **제안자:** 승준(리걸/PM)
-- **유형:** 구현 정합 + 거버넌스 일관성 (새 설계 제안 아님)
+- **유형:** 최종 결정을 만든 문제 분석·대안 기록
 - **연계:** ADR-006(자산 일반성 불변식) · ADR-007 PD-1·PD-3·PD-5·PD-6 · ADR-008
 - **적용 범위:** `src/compliance/elements/`, `src/compliance/ComplianceEngine.sol`, `src/registry/ElementRegistry.sol`
 - **비적용 범위:** RFQ/execution 경로, pricing·risk, 개별 부품의 법률 요건 그 자체
+
+---
+
+## 0. 문서 성격과 최종 처리
+
+이 문서는 ADR-010 자체가 아니라, ADR-010을 결정하기 전에 발견한 G-1~G-3과
+D-1~D-5 대안을 보존하는 **시점 고정(point-in-time) 배경 자료**다. 아래의 코드
+인용과 현재 상태 평가는 2026-08-26 당시 `main`을 기준으로 하므로 현재 구현 설명으로
+사용하지 않는다. 최종 규범과 구현 요구사항은 위의 accepted ADR을 따른다.
+
+| 최초 제안 | 최종 처리 | 구현 추적 |
+| --- | --- | --- |
+| G-1/D-1: 자산별 값을 Manifest 계층으로 이동 | 채택. Manifest가 의미를 소유하고 versioned `ManifestPolicyConfig`로 분리 | #103 / PR #119 |
+| Q2: 파라미터 표현 | bounded `bytes` + immutable schema ID/version으로 확정 | #102 / PR #118 |
+| D-2: `check`에 `elementId` 전달 | 그대로 채택하지 않음. Registry binding을 identity로 유지하고 단일 parameter-capable ABI 사용 | #102 / PR #118 |
+| G-2/D-3: 결정 해시에 구현 식별 포함 | 확대 채택. 주소와 runtime code hash를 실행 binding에 함께 포함 | #105 / PR #122 |
+| G-3/D-4: 같은 ID 구현 교체 통제 | in-place 교체 대신 immutable registration, pause, 새 version, 정상 timelock으로 확정 | #107 (후속 구현) |
+| D-5: 술어 정규화 | 제한적으로 채택. 반복 primitive만 공통화하고 범용 DSL은 배제 | #110 / PR #121 |
+
+따라서 이 문서는 선택의 근거와 기각된 대안을 설명할 때 사용하고, 상태 판단이나
+새 구현의 source of truth로 사용하지 않는다.
 
 ---
 
@@ -294,11 +318,12 @@ ADR-006 §4·§5가 이미 지시한 것을 구현으로 옮기는 안이다. �
 
 ## Related
 
-- [`./ADR-006-asset-agnostic-component.md`](./ADR-006-asset-agnostic-component.md)
-- [`./ADR-007-pd-architecture-decisions.md`](./ADR-007-pd-architecture-decisions.md)
-- [`./ADR-008-compliance-seam-decisions.md`](./ADR-008-compliance-seam-decisions.md)
-- [`./decision-register.md`](./decision-register.md)
-- [`../../src/compliance/ComplianceEngine.sol`](../../src/compliance/ComplianceEngine.sol)
-- [`../../src/registry/ElementRegistry.sol`](../../src/registry/ElementRegistry.sol)
-- [`../../src/registry/TokenPolicyRegistry.sol`](../../src/registry/TokenPolicyRegistry.sol)
-- [`../../src/compliance/elements/Jurisdiction.sol`](../../src/compliance/elements/Jurisdiction.sol)
+- [`ADR-010 최종 결정`](../ADR-010-policy-parameters-versioning-and-audit.md)
+- [`ADR-006`](../ADR-006-asset-agnostic-component.md)
+- [`ADR-007`](../ADR-007-pd-architecture-decisions.md)
+- [`ADR-008`](../ADR-008-compliance-seam-decisions.md)
+- [`decision-register.md`](../decision-register.md)
+- [`ComplianceEngine.sol`](../../../src/compliance/ComplianceEngine.sol)
+- [`ElementRegistry.sol`](../../../src/registry/ElementRegistry.sol)
+- [`TokenPolicyRegistry.sol`](../../../src/registry/TokenPolicyRegistry.sol)
+- [`Jurisdiction.sol`](../../../src/compliance/elements/Jurisdiction.sol)

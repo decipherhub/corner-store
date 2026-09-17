@@ -9,6 +9,353 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+
+## CORE-010 — Policy Execution Binding
+
+### Behavior
+
+- `logicalPolicyHash`와 `executionBindingHash`를 domain-separated hash로 분리하고
+  최종 `policyId`가 두 값을 모두 결합한다.
+- execution binding은 chain ID, Engine/Registry/Recipe/Element 배포 주소와 runtime
+  code hash, exact version/metadata/schema/parameter commitment를 포함한다.
+- `decisionHash`는 최종 `policyId`를 직접 포함한다.
+- RFQ maker quote는 quote-time `policyId`를 서명하고 settlement의 fresh decision과
+  다르면 fail-closed한다.
+- CREATE2 expected address는 배포 전 검증 수단으로만 사용하고 배포 후 runtime code
+  hash 검증을 생략하지 않는다. 기본 production 경로는 immutable 구현이다.
+
+### Verification
+
+- PolicyHashLib 2/2와 DecisionHashLib 2/2 deterministic/domain-separation tests pass
+- Engine 42/42: chain/Engine address binding, single-token quoteable policy ID와
+  Recipe runtime-code drift fail-closed pass
+- RFQAdapter 25/25와 RFQFlow 8/8: stale-policy rejection 및 Router settlement pass
+- RFQ SDK/host/CLI/demo/testnet/Toolkit targeted smoke와 clean generated-project
+  conformance pass
+- full `scripts/check.sh`: Foundry 897/897, all services/packages, standalone clean
+  SDK consumer와 deploy-v3 10/10 pass
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ buy/sell flow pass
+- runtime sizes: ComplianceEngine 18,640 bytes, ElementRegistry 4,260 bytes,
+  RecipeRegistry 3,588 bytes, TokenPolicyRegistry 24,035 bytes(EIP-170 margin 541)
+- `git diff --check` pass
+
+### State
+
+passing
+
+
+## CORE-009 — Bounded Predicate and Element Conformance
+
+### Behavior
+
+- 공통 Element ABI는 그대로 유지하고 metadata에 evidence type과 immutable default
+  enforcement를 명시적으로 고정한다.
+- Registry는 등록자가 지정한 default enforcement와 Element metadata가 다르면
+  fail-closed한다.
+- `BoolClaim`, `BoundedUint`, `TimestampWindow`, `SetMembership`의 bounded decoder를
+  제공하되 범용 DSL/AST/interpreter는 만들지 않는다.
+- generic `MinimumTradeAmount` Element는 threshold를 구현에 하드코딩하지 않고
+  `ManifestPolicyConfig` parameter에서 읽는다.
+- 실제 BUIDL-like profile migration과 값 승인은 별도 `#109`에서 수행한다.
+
+### Verification
+
+- ElementRegistry 11/11, PredicateValidation 4/4, MinimumTradeAmount 2/2,
+  Engine 40/40 targeted tests pass
+- existing Element 579/579, TokenPolicyRegistry 56/56, Factory 11/11 regressions pass
+- full `forge test --offline`: 891/891
+- full `scripts/check.sh`: Foundry, all service/package smoke, standalone clean SDK
+  consumer와 deploy-v3 10/10 pass
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ flow pass
+- `TokenPolicyRegistry` runtime 24,035 bytes(EIP-170 margin 541 bytes),
+  `git diff --check` pass
+
+### State
+
+passing
+
+
+## CORE-008 — Exact Recipe Key and Version Resolution
+
+### Behavior
+
+- Recipe implementation 주소는 canonical `recipeKey + version`으로만 조회한다.
+- numeric `recipeId`는 기존 Manifest binding을 canonical key로 연결하는 immutable
+  compatibility alias이며 latest implementation 의미를 갖지 않는다.
+- catalog/UI discovery는 주소가 아닌 `latestRegisteredVersionOf(recipeKey)` metadata를
+  사용하고, active version은 항상 Manifest `RecipeBinding`에서 읽는다.
+- 새 Recipe version 등록만으로 ACTIVE Manifest, compiled plan 또는 policy ID가
+  변경되지 않는다.
+
+### Verification
+
+- RecipeRegistry 7/7, TokenPolicyRegistry 56/56, Engine 39/39 targeted tests pass
+- CLI/Toolkit build + smoke pass
+- full `scripts/check.sh` pass: Foundry 882/882, all service/package smoke,
+  standalone clean SDK consumer와 deploy-v3 10/10
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ flow pass
+- `TokenPolicyRegistry` runtime 23,978 bytes(EIP-170 margin 598 bytes)
+- `git diff --check` pass
+
+### State
+
+passing
+
+
+## CORE-007 — Versioned Manifest Policy Config
+
+### Behavior
+
+- 자산별 Element 정책값은 schema-versioned `ManifestPolicyConfig`가 소유하며
+  Manifest 등록 또는 semantic update와 함께만 변경된다.
+- Registry는 parameter entry 수, 전체 bytes, binding/Element membership,
+  immutable schema ID/version, required 여부와 Element별 최대 길이를 activation
+  전에 fail-closed로 검증한다.
+- binding별 compiled plan은 enforcement rule과 정확히 정렬된 parameter bytes를
+  저장하며 config hash와 parameter bytes를 plan hash에 포함한다.
+- pending config/compiled plan hash와 compiled parameters는 read-only 검토할 수 있고, timelock activation에서
+  Manifest version, bindings, enforcement와 parameters가 원자적으로 교체된다.
+- Engine은 동적 config lookup 없이 compiled parameters를 해당 Element에 전달한다.
+  기존 parameterless Element와 local Anvil demo는 empty config 호환 경로를 유지한다.
+
+### Verification
+
+- TokenPolicyRegistry targeted tests: 56/56
+- ComplianceEngine targeted tests: 38/38
+- full `forge test --offline`: 881/881
+- full `scripts/check.sh`: Foundry, all services, clean SDK consumer와 deploy-v3 10/10 통과
+- `forge build --sizes`: TokenPolicyRegistry 23,980 bytes, EIP-170 margin 596 bytes
+- BUIDL-like와 Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ flow 통과
+- `git diff --check` 통과
+
+### State
+
+passing
+
+
+## CORE-006 — Unified Element Parameter Interface
+
+### Behavior
+
+- 모든 in-repo Element가 bounded `parameters`를 받는 하나의
+  `IComplianceElement.check` ABI를 구현한다.
+- immutable Element metadata가 schema ID/version, 최대 parameter bytes와 required
+  여부를 선언하며 Registry가 잘못된 capability를 등록 전에 거절한다.
+- 현재 parameterless Element는 empty bytes에서 기존 동작을 유지하고 non-empty
+  parameter를 공통 reason code로 fail-closed한다.
+- Manifest별 parameter 저장과 compiled-plan 전달은 후속 #103 범위로 유지한다.
+
+### Verification
+
+- BaseElement 5/5, Registry 9/9, Engine 37/37, all-Element 577/577
+- full `forge test --offline`: 877/877
+- CLI, Toolkit, RFQ demo backend와 public-testnet demo package tests 통과
+- 전체 `scripts/check.sh` 통과
+- `buidl-like`와 `reg-d` Anvil E2E 각각 7/7 + dashboard/CLI/RFQ flow 통과
+- `git diff --check` 통과
+
+### State
+
+passing
+
+
+## DOCS-011 — ADR-010 Production Policy Decisions
+
+### Behavior
+
+- Q1~Q8과 D-5의 최종 결정을 하나의 accepted ADR로 기록한다.
+- ManifestPolicyConfig, 단일 Element ABI, 주소+runtime-code binding, 온체인
+  lifecycle+PII-free artifact 감사, 안전우선 긴급 교체, exact Recipe version과
+  제한적 predicate 정규화 경계를 구분한다.
+- Q8의 단계적 구현 순서를 GitHub epic #101과 하위 이슈 #102~#110으로 추적한다.
+- 실제 BUIDL 상품값, provider/보관 운영과 Safe 구성은 외부 승인 없이 확정하지 않는다.
+
+### Verification
+
+- ADR/decision index/documentation links review
+- GitHub issue #101 checklist and #102~#110 existence
+- `git diff --check`
+
+### State
+
+passing
+
+
+## CORE-005 — Compliance Core Production Hardening
+
+### Behavior
+
+- Element registrations are immutable per `bytes32 elementId`, pin implementation
+  metadata/version hashes and store a default enforcement action for compiled
+  manifest plans.
+- Recipe registration now supports canonical normalized aliases, domain-separated
+  `bytes32 recipeKey` derivation and legacy numeric aliases without dynamic
+  runtime alias lookup. Alias/key collisions and version overwrite attempts are
+  rejected.
+- `TokenPolicyRegistry` compiles bounded per-binding Element enforcement rules at
+  manifest registration/update time. Normal onboarding is strengthen-only:
+  `FLAG_ONLY < OPERATOR_REVIEW < BLOCK`; `FORCE_FLAG_ONLY` is accepted only for
+  Elements whose immutable default is already `FLAG_ONLY`.
+- The Engine evaluates compiled plans and propagates an Element's exact nonzero
+  `reasonCode`; recipe-scoped code `1` is only the fallback when an Element
+  returns zero.
+- Production onboarding Toolkit/CLI support v2 canonical recipe alias/key,
+  Element default enforcement, bounded overrides, compiled plan commitments and
+  dual-mode verification while preserving legacy v1 configs/calldata ordering.
+
+### Verification
+
+- `npm test --prefix services/toolkit`
+- `npm test --prefix services/cli`
+- Targeted Forge registry tests: 86 passed
+- Targeted Engine tests: 37 passed
+- Targeted RegD integration tests: 6 passed
+- Full `forge test --offline`: 870/870 passed
+- Isolated `/tmp` full `scripts/check.sh`: passed after formatting only the
+  pre-existing `script/DeployProductionCore.s.sol` and
+  `script/DemoScenarios.s.sol` drift in the copy and running fresh `npm ci` for
+  copied stale `node_modules`; this full check was before the final
+  Solidity-only bijection guard, and post-fix full `forge test --offline`
+  870/870 passed
+- Full Anvil E2E: `buidl-like` and `reg-d` passed with 7/7 scenarios and RFQ
+  flows
+- Original-tree `scripts/check.sh` remains blocked by pre-existing formatting
+  drift in `script/DeployProductionCore.s.sol` and `script/DemoScenarios.s.sol`.
+  `DemoScenarios` has only the scoped G005 reason-contract edit here and was not
+  broad-formatted.
+- `git diff --check`
+
+### State
+
+passing
+
+
+## DEPLOY-003 — Production ERC-3643 Asset Onboarding
+
+### Behavior
+
+- Production onboarding is separated from local Anvil/demo `toolkit-onboard` and
+  from core deployment. A versioned `corner-store.production-onboarding.json`
+  declares the exact existing ERC-3643 token, IdentityRegistry/Compliance wiring,
+  Corner Store registries/adapters, PII-free legal package hash, Elements, Recipes,
+  Manifest, RecipeBinding[], governance Safe metadata, explicit operator executor,
+  active venues, RFQ makers, signer delegates and read-only inventory requirements.
+- The Toolkit validates the onboarding file with exact-object schemas, rejects
+  unknown fields, duplicate addresses/ids, unsupported codeHash keys, signer-secret
+  shaped fields, raw contact PII and incoherent RFQ/inventory relationships.
+- `production-onboarding-plan` renders deterministic Element/Recipe/Manifest,
+  venue, maker, signer schedule and owner-only delayed signer execution calldata plus Safe-compatible unsigned drafts.
+  It uses collision-free stage IDs, partitions Safe-owner and operator-authority
+  drafts, includes Safe/required approval/proposal identity on Safe drafts and
+  explicit executor/proposal identity on operator drafts, separates governance-owner/governance-delayed/operator
+  authority, refuses output overwrite, and never signs, broadcasts, transfers
+  tokens or generates ERC-20 approvals. Inventory appears as a read-only
+  verification dependency before service open.
+- `production-onboarding-verify` uses RPC read calls only and fails closed on
+  unavailable or mismatched ERC-3643 wiring, Identity Registry dependencies,
+  Element/Recipe registrations, Manifest hash/fields/bindings, ACTIVE Manifest
+  declarer/approver, governance Safe ownership of safe-owner targets, global/asset/venue pause gates, venue config, TokenPolicyRegistry/RFQAdapter operator authorization, maker approval,
+  signer delegate activation and inventory balance/allowance minima. Pending signer
+  authorization is reported but is not production-ready.
+- Example onboarding JSON is syntactically valid but uses obvious placeholder
+  non-live addresses/hashes; issuer/legal/TA evidence remains an external trust
+  boundary and cannot be inferred from a token address.
+
+### Verification
+
+- `npm test --prefix services/toolkit`
+- `npm test --prefix services/cli`
+- `git diff --check`
+
+### State
+
+passing
+
+
+## RFQ-005 — Production RFQ Host Hardening
+
+### Behavior
+
+- RFQ production HTTP hosting is separated into `services/rfq-host` instead of
+  turning the local Anvil demo backend into a production server. The host wraps
+  the durable `RFQQuoteCoordinator` and leaves pricing, risk, signer custody,
+  transactional storage, TLS termination and WORM audit infrastructure as
+  operator-owned replacement ports.
+- `/rfq/quote` validates request size, JSON and schema before authentication. An
+  authenticator port returns a principal and exact taker claim, and the host
+  binds that normalized taker to the body `taker`; missing/invalid auth returns
+  401 and mismatches return 403 without storing raw auth material.
+- Rate limiting is a replaceable port with a bounded in-memory reference
+  implementation. Limiter keys use hashed principals, and 429 responses include
+  `Retry-After`. Oversized requests return 413.
+- The host calls coordinator `quoteWithEvidence()`, so the actual pricing result
+  and actual risk decision returned inside the durable quote call must carry
+  `snapshotId`, `version`, `observedAt`, `validUntil` and availability. Missing,
+  stale, future-skewed or unavailable metadata fails closed before nonce
+  reservation or signing, and idempotent replay returns persisted evidence
+  without provider recall or re-signing. A strict replay of an existing RESERVED
+  record revalidates persisted evidence before signing; stale/missing/future/
+  unavailable evidence revokes the reservation, releases the lease and burns the
+  nonce. Fresh risk `decision: rejected` returns a stable risk rejection before
+  reserve/sign without exposing raw risk reason.
+- Signer verification failures, stale/unavailable dependencies, auth abuse,
+  rate limits and audit sink failures trigger a bounded best-effort incident
+  hook. Strict audit is enabled by default and quote issuance fails closed if
+  PII-free audit persistence fails.
+- Audit events contain hashed principal/request/idempotency identifiers, persisted
+  actual coordinator module/snapshot/version metadata, timestamps and on-chain
+  identifiers only;
+  raw bearer tokens, raw idempotency keys, raw request bodies, signer refs and
+  stack traces are excluded. Metrics labels are bounded and do not include
+  principals or addresses.
+- `/health` exposes only generic service status. Non-loopback public bind is
+  refused unless the operator explicitly acknowledges external TLS/trusted-proxy
+  termination.
+
+### Verification
+
+- `npm test --prefix services/rfq`
+- `npm test --prefix services/rfq-host`
+- `npm test --prefix services/rfq-demo-backend`
+- `git diff --check`
+
+### State
+
+passing
+
+## RFQ-004 — Durable Quote Coordinator
+
+### Behavior
+
+- RFQ SDK는 기존 demo-friendly quote service를 유지하면서 production 서비스가 교체해
+  구현할 수 있는 `QuoteCoordinatorStore` 포트와 `RFQQuoteCoordinator` 경계를 제공한다.
+- coordinator는 `(chainId, adapter/verifyingContract, maker)` scope에서 nonce를
+  원자적으로 증가시키고, idempotency key hash와 request hash를 durable record에
+  저장한다. 같은 key+request는 재시작 후에도 같은 signed quote를 반환하며, 같은
+  key의 다른 request는 fail-closed conflict로 거부한다.
+- pricing/risk rejection은 nonce와 inventory reservation 전에 종료된다. 새 firm quote는
+  nonce, idempotency record와 maker outgoing token inventory lease를 하나의 store
+  transaction에서 예약한다. signer 실패, 만료, revoke, finalized fill/cancel은 lease를
+  정확히 한 번 해제하고 nonce는 재사용하지 않는다.
+- local/single-host reference file store는 Node built-ins만 사용해 restart persistence,
+  lock 기반 cross-instance atomicity, concurrent over-reservation 방지를 시연한다. HA
+  production은 같은 포트를 operator transactional DB/queue/indexer로 구현해야 한다.
+- coordinator는 external signer가 반환한 EIP-712 signature를 로컬에서 검증한 뒤에만
+  응답하고, idempotency key와 signer key ref는 durable audit record에 raw value가 아닌
+  hash로 저장한다.
+- fill/cancel observation은 transaction hash, block number/hash를 기록하고 configured
+  confirmation depth 이후 terminal 상태로 확정한다. reorg/noncanonical block은 observed
+  상태를 `PUBLISHED`로 되돌리고 lease를 유지한다. Partial fill은 계속 비지원이다.
+
+### Verification
+
+- `npm test --prefix services/rfq`
+- `git diff --check`
+
+### State
+
+passing
+
 ## STUDIO-002 — Localized Evidence-Gated Workflow
 
 ### Behavior
@@ -1064,6 +1411,54 @@ passing
 - `src/compliance/elements/Lockup.sol`
 - `test/unit/compliance/AcquisitionSource.t.sol`
 
+
+## DATA-002 — Provider-Neutral TA/KYC Evidence
+
+### Behavior
+
+- `services/compliance-data` exposes a provider-neutral TA/KYC evidence boundary without
+  hardcoding Securitize or another vendor API. Operator adapters supply provider results;
+  Corner Store core accepts only subject/identity/asset bindings and PII-free hashes.
+- `KycEvidenceCoordinator` validates exact taker/identity/asset binding, exact request/result/fact schemas, bounded provider IDs,
+  schema versions, assessment/source evidence hashes, provider timeout, freshness/future skew and explicit
+  `ACTIVE | REVOKED | INELIGIBLE` status before materializing evidence.
+- Canonical `evidenceHash` is domain-separated over normalized provider/schema,
+  subject/identity/asset, facts, timestamps, status and source hash. Any fact, revocation or
+  lineage change changes the hash.
+- Provider outage/timeout, malformed or missing fields, stale/future data, binding mismatch,
+  sanctions hit, non-verified KYC, ineligible/revoked status, missing/failed strict success audit,
+  store mismatch/conflict all fail closed and never return eligible materialization. Cached last-good evidence
+  is not used to hide refresh outages.
+- `InMemoryKycEvidenceStore` is a reference/conformance store only; production deployments must
+  replace it with transactional durable/HA storage. It enforces idempotent replay,
+  same-assessment conflict detection and monotonic protection so older active evidence cannot
+  overwrite newer or revoked evidence.
+- Audit and incident hooks use PII-free hashes, bounded status/reason codes and on-chain IDs
+  only. Strict success audit runs before eligible store publish; store failure after success audit adds a fail audit/incident. Failure-audit and incident-hook errors are bounded/non-recursive.
+- ERC-3643/ONCHAINID remains an external trust boundary: the output is evidence for an
+  issuer/TA-approved adapter, not direct claim issuance or registry writes.
+
+### Verification
+
+- `npm test --prefix services/compliance-data`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Implements the D012/PD-4 provider-neutral boundary; no new vendor compatibility decision was
+  introduced.
+- Existing mock TA and local demo flows are unchanged.
+
+### Related Files
+
+- `services/compliance-data/src/kyc.ts`
+- `services/compliance-data/test/smoke.ts`
+- `services/compliance-data/README.md`
+
 ## MANIFEST-002 — RecipeBinding Manifest Migration
 
 ### Behavior
@@ -1501,6 +1896,36 @@ passing
 - completed plan: `docs/exec-plans/completed/SDK-002-standalone-integration-workflow.md`
 - production durable nonce와 service hardening은 #66/#67 module로 유지한다.
 
+## SDK-003 — Publishable Package Release Contract
+
+### Behavior
+
+- CLI, Toolkit과 RFQ SDK를 각각 npm tarball로 build/pack하고 저장소 밖 clean
+  project에서 설치한다.
+- Toolkit의 public CommonJS/types export와 기본 config simulation을 packed artifact
+  기준으로 검증한다.
+- package SemVer, schema/capability version 분리, release gate와 rollback 가능한
+  migration 절차를 문서화한다.
+- generated project의 RFQ conformance, CLI doctor/deploy dry-run과 packaged contract
+  build가 repository-relative package resolution 없이 통과해야 한다.
+
+### Verification
+
+- `npm test --prefix services/toolkit`
+- `npm test --prefix services/rfq`
+- `npm test --prefix services/cli`
+- `scripts/sdk-product-smoke.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- production npm registry publish와 release credential 사용은 이 저장소 검증 범위
+  밖이며, PR merge 후 별도 release 권한으로 수행한다.
+
 ## STUDIO-001 — Local Deployment Studio
 
 ### Behavior
@@ -1631,3 +2056,32 @@ passing
   `setRegistryAvailable(true)`를 호출해야 통과가 시작된다.
 - F-03 FraudSurveillance는 STATEFUL(`BaseStatefulElement`)이므로 배포 후
   `setEngine(engine)` wiring이 필요하다(wave-2 D-01 HolderCount와 동일 패턴).
+
+## CMP-005 — A-12 Registration Safety
+
+### Behavior
+
+- opt-in wave-3 배포에서 A-12를 명시적으로 `FLAG_ONLY`로 등록한다.
+- A-12는 거래를 직접 차단하지 않고 red-flag audit와 operator review로 라우팅한다.
+- active Recipe 배선과 production surveillance data source는 이 변경의 범위 밖이다.
+- one-shot Element 등록이 잘못된 기본 action으로 실행되지 않도록 정적 검증 gate를 둔다.
+
+### Verification
+
+- `scripts/check-wave3-element-policies.sh`
+- `forge build tools/deploy-wave3/DeployWave3Elements.s.sol`
+- `forge test --offline --match-path test/unit/registry/ElementRegistry.t.sol`
+- `forge test --offline` (870/870)
+- isolated full `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- PR #96의 배선 위험 분석을 코드와 명세에 반영한다.
+- `RedFlagKnowledgeBar`의 기존 flag-not-block 동작은 변경하지 않는다.
+- 실제 broadcast/E2E는 active Recipe를 변경하지 않는 opt-in 등록 metadata 수정이고
+  배포 키가 필요한 경로이므로 실행하지 않는다.

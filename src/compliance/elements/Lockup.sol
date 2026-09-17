@@ -9,7 +9,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
@@ -30,15 +32,21 @@ contract Lockup is BaseElement {
                 temporal: TemporalNature.PERIODIC,
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.PROVIDER_ATTESTATION,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {
         acquisitionSource = IAcquisitionSource(acquisitionSource_);
         lockupSeconds = lockupSeconds_;
     }
 
-    function check(address user, address, address asset, uint256, bytes calldata)
-        external
+    function _check(address user, address, address asset, uint256, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

@@ -11,7 +11,9 @@ import {
     ObligationTiming,
     Statefulness,
     ComplianceContext,
-    FlowType
+    FlowType,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
@@ -191,7 +193,13 @@ contract RegMIssuerBuying is BaseElement, Governed {
                 temporal: TemporalNature.REALTIME,
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.ONCHAIN_STATE,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -260,8 +268,8 @@ contract RegMIssuerBuying is BaseElement, Governed {
     ///      (engine passes ctx.buyer); `counterparty` (the seller) is deliberately
     ///      NOT screened (direction rule, §5.3). `context` is decoded only to read
     ///      FlowType for the redemption relaxation.
-    function check(address user, address, address asset, uint256 amount, bytes calldata context)
-        external
+    function _check(address user, address, address asset, uint256 amount, bytes calldata context, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

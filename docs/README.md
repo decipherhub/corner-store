@@ -18,11 +18,13 @@
 | [`rfq-demo-guide.md`](./rfq-demo-guide.md)           | RFQ-first MVP presenter guide | Current    |
 | [`showcase-runbook.md`](./showcase-runbook.md)       | production-core → local DEX handoff | Current |
 | [`sdk-integration.md`](./sdk-integration.md)         | modular SDK·scaffold·conformance | Current |
+| [`sdk-versioning.md`](./sdk-versioning.md)           | package semver·release·migration policy | Current |
 | [`deployment-studio.md`](./deployment-studio.md)     | local reference execution + production preflight/plan Studio | Current |
 | [`deployment-production.md`](./deployment-production.md) | production deployment runbook | Current |
 | [`testnet-deployment.md`](./testnet-deployment.md)       | public testnet RFQ reference deployment | Current |
 | [`product-specs/production-rfq-policy.md`](./product-specs/production-rfq-policy.md) | production RFQ 운영·구현 계약 | Current |
 | [`operations/incident-response.md`](./operations/incident-response.md) | 사고 대응·복구 runbook | Current |
+| [`operations/giwa-chain-semantics.md`](./operations/giwa-chain-semantics.md) | GIWA chain 확정 단계·출금·escape hatch 운영 semantics | Current |
 | [`security.md`](./security.md)                       | 보안 규칙                     | Current    |
 | [`rfq-threat-model.md`](./rfq-threat-model.md)       | RFQ venue 위협 모델           | Current    |
 | [`MVP.md`](./MVP.md)                                 | 초기 AMM 중심 설계 기록       | Superseded |
@@ -42,6 +44,8 @@ Uniswap v3 배포 도구의 실제 포함 범위와 의존성은
   activation evidence: `deployment-production.md`
 - feature 상태와 세션 진행: `FEATURES.md`, `PROGRESS.md`
 - 결정 이유와 품질 상태: `DECISIONS.md`, `QUALITY.md`
+- 정책 parameter·immutable version·실행 binding·감사 결정:
+  [`ADR-010`](./decisions/ADR-010-policy-parameters-versioning-and-audit.md)
 
 문서 간 내용이 충돌하면 더 구체적인 책임 문서를 우선하고, 충돌 자체를 방치하지
 않는다. 아키텍처를 바꾸면 제품 baseline과 해당 책임 문서를 함께 갱신하고, 구현

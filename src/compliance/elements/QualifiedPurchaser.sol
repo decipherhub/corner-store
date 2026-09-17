@@ -9,7 +9,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 import {LookThroughStatus} from "../../interfaces/compliance/ILookThroughSource.sol";
@@ -101,7 +103,13 @@ contract QualifiedPurchaser is BaseElement, Governed {
                 temporal: TemporalNature.ONE_TIME,
                 decidability: Decidability.ATTESTATION_BASED,
                 timing: ObligationTiming.EX_ANTE_VERIFY,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.PROVIDER_ATTESTATION,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -154,8 +162,8 @@ contract QualifiedPurchaser is BaseElement, Governed {
     /// @dev `user` = prospective buyer; `asset` = the fund token (its address is
     ///      the fund identifier for the KE covered-company match). Returns the
     ///      first failing reason code in the doc 5.2 order.
-    function check(address user, address, address asset, uint256, bytes calldata)
-        external
+    function _check(address user, address, address asset, uint256, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

@@ -28,17 +28,18 @@ export const ERC20_ABI = [
   "function approve(address spender,uint256 amount) returns (bool)"
 ];
 const ENGINE_ABI = [
-  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))"
+  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))",
+  "function policyHashesOf(address token) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)"
 ];
 const RFQ_ADAPTER_ABI = [
   "function approvedMaker(address maker) view returns (bool)"
 ];
 const POLICY_ABI = ["function statusOf(address token) view returns (uint8)"];
 const QP_ABI = [
-  "function check(address user,address counterparty,address asset,uint256 amount,bytes data) view returns (bool passed,bytes32 reasonCode)"
+  "function check(address user,address counterparty,address asset,uint256 amount,bytes context,bytes parameters) view returns (bool passed,bytes32 reasonCode)"
 ];
 const QUOTE_TUPLE =
-  "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,uint256 nonce,uint64 expiry)";
+  "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,bytes32 policyId,uint256 nonce,uint64 expiry)";
 
 export type TradeSide = "buy" | "sell";
 
@@ -180,7 +181,7 @@ export class TestnetRfqRuntime {
       quote.balanceOf(taker),
       rwa.allowance(taker, a.rfqAdapter),
       quote.allowance(taker, a.rfqAdapter),
-      qp.check(taker, "0x0000000000000000000000000000000000000000", a.rwaToken, 0, "0x")
+      qp.check(taker, "0x0000000000000000000000000000000000000000", a.rwaToken, 0, "0x", "0x")
     ]);
     return {
       address: taker,
@@ -229,12 +230,15 @@ export class TestnetRfqRuntime {
   }
 
   async quoteFor(taker: string, amountIn: string, side: TradeSide, ttlSeconds?: number): Promise<SignedRFQQuote> {
+    const engine = new Contract(this.config.artifact.engine, ENGINE_ABI, this.provider);
+    const hashes = await engine.policyHashesOf(this.config.artifact.rwaToken);
     return this.quoteService.quote({
       taker: taker as `0x${string}`,
       tokenIn: (side === "buy" ? this.quote.address : this.rwa.address) as `0x${string}`,
       tokenOut: (side === "buy" ? this.rwa.address : this.quote.address) as `0x${string}`,
       amountIn,
       venue: this.config.artifact.rfqVenue as `0x${string}`,
+      policyId: String(hashes.policyId ?? hashes[2]) as `0x${string}`,
       ttlSeconds
     });
   }
@@ -258,7 +262,7 @@ export function buildRouterRequest(
   const side: TradeSide = q.tokenIn.toLowerCase() === config.artifact.quote.toLowerCase() ? "buy" : "sell";
   const venueData = AbiCoder.defaultAbiCoder().encode(
     [QUOTE_TUPLE, "bytes"],
-    [[q.maker, q.taker, q.tokenIn, q.tokenOut, q.amountIn, q.amountOut, q.venue, q.nonce, q.expiry], signed.signature]
+    [[q.maker, q.taker, q.tokenIn, q.tokenOut, q.amountIn, q.amountOut, q.venue, q.policyId, q.nonce, q.expiry], signed.signature]
   );
   return [
     executionContext(config, q.taker, q.amountIn, q.amountOut, side),

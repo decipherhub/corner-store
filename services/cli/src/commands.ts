@@ -3,6 +3,8 @@ import {createHash} from "crypto";
 import {
   copyFileSync,
   existsSync,
+  openSync,
+  closeSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -13,7 +15,7 @@ import {
   writeFileSync
 } from "fs";
 import {tmpdir} from "os";
-import {formatEther, keccak256, NonceManager, parseEther} from "ethers";
+import {formatEther, JsonRpcProvider, keccak256, NonceManager, parseEther, Contract} from "ethers";
 
 import {dirname, relative, resolve} from "path";
 import {enabledEngineSpec, loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
@@ -32,6 +34,12 @@ import {
   validateProductionConfig
 } from "../../toolkit/src/production";
 import {scaffoldRFQIntegration} from "../../toolkit/src/scaffold";
+import {
+  OnboardingReader,
+  createProductionOnboardingPlan,
+  loadProductionOnboardingConfig,
+  verifyProductionOnboarding
+} from "../../toolkit/src/production-onboarding";
 
 import {
   ACQ_SOURCE_ABI,
@@ -67,7 +75,6 @@ import {
 } from "./config";
 import {
   AbiCoder,
-  Contract,
   Interface,
   TypedDataEncoder,
   decodeBytes32String,
@@ -163,15 +170,6 @@ function bindingPathGroupId(binding: any): number {
 
 function bindingPriority(binding: any): number {
   return Number(binding.priority ?? binding[4]);
-}
-
-function bindingRecipeIds(bindings: any[]): number[] {
-  const ids: number[] = [];
-  for (const binding of bindings) {
-    const rid = bindingRecipeId(binding);
-    if (rid !== 0 && !ids.includes(rid)) ids.push(rid);
-  }
-  return ids;
 }
 
 function bindingSummary(binding: any): string {
@@ -318,6 +316,35 @@ export function cmdToolkitTest(): void {
   execFileSync("scripts/check.sh", [], {cwd: repoRoot, stdio: "inherit"});
 }
 
+
+export function cmdProductionOnboardingPlan(path = "corner-store.production-onboarding.json", opts: {out?: string}): void {
+  const config = loadProductionOnboardingConfig(resolve(process.cwd(), path));
+  const plan = createProductionOnboardingPlan(config, new Date().toISOString());
+  const output = opts.out ? resolve(process.cwd(), opts.out) : undefined;
+  if (output) {
+    writeImmutableJson(output, plan);
+    console.log(`production onboarding plan written to ${output}`);
+  } else {
+    console.log(JSON.stringify(plan, null, 2));
+  }
+}
+
+export async function cmdProductionOnboardingVerify(path = "corner-store.production-onboarding.json", opts: GlobalOpts & {rpcUrl?: string}): Promise<void> {
+  rejectProductionRawKey(opts);
+  const config = loadProductionOnboardingConfig(resolve(process.cwd(), path));
+  const rpcUrl = opts.rpcUrl ?? explicitlyProvidedGlobalRpc() ?? process.env.CORNER_STORE_RPC_URL;
+  if (!rpcUrl) throw new CliError("production-onboarding-verify requires --rpc-url or CORNER_STORE_RPC_URL");
+  const provider = new JsonRpcProvider(rpcUrl);
+  try {
+    const reader = new EthersOnboardingReader(provider);
+    const result = await verifyProductionOnboarding(config, reader);
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ready) process.exitCode = 1;
+  } finally {
+    provider.destroy();
+  }
+}
+
 export function cmdProductionPlan(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string}): void {
   rejectProductionRawKey(opts);
   const config = productionConfigWithRuntimeOverrides(path, opts);
@@ -440,6 +467,45 @@ export async function cmdProductionVerify(path = "corner-store.production.json",
   if (!result.ready) process.exitCode = 1;
 }
 
+
+class EthersOnboardingReader implements OnboardingReader {
+  constructor(private readonly provider: JsonRpcProvider) {}
+
+  async chainId(): Promise<number> {
+    const network = await this.provider.getNetwork();
+    return Number(network.chainId);
+  }
+
+  async getCode(address: string): Promise<string> {
+    return this.provider.getCode(address);
+  }
+
+  async call(address: string, abi: string[], functionName: string, args: unknown[] = []): Promise<any> {
+    const contract = new Contract(address, abi, this.provider);
+    return contract.getFunction(functionName)(...(args as any[]));
+  }
+
+  async balanceOf(token: string, holder: string): Promise<bigint> {
+    return new Contract(token, ["function balanceOf(address) view returns (uint256)"], this.provider).balanceOf(holder);
+  }
+
+  async allowance(token: string, owner: string, spender: string): Promise<bigint> {
+    return new Contract(token, ["function allowance(address,address) view returns (uint256)"], this.provider).allowance(owner, spender);
+  }
+}
+
+function writeImmutableJson(path: string, value: unknown): void {
+  mkdirSync(dirname(path), {recursive: true});
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "wx");
+    writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`);
+  } catch (err: any) {
+    throw new CliError(`cannot write immutable output ${path}: ${err.message}`);
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
 function productionConfigWithRuntimeOverrides(path: string, opts: GlobalOpts & {rpcUrl?: string}): ProductionConfig {
   const config = loadProductionConfig(resolve(process.cwd(), path));
   const rpcUrl = opts.rpcUrl ?? explicitlyProvidedGlobalRpc() ?? process.env.CORNER_STORE_RPC_URL;
@@ -983,12 +1049,18 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
   const coder = require("ethers").AbiCoder.defaultAbiCoder();
   const elementContext = coder.encode([CTX_TUPLE], [ctx]);
   const recipeContext = coder.encode(["uint256", CTX_TUPLE], [manifest.factsPacked, ctx]);
-  const recipeIds = bindingRecipeIds(bindings);
   const recipeReg = recipeRegistry(a, provider);
+  const recipes: Array<{id: number; name: string; key: string; activeVersion: number; latestRegisteredVersion: number}> = [];
   const activeElementIds: string[] = [];
-  for (const rid of recipeIds) {
-    const recipeAddr = await recipeReg.recipeOf(rid);
-    if (recipeAddr === ZERO_ADDR) continue;
+  for (const binding of bindings) {
+    const rid = bindingRecipeId(binding);
+    const activeVersion = bindingRecipeVersion(binding);
+    const recipeKey = String(await recipeReg.recipeKeyOf(rid));
+    if (recipeKey === ZERO32) throw new CliError(`recipe ${rid} has no canonical key in RecipeRegistry`);
+    const recipeAddr = await recipeReg.recipeOf(recipeKey, activeVersion);
+    if (recipeAddr === ZERO_ADDR) throw new CliError(`recipe ${rid} version ${activeVersion} not registered in RecipeRegistry`);
+    const latestRegisteredVersion = Number(await recipeReg.latestRegisteredVersionOf(recipeKey));
+    recipes.push({id: rid, name: RECIPE_LABELS[rid] ?? "?", key: recipeKey, activeVersion, latestRegisteredVersion});
     const recipe = new Contract(recipeAddr, RECIPE_ABI, provider);
     if (!(await recipe.isApplicable(recipeContext))) continue;
     const requiredIds: string[] = await recipe.requiredElements();
@@ -1008,7 +1080,7 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
     }
     const el = new Contract(elAddr, ELEMENT_ABI, provider);
     try {
-      const [passed] = await el.check(subject, a.pool, a.rwaToken, parseEther("1"), elementContext);
+      const [passed] = await el.check(subject, a.pool, a.rwaToken, parseEther("1"), elementContext, "0x");
       elements.push({id, label, passed});
     } catch {
       elements.push({id, label, passed: false});
@@ -1027,6 +1099,7 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
             status,
             statusName: POLICY_STATUS[status] ?? "?",
             bindings: bindings.map(bindingJson),
+            recipes,
             supportedEngines,
             declaredBy: manifest.declaredBy,
             approvedBy: manifest.approvedBy
@@ -1051,7 +1124,10 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
   console.log("RWA manifest:");
   console.log(`  status           ${status} (${POLICY_STATUS[status] ?? "?"})`);
   console.log("  recipeBindings");
-  for (const binding of bindings) console.log(`    - ${bindingSummary(binding)}`);
+  for (const [index, binding] of bindings.entries()) {
+    const recipe = recipes[index];
+    console.log(`    - ${bindingSummary(binding)} key=${recipe.key} catalogLatest=v${recipe.latestRegisteredVersion}`);
+  }
   console.log(`  supportedEngines 0b${supportedEngines.toString(2).padStart(3, "0")} (AMM=${!!(supportedEngines & 1)}, RFQ=${!!(supportedEngines & 4)})`);
   console.log(`  declaredBy       ${manifest.declaredBy}`);
   console.log(`  approvedBy       ${manifest.approvedBy}`);
@@ -1362,6 +1438,12 @@ export async function cmdRfqQuote(opts: GlobalOpts & {
     if (opts.makerAccount === undefined) throw new CliError("--maker-account is required without --backend");
     if (!opts.amountOut) throw new CliError("--amount-out is required without --backend");
     const maker = walletForAccount(Number(opts.makerAccount)).connect(provider);
+    const engine = new Contract(
+      a.engine,
+      ["function policyHashesOf(address) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)"],
+      provider
+    );
+    const policyHashes = await engine.policyHashesOf(a.rwaToken);
 
     const service = new RFQQuoteService(
       {
@@ -1384,6 +1466,7 @@ export async function cmdRfqQuote(opts: GlobalOpts & {
       amountIn,
       amountOut: parseEther(opts.amountOut).toString(),
       venue: a.rfqVenue as `0x${string}`,
+      policyId: String(policyHashes.policyId ?? policyHashes[2]) as `0x${string}`,
       ttlSeconds: ttl
     });
   }
@@ -1491,7 +1574,7 @@ export async function cmdCheck(
   const manifest = await policy.manifestOf(a.rwaToken);
   const bindings: any[] = await policy.recipeBindingsOf(a.rwaToken);
   const status = Number(manifest.status);
-  const recipeIds: number[] = [];
+  const recipes: Array<{id: number; name: string; key: string; activeVersion: number; latestRegisteredVersion: number}> = [];
   const coder = require("ethers").AbiCoder.defaultAbiCoder();
   const elementContext = coder.encode([CTX_TUPLE], [ctx]);
   const recipeContext = coder.encode(["uint256", CTX_TUPLE], [manifest.factsPacked, ctx]);
@@ -1509,15 +1592,19 @@ export async function cmdCheck(
   }> = [];
   for (const binding of bindings) {
     const rid = bindingRecipeId(binding);
-    const recipeAddr = await recipeReg.recipeOf(rid);
-    if (recipeAddr === ZERO_ADDR) throw new CliError(`recipe ${rid} not registered in RecipeRegistry`);
+    const activeVersion = bindingRecipeVersion(binding);
+    const recipeKey = String(await recipeReg.recipeKeyOf(rid));
+    if (recipeKey === ZERO32) throw new CliError(`recipe ${rid} has no canonical key in RecipeRegistry`);
+    const recipeAddr = await recipeReg.recipeOf(recipeKey, activeVersion);
+    if (recipeAddr === ZERO_ADDR) throw new CliError(`recipe ${rid} version ${activeVersion} not registered in RecipeRegistry`);
+    const latestRegisteredVersion = Number(await recipeReg.latestRegisteredVersionOf(recipeKey));
     const recipe = new Contract(recipeAddr, RECIPE_ABI, provider);
     const actualVersion = Number(await recipe.version());
-    if (actualVersion !== bindingRecipeVersion(binding)) {
-      throw new CliError(`recipe ${rid} version mismatch: binding=${bindingRecipeVersion(binding)}, registry=${actualVersion}`);
+    if (actualVersion !== activeVersion) {
+      throw new CliError(`recipe ${rid} version mismatch: binding=${activeVersion}, registry=${actualVersion}`);
     }
     if (!(await recipe.isApplicable(recipeContext))) continue;
-    recipeIds.push(rid);
+    recipes.push({id: rid, name: RECIPE_LABELS[rid] ?? "?", key: recipeKey, activeVersion, latestRegisteredVersion});
     const requiredIds: string[] = await recipe.requiredElements();
     for (const raw of requiredIds) {
       const idStr = decodeBytes32String(raw);
@@ -1531,15 +1618,19 @@ export async function cmdCheck(
         continue;
       }
       try {
-        const [passed] = await new Contract(elAddr, ELEMENT_ABI, provider).check(
+        const [passed, elementReasonCode] = await new Contract(elAddr, ELEMENT_ABI, provider).check(
           buyer,
           seller,
           a.rwaToken,
           amount,
-          elementContext
+          elementContext,
+          "0x"
         );
-        // The recipe-aware reason the engine would report for THIS element.
-        const reason = passed ? undefined : decodeReason(encodeReason(rid, idStr, 1)).label;
+        // The engine now propagates an Element's exact nonzero reasonCode. Only
+        // zero element reasons fall back to the recipe-scoped code-1 generic.
+        const fallbackReason = encodeReason(rid, idStr, 1);
+        const reasonCode = String(elementReasonCode) === ZERO32 ? fallbackReason : String(elementReasonCode);
+        const reason = passed ? undefined : decodeReason(reasonCode).label;
         rows.push({id: idStr, label, assetSide, recipeId: rid, passed, reason});
       } catch (e: any) {
         rows.push({
@@ -1569,7 +1660,7 @@ export async function cmdCheck(
           seller,
           manifest: {status, statusName: POLICY_STATUS[status] ?? "?"},
           bindings: bindings.map(bindingJson),
-          recipes: recipeIds.map((r) => ({id: r, name: RECIPE_LABELS[r] ?? "?"})),
+          recipes,
           elements: rows,
           verdict: {
             allowed,

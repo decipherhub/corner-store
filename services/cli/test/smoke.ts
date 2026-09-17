@@ -10,7 +10,7 @@ import {
   resolveAssetProfile,
   resolveAssetProfileForArtifact
 } from "../src/assetProfiles";
-import {decodeReason, encodeReason, tableSize} from "../src/reason";
+import {decodeReason, encodeReason, INVALID_ELEMENT_PARAMETERS, tableSize} from "../src/reason";
 import {
   copyDeploymentArtifact,
   doctor,
@@ -28,7 +28,7 @@ import {
   rfqDomain,
   writeQuoteFile
 } from "../src/rfq";
-import {cmdProductionDeploy, cmdProductionPlan} from "../src/commands";
+import {cmdProductionDeploy, cmdProductionOnboardingPlan, cmdProductionOnboardingVerify, cmdProductionPlan} from "../src/commands";
 
 const CHAIN_ID = 31337;
 const RFQ_VERIFYING_CONTRACT = "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0";
@@ -155,6 +155,79 @@ async function main() {
     assert(planOutput.includes("https://secure-rpc.example"), "production-plan supports explicit RPC runtime override");
     assert(!planOutput.includes("--ledger") && !planOutput.includes("--account"), "production-plan is signer-free");
     assertThrows(() => cmdProductionPlan("corner-store.production.json", {key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"}), "production-plan rejects raw key");
+    const onboardingPath = join(consumerRoot, "corner-store.production-onboarding.json");
+    writeFileSync(onboardingPath, `${JSON.stringify({
+      schemaVersion: 1,
+      chainId: 1,
+      configHash: "sha256:" + "a".repeat(64),
+      artifactHash: "sha256:" + "b".repeat(64),
+      legalPackageHash: "sha256:" + "c".repeat(64),
+      governance: {safe: "0x8888888888888888888888888888888888888888", requiredApprovals: 2, operatorExecutor: "0x5555555555555555555555555555555555555555"},
+      addresses: {
+        token: "0x1000000000000000000000000000000000000001",
+        identityRegistry: "0x1000000000000000000000000000000000000002",
+        compliance: "0x1000000000000000000000000000000000000003",
+        topicsRegistry: "0x1000000000000000000000000000000000000004",
+        issuersRegistry: "0x1000000000000000000000000000000000000005",
+        identityStorage: "0x1000000000000000000000000000000000000006",
+        elementRegistry: "0x1000000000000000000000000000000000000007",
+        recipeRegistry: "0x1000000000000000000000000000000000000008",
+        tokenPolicyRegistry: "0x1000000000000000000000000000000000000009",
+        operatorRegistry: "0x1000000000000000000000000000000000000010",
+        venueRegistry: "0x1000000000000000000000000000000000000011",
+        rfqAdapter: "0x1000000000000000000000000000000000000012",
+        makerAuthorizer: "0x1000000000000000000000000000000000000013"
+      },
+      elements: [{elementId: "0x" + "01".repeat(32), implementation: "0x2000000000000000000000000000000000000001"}],
+      recipes: [{recipeId: 1, version: 2, implementation: "0x2000000000000000000000000000000000000002"}],
+      manifest: {issuanceRecipeId: 1, issuanceRecipeVersion: 2, fundRecipeId: 0, enabledResalePaths: 1, supportedEngines: 5, stateScopeId: 7, factsPacked: "1", coverageScope: "3", fullManifestHash: "0x" + "02".repeat(32)},
+      recipeBindings: [{recipeId: 1, recipeVersion: 2, mode: "REQUIRED_BLOCKING", pathGroupId: 0, priority: 100}],
+      venues: [{venue: "0x3000000000000000000000000000000000000001", venueType: "RFQ", adapter: "0x1000000000000000000000000000000000000012", target: "0x3000000000000000000000000000000000000002", operator: "0x5555555555555555555555555555555555555555", custody: "NONE", active: true}],
+      rfq: {makers: [{maker: "0x4000000000000000000000000000000000000001", approved: true}], signerDelegates: [{maker: "0x4000000000000000000000000000000000000001", delegate: "0x4000000000000000000000000000000000000002", reasonHash: "0x" + "03".repeat(32)}]},
+      inventory: [{token: "0x1000000000000000000000000000000000000001", holder: "0x4000000000000000000000000000000000000001", spender: "0x1000000000000000000000000000000000000012", minBalance: "100", minAllowance: "50", riskEvidenceHash: "0x" + "04".repeat(32)}]
+    }, null, 2)}
+`);
+    const onboardingOut = join(consumerRoot, "safe-onboarding.json");
+    let onboardingLog = "";
+    console.log = (value?: any) => { onboardingLog += String(value); };
+    try {
+      cmdProductionOnboardingPlan("corner-store.production-onboarding.json", {out: onboardingOut});
+    } finally {
+      console.log = previousLog;
+    }
+    const onboardingPlan = JSON.parse(readFileSync(onboardingOut, "utf8"));
+    assert(onboardingPlan.schema === "corner-store-production-onboarding", "production-onboarding-plan writes schema");
+    assert(onboardingPlan.safeTransactions.length === onboardingPlan.transactions.filter((tx: any) => tx.authority === "safe-owner").length && onboardingPlan.operatorTransactions.length === onboardingPlan.transactions.filter((tx: any) => tx.authority === "operator").length, "production-onboarding-plan partitions Safe and operator drafts by authority");
+    assert(onboardingLog.includes("production onboarding plan written"), "production-onboarding-plan logs immutable output path");
+    assertThrows(() => cmdProductionOnboardingPlan("corner-store.production-onboarding.json", {out: onboardingOut}), "production-onboarding-plan rejects overwrite");
+
+    const rpc = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => {
+        const parsed = JSON.parse(body || "{}");
+        const method = parsed.method;
+        const result = method === "eth_chainId" ? "0x1" : method === "eth_getCode" ? "0x" : "0x";
+        res.writeHead(200, {"content-type": "application/json"});
+        res.end(JSON.stringify({jsonrpc: "2.0", id: parsed.id, result}));
+      });
+    });
+    await new Promise<void>((resolve) => rpc.listen(0, "127.0.0.1", resolve));
+    const rpcAddress = rpc.address();
+    if (!rpcAddress || typeof rpcAddress === "string") throw new Error("onboarding RPC test server did not bind");
+    const oldExitCode = process.exitCode;
+    process.exitCode = undefined;
+    let verifyLog = "";
+    console.log = (value?: any) => { verifyLog += String(value); };
+    try {
+      await cmdProductionOnboardingVerify("corner-store.production-onboarding.json", {rpcUrl: `http://127.0.0.1:${rpcAddress.port}`});
+    } finally {
+      console.log = previousLog;
+      await new Promise<void>((resolve, reject) => rpc.close((err) => (err ? reject(err) : resolve())));
+    }
+    assert(process.exitCode === 1, "production-onboarding-verify sets nonzero on fail-closed mismatch");
+    assert(JSON.parse(verifyLog.slice(verifyLog.indexOf("{"))).ready === false, "production-onboarding-verify prints not-ready result");
+    process.exitCode = oldExitCode;
     await assertRejects(
       () => cmdProductionDeploy("corner-store.production.json", {ledger: true, confirm: "wrong"}),
       "production-deploy requires explicit confirmation before RPC preflight"
@@ -210,18 +283,21 @@ async function main() {
 
   // table = (recipe-scoped: 3 recipes x codes-per-element-sum) + (direct
   // element-level: 1 x codes-per-element-sum, recipeId 0 — the reasonCode an
-  // element's own `check()` actually self-encodes) + 6 policy statuses.
-  // codes-per-element-sum is each of the 23 elements' code count, where an
+  // element's own `check()` actually self-encodes) + one invalid-parameter
+  // code per Element + 6 policy statuses.
+  // Invalid-parameter entries add one direct code for each known Element.
+  // codes-per-element-sum is each known Element's code count, where an
   // element without a richer ELEMENT_CODE_NAMES table contributes 1.
   // Wave-2b upgraded 6 elements to multi-code taxonomies (A-01:10, A-03:9,
   // A-04:9, A-13:9, B-01:6, B-02:6); the wave-2 illustrative elements
   // (A-08:8, A-09:2, A-11:5, B-03:6, B-04:7, D-01:4) and the wave-3
   // illustrative elements (A-06:4, A-12:8, E-03:9, F-01:3, F-03:4, F-04:5) are
-  // also enumerated; the remaining 5 single-code mocks (A-02, A-05, C-01,
-  // E-01, F-02) contribute 1 each.
+  // also enumerated; the remaining 6 single-code Elements (A-02, A-05, C-01,
+  // E-01, F-02, BUIDL-MIN-v1) contribute 1 each. Generic MIN-AMOUNT-v1 adds
+  // one named threshold code.
   const CODES_PER_ELEMENT =
-    10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5; // = 119
-  assert(tableSize() === 4 * CODES_PER_ELEMENT + 6, "reason table size");
+    10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 1 + 1; // = 121
+  assert(tableSize() === 4 * CODES_PER_ELEMENT + 25 + 6, "reason table size");
 
   const jur = decodeReason(A02_RECIPE1);
   assert(jur.label.includes("Jurisdiction") && jur.label.includes("A-02-v1"), "decodes A-02 to Jurisdiction");
@@ -234,10 +310,11 @@ async function main() {
   // Wave-2b: direct element-level (recipeId 0) codes decode to the doc-name
   // from that element's header table — this is the reasonCode actually
   // returned by an element's own `check()` / thrown via `ComplianceRejected`
-  // (e.g. D-01 HolderCount.onTransfer), unlike the engine-propagated verdict
-  // which today always carries code 1.
+  // (e.g. D-01 HolderCount.onTransfer). G005 engine/CLI propagation preserves
+  // this exact nonzero element reason; code 1 is only the zero-reason fallback.
   const sanctionsClaim = decodeReason(A01_DIRECT_CODE4);
   assert(sanctionsClaim.label.includes("FAIL_NO_SANCTIONS_CLAIM"), "decodes A-01 direct code 4");
+  assert(A01_DIRECT_CODE4 !== encodeReason(1, "A-01-v1", 1), "direct element reason is not fabricated recipe-scoped code 1");
   const holderCap = decodeReason(D01_DIRECT_CODE3);
   assert(holderCap.label.includes("HOLDER_CAP_3C1_100"), "decodes D-01 direct code 3");
   // Wave-3: a monitoring element's audit-surface code still decodes to its
@@ -248,6 +325,10 @@ async function main() {
   // Legacy code-1 meaning is preserved across the wave-2b upgrade (doc says
   // code 1 keeps the pre-upgrade "blocked wallet" semantics for A-01).
   assert(decodeReason(encodeReason(0, "A-01-v1", 1)).label.includes("FAIL_SDN_WALLET_MATCH"), "A-01 code 1 preserved");
+  assert(
+    decodeReason(encodeReason(0, "A-02-v1", INVALID_ELEMENT_PARAMETERS)).label.includes("invalid parameters"),
+    "common invalid-parameter reason decodes"
+  );
 
   // --- quote-file round-trip ---------------------------------------------
   const maker = new Wallet("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
@@ -263,6 +344,7 @@ async function main() {
     amountIn: "120000000000000000000",
     amountOut: "200000000000000000000",
     venue: "0x000000000000000000000000000000000000F00D",
+    policyId: `0x${"77".repeat(32)}`,
     ttlSeconds: 3600
   });
   assert(signed.signature.length === 132, "65-byte signature");
@@ -309,12 +391,13 @@ async function main() {
   const tampered = recoverMaker(round.quote, tamperedSig);
   assert(!tampered.ok, "quote-inspect FAILs a tampered signature");
 
-  // --- reason-decode regression: the recipe-aware per-element code `check`
-  //     reports for a failed element must resolve in the reason table. --------
+  // --- reason-decode regression: zero element reasons still fall back to the
+  //     recipe-aware generic code-1 path, but exact direct codes decode too. ---
   assert(
     decodeReason(encodeReason(1, "A-02-v1", 1)).label.includes("Jurisdiction"),
-    "check per-element reason decodes (recipe 1 / A-02-v1 -> Jurisdiction)"
+    "fallback per-element reason decodes (recipe 1 / A-02-v1 -> Jurisdiction)"
   );
+  assert(decodeReason(A01_DIRECT_CODE4).label.includes("FAIL_NO_SANCTIONS_CLAIM"), "exact non-1 element reason decodes");
 
   console.log("corner-store CLI smoke ok");
 }

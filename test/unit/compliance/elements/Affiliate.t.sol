@@ -146,7 +146,7 @@ contract AffiliateTest is Test {
         // 김 부장, COO of issuer X, resells token X.
         _setClaim(user, assetX, Affiliate.AffiliateBasis.OFFICER_DIRECTOR, START, 0);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 2500, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 2500, "", "");
         assertTrue(passed); // element only DETERMINES; recipe applies Rule 144
         assertEq(reasonCode, bytes32(0));
         assertEq(uint256(element.effectiveStatus(user, assetX)), uint256(Affiliate.EffectiveStatus.AFFILIATE));
@@ -163,11 +163,11 @@ contract AffiliateTest is Test {
         // Issuer Y: never an affiliate.
         _setClaim(user, assetY, Affiliate.AffiliateBasis.NOT_AFFILIATE, START, 0);
 
-        (bool passedX,) = element.check(user, address(0), assetX, 0, "");
+        (bool passedX,) = element.check(user, address(0), assetX, 0, "", "");
         assertTrue(passedX);
         assertEq(uint256(element.effectiveStatus(user, assetX)), uint256(Affiliate.EffectiveStatus.AFFILIATE));
 
-        (bool passedY,) = element.check(user, address(0), assetY, 0, "");
+        (bool passedY,) = element.check(user, address(0), assetY, 0, "", "");
         assertTrue(passedY);
         assertEq(uint256(element.effectiveStatus(user, assetY)), uint256(Affiliate.EffectiveStatus.NON_AFFILIATE));
     }
@@ -181,7 +181,7 @@ contract AffiliateTest is Test {
     function test_check_test3_decayComplete() public {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.FORMER_AFFILIATE_DECAY, START, START - 95 days);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
         assertEq(uint256(element.effectiveStatus(user, assetX)), uint256(Affiliate.EffectiveStatus.NON_AFFILIATE));
@@ -195,7 +195,7 @@ contract AffiliateTest is Test {
         address familyLlc = address(0xF00D);
         _setClaim(familyLlc, assetX, Affiliate.AffiliateBasis.INDIRECT_CONTROL, START, 0);
 
-        (bool passed,) = element.check(familyLlc, address(0), assetX, 0, "");
+        (bool passed,) = element.check(familyLlc, address(0), assetX, 0, "", "");
         assertTrue(passed);
         assertEq(uint256(element.effectiveStatus(familyLlc, assetX)), uint256(Affiliate.EffectiveStatus.AFFILIATE));
     }
@@ -207,7 +207,7 @@ contract AffiliateTest is Test {
     function test_check_test5_notAffiliatePass() public {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.NOT_AFFILIATE, START, 0);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 2000, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 2000, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
         assertEq(uint256(element.effectiveStatus(user, assetX)), uint256(Affiliate.EffectiveStatus.NON_AFFILIATE));
@@ -270,7 +270,7 @@ contract AffiliateTest is Test {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.NOT_AFFILIATE, START, 0);
         vm.warp(START + element.FRESHNESS_CAP());
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -279,7 +279,7 @@ contract AffiliateTest is Test {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.NOT_AFFILIATE, START, 0);
         vm.warp(START + element.FRESHNESS_CAP() + 1);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(3)); // FAIL_AFFILIATE_CLAIM_EXPIRED
         assertEq(uint256(element.effectiveStatus(user, assetX)), uint256(Affiliate.EffectiveStatus.EXPIRED));
@@ -293,7 +293,7 @@ contract AffiliateTest is Test {
 
     function test_beneficialOwner10Plus_isAttestedBasis_notComputedThreshold() public {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.BENEFICIAL_OWNER_10PLUS, START, 0);
-        (bool passed,) = element.check(user, address(0), assetX, 0, "");
+        (bool passed,) = element.check(user, address(0), assetX, 0, "", "");
         assertTrue(passed);
         assertEq(uint256(element.effectiveStatus(user, assetX)), uint256(Affiliate.EffectiveStatus.AFFILIATE));
     }
@@ -305,7 +305,7 @@ contract AffiliateTest is Test {
     // code 1 — no claim at all (fail-closed default state): absence is NOT a
     // non-affiliate pass.
     function test_failClosed_noClaim_statusUnknown() public {
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(1)); // FAIL_AFFILIATE_STATUS_UNKNOWN
         assertEq(uint256(element.effectiveStatus(user, assetX)), uint256(Affiliate.EffectiveStatus.UNKNOWN));
@@ -316,7 +316,7 @@ contract AffiliateTest is Test {
     function test_failClosed_assetMismatch_statusUnknown() public {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.OFFICER_DIRECTOR, START, 0);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetY, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetY, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(1));
     }
@@ -334,25 +334,25 @@ contract AffiliateTest is Test {
             0
         );
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(2)); // FAIL_UNTRUSTED_AFFILIATE_CLAIM_ISSUER
         assertEq(uint256(element.effectiveStatus(user, assetX)), uint256(Affiliate.EffectiveStatus.UNTRUSTED));
 
         // Trusting the issuer cures it.
         element.setTrustedClaimIssuer(rogue, true);
-        (bool passedNow,) = element.check(user, address(0), assetX, 0, "");
+        (bool passedNow,) = element.check(user, address(0), assetX, 0, "", "");
         assertTrue(passedNow);
     }
 
     // Revoking trust after the fact turns a previously-passing claim untrusted.
     function test_untrustedIssuer_revocation() public {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.OFFICER_DIRECTOR, START, 0);
-        (bool passedBefore,) = element.check(user, address(0), assetX, 0, "");
+        (bool passedBefore,) = element.check(user, address(0), assetX, 0, "", "");
         assertTrue(passedBefore);
 
         element.setTrustedClaimIssuer(issuer, false);
-        (bool passedAfter, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "");
+        (bool passedAfter, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "", "");
         assertFalse(passedAfter);
         assertEq(reasonCode, _code(2));
     }
@@ -362,7 +362,7 @@ contract AffiliateTest is Test {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.OFFICER_DIRECTOR, START, 0);
         vm.warp(START + 200 days);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(3));
     }
@@ -371,7 +371,7 @@ contract AffiliateTest is Test {
     function test_uncertainAffiliate_review() public {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.UNCERTAIN_AFFILIATE, START, 0);
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(4)); // REVIEW_AFFILIATE_UNCERTAIN
         assertEq(uint256(element.effectiveStatus(user, assetX)), uint256(Affiliate.EffectiveStatus.UNCERTAIN));
@@ -395,7 +395,7 @@ contract AffiliateTest is Test {
         );
         vm.warp(START + 200 days); // also stale
 
-        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, address(0), assetX, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(2)); // untrusted (step 2) wins over expired (step 3)
     }
@@ -408,8 +408,8 @@ contract AffiliateTest is Test {
     function test_check_ignoresCounterpartyAmountContext() public {
         _setClaim(user, assetX, Affiliate.AffiliateBasis.NOT_AFFILIATE, START, 0);
 
-        (bool passed1,) = element.check(user, address(0), assetX, 0, "");
-        (bool passed2,) = element.check(user, address(0xB0B), assetX, 999999, hex"deadbeef");
+        (bool passed1,) = element.check(user, address(0), assetX, 0, "", "");
+        (bool passed2,) = element.check(user, address(0xB0B), assetX, 999999, hex"deadbeef", "");
         assertTrue(passed1);
         assertEq(passed1, passed2);
     }

@@ -9,7 +9,9 @@ import {
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 
@@ -143,7 +145,13 @@ contract BadActorDisqualification is BaseElement, Governed {
                 // Pattern B borrow, doc §8.1), like the E-01 issuer-side sibling.
                 decidability: Decidability.ATTESTATION_BASED,
                 timing: ObligationTiming.EX_ANTE_VERIFY,
-                statefulness: Statefulness.STATELESS
+                statefulness: Statefulness.STATELESS,
+                evidenceType: EvidenceType.PROVIDER_ATTESTATION,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {}
 
@@ -220,8 +228,8 @@ contract BadActorDisqualification is BaseElement, Governed {
     ///      ahead of the per-mint G-checks; first failure stops). Every branch is
     ///      existence / set-membership / scope / timestamp / boolean — no
     ///      discretion, no event re-adjudication. Unattested/unset fails closed.
-    function check(address, address, address asset, uint256, bytes calldata)
-        external
+    function _check(address, address, address asset, uint256, bytes calldata, bytes calldata)
+        internal
         view
         override
         returns (bool passed, bytes32 reasonCode)

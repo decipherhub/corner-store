@@ -36,6 +36,11 @@ stateful Element는 읽기 검사와 settlement 후 `commit()`을 분리한다. 
 Router 성공 경로에서만 호출하고, off-chain person-group state는 execution id에
 동일 내용이면 no-op, 다른 내용이면 reject하는 idempotency를 적용한다.
 
+Element 구현은 자산별 허용값을 storage에 하드코딩하지 않는다. immutable metadata로
+parameter schema ID/version/required/max bytes를 선언하고, Engine이 Manifest lifecycle에
+고정된 binding별 compiled parameter를 전달한다. 동적 KYC/TA/provider state와 PII는
+parameter가 아니라 외부 evidence boundary에 남는다.
+
 ## Recipe
 
 Recipe는 하나의 법률효과를 표현하는 Element 집합과 활성화 logic이다. 한 거래에는
@@ -52,6 +57,9 @@ Recipe는 하나의 법률효과를 표현하는 Element 집합과 활성화 log
 - post-trade stateful commit은 선택된 path만 반영하고 같은 asset/Element를 중복
   반영하지 않는다.
 - 어떤 Recipe 또는 Element가 실패했는지 구조화된 reason으로 반환한다.
+- 각 binding의 numeric id는 immutable canonical key alias로만 사용하며, Engine은
+  Manifest에 고정된 exact `(recipeKey, recipeVersion)` implementation을 평가한다.
+  새 catalog version 등록은 ACTIVE Manifest를 자동 승격하지 않는다.
 
 Manifest에 선언되지 않은 Recipe를 암묵적으로 선택하지 않는다.
 
@@ -68,6 +76,35 @@ Manifest를 거래 context에 함께 적용한다.
 
 `ACTIVE` Manifest가 존재하면 누락된 Recipe, invalid version, 지원하지 않는 engine
 또는 불완전 reference는 허용 기본값으로 처리하지 않는다.
+`ManifestPolicyConfig`는 Manifest와 별도로 갱신할 수 없으며, pending config와 compiled
+parameters는 검토 가능하되 timelock activation 전까지 active evaluation에 영향을
+주지 않는다.
+`latestRegisteredVersionOf(recipeKey)`는 catalog/UI discovery metadata다. UI는 이를
+Manifest의 active `recipeVersion`과 별도 필드로 표시해야 하며 실행 주소를 latest로
+추론해서는 안 된다.
+
+## Policy And Execution Identity
+
+정책의 법적·상품 의미와 실제 실행 배포 identity를 별도 domain으로 계산한다.
+
+- `logicalPolicyHash`: token, compiled plan hash, supported engines, facts, coverage와
+  full Manifest hash
+- `executionBindingHash`: chain ID, ComplianceEngine와 세 Registry의 주소/runtime
+  code hash, Manifest가 선택한 exact Recipe 주소/version/code hash, 각 compiled
+  Element의 주소/code hash/version hash/metadata hash/parameter hash
+- `policyId`: 위 두 hash를 domain-separated 방식으로 결합한 최종 식별자
+
+Element/Recipe Registry는 등록 순간의 runtime code hash를 고정한다. Engine은
+평가 시점의 code hash가 고정값과 다르면 `ExecutionBindingMismatch`로 fail-closed한다.
+CREATE2 expected address는 배포 전 주소 예측일 뿐이며 이 runtime 검증을 대체하지
+않는다. 현재 지원 경계는 immutable implementation이고 proxy implementation slot
+추적은 지원하지 않는다.
+
+regulated token이 하나면 decision의 `policyId`는 `policyHashesOf(token)`의 final
+값과 같다. 두 regulated token을 함께 평가하면 두 번째 token 주소와 token별
+`policyId`를 순서대로 누적한다. 최종 `decisionHash`는 이 pair policy ID까지
+포함하므로 동일 거래 context를 다른 chain, Engine 또는 구현 배포에서 재사용할 수
+없다.
 
 ## Inputs and Outputs
 
@@ -116,7 +153,8 @@ struct ComplianceDecision {
 - 하나 이상의 regulated 자산이 있으면 모든 regulated Manifest의 applicable
   Recipe를 합쳐 평가한다.
 - `ACTIVE` Manifest의 invalid reference나 unsupported engine은 거부한다.
-- decision은 actor, token, amount, venue, Manifest version, nonce와 expiry에
+- decision은 actor, token, amount, venue, Manifest version, canonical recipe key,
+  compiled Element enforcement plan, 최종 execution-bound `policyId`, nonce와 expiry에
   바인딩된다.
 - preview decision을 settlement 권한으로 사용하지 않는다.
 - settlement 직전에 최신 Manifest와 actor/operator 상태를 평가한다.
@@ -128,6 +166,21 @@ struct ComplianceDecision {
 - Element/Recipe/Manifest/Operator 이름 기반 4-Layer를 사용한다.
 - Recipe는 법률효과 하나를 표현한다.
 - registry-backed bounded `RecipeBinding[]`를 사용한다.
+- Recipe는 canonical `bytes32 recipeKey`와 immutable `(recipeKey, version)`으로
+  등록하며 legacy numeric id는 compatibility alias로만 유지한다.
+- Element default enforcement와 onboarding override는 registration/update 시점에
+  bounded compiled plan으로 고정한다. default enforcement와 PII-free evidence
+  source class는 Element metadata commitment에 포함되고 Registry/Toolkit이 등록
+  입력과의 일치를 검증한다. 일반 onboarding은 strengthen-only이며
+  `FORCE_FLAG_ONLY` downgrade는 허용하지 않는다.
+- 자산별 Element parameter는 versioned `ManifestPolicyConfig`로 관리하고 immutable
+  Element schema capability와 Recipe membership을 compile 전에 검증한다. Engine은
+  config를 동적으로 해석하지 않고 rules와 정렬된 compiled bytes를 전달한다.
+- Element가 nonzero reasonCode를 반환하면 Engine/CLI가 그 값을 그대로 전달한다.
+  zero reason만 recipe-scoped generic code `1`로 fallback한다.
+- logical policy와 execution binding을 domain-separated hash로 유지하고 final
+  `policyId`를 decision과 RFQ EIP-712 quote에 고정한다. Registry가 고정한 runtime
+  code hash와 live code가 다르면 평가를 중단한다.
 - Asset Manifest가 기존 single Recipe mapping/Token Policy 역할을 확장한다.
 - 온체인은 검증·게이팅·집행, 오프체인은 재량 판단·민감 정보·대량 연산을 맡는다.
 - 발행 측 사실은 coverage delta 방식으로 재사용한다.
@@ -135,9 +188,18 @@ struct ComplianceDecision {
   provider-neutral off-chain data layer로 연결한다. 온체인에는 expiring snapshot과
   PII-free hash만 둔다.
 
+### Bounded predicate boundary
+
+`PredicateValidation`은 canonical ABI bool, inclusive bounded uint, inclusive
+timestamp window와 duplicate-free packed bytes32 set만 exact length/상한으로
+decode한다. 이는 Element 내부 구현 helper이며 임의 predicate graph, AST,
+interpreter 또는 무제한 boolean composition을 제공하지 않는다. 법률 의미와
+reason taxonomy는 개별 Element에 남는다. `MinimumTradeAmount`는 이 경계를 사용하는
+generic Element이고 실제 threshold는 `ManifestPolicyConfig`가 소유한다. 기존
+BUIDL-like demo wiring migration은 #109의 별도 검증 범위다.
+
 ## Open Decisions
 
-- canonical recipe key alias와 per-element enforcement override compiler
 - issuer coverage encoding
 - production TA API/authorization, amount-specific lot allocation
 - production WORM/retention과 surveillance hosting

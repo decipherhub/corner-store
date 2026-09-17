@@ -63,7 +63,7 @@ contract FormDFilingTest is Test {
     }
 
     function test_check_failsClosed_whenUnattested() public {
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, asset, 0, "", "");
         assertFalse(passed);
         assertTrue(reasonCode != bytes32(0));
     }
@@ -72,7 +72,7 @@ contract FormDFilingTest is Test {
         vm.prank(operator);
         element.setFormDFiled(asset, true, bytes32("edgar-accession-99"));
 
-        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(user, counterparty, asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -82,8 +82,8 @@ contract FormDFilingTest is Test {
         vm.prank(operator);
         element.setFormDFiled(asset, true, bytes32("edgar-accession-7"));
 
-        (bool passedForFiledAsset,) = element.check(user, counterparty, asset, 0, "");
-        (bool passedForOtherAsset,) = element.check(user, counterparty, otherAsset, 0, "");
+        (bool passedForFiledAsset,) = element.check(user, counterparty, asset, 0, "", "");
+        (bool passedForOtherAsset,) = element.check(user, counterparty, otherAsset, 0, "", "");
         assertTrue(passedForFiledAsset);
         assertFalse(passedForOtherAsset);
     }
@@ -94,14 +94,14 @@ contract FormDFilingTest is Test {
         // File with a nonzero ref → passes, and filingRef is readable.
         vm.prank(operator);
         element.setFormDFiled(asset, true, ref);
-        (bool passed,) = element.check(user, counterparty, asset, 0, "");
+        (bool passed,) = element.check(user, counterparty, asset, 0, "", "");
         assertTrue(passed);
         assertEq(element.filingRef(asset), ref);
 
         // Revoke with (false, bytes32(0)) → fails again, ref cleared.
         vm.prank(operator);
         element.setFormDFiled(asset, false, bytes32(0));
-        (passed,) = element.check(user, counterparty, asset, 0, "");
+        (passed,) = element.check(user, counterparty, asset, 0, "", "");
         assertFalse(passed);
         assertEq(element.filingRef(asset), bytes32(0));
     }

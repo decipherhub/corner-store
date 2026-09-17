@@ -19,6 +19,7 @@ engine, version과 발행 측 compliance coverage를 하나의 검증 가능한 
 - enabled resale paths
 - supported engines/venue types
 - Recipe activation facts
+- versioned `ManifestPolicyConfig`와 Element별 bounded parameter
 - issuer-side compliance coverage
 - state와 effective period
 - off-chain full manifest hash
@@ -42,6 +43,9 @@ Manifest 최소 상태:
 현재 semantic update는 별도 pending 값으로 예약되며 최소 1일 뒤에만 활성화된다.
 활성화 시 version이 단조 증가하고 old/new manifest hash와 history hash가 event에
 남는다. SUSPENDED 상태에서 update를 활성화해도 상태는 SUSPENDED로 유지된다.
+정책 config에는 독립 setter가 없다. active config는 Manifest 등록과 함께 생성되고,
+pending config는 semantic update와 함께 예약되어 같은 activation transaction에서
+bindings와 compiled plan과 함께 교체된다.
 
 ## Recipe Binding Model
 
@@ -64,9 +68,47 @@ struct RecipeBinding {
   `flagsBitmap` bit와 Router event를 남긴다.
 
 빈 plan, 8개 초과, 중복 recipe, version 0, 잘못된 path group과 blocking gate가
-전혀 없는 plan은 등록 시 거부한다. Recipe 주소와 실제 version, Recipe당 최대 32개
-Element는 평가 시 다시 fail-closed로 검증한다. binding 변경은 Manifest hash 변경,
-timelock, version/history 증가를 거친 뒤에만 활성화된다.
+전혀 없는 plan은 등록 시 거부한다. Recipe 주소는 numeric id를 immutable canonical
+key로 변환한 뒤 exact `(recipeKey, recipeVersion)`으로 조회하며, 실제 version과
+Recipe당 최대 32개 Element는 평가 시 다시 fail-closed로 검증한다. binding 변경은
+Manifest hash 변경, timelock, version/history 증가를 거친 뒤에만 활성화된다.
+
+Production onboarding v2 additionally binds each numeric `recipeId` to a
+version-independent canonical `bytes32 recipeKey`. Operators review a normalized
+ASCII alias off-chain; the Toolkit hashes it to `aliasHash` and derives
+`recipeKey = keccak256(abi.encode(keccak256("corner-store.recipe-key.v1"),
+aliasHash))`. `RecipeRegistry` rejects alias/key collisions and immutable
+version overwrites. The canonical recipe family is bijective with the legacy
+numeric id: neither `recipeId -> recipeKey` nor `recipeKey -> recipeId` can be
+rebound, and the same key across later versions must keep its first registered
+`recipeId`. The legacy numeric id remains a compatibility alias for current
+Manifest bindings, but it has no latest-address lookup semantics. Production
+review material should quote both the normalized alias and the derived key.
+`latestRegisteredVersionOf(recipeKey)` is catalog metadata only; active version
+always comes from the token's Manifest binding. Registering a newer version does
+not change an ACTIVE Manifest, compiled plan or policy identity.
+
+Manifest registration/update compiles per-binding Element enforcement rules from
+the immutable Element defaults and bounded overrides. Runtime evaluation uses the
+compiled plan hash/rules and does not dynamically resolve override intent. Normal
+onboarding may only strengthen enforcement (`FLAG_ONLY < OPERATOR_REVIEW <
+BLOCK`); `FORCE_FLAG_ONLY` is accepted only when the Element default is already
+`FLAG_ONLY`.
+
+`ManifestPolicyConfig` schema v1은 `(bindingIndex, elementId)`별 schema ID/version과
+bounded bytes를 전달한다. Registry는 최대 256개 entry와 총 16,384 bytes, Recipe
+membership, 중복, immutable Element capability, required parameter 누락을 compile
+전에 검증한다. parameterless Element에 값을 공급하거나 알 수 없는 binding/schema를
+사용하면 거부한다. binding plan은 enforcement rules와 동일 순서의 parameter bytes를
+저장하며 config hash와 parameter bytes를 `compiledPlanHash`에 포함한다. config 원문은
+Safe calldata와 PII-free 감사 아티팩트에 보존하고 Registry는 active config hash,
+pending compiled plan hash와 실행에 필요한 compiled bytes만 저장해 EIP-170 배포 크기와 중복 storage를
+제한한다. 따라서
+Manifest history와 Engine `policyId`가 정확한 자산별 값에 바인딩된다.
+
+이 config에는 PII, investor별 claim, provider 원본 또는 surveillance runtime state를
+넣지 않는다. Element별 typed decoder가 payload 형식과 값 범위를 최종적으로
+fail-closed 검증한다.
 
 `ManifestCore`의 과거 issuance/fund 필드는 ABI 전환을 위한 deprecated mirror이며
 현재 Engine, Factory와 CLI의 source of truth는 registry의 `RecipeBinding[]`다.
@@ -91,7 +133,10 @@ hot path에 필요한 compact core만 온체인에 둔다. 법률 문서, 심사
 
 - `ACTIVE`가 아닌 Manifest는 regulated execution을 허용하지 않는다.
 - pair 거래에서 양쪽 자산의 classification과 regulated Manifest를 누락하지 않는다.
-- Recipe set, version, engine과 scope가 decision에 바인딩된다.
+- Recipe key, version, compiled Element enforcement plan, engine과 scope가
+  decision에 바인딩된다.
+- config schema/hash와 각 compiled Element parameter가 plan/history/policy ID에
+  바인딩된다.
 - full manifest hash가 변경되면 새로운 version 또는 명시적 update가 필요하다.
 - ACTIVE/SUSPENDED core fact를 직접 덮어써 timelock을 우회할 수 없다.
 - issuer coverage는 검증된 범위보다 넓게 해석하지 않는다.
@@ -115,4 +160,3 @@ hot path에 필요한 compact core만 온체인에 둔다. 법률 문서, 심사
 - 공개 필드와 비공개 자료의 경계
 - coverage field와 claim lookup 최적화
 - token 단위 version 변경이 기존 signed order/quote에 미치는 정책
-- canonical `bytes32 recipeKey` alias와 per-element enforcement override compiler

@@ -2,15 +2,15 @@
 pragma solidity 0.8.17;
 
 import {BaseStatefulElement} from "./BaseStatefulElement.sol";
-import {BaseElement} from "./BaseElement.sol";
-import {IComplianceElement} from "../../interfaces/compliance/IComplianceElement.sol";
 import {
     ElementMetadata,
     ElementCategory,
     TemporalNature,
     Decidability,
     ObligationTiming,
-    Statefulness
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 import {Errors} from "../../libraries/Errors.sol";
@@ -129,10 +129,18 @@ contract HolderCount is BaseStatefulElement {
                 temporal: TemporalNature.CUMULATIVE,
                 decidability: Decidability.DETERMINISTIC,
                 timing: ObligationTiming.AT_TRADE_GATE,
-                statefulness: Statefulness.STATEFUL
+                statefulness: Statefulness.STATEFUL,
+                evidenceType: EvidenceType.ONCHAIN_STATE,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
             }))
     {
-        if (address(identity_) == address(0) || address(ai_) == address(0)) revert ZeroDependency();
+        if (address(identity_) == address(0) || address(ai_) == address(0)) {
+            revert ZeroDependency();
+        }
         identity = identity_;
         ai = ai_;
         capMode = capMode_;
@@ -185,10 +193,10 @@ contract HolderCount is BaseStatefulElement {
 
     /// @dev Pre-trade gate. `user` is the buyer. view: no events here (§ check is
     ///      view); state-change events live in onTransfer.
-    function check(address user, address, address, uint256 amount, bytes calldata)
-        external
+    function _check(address user, address, address, uint256 amount, bytes calldata, bytes calldata)
+        internal
         view
-        override(BaseElement, IComplianceElement)
+        override
         returns (bool passed, bytes32 reasonCode)
     {
         if (amount == 0) return (true, bytes32(0)); // no count effect

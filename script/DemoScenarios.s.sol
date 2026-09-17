@@ -187,11 +187,11 @@ contract DemoScenarios is Script, DemoConstants {
         jurisdiction.setJurisdiction(investor, bytes32("ZZ"));
 
         ExecutionRequest memory req = _buyRequest(tradeAmount);
-        bytes32 expected = ReasonCodes.encode(1, bytes32("A-02-v1"), uint32(1));
+        bytes32 expected = ReasonCodes.encode(0, bytes32("A-02-v1"), uint32(1));
 
         (bool reverted, bytes32 reason) = _tryExecuteExpectComplianceReject(req);
         bool ok = reverted && reason == expected;
-        console2.log("    evidence: ComplianceRejected; reason matches encode(1, A-02-v1, 1) ->", ok);
+        console2.log("    evidence: ComplianceRejected; reason matches encode(0, A-02-v1, 1) ->", ok);
         if (ok) console2.log("      rejected by A-02 Jurisdiction");
 
         // restore the attestation so later scenarios see a compliant investor.
@@ -371,6 +371,7 @@ contract DemoScenarios is Script, DemoConstants {
         q.amountIn = tradeAmount;
         q.amountOut = rfqBuyAmountOut;
         q.venue = RFQ_VENUE;
+        (,, q.policyId) = router.engine().policyHashesOf(address(rwa));
         q.nonce = quoteNonce;
         q.expiry = uint64(block.timestamp) + quoteTtlSeconds;
 
@@ -407,6 +408,7 @@ contract DemoScenarios is Script, DemoConstants {
         q.amountIn = sellTradeAmount;
         q.amountOut = rfqSellAmountOut;
         q.venue = RFQ_VENUE;
+        (,, q.policyId) = router.engine().policyHashesOf(address(rwa));
         q.nonce = quoteNonce;
         q.expiry = uint64(block.timestamp) + quoteTtlSeconds;
 

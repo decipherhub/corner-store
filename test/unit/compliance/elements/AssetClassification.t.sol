@@ -82,7 +82,7 @@ contract AssetClassificationTest is Test {
     function test_check_passesWhenAssetHasRequiredClassification() public {
         element.setClassification(asset, REG_D);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -90,7 +90,7 @@ contract AssetClassificationTest is Test {
     function test_check_failsWhenAssetUnclassified() public {
         // Default classification for any never-set asset is bytes32(0), which
         // must fail because requiredClassification (REG_D) is non-zero.
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), otherAsset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), otherAsset, 0, "", "");
         assertFalse(passed);
         assertTrue(reasonCode != bytes32(0));
     }
@@ -98,7 +98,7 @@ contract AssetClassificationTest is Test {
     function test_check_failsWhenAssetHasWrongClassification() public {
         element.setClassification(asset, REG_A);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertTrue(reasonCode != bytes32(0));
     }
@@ -106,15 +106,15 @@ contract AssetClassificationTest is Test {
     function test_check_ignoresUserParameter() public {
         element.setClassification(asset, REG_D);
 
-        (bool passed1,) = element.check(address(0xA11CE), address(0), asset, 0, "");
-        (bool passed2,) = element.check(address(0xB0B), address(0xDEAD), asset, 12345, "");
+        (bool passed1,) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
+        (bool passed2,) = element.check(address(0xB0B), address(0xDEAD), asset, 12345, "", "");
         assertTrue(passed1);
         assertTrue(passed2);
         assertEq(passed1, passed2);
 
         // Same holds on the fail path (unclassified asset), regardless of user.
-        (bool failed1,) = element.check(address(0x1111), address(0), otherAsset, 0, "");
-        (bool failed2,) = element.check(address(0x2222), address(0x3333), otherAsset, 999, "");
+        (bool failed1,) = element.check(address(0x1111), address(0), otherAsset, 0, "", "");
+        (bool failed2,) = element.check(address(0x2222), address(0x3333), otherAsset, 999, "", "");
         assertFalse(failed1);
         assertFalse(failed2);
         assertEq(failed1, failed2);
@@ -163,7 +163,7 @@ contract AssetClassificationTest is Test {
         // classificationOf view still reflects the card's classification field.
         assertEq(element.classificationOf(asset), REG_D);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -171,7 +171,7 @@ contract AssetClassificationTest is Test {
     // Code 1 — unattested asset (status NONE). Legacy "missing/unclassified"
     // meaning preserved.
     function test_check_missingCard_returnsCode1() public {
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), otherAsset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), otherAsset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(1));
     }
@@ -182,7 +182,7 @@ contract AssetClassificationTest is Test {
         card.status = AssetClassification.CardStatus.SUSPENDED;
         element.setCard(asset, card);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(2));
     }
@@ -193,7 +193,7 @@ contract AssetClassificationTest is Test {
         card.coreVersion = 4; // references v4 while only v1 is approved
         element.setCard(asset, card);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(3));
     }
@@ -203,7 +203,7 @@ contract AssetClassificationTest is Test {
     function test_check_wrongClassification_returnsCode5() public {
         element.setClassification(asset, REG_A);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertFalse(passed);
         assertEq(reasonCode, _code(5));
     }
@@ -223,13 +223,13 @@ contract AssetClassificationTest is Test {
 
         // One second before the boundary => FAIL_VERSION_PENDING (code 4).
         vm.warp(uint256(card.approvedAt) + delay - 1);
-        (bool passedBefore, bytes32 codeBefore) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passedBefore, bytes32 codeBefore) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertFalse(passedBefore);
         assertEq(codeBefore, _code(4));
 
         // Exactly AT the boundary => effective (PASS). now >= approvedAt + delay.
         vm.warp(uint256(card.approvedAt) + delay);
-        (bool passedAt, bytes32 codeAt) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passedAt, bytes32 codeAt) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertTrue(passedAt);
         assertEq(codeAt, bytes32(0));
     }
@@ -248,13 +248,13 @@ contract AssetClassificationTest is Test {
 
         // now - factsAsOf == maxAge exactly => still fresh (PASS).
         vm.warp(uint256(card.factsAsOf) + maxAge);
-        (bool passedAt, bytes32 codeAt) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passedAt, bytes32 codeAt) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertTrue(passedAt);
         assertEq(codeAt, bytes32(0));
 
         // now - factsAsOf == maxAge + 1 => stale (code 6).
         vm.warp(uint256(card.factsAsOf) + maxAge + 1);
-        (bool passedPast, bytes32 codePast) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passedPast, bytes32 codePast) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertFalse(passedPast);
         assertEq(codePast, _code(6));
     }
@@ -264,7 +264,7 @@ contract AssetClassificationTest is Test {
         element.setClassification(asset, REG_D); // maxFactAge 0
         vm.warp(block.timestamp + 3650 days);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -279,7 +279,7 @@ contract AssetClassificationTest is Test {
         card.maxFactAge = 500;
         element.setCard(asset, card);
 
-        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (bool passed, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertTrue(passed);
         assertEq(reasonCode, bytes32(0));
     }
@@ -292,7 +292,7 @@ contract AssetClassificationTest is Test {
         card.coreVersion = 9; // also version-mismatched
         element.setCard(asset, card);
 
-        (, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "");
+        (, bytes32 reasonCode) = element.check(address(0xA11CE), address(0), asset, 0, "", "");
         assertEq(reasonCode, _code(2));
     }
 

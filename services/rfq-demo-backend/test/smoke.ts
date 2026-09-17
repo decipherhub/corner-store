@@ -160,7 +160,8 @@ async function main(): Promise<void> {
   const config: DemoBackendConfig = {
     ...loaded,
     port: 0,
-    now: () => 1_700_000_000
+    now: () => 1_700_000_000,
+    resolvePolicyId: () => `0x${"77".repeat(32)}`
   };
   const market = createDemoPricing(config);
   assert(market.amountOut(100n, "sell") === 148n, "sell quote applies size-sensitive impact to the injected mid");

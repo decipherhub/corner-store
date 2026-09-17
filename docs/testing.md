@@ -11,7 +11,9 @@ forge build
 ```
 
 Foundry high-severity production lint를 fail-closed gate로 사용한다. medium/low
-warning budget과 별도 보안 분석기는 후속 범위다.
+warning budget과 별도 보안 분석기는 후속 범위다. CI는 재현 가능한 lint/build/test
+의미를 위해 Foundry v1.7.1을 고정한다. Foundry upgrade는 새 lint rule과 formatter
+변경을 별도 PR에서 검토하고 전체 check를 통과한 뒤 반영한다.
 
 ### Unit Tests
 
@@ -26,6 +28,23 @@ RFQ adapter와 TREX fixture 기반 integration path를 포함한다.
 `--offline`은 외부 시그니처 조회를 차단해 로컬 검증을 결정적으로 유지하고,
 일부 macOS 환경의 Foundry nightly 프록시 초기화 충돌을 피한다.
 
+Element interface 변경은 `BaseElement.t.sol`에서 parameterless/required/optional/
+oversized envelope를, `ElementRegistry.t.sol`에서 schema capability와 metadata hash
+binding을 검증한다. 모든 기존 Element는 empty parameters에서 기존 판정과 reason
+code를 유지해야 한다.
+
+Manifest policy parameter 변경은 `TokenPolicyRegistry.t.sol`에서 schema/version,
+required/membership/duplicate/size bounds, deterministic config/plan hash, pending
+inspection과 timelock 원자 교체를 검증한다. `Engine.t.sol`은 binding rule과 같은
+index의 compiled bytes가 실제 Element 판정에 전달되는지 검증한다. 기존 demo
+Manifest의 empty config 경로도 full Foundry와 두 Anvil profile E2E에서 회귀한다.
+
+정책 실행 identity는 `PolicyHashLib.t.sol`, `DecisionHashLib.t.sol`과 `Engine.t.sol`에서
+domain separation, deterministic vector, chain/Engine 주소 차이, Recipe runtime code
+drift fail-closed와 decision의 final `policyId` binding을 검증한다. `RFQAdapter.t.sol`은
+quote-time policy와 settlement 직전 fresh decision policy가 다를 때 체결 전
+거부되는지 확인한다.
+
 RFQ TypeScript SDK smoke test:
 
 ```sh
@@ -34,7 +53,9 @@ npm ci
 npm test
 ```
 
-이 smoke test는 EIP-712 typed-data shape, high-level SDK quote flow, pricing/nonce/risk seams, expiry/nonce 부여, unsafe JavaScript number 거부와 monotonic nonce fallback을 검증한다.
+이 smoke test는 EIP-712 v2 typed-data의 `policyId` shape, high-level SDK quote flow,
+pricing/nonce/risk seams, expiry/nonce 부여, unsafe JavaScript number 거부와 monotonic
+nonce fallback을 검증한다.
 
 RFQ demo backend와 CLI smoke test:
 
@@ -43,10 +64,32 @@ cd services/rfq-demo-backend && npm ci && npm test
 cd services/cli && npm ci && npm test
 ```
 
+RFQ production host hardening smoke test:
+
+```sh
+cd services/rfq-host && npm ci && npm test
+```
+
+Host smoke는 인증 401/403, malformed/oversize/Content-Length 413,
+hashed-principal rate limit 429, limiter capacity principal-spray 방어, 실제
+coordinator pricing/risk evidence freshness fail-closed, fresh risk rejection 422,
+RESERVED replay evidence 재검증/terminal release, signer call/verification
+failure, strict audit failure 후 같은 quote/no-resign retry, incident-hook
+failure isolation, PII-free audit redaction, bounded metrics, successful quote와
+idempotent replay를 검증한다.
+또한 unauthenticated 요청은 policy resolver를 호출하지 않고, 인증·rate-limit 이후
+server-owned resolver가 반환한 canonical `policyId`만 coordinator와 signature에
+전달되는지 검증한다.
+
+
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
 API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount
-거부를 검증한다. CLI smoke는 backend quote request path와 기존
-quote-file/서명 검증 경로를 함께 검증한다.
+거부를 검증한다. CLI smoke는 backend quote request path, 기존 quote-file/서명
+검증 경로, `production-onboarding-plan --out` immutable export/overwrite
+refusal, v2 canonical recipe alias/key derivation, compiled plan replay,
+strengthen-only override rejection, legacy v1 plan acceptance,
+`production-onboarding-verify` fail-closed mismatch behavior, exact nonzero
+Element reason과 공통 invalid-parameter reason decode를 함께 검증한다.
 
 Standalone SDK integration smoke:
 
@@ -59,8 +102,17 @@ Toolkit smoke는 unified `create`가 생성하는 `library-only`,
 `reference-service`, `existing-backend` 세 mode의 manifest, `.env.example`,
 vendored `vendor/rfq-service`, optional Docker files, overwrite refusal과
 standalone package scripts(`doctor`, `deploy`, `verify`, `test:module`)를
-검증한다. SDK-002 문서 또는 packaging 변경에서는 CLI help, `doctor`, dry-run
-`deploy`, `verify`/preflight와 `test-module` command path도 별도로 확인한다.
+검증한다. Production onboarding smoke는 exact schema/unknown-field rejection,
+PII/secret rejection, deterministic Element/Recipe/Manifest/Venue/RFQ calldata,
+Safe/operator draft governance/proposal metadata, authority partition, explicit
+operator executor metadata, safe-owner target owner checks, stage dependency including governance-delayed signer execution, mandatory active venue/inventory
+gates, RFQ activation coherence, AMM-only coherent mode, read-only
+inventory stage, ACTIVE Manifest field verification, pause gate verification and
+pending-vs-active signer and safe-owner target owner mismatch/unavailable and operator role mismatch/unavailable fail-closed behavior를 포함한다. SDK-002 문서 또는 packaging 변경에서는 CLI help, `doctor`,
+dry-run `deploy`, `verify`/preflight와 `test-module` command path도 별도로
+확인한다. `scripts/sdk-product-smoke.sh`는 CLI, Toolkit과 RFQ package를 모두
+tarball로 pack한 뒤 clean temporary project에 설치해야 하며 Toolkit public export,
+generated RFQ conformance, CLI doctor/deploy와 packaged contract build를 검증한다.
 
 Generated consumer projects should keep this local gate:
 
@@ -84,8 +136,12 @@ npm test
 ```
 
 TA lot lineage/완납 clock, conservative snapshot, broken-lineage fail-closed,
-idempotent person-group commit, rolling volume/holder counts와 hash-chain 변조 탐지를
-검증한다.
+idempotent person-group commit, rolling volume/holder counts, hash-chain 변조 탐지와
+provider-neutral TA/KYC evidence refresh conformance를 검증한다. KYC suite는 exact
+subject/identity/asset binding, provider outage/timeout/malformed request·result/stale/future fail-closed,
+revoked/ineligible/sanctions handling, deterministic evidence hash, replay/conflict,
+recursive PII/unknown schema rejection, PII-free audit/error output, strict audit-before-publish fail-closed, production store return revalidation, bounded incident hook failure and
+"no cached success on outage" behavior를 포함한다.
 
 Deployment Studio smoke test:
 
@@ -113,6 +169,11 @@ yarn test
 
 Foundry integration tests는 mock/ERC-3643 fixture를 사용해 regulated swap,
 multi-Recipe, surveillance, emergency pause와 invariant path를 검증한다.
+`PredicateValidation.t.sol`은 bool/uint/time-window/set의 exact encoding, inclusive
+boundary, duplicate와 최대 entry 제한을 검증한다. `MinimumTradeAmount.t.sol`은
+Manifest-owned threshold와 missing/zero/trailing parameter fail-closed를 검증하고,
+`ElementRegistry.t.sol`은 evidence type 및 metadata-declared default enforcement
+불일치를 거부하는지 확인한다.
 `tools/deploy-v3`의 Corner Store profile은 unit test로 구성과 순서를 검증하며,
 canonical Uniswap v3 integration test는 같은 pinned package artifact로 factory와
 pool을 배포해 CREATE2, mint/swap callback과 실제 ERC-3643 transfer를 검증한다.
@@ -144,6 +205,8 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패
+- canonical `recipeKey + exact version` 조회와 새 catalog version 등록 후에도 기존
+  ACTIVE Manifest/policy ID가 변하지 않는 회귀
 - RecipeBinding의 REQUIRED/PATH/FLAG truth table과 stateful commit 중복 방지
 - Manifest lifecycle, version과 supported engine binding
 - ERC-3643 transfer 거부의 원자적 실패

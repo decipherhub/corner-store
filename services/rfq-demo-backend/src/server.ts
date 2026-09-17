@@ -1,4 +1,5 @@
 import {IncomingMessage, Server, ServerResponse, createServer} from "http";
+import {Contract, JsonRpcProvider} from "ethers";
 
 import {RFQBackendSDK, SignedRFQQuote} from "../../rfq/src";
 
@@ -315,6 +316,19 @@ async function createQuote(
     throw new Error("ttlSeconds must be a positive integer");
   }
   const side = parseSide(body.side);
+  let policyId: `0x${string}`;
+  if (config.resolvePolicyId) {
+    policyId = await config.resolvePolicyId();
+  } else {
+    const provider = new JsonRpcProvider(config.rpcUrl, config.chainId);
+    const engine = new Contract(
+      asAddress(config.artifact.engine ?? "", "artifact engine"),
+      ["function policyHashesOf(address) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)"],
+      provider
+    );
+    const hashes = await engine.policyHashesOf(asAddress(config.artifact.rwaToken, "artifact rwaToken"));
+    policyId = String(hashes.policyId ?? hashes[2]) as `0x${string}`;
+  }
 
   return quoteService.quote({
     taker,
@@ -322,6 +336,7 @@ async function createQuote(
     tokenOut: asAddress(side === "buy" ? config.artifact.rwaToken : config.artifact.quote, "artifact tokenOut"),
     amountIn: body.amountIn,
     venue: asAddress(config.artifact.rfqVenue, "artifact rfqVenue"),
+    policyId,
     ttlSeconds: body.ttlSeconds as number | undefined
   });
 }

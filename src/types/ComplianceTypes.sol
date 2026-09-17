@@ -44,6 +44,49 @@ enum RecipeBindingMode {
     FLAG_ONLY
 }
 
+// Element-level enforcement action compiled at manifest registration/update
+// time. Numeric order is load-bearing for strengthen-only comparisons:
+// FLAG_ONLY < OPERATOR_REVIEW < BLOCK. OPERATOR_REVIEW is blocking in v1.
+enum EnforcementAction {
+    FLAG_ONLY,
+    OPERATOR_REVIEW,
+    BLOCK
+}
+
+// Governance-supplied override modes. USE_ELEMENT_DEFAULT is a no-op marker;
+// ESCALATE_* may only strengthen a member element's default; FORCE_FLAG_ONLY
+// is allowed only for elements whose immutable default is already FLAG_ONLY.
+enum EnforcementOverrideMode {
+    USE_ELEMENT_DEFAULT,
+    ESCALATE_TO_OPERATOR_REVIEW,
+    ESCALATE_TO_BLOCK,
+    FORCE_FLAG_ONLY
+}
+
+struct ElementEnforcementOverride {
+    uint8 bindingIndex;
+    bytes32 elementId;
+    EnforcementOverrideMode mode;
+}
+
+struct CompiledElementRule {
+    bytes32 elementId;
+    EnforcementAction action;
+}
+
+struct ElementPolicyParameter {
+    uint8 bindingIndex;
+    bytes32 elementId;
+    bytes32 schemaId;
+    uint16 schemaVersion;
+    bytes parameters;
+}
+
+struct ManifestPolicyConfig {
+    uint16 schemaVersion;
+    ElementPolicyParameter[] elementParameters;
+}
+
 struct RecipeBinding {
     uint16 recipeId;
     uint16 recipeVersion;
@@ -87,6 +130,16 @@ enum TemporalNature {
     CUMULATIVE
 }
 
+// Source class whose commitment or runtime state supports an Element decision.
+// This describes the evidence boundary, never the raw evidence or PII itself.
+enum EvidenceType {
+    UNSPECIFIED,
+    TRANSACTION_CONTEXT,
+    ONCHAIN_STATE,
+    PROVIDER_ATTESTATION,
+    COMPOSITE
+}
+
 struct ElementMetadata {
     bytes32 elementId;
     ElementCategory category;
@@ -95,6 +148,14 @@ struct ElementMetadata {
     Decidability decidability;
     ObligationTiming timing;
     Statefulness statefulness;
+    EvidenceType evidenceType;
+    EnforcementAction defaultEnforcement;
+    // Zero identifies a parameterless Element. A non-zero schema ID is bound
+    // to exactly one immutable version and an explicit calldata size bound.
+    bytes32 parameterSchemaId;
+    uint16 parameterSchemaVersion;
+    uint32 maxParameterBytes;
+    bool parametersRequired;
 }
 
 struct ManifestCore {

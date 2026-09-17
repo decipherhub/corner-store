@@ -741,7 +741,8 @@ LP onboarding, production pool governance, oracle/risk controls와 실제 운영
 ### 8.2 RFQ
 
 RFQ는 규제 자산 MVP의 주된 reference path다. Maker가 특정 taker와 자산,
-수량, 가격, nonce, 만료시간을 묶은 EIP-712 typed quote에 서명하고, taker가
+수량, 가격, current execution-bound `policyId`, nonce, 만료시간을 묶은 EIP-712 v2
+typed quote에 서명하고, taker가
 Router를 통해 이를 fill한다. EIP-712는 structured data와 domain separation을
 정의하지만 replay protection 자체는 제공하지 않으므로 nonce와 expiry를 protocol이
 별도로 강제한다

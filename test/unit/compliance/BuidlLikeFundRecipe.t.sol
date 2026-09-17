@@ -46,13 +46,13 @@ contract BuidlLikeFundRecipeTest is Test {
     }
 
     function test_minimumInvestment_inclusive_boundary() public view {
-        (bool below,) = minimum.check(address(1), address(2), address(3), minimum.MINIMUM_AMOUNT() - 1, "");
+        (bool below,) = minimum.check(address(1), address(2), address(3), minimum.MINIMUM_AMOUNT() - 1, "", "");
         assertFalse(below);
 
-        (bool exact,) = minimum.check(address(1), address(2), address(3), minimum.MINIMUM_AMOUNT(), "");
+        (bool exact,) = minimum.check(address(1), address(2), address(3), minimum.MINIMUM_AMOUNT(), "", "");
         assertTrue(exact);
 
-        (bool above,) = minimum.check(address(1), address(2), address(3), minimum.MINIMUM_AMOUNT() + 1, "");
+        (bool above,) = minimum.check(address(1), address(2), address(3), minimum.MINIMUM_AMOUNT() + 1, "", "");
         assertTrue(above);
     }
 }

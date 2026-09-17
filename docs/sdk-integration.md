@@ -179,10 +179,15 @@ corner-store test-module dist/module-conformance.js
 ```
 
 The suite verifies capability declarations, positive base-unit pricing,
-maker/domain/field binding, expiry, module order, risk fail-closed behavior,
+maker/domain/current-policy field binding, expiry, module order, risk fail-closed behavior,
 65-byte signature shape and maker recovery, and maker-scoped monotonic nonce
 behavior.
 
 Passing conformance proves compatibility with the RFQ SDK contract. It does not
 certify a pricing model, risk policy, signer custody, persistence durability or
 legal compliance for production.
+
+Package compatibility, release sequencing and migration requirements are defined
+in [`sdk-versioning.md`](./sdk-versioning.md). The standalone product smoke packs
+and installs the CLI, Toolkit and RFQ packages into temporary clean projects; it
+must not resolve package code through repository-relative paths.

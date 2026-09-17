@@ -126,6 +126,30 @@ plan. Production orchestration, signer policy and ownership handoff remain separ
 `toolkit-test` always runs the full repository check rather than a partial user-selected
 scope, so Solidity, SDK, CLI, API and dashboard regressions are not hidden.
 
+Production deployment/onboarding commands are signer-free unless `production-deploy`
+is explicitly confirmed with an external Foundry signer:
+
+```sh
+corner-store production-source-hash
+corner-store production-plan corner-store.production.json
+corner-store production-preflight corner-store.production.json --rpc-url https://approved-rpc.example
+corner-store production-deploy corner-store.production.json --ledger --confirm production-deploy
+corner-store production-verify corner-store.production.json --rpc-url https://approved-rpc.example
+corner-store production-onboarding-plan corner-store.production-onboarding.json --out safe-onboarding.json
+corner-store production-onboarding-verify corner-store.production-onboarding.json --rpc-url https://approved-rpc.example
+```
+
+`production-onboarding-plan` writes an immutable unsigned plan/Safe draft bundle and
+refuses to overwrite an existing file. Safe-owner drafts include chain id, Safe address, required approvals,
+deterministic proposal id, artifact hash, legal package hash and onboarding hash.
+Operator-authority drafts are exported separately with explicit executor metadata;
+the CLI does not assume the Safe is an operator. It stages governance-owner calls,
+operator calls and owner-only delayed signer execution separately. It never broadcasts, signs, transfers tokens or
+generates approvals; inventory appears as read-only verification evidence.
+`production-onboarding-verify` fails closed on unavailable RPC reads, wiring/state
+mismatches, safe-owner target owner mismatch, missing operator role, paused/suspended registry gates, pending signer
+authorization or missing inventory balance/allowance.
+
 Admin commands (`onboard`, `manifest`, `attest`, `investor-setup`, `maker`)
 default to the operator (account 0). `buy` defaults to the buyer (account 1).
 The asset is selected when the stack is deployed. `onboard --profile` and

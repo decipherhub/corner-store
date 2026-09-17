@@ -12,11 +12,14 @@ import {
     ComplianceDecision,
     ManifestCore,
     PolicyStatus,
+    CompiledElementRule,
+    EnforcementAction,
     RecipeBinding,
     RecipeBindingMode,
     Statefulness
 } from "../types/ComplianceTypes.sol";
 import {DecisionHashLib} from "../libraries/DecisionHashLib.sol";
+import {PolicyHashLib} from "../libraries/PolicyHashLib.sol";
 import {ReasonCodes} from "../libraries/ReasonCodes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Governed} from "../auth/Governed.sol";
@@ -60,6 +63,9 @@ contract ComplianceEngine is IComplianceEngine, Governed {
     ITokenPolicyRegistry public immutable policyReg;
     IElementRegistry public immutable elementReg;
     IRecipeRegistry public immutable recipeReg;
+    bytes32 public immutable policyRegistryCodeHash;
+    bytes32 public immutable elementRegistryCodeHash;
+    bytes32 public immutable recipeRegistryCodeHash;
     address public router;
 
     modifier onlyRouter() {
@@ -71,6 +77,9 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         policyReg = policyReg_;
         elementReg = elementReg_;
         recipeReg = recipeReg_;
+        policyRegistryCodeHash = address(policyReg_).codehash;
+        elementRegistryCodeHash = address(elementReg_).codehash;
+        recipeRegistryCodeHash = address(recipeReg_).codehash;
     }
 
     function setRouter(address r) external onlyOwner {
@@ -86,6 +95,17 @@ contract ComplianceEngine is IComplianceEngine, Governed {
             return _passThrough(ctx);
         }
         return _evaluateActivePair(ctx, statusIn, statusOut);
+    }
+
+    function policyHashesOf(address token)
+        public
+        view
+        override
+        returns (bytes32 logicalPolicyHash, bytes32 executionBindingHash, bytes32 policyId)
+    {
+        ManifestCore memory manifest = policyReg.manifestOf(token);
+        RecipeBinding[] memory bindings = policyReg.recipeBindingsOf(token);
+        return _policyHashes(token, manifest, bindings);
     }
 
     function _isPermitted(PolicyStatus status) private pure returns (bool) {
@@ -155,18 +175,21 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         bytes memory recipeContext = abi.encode(manifest.factsPacked, ctx);
         for (uint256 i = 0; i < bindings.length; i++) {
             RecipeBinding memory binding = bindings[i];
-            (bool applicable, bool passed, bytes32 reasonCode) = _evaluateRecipe(ctx, token, binding, recipeContext);
+            (bool applicable, bool passed, bool flagged, bytes32 reasonCode) =
+                _evaluateRecipe(ctx, token, binding, i, recipeContext);
 
             if (binding.mode == RecipeBindingMode.FLAG_ONLY) {
-                if (applicable && !passed) state.flagsBitmap |= uint256(1) << (bindingOffset + i);
+                if (applicable && (!passed || flagged)) state.flagsBitmap |= uint256(1) << (bindingOffset + i);
                 continue;
             }
             if (binding.mode == RecipeBindingMode.REQUIRED_BLOCKING) {
+                if (applicable && flagged) state.flagsBitmap |= uint256(1) << (bindingOffset + i);
                 if (applicable && !passed) _selectFailure(state, reasonCode, binding.priority);
                 continue;
             }
 
             uint256 pathIndex = _pathIndex(paths, binding.pathGroupId);
+            if (applicable && flagged) state.flagsBitmap |= uint256(1) << (bindingOffset + i);
             if (applicable && passed) paths.passed[pathIndex] = true;
             if (applicable && !passed) {
                 (paths.reasonCodes[pathIndex], paths.priorities[pathIndex]) = _preferredFailure(
@@ -187,9 +210,11 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         ComplianceContext calldata ctx,
         address token,
         RecipeBinding memory binding,
+        uint256 bindingIndex,
         bytes memory recipeContext
-    ) internal view returns (bool applicable, bool passed, bytes32 reasonCode) {
-        address recipeAddress = recipeReg.recipeOf(binding.recipeId);
+    ) internal view returns (bool applicable, bool passed, bool flagged, bytes32 reasonCode) {
+        bytes32 recipeKey = recipeReg.recipeKeyOf(binding.recipeId);
+        address recipeAddress = recipeReg.recipeOf(recipeKey, binding.recipeVersion);
         if (recipeAddress == address(0)) revert Errors.RecipeNotRegistered(binding.recipeId);
         IRecipe recipe = IRecipe(recipeAddress);
         uint16 actualVersion = recipe.version();
@@ -197,30 +222,56 @@ contract ComplianceEngine is IComplianceEngine, Governed {
             revert Errors.RecipeVersionMismatch(binding.recipeId, binding.recipeVersion, actualVersion);
         }
         applicable = recipe.isApplicable(recipeContext);
-        if (!applicable) return (false, true, bytes32(0));
+        if (!applicable) return (false, true, false, bytes32(0));
 
-        return _checkRequiredElements(ctx, token, binding.recipeId, recipe.requiredElements());
+        (passed, flagged, reasonCode) = _checkCompiledRules(ctx, token, binding.recipeId, bindingIndex);
+        return (true, passed, flagged, reasonCode);
     }
 
-    function _checkRequiredElements(
-        ComplianceContext calldata ctx,
-        address token,
-        uint16 recipeId,
-        bytes32[] memory required
-    ) private view returns (bool applicable, bool passed, bytes32 reasonCode) {
-        if (required.length > MAX_ELEMENTS_PER_RECIPE) {
-            revert Errors.TooManyRecipeElements(recipeId, required.length, MAX_ELEMENTS_PER_RECIPE);
+    function _checkCompiledRules(ComplianceContext calldata ctx, address token, uint16 recipeId, uint256 bindingIndex)
+        private
+        view
+        returns (bool passed, bool flagged, bytes32 reasonCode)
+    {
+        CompiledElementRule[] memory rules = policyReg.compiledRulesOf(token, bindingIndex);
+        bytes[] memory parameters = policyReg.compiledParametersOf(token, bindingIndex);
+        if (rules.length == 0 || rules.length > MAX_ELEMENTS_PER_RECIPE) {
+            revert Errors.TooManyRecipeElements(recipeId, rules.length, MAX_ELEMENTS_PER_RECIPE);
         }
+        if (parameters.length != rules.length) revert Errors.InvalidPolicyConfig();
         bytes memory elementContext = abi.encode(ctx);
         uint256 rwaAmount = token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn;
-        for (uint256 i = 0; i < required.length; i++) {
-            address element = elementReg.elementOf(required[i]);
-            if (element == address(0)) revert Errors.ElementNotRegistered(required[i]);
-            (bool elementPassed,) =
-                IComplianceElement(element).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext);
-            if (!elementPassed) return (true, false, ReasonCodes.encode(recipeId, required[i], 1));
+        for (uint256 i = 0; i < rules.length; i++) {
+            (bool elementPassed, bytes32 elementReason) =
+                _checkElementRule(ctx, token, rwaAmount, elementContext, rules[i].elementId, parameters[i]);
+            if (elementPassed) continue;
+            flagged = true;
+            if (rules[i].action == EnforcementAction.FLAG_ONLY) continue;
+            return (false, true, _reasonOrFallback(elementReason, recipeId, rules[i].elementId));
         }
-        return (true, true, bytes32(0));
+        return (true, flagged, bytes32(0));
+    }
+
+    function _checkElementRule(
+        ComplianceContext calldata ctx,
+        address token,
+        uint256 rwaAmount,
+        bytes memory elementContext,
+        bytes32 elementId,
+        bytes memory parameters
+    ) private view returns (bool elementPassed, bytes32 elementReason) {
+        address element = elementReg.elementOf(elementId);
+        if (element == address(0)) revert Errors.ElementNotRegistered(elementId);
+        return IComplianceElement(element).check(ctx.buyer, ctx.seller, token, rwaAmount, elementContext, parameters);
+    }
+
+    function _reasonOrFallback(bytes32 elementReason, uint16 recipeId, bytes32 elementId)
+        private
+        pure
+        returns (bytes32)
+    {
+        if (elementReason != bytes32(0)) return elementReason;
+        return ReasonCodes.encode(recipeId, elementId, 1);
     }
 
     function _pathIndex(PathState memory paths, uint16 pathGroupId) private pure returns (uint256) {
@@ -275,7 +326,14 @@ contract ComplianceEngine is IComplianceEngine, Governed {
 
     function _hash(ComplianceContext calldata ctx, ComplianceDecision memory d) private pure returns (bytes32) {
         return DecisionHashLib.compute(
-            ctx, d.maxAmount, d.maxAmountToken, d.allowedVenueTypes, d.allowedVenuesHash, d.policyVersion, d.validUntil
+            ctx,
+            d.policyId,
+            d.maxAmount,
+            d.maxAmountToken,
+            d.allowedVenueTypes,
+            d.allowedVenuesHash,
+            d.policyVersion,
+            d.validUntil
         );
     }
 
@@ -353,7 +411,7 @@ contract ComplianceEngine is IComplianceEngine, Governed {
             if (!recipe.isApplicable(recipeContext)) continue;
 
             if (binding.mode == RecipeBindingMode.PATH_OPTION) {
-                (, bool passed,) = _checkRequiredElements(ctx, token, binding.recipeId, recipe.requiredElements());
+                (bool passed,,) = _checkCompiledRules(ctx, token, binding.recipeId, i);
                 if (passed) _selectCommitPath(paths, bindings, i);
                 continue;
             }
@@ -364,7 +422,7 @@ contract ComplianceEngine is IComplianceEngine, Governed {
             // rather than the trade-critical commit path.
             if (binding.mode == RecipeBindingMode.FLAG_ONLY) continue;
 
-            _appendRecipeElements(elements, token, binding.recipeId, recipe.requiredElements());
+            _appendCompiledElements(elements, token, i);
         }
 
         for (uint256 i = 0; i < paths.count; i++) {
@@ -373,13 +431,14 @@ contract ComplianceEngine is IComplianceEngine, Governed {
             // for every applicable path group. Keep commit fail-closed if that
             // invariant is ever broken by an incompatible caller or upgrade.
             if (selected == 0) revert Errors.InvalidRecipeBinding();
-            IRecipe recipe = _validatedRecipe(bindings[selected - 1]);
-            _appendRecipeElements(elements, token, bindings[selected - 1].recipeId, recipe.requiredElements());
+            _validatedRecipe(bindings[selected - 1]);
+            _appendCompiledElements(elements, token, selected - 1);
         }
     }
 
     function _validatedRecipe(RecipeBinding memory binding) private view returns (IRecipe recipe) {
-        address recipeAddress = recipeReg.recipeOf(binding.recipeId);
+        bytes32 recipeKey = recipeReg.recipeKeyOf(binding.recipeId);
+        address recipeAddress = recipeReg.recipeOf(recipeKey, binding.recipeVersion);
         if (recipeAddress == address(0)) revert Errors.RecipeNotRegistered(binding.recipeId);
         recipe = IRecipe(recipeAddress);
         uint16 actualVersion = recipe.version();
@@ -415,18 +474,18 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         return index;
     }
 
-    function _appendRecipeElements(
-        ElementAccumulator memory elements,
-        address token,
-        uint16 recipeId,
-        bytes32[] memory required
-    ) private pure {
-        if (required.length > MAX_ELEMENTS_PER_RECIPE) {
-            revert Errors.TooManyRecipeElements(recipeId, required.length, MAX_ELEMENTS_PER_RECIPE);
+    function _appendCompiledElements(ElementAccumulator memory elements, address token, uint256 bindingIndex)
+        private
+        view
+    {
+        CompiledElementRule[] memory rules = policyReg.compiledRulesOf(token, bindingIndex);
+        if (rules.length > MAX_ELEMENTS_PER_RECIPE) {
+            revert Errors.TooManyRecipeElements(0, rules.length, MAX_ELEMENTS_PER_RECIPE);
         }
-        for (uint256 i = 0; i < required.length; i++) {
-            if (!_seen(elements, required[i], token)) {
-                elements.ids[elements.count] = required[i];
+        for (uint256 i = 0; i < rules.length; i++) {
+            if (rules[i].action == EnforcementAction.FLAG_ONLY) continue;
+            if (!_seen(elements, rules[i].elementId, token)) {
+                elements.ids[elements.count] = rules[i].elementId;
                 elements.tokens[elements.count] = token;
                 elements.count++;
             }
@@ -451,18 +510,76 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         address token,
         ManifestCore memory manifest,
         RecipeBinding[] memory bindings
-    ) private pure returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                acc,
-                token,
-                keccak256(abi.encode(bindings)),
-                manifest.supportedEngines,
-                manifest.factsPacked,
-                manifest.coverageScope,
-                manifest.fullManifestHash
-            )
+    ) private view returns (bytes32) {
+        (,, bytes32 tokenPolicyId) = _policyHashes(token, manifest, bindings);
+        if (acc == bytes32(0)) return tokenPolicyId;
+        return PolicyHashLib.accumulate(acc, token, tokenPolicyId);
+    }
+
+    function _policyHashes(address token, ManifestCore memory manifest, RecipeBinding[] memory bindings)
+        private
+        view
+        returns (bytes32 logicalPolicyHash, bytes32 executionBindingHash, bytes32 policyId)
+    {
+        logicalPolicyHash = PolicyHashLib.logicalPolicyHash(
+            token,
+            policyReg.compiledPlanHashOf(token),
+            manifest.supportedEngines,
+            manifest.factsPacked,
+            manifest.coverageScope,
+            manifest.fullManifestHash
         );
+
+        _assertRuntimeCode(address(policyReg), policyRegistryCodeHash);
+        _assertRuntimeCode(address(elementReg), elementRegistryCodeHash);
+        _assertRuntimeCode(address(recipeReg), recipeRegistryCodeHash);
+        executionBindingHash = PolicyHashLib.executionRoot(
+            block.chainid,
+            address(this),
+            address(this).codehash,
+            address(policyReg),
+            policyRegistryCodeHash,
+            address(elementReg),
+            elementRegistryCodeHash,
+            address(recipeReg),
+            recipeRegistryCodeHash
+        );
+
+        for (uint256 i = 0; i < bindings.length; i++) {
+            (RecipeBinding memory binding, bytes32 recipeKey,) = policyReg.compiledBindingOf(token, i);
+            address recipe = recipeReg.recipeOf(recipeKey, binding.recipeVersion);
+            bytes32 recipeCodeHash = recipeReg.runtimeCodeHashOf(recipeKey, binding.recipeVersion);
+            _assertRuntimeCode(recipe, recipeCodeHash);
+            executionBindingHash = PolicyHashLib.bindRecipe(
+                executionBindingHash, recipeKey, binding.recipeVersion, recipe, recipeCodeHash
+            );
+
+            CompiledElementRule[] memory rules = policyReg.compiledRulesOf(token, i);
+            bytes[] memory parameters = policyReg.compiledParametersOf(token, i);
+            if (rules.length != parameters.length) revert Errors.InvalidRecipeBinding();
+            for (uint256 j = 0; j < rules.length; j++) {
+                address element = elementReg.elementOf(rules[j].elementId);
+                bytes32 elementCodeHash = elementReg.runtimeCodeHashOf(rules[j].elementId);
+                _assertRuntimeCode(element, elementCodeHash);
+                executionBindingHash = PolicyHashLib.bindElement(
+                    executionBindingHash,
+                    rules[j].elementId,
+                    element,
+                    elementCodeHash,
+                    elementReg.versionHashOf(rules[j].elementId),
+                    elementReg.metadataHashOf(rules[j].elementId),
+                    keccak256(parameters[j])
+                );
+            }
+        }
+        policyId = PolicyHashLib.policyId(logicalPolicyHash, executionBindingHash);
+    }
+
+    function _assertRuntimeCode(address subject, bytes32 expected) private view {
+        bytes32 actual = subject.codehash;
+        if (subject == address(0) || expected == bytes32(0) || actual != expected) {
+            revert Errors.ExecutionBindingMismatch(subject, expected, actual);
+        }
     }
 
     function _max64(uint64 a, uint64 b) private pure returns (uint64) {

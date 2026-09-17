@@ -88,11 +88,11 @@ bit-packed into one word and the digest is not on-chain-decodable (see
 ReasonCodes.encode(recipeId, elementId, code) == keccak256(abi.encode(recipeId, elementId, code))
 ```
 
-Scenario 3 does exactly this: it recomputes `ReasonCodes.encode(1, "A-02-v1", 1)`
-(Reg D recipe id 1, jurisdiction element, generic fail code 1) and asserts it
-equals the `reasonCode` decoded from the caught revert. The engine re-encodes
-each element's placeholder code with the real contributing `recipeId`, so the
-digest is stable and reproducible.
+Scenario 3 does exactly this: it recomputes `ReasonCodes.encode(0, "A-02-v1", 1)`
+(the Jurisdiction Element's own exact reason for a disallowed jurisdiction) and
+asserts it equals the `reasonCode` decoded from the caught revert. The engine
+propagates an Element's nonzero reason unchanged; only an Element zero reason
+falls back to a recipe-scoped generic code.
 
 A policy-level rejection (scenario 4, suspended manifest) uses
 `ReasonCodes.encode(0, "POLICY", uint32(status))` where `status` is the offending

@@ -3,6 +3,7 @@ pragma solidity 0.8.17;
 
 import {Script} from "forge-std/Script.sol";
 import {ElementRegistry} from "../../src/registry/ElementRegistry.sol";
+import {EnforcementAction} from "../../src/types/ComplianceTypes.sol";
 import {Affiliate} from "../../src/compliance/elements/Affiliate.sol";
 import {RedFlagKnowledgeBar} from "../../src/compliance/elements/RedFlagKnowledgeBar.sol";
 import {BadActorDisqualification} from "../../src/compliance/elements/BadActorDisqualification.sol";
@@ -37,7 +38,7 @@ contract DeployWave3Elements is Script {
         ElementRegistry registry = ElementRegistry(registryAddress);
 
         registry.registerElement(bytes32("A-06-v1"), address(new Affiliate()));
-        registry.registerElement(bytes32("A-12-v1"), address(new RedFlagKnowledgeBar()));
+        registry.registerElement(bytes32("A-12-v1"), address(new RedFlagKnowledgeBar()), EnforcementAction.FLAG_ONLY);
         registry.registerElement(bytes32("E-03-v1"), address(new BadActorDisqualification()));
         registry.registerElement(bytes32("F-01-v1"), address(new OperatorSelfDealing()));
         registry.registerElement(bytes32("F-04-v1"), address(new RegMIssuerBuying()));
