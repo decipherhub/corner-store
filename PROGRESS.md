@@ -11,9 +11,22 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음.
+없음. 다음 production-readiness feature는 열린 이슈와 의존성을 검토한 뒤 하나만
+활성화한다.
 
 ## Completed
+
+- `CORE-012 — Safe Element Emergency Replacement`: 사고 자산을 즉시 suspend한 뒤
+  새 immutable Element ID와 exact Recipe version을 등록하고, full policy config와
+  override를 보존한 delayed Manifest update로 영향 자산만 교체하는 절차를 완성했다.
+  update activation은 SUSPENDED 상태를 보존하며 별도 delayed resume 전 checkpoint,
+  artifact와 unaffected-asset 불변성을 검증한다. known RFQ nonce 취소에 더해 old
+  policy-bound quote가 settlement에서 fail-closed하도록 회귀를 고정했다. 검증:
+  Factory 12/12, RFQFlow 9/9, Engine 44/44, Registry targeted suites, full Foundry
+  902/902, 전체 `scripts/check.sh`, BUIDL-like/Reg-D E2E 각각 7/7 및
+  dashboard/CLI/RFQ flow. ComplianceEngine 19,583 bytes, TokenPolicyRegistry
+  24,035 bytes(EIP-170 margin 541), CornerStoreFactory 4,740 bytes,
+  `git diff --check` 통과.
 
 - `CORE-011 — Policy Audit Artifact`: domain-separated canonical PII-free policy
   artifact와 content-addressed local reference store를 추가했다. production

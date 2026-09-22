@@ -12,6 +12,7 @@ import {
     ComplianceContext,
     ComplianceDecision,
     ManifestCore,
+    RecipeBinding,
     VenueType,
     FlowType
 } from "../../src/types/ComplianceTypes.sol";
@@ -292,6 +293,32 @@ contract RFQFlowTest is IntegrationBase {
         vm.prank(alice);
         vm.expectRevert(Errors.RFQQuoteUsed.selector);
         router.execute(req);
+    }
+
+    /// @notice A quote bound to the previous policy cannot settle after an
+    ///         immutable manifest replacement, even if the maker did not cancel
+    ///         its nonce. This is the final fail-closed backstop for outstanding
+    ///         quotes during an Element incident.
+    function test_rfqFill_revertsAfterManifestReplacementInvalidatesPolicyBoundQuote() public {
+        RFQQuote memory q = _bindCurrentPolicy(_quote(12, uint64(block.timestamp + 30 days)));
+        ExecutionRequest memory req = _buildRfqRequest(q);
+        req.deadline = uint64(block.timestamp + 30 days);
+
+        ManifestCore memory replacement = policyReg.manifestOf(address(rwaToken));
+        replacement.fullManifestHash = keccak256("rfq-policy-after-element-replacement");
+        RecipeBinding[] memory bindings = policyReg.recipeBindingsOf(address(rwaToken));
+        policyReg.scheduleManifestUpdate(address(rwaToken), replacement, bindings, bytes32("ELEMENT_REPLACEMENT"));
+        (,, uint64 readyAt,) = policyReg.pendingManifestUpdateOf(address(rwaToken));
+        vm.warp(readyAt);
+        policyReg.activateManifestUpdate(address(rwaToken));
+
+        vm.prank(alice);
+        vm.expectRevert(Errors.RFQQuoteMismatch.selector);
+        router.execute(req);
+
+        assertFalse(rfqAdapter.usedQuoteNonce(q.maker, q.nonce), "failed stale quote must not consume nonce");
+        assertEq(rwaToken.balanceOf(alice), 0, "no stale-policy RWA delivery");
+        assertEq(quote.balanceOf(maker), 0, "no stale-policy QUOTE settlement");
     }
 
     /// @notice Flipping ONE investor attestation (jurisdiction) makes the live

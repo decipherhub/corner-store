@@ -4,7 +4,12 @@ pragma solidity 0.8.17;
 import {Governed} from "../auth/Governed.sol";
 import {ITokenPolicyRegistry} from "../interfaces/compliance/ITokenPolicyRegistry.sol";
 import {IVenueRegistry} from "../interfaces/execution/IVenueRegistry.sol";
-import {ManifestCore, RecipeBinding} from "../types/ComplianceTypes.sol";
+import {
+    ElementEnforcementOverride,
+    ManifestCore,
+    ManifestPolicyConfig,
+    RecipeBinding
+} from "../types/ComplianceTypes.sol";
 import {VenueConfig} from "../types/VenueTypes.sol";
 
 /// @title CornerStoreFactory
@@ -79,6 +84,21 @@ contract CornerStoreFactory is Governed {
         bytes32 reasonCode
     ) external onlyOwner {
         tokenPolicyRegistry.scheduleManifestUpdate(token, manifest, bindings, reasonCode);
+    }
+
+    /// @notice Schedule a delayed semantic update without dropping the reviewed
+    ///         per-Element policy parameters or enforcement overrides.
+    /// @dev Required when this factory owns the Registry and an incident
+    ///      replacement must preserve the complete ManifestPolicyConfig.
+    function scheduleManifestUpdate(
+        address token,
+        ManifestCore calldata manifest,
+        RecipeBinding[] calldata bindings,
+        ElementEnforcementOverride[] calldata overrides_,
+        ManifestPolicyConfig calldata config,
+        bytes32 reasonCode
+    ) external onlyOwner {
+        tokenPolicyRegistry.scheduleManifestUpdate(token, manifest, bindings, overrides_, config, reasonCode);
     }
 
     /// @notice Cancel a pending semantic manifest update through governance.

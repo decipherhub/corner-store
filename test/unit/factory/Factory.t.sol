@@ -26,7 +26,10 @@ import {
     RecipeBindingMode,
     VenueType,
     EvidenceType,
-    EnforcementAction
+    EnforcementAction,
+    ElementEnforcementOverride,
+    ElementPolicyParameter,
+    ManifestPolicyConfig
 } from "../../../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../../../src/types/VenueTypes.sol";
 
@@ -55,6 +58,9 @@ contract FactoryElementMock is IComplianceElement {
         m.statefulness = Statefulness.STATELESS;
         m.evidenceType = EvidenceType.TRANSACTION_CONTEXT;
         m.defaultEnforcement = EnforcementAction.BLOCK;
+        m.parameterSchemaId = keccak256("corner-store.factory.optional.v1");
+        m.parameterSchemaVersion = 1;
+        m.maxParameterBytes = 32;
     }
 }
 
@@ -90,6 +96,7 @@ contract FactoryTest is Test {
     RecipeRegistry internal recipeReg;
     VenueRegistry internal vr;
     bytes32 internal constant ELEMENT_ID = bytes32("FACTORY-ELEM-v1");
+    bytes32 internal constant PARAM_SCHEMA_ID = keccak256("corner-store.factory.optional.v1");
 
     address internal rwa = address(0x4001);
     address internal venue = address(0x4E51E);
@@ -187,6 +194,31 @@ contract FactoryTest is Test {
         assertEq(pending.fullManifestHash, next.fullManifestHash);
         assertEq(effectiveTime, block.timestamp + tpr.MIN_MANIFEST_DELAY());
         assertEq(reasonCode, bytes32("LEGAL-UPDATE"));
+    }
+
+    function test_scheduleManifestUpdate_forwardsFullPolicyConfigWithoutDroppingParameters() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        factory.registerRWAToken(rwa, initial, _bindings(), venue, _venueCfg());
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2-with-config");
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] = ElementPolicyParameter(0, ELEMENT_ID, PARAM_SCHEMA_ID, 1, abi.encode(42));
+
+        factory.scheduleManifestUpdate(rwa, next, _bindings(), overrides_, config, bytes32("ELEMENT-REPLACEMENT"));
+
+        (,, uint64 effectiveTime, bytes32 reasonCode) = tpr.pendingManifestUpdateOf(rwa);
+        assertEq(reasonCode, bytes32("ELEMENT-REPLACEMENT"));
+        vm.warp(effectiveTime);
+        tpr.activateManifestUpdate(rwa);
+        bytes[] memory parameters = tpr.compiledParametersOf(rwa, 0);
+        assertEq(parameters.length, 1);
+        assertEq(parameters[0], abi.encode(42), "factory must not downgrade a full config update to empty config");
+        assertNotEq(tpr.policyConfigHashOf(rwa), bytes32(0));
     }
 
     function test_cancelManifestActions_forwardsRegistryOwnerCalls() public {

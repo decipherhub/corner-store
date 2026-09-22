@@ -124,6 +124,11 @@ recipe 제거와 unpause는 외부 multisig 승인과 적용 가능한 timelock�
    취소 필요성을 재검토한다.
 8. 한 자산·venue부터 단계적으로 resume하고 Operator API events/metrics를 관찰한다.
 
+Element 구현 결함을 새 immutable version으로 교체하는 경우에는 일반 recovery gate에
+더해 [`element-emergency-replacement.md`](./element-emergency-replacement.md)의
+pause → 신규 Element/Recipe → delayed Manifest update → checkpoint → delayed resume
+순서를 따른다. 기존 ID/version overwrite 또는 즉시 unpause는 허용하지 않는다.
+
 ## 7. Post-incident
 
 - incident timeline, root cause, containment, recovery와 재발 방지 항목을 남긴다.
@@ -134,6 +139,7 @@ recipe 제거와 unpause는 외부 multisig 승인과 적용 가능한 timelock�
 관련 문서:
 
 - [`giwa-chain-semantics.md`](./giwa-chain-semantics.md)
+- [`element-emergency-replacement.md`](./element-emergency-replacement.md)
 - [`../security.md`](../security.md)
 - [`../rfq-threat-model.md`](../rfq-threat-model.md)
 - [`../architecture/deployment-operations.md`](../architecture/deployment-operations.md)
