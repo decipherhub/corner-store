@@ -70,7 +70,9 @@ export const RECIPE_ABI = [
 // ComplianceEngine.evaluate(ctx) is a VIEW returning the full ComplianceDecision
 // (src/types/ComplianceTypes.sol). `check` calls it for the overall verdict.
 export const ENGINE_ABI = [
-  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))"
+  "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))",
+  "function policyHashesOf(address token) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)",
+  "function recordPolicyAuditCheckpoint(address token) returns (bytes32 checkpointHash)"
 ];
 
 // Event fragments for `watch` (src/libraries/Events.sol + RFQAdapter.sol). Only
@@ -82,6 +84,7 @@ export const EVENTS_ABI = [
   "event MakerApprovalSet(address indexed maker, bool approved)",
   "event ManifestRegistered(address indexed token, bytes32 bindingsHash, address declaredBy)",
   "event ManifestStatusChanged(address indexed token, uint8 status, bytes32 reasonCode)",
+  "event PolicyAuditCheckpointRecorded(address indexed token, bytes32 indexed policyId, bytes32 indexed artifactHash, uint64 policyVersion, uint8 status, bytes32 historyHash, bytes32 checkpointHash, address recorder)",
   "event ComplianceFlags(bytes32 indexed decisionHash, uint256 flagsBitmap)",
   "event SurveillanceFlag(bytes32 indexed elementId, address indexed subject, bytes32 reasonCode)"
 ];

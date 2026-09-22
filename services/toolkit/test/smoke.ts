@@ -6,9 +6,11 @@ import {
   deriveRecipeKey,
   EVIDENCE_TYPE,
   ENFORCEMENT_ACTION,
+  ENFORCEMENT_OVERRIDE_MODE,
   MAX_ENFORCEMENT_OVERRIDES,
   normalizeRecipeAlias,
   productionOnboardingInterfaces,
+  RECIPE_BINDING_MODE,
   recipeAliasHash,
   validateProductionOnboardingConfig,
   verifyProductionOnboarding
@@ -32,6 +34,15 @@ import {
 import {toSafeTransactionDraft} from "../src/multisig";
 import {defaultIntegrationManifest, validateIntegrationManifest} from "../src/integration";
 import {scaffoldRFQIntegration} from "../src/scaffold";
+import {
+  LocalPolicyAuditStore,
+  PolicyAuditArtifact,
+  artifactHashBytes32,
+  buildPolicyAuditArtifact,
+  canonicalPolicyAuditJson,
+  validatePolicyAuditArtifact,
+  validatePolicyAuditArtifactFile
+} from "../src/policy-audit";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -205,6 +216,88 @@ try {
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 
+const h = (byte: string) => `0x${byte.repeat(64)}`;
+const policyAuditInput: PolicyAuditArtifact = {
+  schema: "corner-store-policy-audit",
+  schemaVersion: 1,
+  chainId: 1,
+  token: "0x1000000000000000000000000000000000000001",
+  intendedPolicyVersion: "1",
+  lifecycleAction: "REGISTER",
+  policy: {
+    configHash: `sha256:${"a".repeat(64)}`,
+    legalPackageHash: `sha256:${"b".repeat(64)}`,
+    compiledPlanHash: h("1"),
+    manifest: {
+      issuanceRecipeId: 1,
+      issuanceRecipeVersion: 2,
+      fundRecipeId: 0,
+      enabledResalePaths: 1,
+      supportedEngines: 5,
+      stateScopeId: 7,
+      factsPacked: "1",
+      coverageScope: "3"
+    },
+    recipeBindings: [{recipeKey: h("2"), recipeId: 1, recipeVersion: 2, mode: 0, pathGroupId: 0, priority: 100}],
+    enforcementOverrides: []
+  },
+  deployment: {
+    complianceEngine: "0x1000000000000000000000000000000000000007",
+    tokenPolicyRegistry: "0x1000000000000000000000000000000000000008",
+    elementRegistry: "0x1000000000000000000000000000000000000009",
+    recipeRegistry: "0x1000000000000000000000000000000000000010",
+    runtimeCodeHashes: {
+      complianceEngine: h("3"),
+      tokenPolicyRegistry: h("4"),
+      elementRegistry: h("5"),
+      recipeRegistry: h("6")
+    }
+  },
+  elements: [{
+    bindingIndex: 0,
+    elementId: h("7"),
+    implementation: "0x2000000000000000000000000000000000000001",
+    runtimeCodeHash: h("8"),
+    versionHash: h("9"),
+    metadataHash: h("a"),
+    evidenceType: 3,
+    defaultAction: 2,
+    parameterSchemaId: h("b"),
+    parameterSchemaVersion: 1,
+    parameters: "0x1234",
+    parameterHash: keccak256("0x1234")
+  }],
+  recipes: [{
+    recipeKey: h("2"),
+    recipeId: 1,
+    version: 2,
+    implementation: "0x2000000000000000000000000000000000000002",
+    runtimeCodeHash: h("c"),
+    requiredElements: [h("7")]
+  }],
+  providerEvidence: [{providerIdHash: h("d"), evidenceHash: h("e"), signatureRefHash: h("f"), validUntil: "2000000000"}],
+  evidenceChainHead: h("0"),
+  source: {toolVersion: "corner-store-toolkit-0.1.0", sourceCommit: "abcdef1234567890"}
+};
+const policyAudit = buildPolicyAuditArtifact(policyAuditInput);
+assert(policyAudit.artifactHash === buildPolicyAuditArtifact(JSON.parse(JSON.stringify(policyAuditInput))).artifactHash, "policy audit hash is deterministic");
+assert(artifactHashBytes32(policyAudit.artifactHash) === policyAudit.onchainArtifactHash, "policy audit on-chain commitment matches sha256 digest");
+assert(canonicalPolicyAuditJson(policyAudit.artifact).startsWith('{"chainId":1,'), "policy audit canonical JSON sorts keys");
+assertThrows(() => validatePolicyAuditArtifactFile({...policyAudit, artifact: {...policyAudit.artifact, intendedPolicyVersion: "2"}}), "tampered policy audit artifact rejected");
+assertThrows(() => validatePolicyAuditArtifact({...policyAuditInput, investorName: "Alice"} as any), "unknown PII field rejected");
+assertThrows(() => validatePolicyAuditArtifact({...policyAuditInput, elements: [{...policyAuditInput.elements[0], parameterHash: h("0")}]}), "parameter hash mismatch rejected");
+assertThrows(() => validatePolicyAuditArtifact({...policyAuditInput, policy: {...policyAuditInput.policy, recipeBindings: [{...policyAuditInput.policy.recipeBindings[0], recipeVersion: 3}]}}), "unresolved audited recipe binding rejected");
+assertThrows(() => validatePolicyAuditArtifact({...policyAuditInput, elements: [{...policyAuditInput.elements[0], bindingIndex: 1}]}), "out-of-range audited element binding rejected");
+const auditStore = new LocalPolicyAuditStore(join(dir, "policy-audit-store"));
+const storedAuditPath = auditStore.put(policyAudit);
+assert(existsSync(storedAuditPath) && auditStore.exists(policyAudit.artifactHash), "policy audit artifact stored by hash");
+assert(auditStore.get(policyAudit.artifactHash).artifactHash === policyAudit.artifactHash, "policy audit artifact reconstructs by hash");
+assert(auditStore.put(policyAudit) === storedAuditPath, "idempotent immutable policy audit put succeeds");
+const corruptStore = new LocalPolicyAuditStore(join(dir, "corrupt-policy-audit-store"));
+const corruptPath = corruptStore.put(policyAudit);
+writeFileSync(corruptPath, `${JSON.stringify({...policyAudit, artifactHash: `sha256:${"0".repeat(64)}`})}\n`);
+assertThrows(() => corruptStore.get(policyAudit.artifactHash), "corrupt stored policy audit artifact rejected");
+
 const onboardingConfig = validateProductionOnboardingConfig({
   schemaVersion: 1,
   chainId: 1,
@@ -351,6 +444,109 @@ const decodedRecipeV2 = ifaces.RECIPE_REGISTRY.decodeFunctionData("registerRecip
 assert(decodedRecipeV2[0] === aliasHash && decodedRecipeV2[1] === recipeKey, "v3 recipe calldata includes canonical alias/key");
 const decodedManifestV2 = ifaces.POLICY_REGISTRY.decodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[])", onboardingPlanV3.transactions[3].data);
 assert(decodedManifestV2[3].length === 1 && Number(decodedManifestV2[3][0][2]) === 2, "v3 manifest calldata includes bounded override");
+
+// --- production onboarding v4: stored canonical policy audit gate ---
+const auditCodeHashes = {
+  complianceEngine: h("1"),
+  tokenPolicyRegistry: h("2"),
+  elementRegistry: h("3"),
+  recipeRegistry: h("4")
+};
+const onboardingAuditFile = buildPolicyAuditArtifact({
+  ...policyAuditInput,
+  token: onboardingConfigV3.addresses.token,
+  policy: {
+    ...policyAuditInput.policy,
+    configHash: onboardingConfigV3.configHash,
+    legalPackageHash: onboardingConfigV3.legalPackageHash,
+    compiledPlanHash: onboardingPlanV3.compiledPlan!.compiledPlanHash,
+    manifest: {
+      issuanceRecipeId: onboardingConfigV3.manifest.issuanceRecipeId,
+      issuanceRecipeVersion: onboardingConfigV3.manifest.issuanceRecipeVersion,
+      fundRecipeId: onboardingConfigV3.manifest.fundRecipeId,
+      enabledResalePaths: onboardingConfigV3.manifest.enabledResalePaths,
+      supportedEngines: onboardingConfigV3.manifest.supportedEngines,
+      stateScopeId: onboardingConfigV3.manifest.stateScopeId,
+      factsPacked: onboardingConfigV3.manifest.factsPacked,
+      coverageScope: onboardingConfigV3.manifest.coverageScope
+    },
+    recipeBindings: onboardingConfigV3.recipeBindings.map((binding) => ({
+      recipeKey: onboardingConfigV3.recipes.find((recipe) => recipe.recipeId === binding.recipeId)!.recipeKey!,
+      recipeId: binding.recipeId,
+      recipeVersion: binding.recipeVersion,
+      mode: RECIPE_BINDING_MODE[binding.mode as keyof typeof RECIPE_BINDING_MODE],
+      pathGroupId: binding.pathGroupId,
+      priority: binding.priority
+    })),
+    enforcementOverrides: onboardingConfigV3.enforcementOverrides!.map((override) => ({
+      bindingIndex: override.bindingIndex,
+      elementId: override.elementId,
+      mode: ENFORCEMENT_OVERRIDE_MODE[override.mode as keyof typeof ENFORCEMENT_OVERRIDE_MODE]
+    }))
+  },
+  deployment: {
+    complianceEngine: "0x1000000000000000000000000000000000000014",
+    tokenPolicyRegistry: onboardingConfigV3.addresses.tokenPolicyRegistry,
+    elementRegistry: onboardingConfigV3.addresses.elementRegistry,
+    recipeRegistry: onboardingConfigV3.addresses.recipeRegistry,
+    runtimeCodeHashes: auditCodeHashes
+  },
+  elements: onboardingPlanV3.compiledPlan!.bindings.flatMap((binding) => binding.rules.map((rule) => {
+    const configured = onboardingConfigV3.elements.find((element) => element.elementId.toLowerCase() === rule.elementId.toLowerCase())!;
+    return {
+      bindingIndex: binding.bindingIndex,
+      elementId: configured.elementId,
+      implementation: configured.implementation,
+      runtimeCodeHash: h(String(binding.bindingIndex + 5)),
+      versionHash: configured.versionHash ?? h("0"),
+      metadataHash: configured.metadataHash ?? h("0"),
+      evidenceType: EVIDENCE_TYPE[configured.evidenceType as keyof typeof EVIDENCE_TYPE],
+      defaultAction: ENFORCEMENT_ACTION[configured.defaultAction as keyof typeof ENFORCEMENT_ACTION],
+      parameterSchemaId: h("b"),
+      parameterSchemaVersion: 1,
+      parameters: "0x",
+      parameterHash: keccak256("0x")
+    };
+  })),
+  recipes: onboardingConfigV3.recipes.map((recipe) => ({
+    recipeKey: recipe.recipeKey!,
+    recipeId: recipe.recipeId,
+    version: recipe.version,
+    implementation: recipe.implementation,
+    runtimeCodeHash: h("c"),
+    requiredElements: recipe.requiredElements!
+  }))
+});
+const onboardingConfigV4 = validateProductionOnboardingConfig({
+  ...onboardingConfigV3,
+  schemaVersion: 4,
+  artifactHash: onboardingAuditFile.artifactHash,
+  manifest: {...onboardingConfigV3.manifest, fullManifestHash: onboardingAuditFile.onchainArtifactHash},
+  addresses: {...onboardingConfigV3.addresses, complianceEngine: onboardingAuditFile.artifact.deployment.complianceEngine},
+  codeHashes: {...onboardingConfigV3.codeHashes, ...auditCodeHashes}
+});
+assertThrows(() => createProductionOnboardingPlan(onboardingConfigV4), "v4 onboarding without stored audit artifact rejected");
+const emptyAuditStore = new LocalPolicyAuditStore(join(dir, "empty-onboarding-audit-store"));
+assertThrows(() => createProductionOnboardingPlan(onboardingConfigV4, "2026-08-23T00:00:00.000Z", {file: onboardingAuditFile, store: emptyAuditStore}), "v4 onboarding with unstored audit artifact rejected");
+const onboardingAuditStore = new LocalPolicyAuditStore(join(dir, "onboarding-audit-store"));
+onboardingAuditStore.put(onboardingAuditFile);
+const onboardingPlanV4 = createProductionOnboardingPlan(onboardingConfigV4, "2026-08-23T00:00:00.000Z", {file: onboardingAuditFile, store: onboardingAuditStore});
+assert(onboardingPlanV4.transactions.some((item) => item.id === "policy-audit-checkpoint" && item.dependsOn.includes("manifest-approve")), "v4 plan records checkpoint after activation");
+const onboardingConfigV4DerivedKeys = validateProductionOnboardingConfig({
+  ...onboardingConfigV4,
+  recipes: onboardingConfigV4.recipes.map(({normalizedAlias: _normalizedAlias, aliasHash: _aliasHash, recipeKey: _recipeKey, ...recipe}) => recipe)
+});
+assert(createProductionOnboardingPlan(onboardingConfigV4DerivedKeys, "2026-08-23T00:00:00.000Z", {file: onboardingAuditFile, store: onboardingAuditStore}).schemaVersion === 4, "v4 audit gate derives optional canonical recipe commitments");
+assert(onboardingPlanV4.operatorTransactions.map((item) => item.id).join(",") === "manifest-approve,policy-audit-checkpoint,maker-1", "v4 operator lane includes audit checkpoint");
+const checkpointTx = onboardingPlanV4.transactions.find((item) => item.id === "policy-audit-checkpoint")!;
+const decodedCheckpoint = ifaces.POLICY_AUDIT_ENGINE.decodeFunctionData("recordPolicyAuditCheckpoint", checkpointTx.data);
+assert(decodedCheckpoint[0] === onboardingConfigV4.addresses.token, "v4 checkpoint calldata binds token");
+assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV4, manifest: {...onboardingConfigV4.manifest, fullManifestHash: h("f")}}), "v4 onboarding rejects detached on-chain artifact commitment");
+const mismatchedAudit = buildPolicyAuditArtifact({...onboardingAuditFile.artifact, recipes: onboardingAuditFile.artifact.recipes.map((recipe, index) => index === 0 ? {...recipe, implementation: "0x20000000000000000000000000000000000000ff"} : recipe)});
+const mismatchedAuditConfig = validateProductionOnboardingConfig({...onboardingConfigV4, artifactHash: mismatchedAudit.artifactHash, manifest: {...onboardingConfigV4.manifest, fullManifestHash: mismatchedAudit.onchainArtifactHash}});
+const mismatchedAuditStore = new LocalPolicyAuditStore(join(dir, "mismatched-onboarding-audit-store"));
+mismatchedAuditStore.put(mismatchedAudit);
+assertThrows(() => createProductionOnboardingPlan(mismatchedAuditConfig, "2026-08-23T00:00:00.000Z", {file: mismatchedAudit, store: mismatchedAuditStore}), "v4 onboarding rejects artifact recipe mismatch");
 assert(createProductionOnboardingPlan(onboardingConfig).schemaVersion === 1, "legacy plan version matches legacy calldata mode");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, elements: [{...onboardingConfig.elements[0], defaultAction: "BLOCK"}]} as any), "schemaVersion 1 rejects v2 element fields");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, elements: onboardingConfigV3.elements.map(({evidenceType: _evidenceType, ...element}) => element)} as any), "schemaVersion 3 requires evidence type");

@@ -30,6 +30,7 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `services/operator-api/` | private-key 없는 read-only operator snapshot/event API |
 | `services/operator-dashboard/` | Operator API를 소비하는 read-only snapshot/proposal review 화면 |
 | `services/compliance-data/` | provider-neutral TA lot, person-group state와 reject/surveillance audit SDK |
+| `services/toolkit/src/policy-audit.ts` | canonical PII-free policy artifact와 operator-owned immutable store port/reference adapter |
 | `tools/deploy-v3/` | 독립적으로 유지하는 vendored Uniswap v3 배포 도구 |
 | `lib/` | Foundry 의존성 |
 | `scripts/` | 저장소 setup, 검증과 정리 명령 |
@@ -72,6 +73,10 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - Router 밖 경로는 발행자 token-level enforcement에 위임하거나, controlled
   venue/settlement로 제한하거나, 명시적으로 제품 범위 밖으로 선언해야 한다.
 - 무거운 자료와 재량 판단은 오프체인, 검증·게이팅·집행은 온체인에 둔다.
+- production policy 원문은 PII-free canonical artifact로 오프체인 불변 저장소에
+  보관하고 SHA-256 digest만 Manifest에 고정한다. 승인 직후 Engine checkpoint가
+  최종 policyId/version/history와 digest를 연결한다. 특정 hosted/WORM vendor와
+  retention 운영은 SDK core가 소유하지 않는다.
 - production Compliance Core는 immutable implementation을 기본으로 한다. 현재
   execution binding은 proxy implementation slot을 해석하지 않으므로 proxy를
   immutable 구현과 동등한 검증 대상으로 주장하지 않는다.

@@ -10,6 +10,36 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## CORE-011 — Policy Audit Artifact
+
+### Behavior
+
+- canonical PII-free policy audit artifact와 immutable local reference store를 제공한다.
+- schema v4 production onboarding은 저장·재검증된 artifact commitment 없이는
+  activation proposal을 생성하지 않는다.
+- Engine checkpoint event가 policyId, policy version, artifact commitment와
+  manifest history를 연결한다.
+- 기존 onboarding schema v1~v3와 local demo는 그대로 유지한다.
+
+### Verification
+
+- Policy audit Toolkit smoke: deterministic/domain-separated hash, strict schema,
+  relational binding validation, tamper/PII rejection, immutable store
+  put/get/exists/reconstruct와 onboarding v4 full cross-check pass
+- CLI smoke: build/store/verify/reconstruct와 immutable output pass
+- Engine targeted 44/44, full Foundry 899/899 pass
+- full `scripts/check.sh`: Foundry, all services/packages, clean standalone SDK
+  consumer와 deploy-v3 10/10 pass
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ buy/sell flow pass
+- runtime sizes: ComplianceEngine 19,583 bytes(EIP-170 margin 4,993),
+  TokenPolicyRegistry 24,035 bytes(기존 유지)
+- `git diff --check` pass
+
+### State
+
+passing
+
+
 ## CORE-010 — Policy Execution Binding
 
 ### Behavior

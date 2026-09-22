@@ -40,6 +40,16 @@ library Events {
     );
     event ManifestResumeScheduled(address indexed token, bytes32 reasonCode, uint64 effectiveTime);
     event ManifestResumeCancelled(address indexed token);
+    event PolicyAuditCheckpointRecorded(
+        address indexed token,
+        bytes32 indexed policyId,
+        bytes32 indexed artifactHash,
+        uint64 policyVersion,
+        PolicyStatus status,
+        bytes32 historyHash,
+        bytes32 checkpointHash,
+        address recorder
+    );
     event ElementRegistered(bytes32 indexed elementId, address element);
     event ElementRegisteredV2(
         bytes32 indexed elementId,

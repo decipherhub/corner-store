@@ -135,7 +135,11 @@ corner-store production-plan corner-store.production.json
 corner-store production-preflight corner-store.production.json --rpc-url https://approved-rpc.example
 corner-store production-deploy corner-store.production.json --ledger --confirm production-deploy
 corner-store production-verify corner-store.production.json --rpc-url https://approved-rpc.example
-corner-store production-onboarding-plan corner-store.production-onboarding.json --out safe-onboarding.json
+corner-store policy-audit-build policy-audit.input.json --out policy-audit.json
+corner-store policy-audit-store policy-audit.json --store ./policy-audit-store
+corner-store policy-audit-verify policy-audit.json --store ./policy-audit-store
+corner-store policy-audit-reconstruct sha256:<digest> --store ./policy-audit-store --out reconstructed.json
+corner-store production-onboarding-plan corner-store.production-onboarding.json --audit-artifact policy-audit.json --audit-store ./policy-audit-store --out safe-onboarding.json
 corner-store production-onboarding-verify corner-store.production-onboarding.json --rpc-url https://approved-rpc.example
 ```
 
@@ -149,6 +153,14 @@ generates approvals; inventory appears as read-only verification evidence.
 `production-onboarding-verify` fails closed on unavailable RPC reads, wiring/state
 mismatches, safe-owner target owner mismatch, missing operator role, paused/suspended registry gates, pending signer
 authorization or missing inventory balance/allowance.
+
+New production onboarding uses schema v4. The plan command then requires both
+`--audit-artifact` and `--audit-store`, re-reads the content-addressed artifact,
+checks it against the complete onboarding configuration, commits its digest as
+`fullManifestHash`, and places an Engine policy checkpoint after Manifest approval.
+Schema v1-v3 remain compatibility inputs for existing demos, not the new audit
+readiness gate. The local store is a reference adapter, not a production WORM
+service.
 
 Admin commands (`onboard`, `manifest`, `attest`, `investor-setup`, `maker`)
 default to the operator (account 0). `buy` defaults to the buyer (account 1).

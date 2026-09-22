@@ -196,6 +196,17 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 - Inventory mutation은 maker/operator custody process의 책임이다. Corner Store
   tooling은 inventory-before-service-open 조건을 plan dependency와 verifier evidence로
   표현할 뿐 transfer/approval/custody transaction을 합성하지 않는다.
+- 새 production activation은 onboarding schema v4와 저장·재검증된 canonical
+  policy audit artifact를 사용한다. `artifactHash`와
+  `ManifestCore.fullManifestHash`는 동일한 SHA-256 digest여야 하며 chain/token,
+  compiled plan, binding/override, Element/Recipe와 deployment code hash 불일치는
+  plan 생성 전에 fail-closed한다.
+- artifact에는 provider 원문·개인 식별자·signer secret을 넣지 않는다. Element
+  parameter bytes에도 PII를 encode하지 않는다. local immutable store는 reference
+  adapter이며 production WORM/retention/backup/access-control을 대신하지 않는다.
+- `recordPolicyAuditCheckpoint`는 Registry/Engine의 현재 상태에서 값을 도출하는
+  permissionless event 함수다. 새로운 mutable policy authority가 아니며 Manifest
+  승인과 lifecycle 변경 뒤 누락 없이 호출·index·reconcile해야 한다.
 
 ## Logging
 

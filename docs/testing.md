@@ -114,6 +114,14 @@ dry-run `deploy`, `verify`/preflight와 `test-module` command path도 별도로
 tarball로 pack한 뒤 clean temporary project에 설치해야 하며 Toolkit public export,
 generated RFQ conformance, CLI doctor/deploy와 packaged contract build를 검증한다.
 
+Policy audit smoke는 canonical/domain-separated hash 결정성, bytes32 commitment,
+unknown/PII-shaped field와 parameter hash 변조 거부, immutable store put/get/exists와
+hash 기반 reconstruction, 저장 파일 변조 검출을 검증한다. Production onboarding v4
+smoke는 missing/unstored artifact, detached Manifest commitment와 Recipe/Element/policy
+구성 불일치를 거부하고, Manifest approval 뒤 checkpoint·venue activation 순서를
+검증한다. Foundry Engine test는 checkpoint가 live policyId, version, artifact hash,
+status와 history hash를 결합하고 commitment가 없는 token을 거부하는지 확인한다.
+
 Generated consumer projects should keep this local gate:
 
 ```sh

@@ -11,5 +11,7 @@ interface IComplianceEngine {
         view
         returns (bytes32 logicalPolicyHash, bytes32 executionBindingHash, bytes32 policyId);
 
+    function recordPolicyAuditCheckpoint(address token) external returns (bytes32 checkpointHash);
+
     function commit(ComplianceContext calldata ctx) external;
 }

@@ -35,6 +35,12 @@ import {
 } from "../../toolkit/src/production";
 import {scaffoldRFQIntegration} from "../../toolkit/src/scaffold";
 import {
+  LocalPolicyAuditStore,
+  buildPolicyAuditArtifact,
+  readPolicyAuditArtifact,
+  validatePolicyAuditArtifactFile
+} from "../../toolkit/src/policy-audit";
+import {
   OnboardingReader,
   createProductionOnboardingPlan,
   loadProductionOnboardingConfig,
@@ -317,9 +323,57 @@ export function cmdToolkitTest(): void {
 }
 
 
-export function cmdProductionOnboardingPlan(path = "corner-store.production-onboarding.json", opts: {out?: string}): void {
+export function cmdPolicyAuditBuild(input: string, opts: {out: string}): void {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(resolve(process.cwd(), input), "utf8"));
+  } catch (err: any) {
+    throw new CliError(`cannot read policy audit input: ${err.message}`);
+  }
+  const file = buildPolicyAuditArtifact(value);
+  const output = resolve(process.cwd(), opts.out);
+  writeImmutableJson(output, file);
+  console.log(JSON.stringify({artifactHash: file.artifactHash, onchainArtifactHash: file.onchainArtifactHash, output}, null, 2));
+}
+
+export function cmdPolicyAuditStore(artifact: string, opts: {store: string}): void {
+  const file = readPolicyAuditArtifact(resolve(process.cwd(), artifact));
+  const store = new LocalPolicyAuditStore(resolve(process.cwd(), opts.store));
+  const stored = store.put(file);
+  console.log(JSON.stringify({artifactHash: file.artifactHash, stored}, null, 2));
+}
+
+export function cmdPolicyAuditVerify(artifact: string, opts: {expected?: string; store?: string}): void {
+  const file = readPolicyAuditArtifact(resolve(process.cwd(), artifact), opts.expected);
+  let stored = false;
+  if (opts.store) stored = new LocalPolicyAuditStore(resolve(process.cwd(), opts.store)).exists(file.artifactHash);
+  console.log(JSON.stringify({valid: true, artifactHash: file.artifactHash, onchainArtifactHash: file.onchainArtifactHash, stored}, null, 2));
+}
+
+export function cmdPolicyAuditReconstruct(artifactHash: string, opts: {store: string; out?: string}): void {
+  const file = validatePolicyAuditArtifactFile(new LocalPolicyAuditStore(resolve(process.cwd(), opts.store)).get(artifactHash), artifactHash);
+  if (opts.out) {
+    const output = resolve(process.cwd(), opts.out);
+    writeImmutableJson(output, file);
+    console.log(JSON.stringify({artifactHash: file.artifactHash, output}, null, 2));
+  } else {
+    console.log(JSON.stringify(file, null, 2));
+  }
+}
+
+export function cmdProductionOnboardingPlan(
+  path = "corner-store.production-onboarding.json",
+  opts: {out?: string; auditArtifact?: string; auditStore?: string}
+): void {
   const config = loadProductionOnboardingConfig(resolve(process.cwd(), path));
-  const plan = createProductionOnboardingPlan(config, new Date().toISOString());
+  if (Boolean(opts.auditArtifact) !== Boolean(opts.auditStore)) throw new CliError("--audit-artifact and --audit-store must be provided together");
+  const auditEvidence = opts.auditArtifact && opts.auditStore
+    ? {
+      file: readPolicyAuditArtifact(resolve(process.cwd(), opts.auditArtifact), config.artifactHash),
+      store: new LocalPolicyAuditStore(resolve(process.cwd(), opts.auditStore))
+    }
+    : undefined;
+  const plan = createProductionOnboardingPlan(config, new Date().toISOString(), auditEvidence);
   const output = opts.out ? resolve(process.cwd(), opts.out) : undefined;
   if (output) {
     writeImmutableJson(output, plan);
