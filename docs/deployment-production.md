@@ -177,8 +177,9 @@ claims. Those require issuer/TA evidence and separate Safe-reviewed onboarding:
 
 The Toolkit accepts explicit, versioned production onboarding files. Legacy v1
 input remains accepted for local/demo compatibility, and v2/v3 remain readable for
-existing canonical Recipe/enforcement plans. New production onboarding must use
-v4 stored policy-audit readiness fields. The v3 example remains the base policy
+existing canonical Recipe/enforcement plans. New production registration must use
+v4 or v5 stored policy-audit readiness fields. Parameterized registration and
+semantic update must use v5. The v3 example remains the base policy
 configuration shape:
 [`services/toolkit/examples/corner-store.production-onboarding.json`](../services/toolkit/examples/corner-store.production-onboarding.json).
 It generates deterministic calldata and Safe-compatible unsigned drafts for the
@@ -227,6 +228,43 @@ policyId/version for v4,
 ACTIVE Manifest with non-zero declarer/approver, global/asset/venue pause gates,
 venue config, maker approval, active signer delegate and inventory minima. A
 pending signer delay is reported but is not considered ready.
+
+### Schema v5 parameter policy and UPDATE export
+
+Schema v5 adds an explicit `lifecycle`, immutable Element parameter capabilities,
+per-object `register` intent and a bounded `policyConfig`. The Toolkit rejects
+missing required parameters, schema mismatches, non-member Elements, duplicate
+entries, per-Element size violations and more than 16,384 total parameter bytes
+before any calldata is exported. Parameterless Elements use zero capability and
+remain compatible through an empty config.
+An UPDATE also declares `expectedPostStatus`: use `SUSPENDED` for incident
+replacement and `ACTIVE` only for an already-active routine update. Verification
+does not treat suspension as failure when the reviewed lifecycle expects it.
+
+For `UPDATE`, the reviewed audit artifact must use the same intended policy
+version, `previousArtifactHash`, compiled plan and exact parameter bytes. The Safe
+lane contains only new immutable Element/Recipe registrations and
+`scheduleManifestUpdate`; the operator lane contains delayed activation followed
+by the audit checkpoint. Existing venue, maker and signer activation is not
+silently replayed. The plan reports parameter byte count, exact Manifest calldata
+size and the worst-case calldata-only gas bound; this is not an execution-gas or
+GIWA fee quote.
+
+```sh
+corner-store production-onboarding-plan corner-store.production-policy-update.json \
+  --audit-artifact update-policy.json --audit-store ./policy-audit-store \
+  --out safe-policy-update.json
+
+corner-store production-policy-update-preactivation \
+  corner-store.production-policy-update.json --rpc-url https://approved-rpc.example
+
+corner-store production-onboarding-verify \
+  corner-store.production-policy-update.json --rpc-url https://approved-rpc.example
+```
+
+The input shape is illustrated by
+[`services/toolkit/examples/corner-store.production-policy-update.json`](../services/toolkit/examples/corner-store.production-policy-update.json).
+Its hashes and addresses are placeholders, not approval evidence.
 
 The tool still cannot infer legal requirements from a token address. The issuer/
 legal-approved mapping, PII-free evidence hashes and reviewed onboarding

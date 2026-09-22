@@ -44,7 +44,8 @@ import {
   OnboardingReader,
   createProductionOnboardingPlan,
   loadProductionOnboardingConfig,
-  verifyProductionOnboarding
+  verifyProductionOnboarding,
+  verifyProductionPolicyUpdatePreActivation
 } from "../../toolkit/src/production-onboarding";
 
 import {
@@ -392,6 +393,21 @@ export async function cmdProductionOnboardingVerify(path = "corner-store.product
   try {
     const reader = new EthersOnboardingReader(provider);
     const result = await verifyProductionOnboarding(config, reader);
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ready) process.exitCode = 1;
+  } finally {
+    provider.destroy();
+  }
+}
+
+export async function cmdProductionPolicyUpdatePreActivation(path = "corner-store.production-onboarding.json", opts: GlobalOpts & {rpcUrl?: string}): Promise<void> {
+  rejectProductionRawKey(opts);
+  const config = loadProductionOnboardingConfig(resolve(process.cwd(), path));
+  const rpcUrl = opts.rpcUrl ?? explicitlyProvidedGlobalRpc() ?? process.env.CORNER_STORE_RPC_URL;
+  if (!rpcUrl) throw new CliError("production-policy-update-preactivation requires --rpc-url or CORNER_STORE_RPC_URL");
+  const provider = new JsonRpcProvider(rpcUrl);
+  try {
+    const result = await verifyProductionPolicyUpdatePreActivation(config, new EthersOnboardingReader(provider));
     console.log(JSON.stringify(result, null, 2));
     if (!result.ready) process.exitCode = 1;
   } finally {

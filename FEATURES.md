@@ -10,6 +10,35 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## TOOLKIT-003 — Parameter-aware Production Safe Export
+
+### Behavior
+
+- schema v5 config가 Element parameter capability와 bounded ManifestPolicyConfig를
+  typed validation한다.
+- REGISTER/UPDATE artifact lifecycle과 exact parameter/compiled-plan commitment가
+  일치할 때만 unsigned Safe/operator plan을 export한다.
+- UPDATE는 새 immutable policy object 등록과 schedule을 Safe lane으로, delayed
+  activation과 checkpoint를 operator lane으로 분리한다.
+- activation 전 pending state와 activation 후 live policy/config/code hash를 각각
+  fail-closed 검증한다.
+- v1~v4 parameterless config와 기존 local Anvil demo 의미를 유지한다.
+
+### Verification
+
+- Toolkit/CLI targeted smoke 통과
+- clean external SDK consumer install/build/conformance 통과
+- full Foundry 902/902 및 `scripts/check.sh` 통과
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 및 dashboard/CLI/RFQ flow 통과
+- worst bounded config(256 entries, raw parameter 16,384 bytes)는 exact calldata
+  100,292 bytes, calldata-only upper bound 1,604,672 gas로 측정
+- `git diff --check` 통과
+
+### State
+
+passing
+
+
 ## CORE-012 — Safe Element Emergency Replacement
 
 ### Behavior

@@ -2,18 +2,21 @@ import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
 
 import {keccak256} from "ethers";
 import {
+  compilePlanCommitment,
   createProductionOnboardingPlan,
   deriveRecipeKey,
   EVIDENCE_TYPE,
   ENFORCEMENT_ACTION,
   ENFORCEMENT_OVERRIDE_MODE,
   MAX_ENFORCEMENT_OVERRIDES,
+  manifestPolicyConfigHash,
   normalizeRecipeAlias,
   productionOnboardingInterfaces,
   RECIPE_BINDING_MODE,
   recipeAliasHash,
   validateProductionOnboardingConfig,
-  verifyProductionOnboarding
+  verifyProductionOnboarding,
+  verifyProductionPolicyUpdatePreActivation
 } from "../src/production-onboarding";
 import {tmpdir} from "os";
 import {join} from "path";
@@ -447,10 +450,10 @@ assert(decodedManifestV2[3].length === 1 && Number(decodedManifestV2[3][0][2]) =
 
 // --- production onboarding v4: stored canonical policy audit gate ---
 const auditCodeHashes = {
-  complianceEngine: h("1"),
-  tokenPolicyRegistry: h("2"),
-  elementRegistry: h("3"),
-  recipeRegistry: h("4")
+  complianceEngine: keccak256("0x6001"),
+  tokenPolicyRegistry: keccak256("0x6001"),
+  elementRegistry: keccak256("0x6001"),
+  recipeRegistry: keccak256("0x6001")
 };
 const onboardingAuditFile = buildPolicyAuditArtifact({
   ...policyAuditInput,
@@ -547,6 +550,95 @@ const mismatchedAuditConfig = validateProductionOnboardingConfig({...onboardingC
 const mismatchedAuditStore = new LocalPolicyAuditStore(join(dir, "mismatched-onboarding-audit-store"));
 mismatchedAuditStore.put(mismatchedAudit);
 assertThrows(() => createProductionOnboardingPlan(mismatchedAuditConfig, "2026-08-23T00:00:00.000Z", {file: mismatchedAudit, store: mismatchedAuditStore}), "v4 onboarding rejects artifact recipe mismatch");
+
+// --- production onboarding v5: parameter-aware UPDATE Safe export ---
+const updateReason = h("e");
+const parameterValue = h("2");
+const v5Elements = onboardingConfigV4.elements.map((element, index) => ({
+  ...element,
+  parameterSchemaId: index === 0 ? h("b") : h("0"),
+  parameterSchemaVersion: index === 0 ? 1 : 0,
+  maxParameterBytes: index === 0 ? 32 : 0,
+  parametersRequired: index === 0,
+  register: false
+}));
+const v5PolicyConfig = {
+  schemaVersion: 1,
+  elementParameters: [{
+    bindingIndex: 0,
+    elementId: v5Elements[0].elementId,
+    schemaId: v5Elements[0].parameterSchemaId,
+    schemaVersion: 1,
+    parameters: parameterValue
+  }]
+};
+const v5Draft = validateProductionOnboardingConfig({
+  ...onboardingConfigV4,
+  schemaVersion: 5,
+  artifactHash: `sha256:${"ff".repeat(32)}`,
+  manifest: {...onboardingConfigV4.manifest, fullManifestHash: `0x${"ff".repeat(32)}`},
+  lifecycle: {action: "UPDATE", intendedPolicyVersion: "2", previousArtifactHash: onboardingAuditFile.artifactHash, reasonCode: updateReason, expectedPostStatus: "ACTIVE"},
+  elements: v5Elements,
+  recipes: onboardingConfigV4.recipes.map((recipe) => ({...recipe, register: false})),
+  policyConfig: v5PolicyConfig
+});
+const v5Compiled = compilePlanCommitment(v5Draft);
+const updateAuditFile = buildPolicyAuditArtifact({
+  ...onboardingAuditFile.artifact,
+  intendedPolicyVersion: "2",
+  lifecycleAction: "UPDATE",
+  previousArtifactHash: onboardingAuditFile.artifactHash,
+  policy: {...onboardingAuditFile.artifact.policy, compiledPlanHash: v5Compiled.compiledPlanHash},
+  elements: onboardingAuditFile.artifact.elements.map((element) => {
+    const configured = v5Elements.find((candidate) => candidate.elementId.toLowerCase() === element.elementId.toLowerCase())!;
+    const parameters = configured.parametersRequired ? parameterValue : "0x";
+    return {
+      ...element,
+      parameterSchemaId: configured.parameterSchemaId,
+      parameterSchemaVersion: configured.parameterSchemaVersion,
+      parameters,
+      parameterHash: keccak256(parameters)
+    };
+  })
+});
+const updateConfigV5 = validateProductionOnboardingConfig({
+  ...v5Draft,
+  artifactHash: updateAuditFile.artifactHash,
+  manifest: {...v5Draft.manifest, fullManifestHash: updateAuditFile.onchainArtifactHash}
+});
+const updateStore = new LocalPolicyAuditStore(join(dir, "update-onboarding-audit-store"));
+updateStore.put(updateAuditFile);
+const updatePlanV5 = createProductionOnboardingPlan(updateConfigV5, "2026-08-23T00:00:00.000Z", {file: updateAuditFile, store: updateStore});
+assert(updatePlanV5.lifecycleAction === "UPDATE", "v5 plan identifies UPDATE lifecycle");
+assert(updatePlanV5.safeTransactions.map((tx) => tx.id).join(",") === "manifest-update-schedule", "v5 UPDATE Safe lane exports only the reviewed schedule when policy objects already exist");
+assert(updatePlanV5.operatorTransactions.map((tx) => tx.id).join(",") === "manifest-update-activate,policy-audit-checkpoint", "v5 UPDATE operator lane activates after delay then checkpoints");
+assert(updatePlanV5.operatorTransactions[0].earliestExecution?.includes("readyAt"), "v5 UPDATE activation preserves normal timelock");
+assert(updatePlanV5.parameterMetrics?.entryCount === 1 && updatePlanV5.parameterMetrics.totalParameterBytes === 32 && updatePlanV5.parameterMetrics.calldataGasUpperBound > 0, "v5 plan reports bounded parameter/calldata metrics");
+const updateSchedule = updatePlanV5.transactions.find((tx) => tx.id === "manifest-update-schedule")!;
+const decodedUpdate = ifaces.POLICY_REGISTRY.decodeFunctionData("scheduleManifestUpdate(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[],(uint16,(uint8,bytes32,bytes32,uint16,bytes)[]),bytes32)", updateSchedule.data);
+assert(decodedUpdate[4][1].length === 1 && decodedUpdate[4][1][0][4] === parameterValue && decodedUpdate[5] === updateReason, "v5 Safe calldata carries exact parameter bytes and reason");
+assertThrows(() => validateProductionOnboardingConfig({...updateConfigV5, policyConfig: {...v5PolicyConfig, elementParameters: []}}), "v5 missing required Element parameter rejected before calldata export");
+assertThrows(() => validateProductionOnboardingConfig({...updateConfigV5, policyConfig: {...v5PolicyConfig, elementParameters: [{...v5PolicyConfig.elementParameters[0], schemaVersion: 2}]}}), "v5 parameter schema mismatch rejected before calldata export");
+const boundedElements = Array.from({length: 256}, (_, index) => ({
+  ...v5Elements[0],
+  elementId: `0x${BigInt(1_000 + index).toString(16).padStart(64, "0")}`,
+  parameterSchemaId: `0x${BigInt(2_000 + index).toString(16).padStart(64, "0")}`,
+  maxParameterBytes: index === 0 ? 65 : 64
+}));
+const boundedRecipes = Array.from({length: 8}, (_, index) => ({
+  ...updateConfigV5.recipes[0],
+  recipeId: index + 1,
+  alias: `bounded-${index + 1}`,
+  normalizedAlias: undefined,
+  aliasHash: undefined,
+  recipeKey: undefined,
+  requiredElements: boundedElements.slice(index * 32, (index + 1) * 32).map((element) => element.elementId)
+}));
+const boundedBindings = boundedRecipes.map((recipe, index) => ({recipeId: recipe.recipeId, recipeVersion: recipe.version, mode: "REQUIRED_BLOCKING" as const, pathGroupId: 0, priority: 255 - index}));
+const boundedParameters = boundedElements.map((element, index) => ({bindingIndex: Math.floor(index / 32), elementId: element.elementId, schemaId: element.parameterSchemaId, schemaVersion: 1, parameters: `0x${"aa".repeat(64)}`}));
+const maxParameterConfig = {...updateConfigV5, elements: boundedElements, recipes: boundedRecipes, recipeBindings: boundedBindings, enforcementOverrides: [], policyConfig: {schemaVersion: 1, elementParameters: boundedParameters}};
+assert(validateProductionOnboardingConfig(maxParameterConfig).policyConfig!.elementParameters.length === 256, "v5 accepts the exact 256-entry/16,384-byte global boundary");
+assertThrows(() => validateProductionOnboardingConfig({...maxParameterConfig, policyConfig: {schemaVersion: 1, elementParameters: boundedParameters.map((entry, index) => index === 0 ? {...entry, parameters: `0x${"aa".repeat(65)}`} : entry)}}), "v5 rejects parameter bytes above the global boundary");
 assert(createProductionOnboardingPlan(onboardingConfig).schemaVersion === 1, "legacy plan version matches legacy calldata mode");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfig, elements: [{...onboardingConfig.elements[0], defaultAction: "BLOCK"}]} as any), "schemaVersion 1 rejects v2 element fields");
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, elements: onboardingConfigV3.elements.map(({evidenceType: _evidenceType, ...element}) => element)} as any), "schemaVersion 3 requires evidence type");
@@ -598,7 +690,7 @@ const okReader = {
   async balanceOf() { calls.push("balanceOf"); return 100n; },
   async allowance() { calls.push("allowance"); return 50n; }
 };
-const onboardingVerificationPromise = verifyProductionOnboarding(onboardingConfig, okReader).then((onboardingVerify) => {
+const baseOnboardingVerificationPromise = verifyProductionOnboarding(onboardingConfig, okReader).then((onboardingVerify) => {
   assert(onboardingVerify.ready, `onboarding verifier should pass: ${JSON.stringify(onboardingVerify.checks)}`);
   assert(calls.includes("balanceOf") && calls.includes("allowance") && !calls.some((name) => name === "approve" || name === "transfer"), "inventory verifier only reads balance/allowance");
   const ownerMismatchReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "owner" && address === onboardingConfig.addresses.venueRegistry) return "0x9999999999999999999999999999999999999999"; return okReader.call(address, abi, fn, args); }};
@@ -686,6 +778,61 @@ const onboardingVerificationPromise = verifyProductionOnboarding(onboardingConfi
 }).then((badVerify) => {
   assert(!badVerify.ready && badVerify.checks.some((check) => check.name === "erc3643-identity-registry" && !check.pass), "onboarding verifier fails closed on unavailable reads");
 });
+
+const v5Reader = {
+  ...okReader,
+  async call(address: string, abi: string[], fn: string, args: unknown[] = []) {
+    if (fn === "policyHashesOf") return [h("1"), h("2"), h("3")];
+    if (fn === "manifestVersionOf") return 2n;
+    if (fn === "elementOf") return v5Elements.find((element) => element.elementId.toLowerCase() === String(args[0]).toLowerCase())?.implementation ?? ZERO_ADDR;
+    if (fn === "defaultActionOf") {
+      const element = v5Elements.find((candidate) => candidate.elementId.toLowerCase() === String(args[0]).toLowerCase())!;
+      return ENFORCEMENT_ACTION[element.defaultAction as keyof typeof ENFORCEMENT_ACTION];
+    }
+    if (fn === "metadataOf") {
+      const element = v5Elements.find((candidate) => candidate.elementId.toLowerCase() === String(args[0]).toLowerCase())!;
+      return [element.elementId, 0, "1.0.0", 0, 0, 1, 0, EVIDENCE_TYPE[element.evidenceType as keyof typeof EVIDENCE_TYPE], ENFORCEMENT_ACTION[element.defaultAction as keyof typeof ENFORCEMENT_ACTION], element.parameterSchemaId, element.parameterSchemaVersion, element.maxParameterBytes, element.parametersRequired];
+    }
+    if (fn === "versionHashOf") return v5Elements[0].versionHash;
+    if (fn === "recipeOf") return updateConfigV5.recipes.find((recipe) => recipe.version === Number(args[1]))?.implementation ?? ZERO_ADDR;
+    if (fn === "recipeKeyOfAlias" || fn === "recipeKeyOf") return recipeKey;
+    if (fn === "aliasHashOf") return aliasHash;
+    if (fn === "latestRegisteredVersionOf") return 2;
+    if (fn === "statusOf") return 2;
+    if (fn === "manifestOf") return [2, updateConfigV5.manifest.issuanceRecipeId, updateConfigV5.manifest.issuanceRecipeVersion, updateConfigV5.manifest.fundRecipeId, updateConfigV5.manifest.enabledResalePaths, updateConfigV5.manifest.supportedEngines, updateConfigV5.manifest.stateScopeId, BigInt(updateConfigV5.manifest.factsPacked), BigInt(updateConfigV5.manifest.coverageScope), updateConfigV5.manifest.fullManifestHash, updateConfigV5.governance.safe, updateConfigV5.governance.operatorExecutor];
+    if (fn === "recipeBindingsOf") return [[1, 2, 0, 0, 100]];
+    if (fn === "compiledPlanHashOf") return v5Compiled.compiledPlanHash;
+    if (fn === "compiledBindingCountOf") return BigInt(v5Compiled.bindings.length);
+    if (fn === "compiledBindingOf") {
+      const binding = v5Compiled.bindings[Number(args[1])];
+      return [[binding.recipeId, binding.recipeVersion, 0, 0, 100], binding.recipeKey, binding.bindingPlanHash];
+    }
+    if (fn === "compiledRulesOf") return v5Compiled.bindings[Number(args[1])].rules.map((rule) => [rule.elementId, rule.actionValue]);
+    if (fn === "policyConfigHashOf") return manifestPolicyConfigHash(updateConfigV5.policyConfig);
+    if (fn === "compiledParametersOf") return [parameterValue, "0x"];
+    return okReader.call(address, abi, fn, args);
+  }
+};
+const v5PostVerificationPromise = verifyProductionOnboarding(updateConfigV5, v5Reader).then((result) => {
+  assert(result.ready, `v5 post-activation verifier should pass: ${JSON.stringify(result.checks)}`);
+});
+const v5PreReader = {
+  ...v5Reader,
+  async call(address: string, abi: string[], fn: string, args: unknown[] = []) {
+    if (fn === "manifestVersionOf") return 1n;
+    if (fn === "pendingCompiledPlanHashOf") return v5Compiled.compiledPlanHash;
+    if (fn === "pendingManifestUpdateOf") return [[3, updateConfigV5.manifest.issuanceRecipeId, updateConfigV5.manifest.issuanceRecipeVersion, updateConfigV5.manifest.fundRecipeId, updateConfigV5.manifest.enabledResalePaths, updateConfigV5.manifest.supportedEngines, updateConfigV5.manifest.stateScopeId, BigInt(updateConfigV5.manifest.factsPacked), BigInt(updateConfigV5.manifest.coverageScope), updateConfigV5.manifest.fullManifestHash, ZERO_ADDR, ZERO_ADDR], [[1, 2, 0, 0, 100]], 123n, updateReason];
+    return v5Reader.call(address, abi, fn, args);
+  }
+};
+const v5PreVerificationPromise = verifyProductionPolicyUpdatePreActivation(updateConfigV5, v5PreReader).then((result) => {
+  assert(result.ready, `v5 pre-activation verifier should pass: ${JSON.stringify(result.checks)}`);
+  const mismatched = {...v5PreReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "pendingCompiledPlanHashOf") return h("f"); return v5PreReader.call(address, abi, fn, args); }};
+  return verifyProductionPolicyUpdatePreActivation(updateConfigV5, mismatched);
+}).then((result) => {
+  assert(!result.ready && result.checks.some((check) => check.name === "pending-compiled-plan-hash" && !check.pass), "v5 pre-activation verifier fails closed on pending plan mismatch");
+});
+const onboardingVerificationPromise = Promise.all([baseOnboardingVerificationPromise, v5PostVerificationPromise, v5PreVerificationPromise]);
 
 
 const referenceTarget = join(dir, "reference-rfq");
