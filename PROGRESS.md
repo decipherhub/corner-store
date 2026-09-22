@@ -11,10 +11,21 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. 다음 production-readiness feature는 열린 이슈와 의존성을 검토한 뒤 하나만
-활성화한다.
+없음. 다음 우선순위는 #109 BUIDL-like profile의 generic parameter migration이다.
 
 ## Completed
+
+- `TOOLKIT-003 — Parameter-aware Production Safe Export`: schema v5가 Element
+  parameter capability와 bounded `ManifestPolicyConfig`를 검증하고, exact parameter
+  bytes와 compiled-plan commitment가 audit artifact에 일치할 때만 REGISTER 또는
+  delayed UPDATE용 unsigned Safe/operator plan을 생성한다. UPDATE는 owner schedule,
+  timelock 이후 activation, permissionless checkpoint를 분리하며 pending/live 상태,
+  policy version/status, runtime code hash와 compiled parameters를 fail-closed 검증한다.
+  최대 256 entries·16,384 raw parameter bytes의 exact calldata는 100,292 bytes,
+  calldata-only upper bound는 1,604,672 gas로 측정했다. 검증: Toolkit/CLI targeted
+  smoke, clean external SDK consumer install/build/conformance, full Foundry 902/902,
+  전체 `scripts/check.sh`, BUIDL-like/Reg-D E2E 각각 7/7 및 dashboard/CLI/RFQ flow,
+  `git diff --check` 통과.
 
 - `CORE-012 — Safe Element Emergency Replacement`: 사고 자산을 즉시 suspend한 뒤
   새 immutable Element ID와 exact Recipe version을 등록하고, full policy config와

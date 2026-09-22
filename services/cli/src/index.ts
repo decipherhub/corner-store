@@ -193,7 +193,7 @@ program
 
 program
   .command("production-onboarding-plan")
-  .description("render unsigned production ERC-3643 asset onboarding plan and Safe drafts")
+  .description("render unsigned production ERC-3643 REGISTER/UPDATE plan and Safe drafts")
   .argument("[path]", "production onboarding config JSON path", "corner-store.production-onboarding.json")
   .option("--out <path>", "immutable output JSON path")
   .option("--audit-artifact <path>", "reviewed canonical policy audit artifact (required by schema v4)")
@@ -206,6 +206,13 @@ program
   .argument("[path]", "production onboarding config JSON path", "corner-store.production-onboarding.json")
   .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
   .action(run((path, opts, command) => cmd.cmdProductionOnboardingVerify(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
+
+program
+  .command("production-policy-update-preactivation")
+  .description("fail-closed verification of pending Manifest/config/code before delayed UPDATE activation")
+  .argument("[path]", "schema v5 production policy UPDATE config JSON path", "corner-store.production-onboarding.json")
+  .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
+  .action(run((path, opts, command) => cmd.cmdProductionPolicyUpdatePreActivation(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
 
 program
   .command("production-deploy")

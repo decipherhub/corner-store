@@ -105,3 +105,23 @@ Migration steps:
 3. pass the resolved value through coordinator persistence and signing;
 4. expire or cancel outstanding v1 quotes rather than converting them;
 5. run RFQ SDK/host conformance, Foundry RFQ tests and a Router settlement E2E.
+
+### Production onboarding schema v5 migration
+
+Schema v5 is additive and does not reinterpret v1-v4 inputs. Use it when a policy
+contains `ManifestPolicyConfig` parameters or when exporting a semantic UPDATE.
+
+1. add `lifecycle` with `REGISTER` version 1, or `UPDATE` with the intended next
+   version, previous artifact hash, non-zero reason code and expected post-status;
+2. copy each live Element parameter capability from reviewed Registry metadata and
+   declare whether the object is newly registered;
+3. add schema v1 `policyConfig`, including exact bytes only for the binding/Element
+   pairs that accept or require them;
+4. create and store an artifact whose lifecycle, previous hash, compiled plan and
+   parameter bytes match the config;
+5. regenerate the immutable Safe plan rather than editing v4 calldata;
+6. for UPDATE, run the pre-activation verifier after scheduling and the normal
+   production verifier after delayed activation/checkpoint.
+
+Do not change only the schema number: v5 deliberately fails closed when lifecycle
+or Element capability data is absent.

@@ -177,6 +177,12 @@ yarn test
 
 Foundry integration tests는 mock/ERC-3643 fixture를 사용해 regulated swap,
 multi-Recipe, surveillance, emergency pause와 invariant path를 검증한다.
+
+Parameterized production onboarding은 Toolkit smoke에서 schema/capability mismatch,
+required parameter 누락, 16,384-byte boundary, exact UPDATE calldata, Safe/operator
+ordering과 activation 전후 verifier를 검증한다. calldata 측정과 production gas gate는
+[`performance/manifest-policy-config-calldata.md`](./performance/manifest-policy-config-calldata.md)를
+따른다.
 `PredicateValidation.t.sol`은 bool/uint/time-window/set의 exact encoding, inclusive
 boundary, duplicate와 최대 entry 제한을 검증한다. `MinimumTradeAmount.t.sol`은
 Manifest-owned threshold와 missing/zero/trailing parameter fail-closed를 검증하고,

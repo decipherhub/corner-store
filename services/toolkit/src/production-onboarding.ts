@@ -11,7 +11,7 @@ import {
   validatePolicyAuditArtifactFile
 } from "./policy-audit";
 
-export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 4;
+export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 5;
 export const MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION = 1;
 export const POLICY_STATUS = {UNKNOWN: 0, UNREGULATED: 1, ACTIVE: 2, SUSPENDED: 3, PROPOSED: 4, RETIRED: 5} as const;
 export const VENUE_TYPE = {AMM: 0, ORDER_BOOK: 1, RFQ: 2} as const;
@@ -21,6 +21,9 @@ export const ENFORCEMENT_ACTION = {FLAG_ONLY: 0, OPERATOR_REVIEW: 1, BLOCK: 2} a
 export const EVIDENCE_TYPE = {TRANSACTION_CONTEXT: 1, ONCHAIN_STATE: 2, PROVIDER_ATTESTATION: 3, COMPOSITE: 4} as const;
 export const ENFORCEMENT_OVERRIDE_MODE = {USE_ELEMENT_DEFAULT: 0, ESCALATE_TO_OPERATOR_REVIEW: 1, ESCALATE_TO_BLOCK: 2, FORCE_FLAG_ONLY: 3} as const;
 export const MAX_ENFORCEMENT_OVERRIDES = 256;
+export const MAX_POLICY_PARAMETERS = 256;
+export const MAX_TOTAL_PARAMETER_BYTES = 16_384;
+export const MAX_ELEMENT_PARAMETER_BYTES = 4_096;
 export const RECIPE_KEY_DOMAIN = keccak256(toUtf8Bytes("corner-store.recipe-key.v1"));
 export const POLICY_CONFIG_DOMAIN = keccak256(toUtf8Bytes("CORNER_STORE_MANIFEST_POLICY_CONFIG_V1"));
 
@@ -50,11 +53,13 @@ export interface ProductionOnboardingConfig {
     makerAuthorizer?: string;
   };
   codeHashes?: Record<string, string>;
+  lifecycle?: PolicyLifecycleInput;
   elements: ElementInput[];
   recipes: RecipeInput[];
   manifest: ManifestInput;
   recipeBindings: RecipeBindingInput[];
   enforcementOverrides?: ElementEnforcementOverrideInput[];
+  policyConfig?: ManifestPolicyConfigInput;
   venues: VenueInput[];
   rfq?: {
     makers?: {maker: string; approved: boolean}[];
@@ -70,6 +75,11 @@ export interface ElementInput {
   defaultAction?: keyof typeof ENFORCEMENT_ACTION | number;
   versionHash?: string;
   metadataHash?: string;
+  parameterSchemaId?: string;
+  parameterSchemaVersion?: number;
+  maxParameterBytes?: number;
+  parametersRequired?: boolean;
+  register?: boolean;
 }
 
 export interface RecipeInput {
@@ -81,6 +91,28 @@ export interface RecipeInput {
   aliasHash?: string;
   recipeKey?: string;
   requiredElements?: string[];
+  register?: boolean;
+}
+
+export interface PolicyLifecycleInput {
+  action: "REGISTER" | "UPDATE";
+  intendedPolicyVersion: string;
+  previousArtifactHash?: string;
+  reasonCode?: string;
+  expectedPostStatus?: "ACTIVE" | "SUSPENDED";
+}
+
+export interface ElementPolicyParameterInput {
+  bindingIndex: number;
+  elementId: string;
+  schemaId: string;
+  schemaVersion: number;
+  parameters: string;
+}
+
+export interface ManifestPolicyConfigInput {
+  schemaVersion: number;
+  elementParameters: ElementPolicyParameterInput[];
 }
 
 export interface ManifestInput {
@@ -150,11 +182,13 @@ export interface ProductionOnboardingPlan {
   legalPackageHash: string;
   onboardingHash: string;
   generatedAt: string;
+  lifecycleAction: "REGISTER" | "UPDATE";
   warnings: string[];
   transactions: OnboardingTx[];
   inventoryRequirements: InventoryRequirement[];
   recipeKeyCommitments?: RecipeKeyCommitment[];
   compiledPlan?: CompiledPlanCommitment;
+  parameterMetrics?: {entryCount: number; totalParameterBytes: number; manifestCalldataBytes: number; calldataGasUpperBound: number};
   safeTransactions: SafeOnboardingTransaction[];
   operatorTransactions: OperatorOnboardingTransaction[];
 }
@@ -240,6 +274,9 @@ const RECIPE_REGISTRY = new Interface([
 const POLICY_REGISTRY = new Interface([
   "function registerManifest(address token,tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) m,tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings)",
   "function registerManifest(address token,tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) m,tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings,tuple(uint8 bindingIndex,bytes32 elementId,uint8 mode)[] overrides)",
+  "function registerManifest(address token,tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) m,tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings,tuple(uint8 bindingIndex,bytes32 elementId,uint8 mode)[] overrides,tuple(uint16 schemaVersion,tuple(uint8 bindingIndex,bytes32 elementId,bytes32 schemaId,uint16 schemaVersion,bytes parameters)[] elementParameters) config)",
+  "function scheduleManifestUpdate(address token,tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) m,tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings,tuple(uint8 bindingIndex,bytes32 elementId,uint8 mode)[] overrides,tuple(uint16 schemaVersion,tuple(uint8 bindingIndex,bytes32 elementId,bytes32 schemaId,uint16 schemaVersion,bytes parameters)[] elementParameters) config,bytes32 reasonCode)",
+  "function activateManifestUpdate(address token)",
   "function approveManifest(address token)",
   "function manifestOf(address token) view returns (tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy))",
   "function recipeBindingsOf(address token) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[])",
@@ -248,7 +285,11 @@ const POLICY_REGISTRY = new Interface([
   "function compiledBindingCountOf(address token) view returns (uint256)",
   "function compiledBindingOf(address token,uint256 index) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority) binding,bytes32 recipeKey,bytes32 bindingPlanHash)",
   "function compiledRulesOf(address token,uint256 bindingIndex) view returns (tuple(bytes32 elementId,uint8 action)[])",
-  "function manifestVersionOf(address token) view returns (uint64)"
+  "function manifestVersionOf(address token) view returns (uint64)",
+  "function policyConfigHashOf(address token) view returns (bytes32)",
+  "function compiledParametersOf(address token,uint256 bindingIndex) view returns (bytes[] values)",
+  "function pendingCompiledPlanHashOf(address token) view returns (bytes32)",
+  "function pendingManifestUpdateOf(address token) view returns (tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) manifest,tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings,uint64 effectiveTime,bytes32 reasonCode)"
 ]);
 const POLICY_AUDIT_ENGINE = new Interface([
   "function recordPolicyAuditCheckpoint(address token) returns (bytes32 checkpointHash)",
@@ -292,12 +333,13 @@ export function loadProductionOnboardingConfig(path: string): ProductionOnboardi
 export function validateProductionOnboardingConfig(value: unknown): ProductionOnboardingConfig {
   rejectUnsafeEvidence(value, "onboarding");
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("production onboarding config must be an object");
-  assertKnownKeys(value, ["schemaVersion", "chainId", "configHash", "artifactHash", "legalPackageHash", "governance", "addresses", "codeHashes", "elements", "recipes", "manifest", "recipeBindings", "enforcementOverrides", "venues", "rfq", "inventory"], "onboarding");
+  assertKnownKeys(value, ["schemaVersion", "chainId", "configHash", "artifactHash", "legalPackageHash", "governance", "addresses", "codeHashes", "lifecycle", "elements", "recipes", "manifest", "recipeBindings", "enforcementOverrides", "policyConfig", "venues", "rfq", "inventory"], "onboarding");
   const c = value as Partial<ProductionOnboardingConfig>;
   const schemaVersion = c.schemaVersion;
   if (typeof schemaVersion !== "number" || !Number.isInteger(schemaVersion) || schemaVersion < MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION || schemaVersion > PRODUCTION_ONBOARDING_SCHEMA_VERSION) throw new Error(`schemaVersion must be between ${MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION} and ${PRODUCTION_ONBOARDING_SCHEMA_VERSION}`);
   const v2 = isV2Onboarding(c);
   const v3 = isV3Onboarding(c);
+  const v5 = isV5Onboarding(c);
   if (!Number.isSafeInteger(c.chainId) || Number(c.chainId) <= 0) throw new Error("chainId must be a positive integer");
   if (!isSha(c.configHash)) throw new Error("configHash must be a sha256 hash");
   if (!isSha(c.artifactHash)) throw new Error("artifactHash must be a sha256 hash");
@@ -332,10 +374,14 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
       throw new Error("schemaVersion 4 artifactHash must equal manifest.fullManifestHash bytes32 commitment");
     }
   }
+  if (v5) {
+    validateLifecycle(c.lifecycle);
+    if (c.lifecycle!.action === "UPDATE" && normalizeArtifactHash(c.lifecycle!.previousArtifactHash!) === normalizeArtifactHash(c.artifactHash!)) throw new Error("UPDATE artifactHash must differ from previousArtifactHash");
+  } else if (c.lifecycle !== undefined || c.policyConfig !== undefined) throw new Error("lifecycle and policyConfig require schemaVersion 5");
   if (!Array.isArray(c.elements) || c.elements.length === 0) throw new Error("elements must contain at least one element");
   const elementIds = new Set<string>();
   for (const [index, element] of c.elements.entries()) {
-    assertKnownKeys(element, ["elementId", "implementation", "evidenceType", "defaultAction", "versionHash", "metadataHash"], `elements[${index}]`);
+    assertKnownKeys(element, ["elementId", "implementation", "evidenceType", "defaultAction", "versionHash", "metadataHash", "parameterSchemaId", "parameterSchemaVersion", "maxParameterBytes", "parametersRequired", "register"], `elements[${index}]`);
     if (!isHash32(element?.elementId)) throw new Error(`elements[${index}].elementId must be bytes32`);
     if (!isAddress(element?.implementation)) throw new Error(`elements[${index}].implementation must be a non-zero address`);
     if (element.evidenceType !== undefined) enumValue(element.evidenceType, EVIDENCE_TYPE, `elements[${index}].evidenceType`);
@@ -346,6 +392,19 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
     if (v2 && !v3 && element.evidenceType !== undefined) throw new Error("schemaVersion 2 elements must not include schemaVersion 3 evidenceType");
     if (element.versionHash !== undefined && !isHash32(element.versionHash)) throw new Error(`elements[${index}].versionHash must be bytes32`);
     if (element.metadataHash !== undefined && !isHash32(element.metadataHash)) throw new Error(`elements[${index}].metadataHash must be bytes32`);
+    if (v5) {
+      if (!isHash32(element.parameterSchemaId)) throw new Error(`elements[${index}].parameterSchemaId must be bytes32`);
+      validateUint(element.parameterSchemaVersion, 16, `elements[${index}].parameterSchemaVersion`);
+      validateUint(element.maxParameterBytes, 32, `elements[${index}].maxParameterBytes`);
+      if (typeof element.parametersRequired !== "boolean") throw new Error(`elements[${index}].parametersRequired must be boolean`);
+      if (typeof element.register !== "boolean") throw new Error(`elements[${index}].register must be boolean`);
+      if (c.lifecycle!.action === "REGISTER" && !element.register) throw new Error(`elements[${index}].register must be true for REGISTER lifecycle`);
+      const parameterless = /^0x0{64}$/i.test(element.parameterSchemaId!);
+      if (parameterless && (element.parameterSchemaVersion !== 0 || element.maxParameterBytes !== 0 || element.parametersRequired)) throw new Error(`elements[${index}] parameterless capability must use zero version/max and required=false`);
+      if (!parameterless && (element.parameterSchemaVersion === 0 || element.maxParameterBytes === 0 || element.maxParameterBytes! > MAX_ELEMENT_PARAMETER_BYTES)) throw new Error(`elements[${index}] parameter schema requires non-zero version and maxParameterBytes <= ${MAX_ELEMENT_PARAMETER_BYTES}`);
+    } else if (element.parameterSchemaId !== undefined || element.parameterSchemaVersion !== undefined || element.maxParameterBytes !== undefined || element.parametersRequired !== undefined || element.register !== undefined) {
+      throw new Error("parameter capability and registration fields require schemaVersion 5");
+    }
     const key = element.elementId.toLowerCase();
     if (elementIds.has(key)) throw new Error("elements must not contain duplicate elementId values");
     elementIds.add(key);
@@ -355,7 +414,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   const aliasHashes = new Set<string>();
   const recipeKeys = new Set<string>();
   for (const [index, recipe] of c.recipes.entries()) {
-    assertKnownKeys(recipe, ["recipeId", "version", "implementation", "alias", "normalizedAlias", "aliasHash", "recipeKey", "requiredElements"], `recipes[${index}]`);
+    assertKnownKeys(recipe, ["recipeId", "version", "implementation", "alias", "normalizedAlias", "aliasHash", "recipeKey", "requiredElements", "register"], `recipes[${index}]`);
     validateUint(recipe?.recipeId, 16, `recipes[${index}].recipeId`);
     validateUint(recipe?.version, 16, `recipes[${index}].version`);
     if (recipe.recipeId === 0 || recipe.version === 0) throw new Error(`recipes[${index}] recipeId/version must be non-zero`);
@@ -383,6 +442,9 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
         if (requiredSeen.has(key)) throw new Error(`recipes[${index}].requiredElements must not contain duplicates`);
         requiredSeen.add(key);
       }
+      if (v5 && typeof recipe.register !== "boolean") throw new Error(`recipes[${index}].register must be boolean`);
+      if (v5 && c.lifecycle!.action === "REGISTER" && !recipe.register) throw new Error(`recipes[${index}].register must be true for REGISTER lifecycle`);
+      if (!v5 && recipe.register !== undefined) throw new Error("recipe registration fields require schemaVersion 5");
     } else if (recipe.alias !== undefined || recipe.normalizedAlias !== undefined || recipe.aliasHash !== undefined || recipe.recipeKey !== undefined || recipe.requiredElements !== undefined) throw new Error("schemaVersion 1 recipes must not include v2 canonical recipe fields");
   }
   validateManifest(c.manifest);
@@ -410,6 +472,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   }
   if (!hasBlocking) throw new Error("recipeBindings must include a blocking REQUIRED_BLOCKING or PATH_OPTION binding");
   validateOverrides(c.enforcementOverrides, c.recipeBindings, c.recipes, c.elements, v2);
+  if (v5) validatePolicyConfig(c.policyConfig, c.recipeBindings, c.recipes, c.elements);
   if (!Array.isArray(c.venues) || c.venues.length === 0) throw new Error("venues must contain at least one venue");
   const venueSeen = new Set<string>();
   for (const [index, venue] of c.venues.entries()) validateVenue(venue, index, venueSeen);
@@ -483,12 +546,15 @@ export function createProductionOnboardingPlan(
   const selected = validateProductionOnboardingConfig(config);
   const v2 = isV2Onboarding(selected);
   const v4 = isV4Onboarding(selected);
+  const v5 = isV5Onboarding(selected);
+  const lifecycleAction = v5 ? selected.lifecycle!.action : "REGISTER";
   const recipeKeyCommitments = v2 ? recipeCommitments(selected.recipes) : undefined;
   const compiledPlan = v2 ? compilePlanCommitment(selected) : undefined;
   if (v4) assertPolicyAuditReady(selected, compiledPlan!, auditEvidence);
   const txs: OnboardingTx[] = [];
   const ids = {elements: [] as string[], recipes: [] as string[], venues: [] as string[], makers: [] as string[], delegates: [] as string[]};
   for (const [index, element] of selected.elements.entries()) {
+    if (v5 && !element.register) continue;
     const id = `element-${index + 1}-${digestId(element.elementId)}`;
     ids.elements.push(id);
     const data = v2
@@ -497,6 +563,7 @@ export function createProductionOnboardingPlan(
     txs.push(tx(id, "governance-owner", `Register compliance element ${element.elementId}`, selected.addresses.elementRegistry, data, [], "safe-owner"));
   }
   for (const recipe of selected.recipes) {
+    if (v5 && !recipe.register) continue;
     const id = `recipe-${recipe.recipeId}-v${recipe.version}`;
     ids.recipes.push(id);
     const data = v2
@@ -504,29 +571,46 @@ export function createProductionOnboardingPlan(
       : RECIPE_REGISTRY.encodeFunctionData("registerRecipe(uint16,uint16,address)", [recipe.recipeId, recipe.version, recipe.implementation]);
     txs.push(tx(id, "governance-owner", `Register recipe ${recipe.recipeId} v${recipe.version}${v2 ? ` alias=${normalizeRecipeAlias(recipe.alias!)}` : ""}`, selected.addresses.recipeRegistry, data, ids.elements, "safe-owner"));
   }
-  const manifestId = "manifest-register";
-  const manifestData = v2
-    ? POLICY_REGISTRY.encodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[])", [selected.addresses.token, manifestTuple(selected.manifest), bindingTuples(selected.recipeBindings), overrideTuples(selected.enforcementOverrides ?? [])])
-    : POLICY_REGISTRY.encodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[])", [selected.addresses.token, manifestTuple(selected.manifest), bindingTuples(selected.recipeBindings)]);
-  txs.push(tx(manifestId, "governance-owner", "Register token manifest as PROPOSED", selected.addresses.tokenPolicyRegistry, manifestData, ids.recipes, "safe-owner"));
-  const approveManifestId = "manifest-approve";
-  txs.push(tx(approveManifestId, "operator", "Approve token manifest as ACTIVE", selected.addresses.tokenPolicyRegistry, POLICY_REGISTRY.encodeFunctionData("approveManifest", [selected.addresses.token]), [manifestId], "operator"));
-  const policyReadyId = v4 ? "policy-audit-checkpoint" : approveManifestId;
-  if (v4) {
-    txs.push(tx(policyReadyId, "operator", "Record policyId/version/artifact audit checkpoint", selected.addresses.complianceEngine!, POLICY_AUDIT_ENGINE.encodeFunctionData("recordPolicyAuditCheckpoint", [selected.addresses.token]), [approveManifestId], "operator"));
+  const manifestId = lifecycleAction === "UPDATE" ? "manifest-update-schedule" : "manifest-register";
+  let manifestData: string;
+  if (lifecycleAction === "UPDATE") {
+    manifestData = POLICY_REGISTRY.encodeFunctionData(
+      "scheduleManifestUpdate(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[],(uint16,(uint8,bytes32,bytes32,uint16,bytes)[]),bytes32)",
+      [selected.addresses.token, manifestTuple(selected.manifest), bindingTuples(selected.recipeBindings), overrideTuples(selected.enforcementOverrides ?? []), policyConfigTuple(selected.policyConfig), selected.lifecycle!.reasonCode]
+    );
+    txs.push(tx(manifestId, "governance-owner", "Schedule delayed token Manifest semantic update", selected.addresses.tokenPolicyRegistry, manifestData, ids.recipes, "safe-owner"));
+  } else {
+    manifestData = v5
+      ? POLICY_REGISTRY.encodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[],(uint16,(uint8,bytes32,bytes32,uint16,bytes)[]))", [selected.addresses.token, manifestTuple(selected.manifest), bindingTuples(selected.recipeBindings), overrideTuples(selected.enforcementOverrides ?? []), policyConfigTuple(selected.policyConfig)])
+      : v2
+        ? POLICY_REGISTRY.encodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[],(uint8,bytes32,uint8)[])", [selected.addresses.token, manifestTuple(selected.manifest), bindingTuples(selected.recipeBindings), overrideTuples(selected.enforcementOverrides ?? [])])
+        : POLICY_REGISTRY.encodeFunctionData("registerManifest(address,(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),(uint16,uint16,uint8,uint16,uint8)[])", [selected.addresses.token, manifestTuple(selected.manifest), bindingTuples(selected.recipeBindings)]);
+    txs.push(tx(manifestId, "governance-owner", "Register token manifest as PROPOSED", selected.addresses.tokenPolicyRegistry, manifestData, ids.recipes, "safe-owner"));
   }
-  for (const [index, venue] of (selected.venues ?? []).entries()) {
+  const activationId = lifecycleAction === "UPDATE" ? "manifest-update-activate" : "manifest-approve";
+  const activationData = lifecycleAction === "UPDATE"
+    ? POLICY_REGISTRY.encodeFunctionData("activateManifestUpdate", [selected.addresses.token])
+    : POLICY_REGISTRY.encodeFunctionData("approveManifest", [selected.addresses.token]);
+  const activationDescription = lifecycleAction === "UPDATE" ? "Activate delayed Manifest update" : "Approve token manifest as ACTIVE";
+  const activation = tx(activationId, "operator", activationDescription, selected.addresses.tokenPolicyRegistry, activationData, [manifestId], "operator");
+  if (lifecycleAction === "UPDATE") activation.earliestExecution = "+1 day after Manifest update readyAt";
+  txs.push(activation);
+  const policyReadyId = v4 ? "policy-audit-checkpoint" : activationId;
+  if (v4) {
+    txs.push(tx(policyReadyId, "operator", "Record policyId/version/artifact audit checkpoint", selected.addresses.complianceEngine!, POLICY_AUDIT_ENGINE.encodeFunctionData("recordPolicyAuditCheckpoint", [selected.addresses.token]), [activationId], "operator"));
+  }
+  for (const [index, venue] of (lifecycleAction === "REGISTER" ? (selected.venues ?? []) : []).entries()) {
     const id = `venue-${index + 1}`;
     ids.venues.push(id);
     txs.push(tx(id, "governance-owner", `Register venue ${venue.venue}`, selected.addresses.venueRegistry, VENUE_REGISTRY.encodeFunctionData("registerVenue", [venue.venue, venueTuple(venue)]), [policyReadyId], "safe-owner"));
   }
-  for (const [index, maker] of (selected.rfq?.makers ?? []).entries()) {
+  for (const [index, maker] of (lifecycleAction === "REGISTER" ? (selected.rfq?.makers ?? []) : []).entries()) {
     const id = `maker-${index + 1}`;
     ids.makers.push(id);
-    const deps = ids.venues.length > 0 ? ids.venues : [approveManifestId];
+    const deps = ids.venues.length > 0 ? ids.venues : [activationId];
     txs.push(tx(id, "operator", `Set RFQ maker approval ${maker.maker}=${maker.approved}`, selected.addresses.rfqAdapter!, RFQ_ADAPTER.encodeFunctionData("setMakerApproved", [maker.maker, maker.approved]), deps, "operator"));
   }
-  for (const [index, delegate] of (selected.rfq?.signerDelegates ?? []).entries()) {
+  for (const [index, delegate] of (lifecycleAction === "REGISTER" ? (selected.rfq?.signerDelegates ?? []) : []).entries()) {
     const schedule = `signer-${index + 1}-schedule`;
     const execute = `signer-${index + 1}-execute`;
     ids.delegates.push(execute);
@@ -534,8 +618,14 @@ export function createProductionOnboardingPlan(
     txs.push({...tx(execute, "governance-delayed", `Execute delayed RFQ signer delegate ${delegate.delegate}`, selected.addresses.makerAuthorizer!, MAKER_AUTHORIZER.encodeFunctionData("executeDelegateAuthorization", [delegate.maker, delegate.delegate]), [schedule], "safe-owner"), earliestExecution: "+1 day after signer schedule readyAt"});
   }
   for (const [index, inv] of selected.inventory.entries()) {
-    txs.push(tx(`inventory-${index + 1}-verify`, "verification", `Verify read-only inventory for ${inv.holder}`, inv.token, "0x", ids.makers.length > 0 ? ids.makers : [approveManifestId], "read-only"));
+    txs.push(tx(`inventory-${index + 1}-verify`, "verification", `Verify read-only inventory for ${inv.holder}`, inv.token, "0x", ids.makers.length > 0 ? ids.makers : [policyReadyId], "read-only"));
   }
+  const parameterMetrics = v5 ? {
+    entryCount: selected.policyConfig!.elementParameters.length,
+    totalParameterBytes: selected.policyConfig!.elementParameters.reduce((sum, entry) => sum + (entry.parameters.length - 2) / 2, 0),
+    manifestCalldataBytes: (manifestData.length - 2) / 2,
+    calldataGasUpperBound: ((manifestData.length - 2) / 2) * 16
+  } : undefined;
   const hashInput = {...selected, recipeKeyCommitments, compiledPlan, generatedAt: "<deterministic>"};
   const onboardingHash = `sha256:${createHash("sha256").update(canonicalJson(hashInput)).digest("hex")}`;
   const safeTransactions = txs.filter((entry) => entry.authority === "safe-owner").map((entry, index) => {
@@ -576,6 +666,7 @@ export function createProductionOnboardingPlan(
     legalPackageHash: selected.legalPackageHash,
     onboardingHash,
     generatedAt,
+    lifecycleAction,
     warnings: [
       "plan/export only: transactions are unsigned and are never broadcast by this tool",
       "governance-owner and operator steps are separated for Safe/operator review",
@@ -586,6 +677,7 @@ export function createProductionOnboardingPlan(
     inventoryRequirements: selected.inventory,
     recipeKeyCommitments,
     compiledPlan,
+    parameterMetrics,
     safeTransactions,
     operatorTransactions
   };
@@ -608,7 +700,9 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
       const policyId = String(hashes.policyId ?? hashes[2]);
       check("policy-id", isHash32(policyId) && !/^0x0{64}$/i.test(policyId), `actual=${policyId}`);
       const version = await reader.call(selected.addresses.tokenPolicyRegistry, ["function manifestVersionOf(address) view returns (uint64)"], "manifestVersionOf", [selected.addresses.token]);
-      check("policy-version", BigInt(version.toString()) > 0n, `actual=${version.toString()}`);
+      const actualVersion = BigInt(version.toString());
+      const expectedVersion = isV5Onboarding(selected) ? BigInt(selected.lifecycle!.intendedPolicyVersion) : undefined;
+      check("policy-version", expectedVersion === undefined ? actualVersion > 0n : actualVersion === expectedVersion, `expected=${expectedVersion?.toString() ?? ">0"}; actual=${actualVersion.toString()}`);
     } catch (err: any) { check("policy-audit-state", false, `unavailable: ${err.message}`); }
   }
   await verifyCallAddress(reader, selected.addresses.token, ERC3643_TOKEN, "identityRegistry", [], selected.addresses.identityRegistry, "erc3643-identity-registry", check);
@@ -646,6 +740,13 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
           const expectedDefaultEnforcement = enumValue(element.defaultAction, ENFORCEMENT_ACTION, "defaultAction");
           check(`element-${index + 1}-evidence-type`, actualEvidenceType === expectedEvidenceType, `expected=${expectedEvidenceType}; actual=${actualEvidenceType}`);
           check(`element-${index + 1}-metadata-default`, actualDefaultEnforcement === expectedDefaultEnforcement, `expected=${expectedDefaultEnforcement}; actual=${actualDefaultEnforcement}`);
+          if (isV5Onboarding(selected)) {
+            const actualSchemaId = String(metadata.parameterSchemaId ?? metadata[9]);
+            const actualSchemaVersion = Number(metadata.parameterSchemaVersion ?? metadata[10]);
+            const actualMaxBytes = Number(metadata.maxParameterBytes ?? metadata[11]);
+            const actualRequired = Boolean(metadata.parametersRequired ?? metadata[12]);
+            check(`element-${index + 1}-parameter-capability`, actualSchemaId.toLowerCase() === element.parameterSchemaId!.toLowerCase() && actualSchemaVersion === element.parameterSchemaVersion && actualMaxBytes === element.maxParameterBytes && actualRequired === element.parametersRequired, `schema=${actualSchemaId}@${actualSchemaVersion}; max=${actualMaxBytes}; required=${actualRequired}`);
+          }
         } catch (err: any) {
           check(`element-${index + 1}-metadata-conformance`, false, `unavailable: ${err.message}`);
         }
@@ -683,7 +784,8 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
   }
   try {
     const status = Number(await reader.call(selected.addresses.tokenPolicyRegistry, ["function statusOf(address) view returns (uint8)"], "statusOf", [selected.addresses.token]));
-    check("manifest-status", status === POLICY_STATUS.ACTIVE, `expected=ACTIVE(${POLICY_STATUS.ACTIVE}); actual=${status}`);
+    const expectedStatus = isV5Onboarding(selected) && selected.lifecycle!.action === "UPDATE" && selected.lifecycle!.expectedPostStatus === "SUSPENDED" ? POLICY_STATUS.SUSPENDED : POLICY_STATUS.ACTIVE;
+    check("manifest-status", status === expectedStatus, `expected=${selected.lifecycle?.expectedPostStatus ?? "ACTIVE"}(${expectedStatus}); actual=${status}`);
   } catch (err: any) { check("manifest-status", false, `unavailable: ${err.message}`); }
   try {
     const manifest = await reader.call(selected.addresses.tokenPolicyRegistry, ["function manifestOf(address) view returns (tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy))"], "manifestOf", [selected.addresses.token]);
@@ -702,6 +804,7 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
     check("manifest-bindings", JSON.stringify(normalizeBindings(bindings)) === JSON.stringify(bindingTuples(selected.recipeBindings).map((b) => b.map(Number))), `expected=${JSON.stringify(bindingTuples(selected.recipeBindings))}; actual=${JSON.stringify(normalizeBindings(bindings))}`);
   } catch (err: any) { check("manifest-bindings", false, `unavailable: ${err.message}`); }
   if (isV2Onboarding(selected)) await verifyCompiledPlan(selected, reader, check);
+  if (isV5Onboarding(selected)) await verifyPolicyConfig(selected, reader, check);
   for (const [index, venue] of (selected.venues ?? []).entries()) {
     try {
       const actual = await reader.call(selected.addresses.venueRegistry, ["function venueOf(address) view returns (tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active))"], "venueOf", [venue.venue]);
@@ -737,6 +840,56 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
   return {ready: checks.every((item) => item.pass), checks};
 }
 
+export async function verifyProductionPolicyUpdatePreActivation(
+  config: ProductionOnboardingConfig,
+  reader: OnboardingReader
+): Promise<ProductionOnboardingVerification> {
+  const selected = validateProductionOnboardingConfig(config);
+  if (!isV5Onboarding(selected) || selected.lifecycle!.action !== "UPDATE") throw new Error("pre-activation verification requires a schemaVersion 5 UPDATE config");
+  const checks: ProductionOnboardingCheck[] = [];
+  const check = (name: string, pass: boolean, detail: string) => checks.push({name, pass, detail});
+  try {
+    const chain = await reader.chainId();
+    check("chain-id", chain === selected.chainId, `expected=${selected.chainId}; actual=${chain}`);
+  } catch (err: any) { check("chain-id", false, `unavailable: ${err.message}`); }
+  for (const key of ["complianceEngine", "tokenPolicyRegistry", "elementRegistry", "recipeRegistry"] as const) {
+    await verifyCode(reader, selected.addresses[key]!, `code-${key}`, check, selected.codeHashes?.[key]);
+  }
+  await verifyOwner(reader, selected.addresses.elementRegistry, selected.governance.safe, "owner-element-registry", check);
+  await verifyOwner(reader, selected.addresses.recipeRegistry, selected.governance.safe, "owner-recipe-registry", check);
+  await verifyOwner(reader, selected.addresses.tokenPolicyRegistry, selected.governance.safe, "owner-token-policy-registry", check);
+  await verifyOperatorRole(reader, selected.addresses.tokenPolicyRegistry, selected.governance.operatorExecutor, "token-policy-operator", check);
+  for (const [index, element] of selected.elements.entries()) {
+    await verifyCallAddress(reader, selected.addresses.elementRegistry, ["function elementOf(bytes32) view returns (address)"], "elementOf", [element.elementId], element.implementation, `element-${index + 1}-registered`, check);
+  }
+  for (const recipe of selected.recipes) {
+    const key = deriveRecipeKey(recipeAliasHash(recipe.alias!));
+    await verifyCallAddress(reader, selected.addresses.recipeRegistry, ["function recipeOf(bytes32,uint16) view returns (address)"], "recipeOf", [key, recipe.version], recipe.implementation, `recipe-${recipe.recipeId}-registered`, check);
+  }
+  try {
+    const version = BigInt(await reader.call(selected.addresses.tokenPolicyRegistry, ["function manifestVersionOf(address) view returns (uint64)"], "manifestVersionOf", [selected.addresses.token]));
+    const expectedCurrent = BigInt(selected.lifecycle!.intendedPolicyVersion) - 1n;
+    check("current-policy-version", version === expectedCurrent, `expected=${expectedCurrent}; actual=${version}`);
+  } catch (err: any) { check("current-policy-version", false, `unavailable: ${err.message}`); }
+  try {
+    const pending = await reader.call(selected.addresses.tokenPolicyRegistry, ["function pendingManifestUpdateOf(address) view returns (tuple(uint8 status,uint16 issuanceRecipeId,uint16 issuanceRecipeVersion,uint16 fundRecipeId,uint32 enabledResalePaths,uint8 supportedEngines,uint16 stateScopeId,uint256 factsPacked,uint256 coverageScope,bytes32 fullManifestHash,address declaredBy,address approvedBy) manifest,tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)[] bindings,uint64 effectiveTime,bytes32 reasonCode)"], "pendingManifestUpdateOf", [selected.addresses.token]);
+    const manifest = pending.manifest ?? pending[0];
+    const bindings = pending.bindings ?? pending[1];
+    const effectiveTime = BigInt(pending.effectiveTime ?? pending[2]);
+    const reasonCode = String(pending.reasonCode ?? pending[3]);
+    check("pending-manifest-hash", String(manifest.fullManifestHash ?? manifest[9]).toLowerCase() === selected.manifest.fullManifestHash.toLowerCase(), `actual=${String(manifest.fullManifestHash ?? manifest[9])}`);
+    check("pending-bindings", JSON.stringify(normalizeBindings(bindings)) === JSON.stringify(bindingTuples(selected.recipeBindings).map((b) => b.map(Number))), `actual=${JSON.stringify(normalizeBindings(bindings))}`);
+    check("pending-effective-time", effectiveTime > 0n, `actual=${effectiveTime}`);
+    check("pending-reason", reasonCode.toLowerCase() === selected.lifecycle!.reasonCode!.toLowerCase(), `expected=${selected.lifecycle!.reasonCode}; actual=${reasonCode}`);
+  } catch (err: any) { check("pending-manifest", false, `unavailable: ${err.message}`); }
+  try {
+    const actual = String(await reader.call(selected.addresses.tokenPolicyRegistry, ["function pendingCompiledPlanHashOf(address) view returns (bytes32)"], "pendingCompiledPlanHashOf", [selected.addresses.token]));
+    const expected = compilePlanCommitment(selected).compiledPlanHash;
+    check("pending-compiled-plan-hash", actual.toLowerCase() === expected.toLowerCase(), `expected=${expected}; actual=${actual}`);
+  } catch (err: any) { check("pending-compiled-plan-hash", false, `unavailable: ${err.message}`); }
+  return {ready: checks.every((item) => item.pass), checks};
+}
+
 export function productionOnboardingInterfaces() {
   return {ELEMENT_REGISTRY, RECIPE_REGISTRY, POLICY_REGISTRY, POLICY_AUDIT_ENGINE, VENUE_REGISTRY, RFQ_ADAPTER, MAKER_AUTHORIZER};
 }
@@ -755,6 +908,24 @@ function bindingTuples(bindings: RecipeBindingInput[]): any[][] {
 
 function overrideTuples(overrides: ElementEnforcementOverrideInput[]): any[][] {
   return overrides.map((o) => [o.bindingIndex, o.elementId, enumValue(o.mode, ENFORCEMENT_OVERRIDE_MODE, "override.mode")]);
+}
+
+function policyConfigTuple(config?: ManifestPolicyConfigInput): any[] {
+  const selected = config ?? {schemaVersion: 1, elementParameters: []};
+  return [selected.schemaVersion, selected.elementParameters.map((entry) => [
+    entry.bindingIndex,
+    entry.elementId,
+    entry.schemaId,
+    entry.schemaVersion,
+    entry.parameters
+  ])];
+}
+
+export function manifestPolicyConfigHash(config?: ManifestPolicyConfigInput): string {
+  return keccak256(coder.encode(
+    ["bytes32", "tuple(uint16 schemaVersion,tuple(uint8 bindingIndex,bytes32 elementId,bytes32 schemaId,uint16 schemaVersion,bytes parameters)[] elementParameters)"],
+    [POLICY_CONFIG_DOMAIN, policyConfigTuple(config)]
+  ));
 }
 
 function venueTuple(v: VenueInput): any[] {
@@ -792,6 +963,71 @@ function isV4Onboarding(config: Partial<ProductionOnboardingConfig>): boolean {
   return typeof config.schemaVersion === "number" && config.schemaVersion >= 4;
 }
 
+function isV5Onboarding(config: Partial<ProductionOnboardingConfig>): boolean {
+  return typeof config.schemaVersion === "number" && config.schemaVersion >= 5;
+}
+
+function validateLifecycle(lifecycle: PolicyLifecycleInput | undefined): void {
+  if (!lifecycle || typeof lifecycle !== "object" || Array.isArray(lifecycle)) throw new Error("lifecycle is required for schemaVersion 5");
+  assertKnownKeys(lifecycle, ["action", "intendedPolicyVersion", "previousArtifactHash", "reasonCode", "expectedPostStatus"], "lifecycle");
+  if (lifecycle.action !== "REGISTER" && lifecycle.action !== "UPDATE") throw new Error("lifecycle.action must be REGISTER or UPDATE");
+  const version = parseUint(lifecycle.intendedPolicyVersion, "lifecycle.intendedPolicyVersion");
+  if (lifecycle.action === "REGISTER") {
+    if (version !== 1n) throw new Error("REGISTER lifecycle requires intendedPolicyVersion 1");
+    if (lifecycle.previousArtifactHash !== undefined || lifecycle.reasonCode !== undefined || lifecycle.expectedPostStatus !== undefined) throw new Error("REGISTER lifecycle must not include UPDATE-only fields");
+  } else {
+    if (version <= 1n) throw new Error("UPDATE lifecycle requires intendedPolicyVersion greater than 1");
+    if (!isSha(lifecycle.previousArtifactHash)) throw new Error("UPDATE lifecycle requires previousArtifactHash");
+    if (!isHash32(lifecycle.reasonCode) || /^0x0{64}$/i.test(lifecycle.reasonCode!)) throw new Error("UPDATE lifecycle requires a non-zero reasonCode");
+    if (lifecycle.expectedPostStatus !== "ACTIVE" && lifecycle.expectedPostStatus !== "SUSPENDED") throw new Error("UPDATE lifecycle requires expectedPostStatus ACTIVE or SUSPENDED");
+  }
+}
+
+function validatePolicyConfig(
+  config: ManifestPolicyConfigInput | undefined,
+  bindings: RecipeBindingInput[] | undefined,
+  recipes: RecipeInput[] | undefined,
+  elements: ElementInput[] | undefined
+): void {
+  if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("policyConfig is required for schemaVersion 5");
+  assertKnownKeys(config, ["schemaVersion", "elementParameters"], "policyConfig");
+  if (config.schemaVersion !== 1) throw new Error("policyConfig.schemaVersion must be 1");
+  if (!Array.isArray(config.elementParameters) || config.elementParameters.length > MAX_POLICY_PARAMETERS) throw new Error(`policyConfig.elementParameters must contain at most ${MAX_POLICY_PARAMETERS} entries`);
+  const byRecipe = new Map((recipes ?? []).map((recipe) => [recipe.recipeId, recipe]));
+  const byElement = new Map((elements ?? []).map((element) => [element.elementId.toLowerCase(), element]));
+  const seen = new Set<string>();
+  let totalBytes = 0;
+  for (const [index, entry] of config.elementParameters.entries()) {
+    assertKnownKeys(entry, ["bindingIndex", "elementId", "schemaId", "schemaVersion", "parameters"], `policyConfig.elementParameters[${index}]`);
+    validateUint(entry.bindingIndex, 8, `policyConfig.elementParameters[${index}].bindingIndex`);
+    if (!bindings || entry.bindingIndex >= bindings.length) throw new Error(`policyConfig.elementParameters[${index}].bindingIndex is out of range`);
+    if (!isHash32(entry.elementId) || !isHash32(entry.schemaId)) throw new Error(`policyConfig.elementParameters[${index}] elementId/schemaId must be bytes32`);
+    validateUint(entry.schemaVersion, 16, `policyConfig.elementParameters[${index}].schemaVersion`);
+    if (!/^0x(?:[0-9a-fA-F]{2})*$/.test(entry.parameters)) throw new Error(`policyConfig.elementParameters[${index}].parameters must be canonical hex bytes`);
+    const key = `${entry.bindingIndex}:${entry.elementId.toLowerCase()}`;
+    if (seen.has(key)) throw new Error("policyConfig.elementParameters must not contain duplicate bindingIndex/elementId entries");
+    seen.add(key);
+    const element = byElement.get(entry.elementId.toLowerCase());
+    const recipe = byRecipe.get(bindings[entry.bindingIndex].recipeId);
+    if (!element || !recipe?.requiredElements?.some((id) => id.toLowerCase() === entry.elementId.toLowerCase())) throw new Error(`policyConfig.elementParameters[${index}] is not a required Element of its binding`);
+    if (entry.schemaId.toLowerCase() !== element.parameterSchemaId!.toLowerCase() || entry.schemaVersion !== element.parameterSchemaVersion) throw new Error(`policyConfig.elementParameters[${index}] schema does not match Element capability`);
+    const bytes = (entry.parameters.length - 2) / 2;
+    if (bytes === 0) throw new Error(`policyConfig.elementParameters[${index}].parameters must not be empty`);
+    if (bytes > element.maxParameterBytes!) throw new Error(`policyConfig.elementParameters[${index}] exceeds Element maxParameterBytes`);
+    totalBytes += bytes;
+  }
+  if (totalBytes > MAX_TOTAL_PARAMETER_BYTES) throw new Error(`policyConfig parameter bytes exceed ${MAX_TOTAL_PARAMETER_BYTES}`);
+  for (const [bindingIndex, binding] of (bindings ?? []).entries()) {
+    const recipe = byRecipe.get(binding.recipeId)!;
+    for (const elementId of recipe.requiredElements ?? []) {
+      const element = byElement.get(elementId.toLowerCase())!;
+      const supplied = seen.has(`${bindingIndex}:${elementId.toLowerCase()}`);
+      if (element.parametersRequired && !supplied) throw new Error(`policyConfig missing required parameters for binding ${bindingIndex} Element ${elementId}`);
+      if (!element.parametersRequired && element.maxParameterBytes === 0 && supplied) throw new Error(`policyConfig supplied parameters to parameterless Element ${elementId}`);
+    }
+  }
+}
+
 function assertPolicyAuditReady(
   config: ProductionOnboardingConfig,
   compiledPlan: CompiledPlanCommitment,
@@ -807,7 +1043,9 @@ function assertPolicyAuditReady(
   if (artifact.chainId !== config.chainId || !same(artifact.token, config.addresses.token)) throw new Error("policy audit chain/token binding mismatch");
   if (artifact.policy.configHash !== config.configHash || artifact.policy.legalPackageHash !== config.legalPackageHash) throw new Error("policy audit config/legal commitment mismatch");
   if (artifact.policy.compiledPlanHash.toLowerCase() !== compiledPlan.compiledPlanHash.toLowerCase()) throw new Error("policy audit compiled plan mismatch");
-  if (artifact.lifecycleAction !== "REGISTER" || artifact.intendedPolicyVersion !== "1") throw new Error("production onboarding requires a REGISTER audit artifact for policy version 1");
+  const lifecycle = isV5Onboarding(config) ? config.lifecycle! : {action: "REGISTER" as const, intendedPolicyVersion: "1"};
+  if (artifact.lifecycleAction !== lifecycle.action || artifact.intendedPolicyVersion !== lifecycle.intendedPolicyVersion) throw new Error("policy audit lifecycle/version mismatch");
+  if (lifecycle.action === "UPDATE" && normalizeArtifactHash(artifact.previousArtifactHash!) !== normalizeArtifactHash(lifecycle.previousArtifactHash!)) throw new Error("policy audit previous artifact mismatch");
   for (const key of ["complianceEngine", "tokenPolicyRegistry", "elementRegistry", "recipeRegistry"] as const) {
     if (!same(artifact.deployment[key], config.addresses[key]!)) throw new Error(`policy audit deployment.${key} mismatch`);
     if (artifact.deployment.runtimeCodeHashes[key].toLowerCase() !== config.codeHashes![key].toLowerCase()) throw new Error(`policy audit runtime code hash ${key} mismatch`);
@@ -865,7 +1103,12 @@ function assertPolicyAuditReady(
           (configured.versionHash !== undefined && audited.versionHash.toLowerCase() !== configured.versionHash.toLowerCase()) ||
           (configured.metadataHash !== undefined && audited.metadataHash.toLowerCase() !== configured.metadataHash.toLowerCase()) ||
           audited.evidenceType !== enumValue(configured.evidenceType, EVIDENCE_TYPE, "element evidence type") ||
-          audited.defaultAction !== enumValue(configured.defaultAction, ENFORCEMENT_ACTION, "element default action")) {
+          audited.defaultAction !== enumValue(configured.defaultAction, ENFORCEMENT_ACTION, "element default action") ||
+          (isV5Onboarding(config) && (
+            audited.parameterSchemaId.toLowerCase() !== configured.parameterSchemaId!.toLowerCase() ||
+            audited.parameterSchemaVersion !== configured.parameterSchemaVersion ||
+            audited.parameters.toLowerCase() !== ((config.policyConfig!.elementParameters.find((entry) => entry.bindingIndex === binding.bindingIndex && entry.elementId.toLowerCase() === rule.elementId.toLowerCase())?.parameters) ?? "0x").toLowerCase()
+          ))) {
         throw new Error(`policy audit element ${key} mismatch`);
       }
     }
@@ -910,15 +1153,13 @@ function validateOverrides(overrides: ElementEnforcementOverrideInput[] | undefi
   }
 }
 
-function compilePlanCommitment(config: ProductionOnboardingConfig): CompiledPlanCommitment {
+export function compilePlanCommitment(config: ProductionOnboardingConfig): CompiledPlanCommitment {
   const recipeById = new Map(config.recipes.map((recipe) => [recipe.recipeId, recipe]));
   const elementById = new Map(config.elements.map((element) => [element.elementId.toLowerCase(), element]));
   const overrideByBindingElement = new Map((config.enforcementOverrides ?? []).map((override) => [`${override.bindingIndex}:${override.elementId.toLowerCase()}`, override]));
-  const emptyPolicyConfigHash = keccak256(coder.encode(
-    ["bytes32", "tuple(uint16 schemaVersion,tuple(uint8 bindingIndex,bytes32 elementId,bytes32 schemaId,uint16 schemaVersion,bytes parameters)[] elementParameters)"],
-    [POLICY_CONFIG_DOMAIN, [1, []]]
-  ));
-  let acc = emptyPolicyConfigHash;
+  const policyConfigHash = manifestPolicyConfigHash(config.policyConfig);
+  let acc = policyConfigHash;
+  const parameterByBindingElement = new Map((config.policyConfig?.elementParameters ?? []).map((entry) => [`${entry.bindingIndex}:${entry.elementId.toLowerCase()}`, entry.parameters]));
   const bindings = config.recipeBindings.map((binding, bindingIndex) => {
     const recipe = recipeById.get(binding.recipeId);
     if (!recipe) throw new Error(`recipeBindings[${bindingIndex}].recipeId has no registered recipe`);
@@ -934,7 +1175,7 @@ function compilePlanCommitment(config: ProductionOnboardingConfig): CompiledPlan
     const bindingTuple = bindingTuples([binding])[0];
     const bindingPlanHash = keccak256(coder.encode(
       ["tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)", "bytes32", "tuple(bytes32 elementId,uint8 action)[]", "bytes[]"],
-      [bindingTuple, recipeKey, rules.map((rule) => [rule.elementId, rule.actionValue]), rules.map(() => "0x")]
+      [bindingTuple, recipeKey, rules.map((rule) => [rule.elementId, rule.actionValue]), rules.map((rule) => parameterByBindingElement.get(`${bindingIndex}:${rule.elementId.toLowerCase()}`) ?? "0x")]
     ));
     acc = keccak256(coder.encode(["bytes32", "bytes32"], [acc, bindingPlanHash]));
     return {bindingIndex, recipeId: binding.recipeId, recipeVersion: binding.recipeVersion, recipeKey, bindingPlanHash, rules};
@@ -1060,7 +1301,7 @@ function same(a: string, b: string): boolean { return a.toLowerCase() === b.toLo
 
 function rejectUnsafeEvidence(value: unknown, path: string): void {
   if (typeof value === "string") {
-    const hashLike = /(Hash|hash|elementId|reasonHash|fullManifestHash|recipeKey)$/.test(path) || path.includes(".codeHashes.") || path.includes(".requiredElements[");
+    const hashLike = /(Hash|hash|elementId|SchemaId|schemaId|reasonCode|fullManifestHash|recipeKey|parameters)$/.test(path) || path.includes(".codeHashes.") || path.includes(".requiredElements[");
     const addressLike = ADDRESS.test(value);
     const decimalAmountLike = /\.(minBalance|minAllowance|factsPacked|coverageScope)$/.test(path);
     if (SECRET_VALUE.test(value) && !hashLike) throw new Error(`${path} must not contain signer secrets or raw private keys`);
@@ -1165,6 +1406,24 @@ async function verifyCompiledPlan(selected: ProductionOnboardingConfig, reader: 
       const expectedRules = expectedBinding.rules.map((rule) => ({elementId: rule.elementId.toLowerCase(), actionValue: rule.actionValue}));
       check(`compiled-rules-${expectedBinding.bindingIndex}`, JSON.stringify(normalized) === JSON.stringify(expectedRules), `expected=${JSON.stringify(expectedRules)}; actual=${JSON.stringify(normalized)}`);
     } catch (err: any) { check(`compiled-rules-${expectedBinding.bindingIndex}`, false, `unavailable: ${err.message}`); }
+  }
+}
+
+async function verifyPolicyConfig(selected: ProductionOnboardingConfig, reader: OnboardingReader, check: (name: string, pass: boolean, detail: string) => void): Promise<void> {
+  const expectedHash = manifestPolicyConfigHash(selected.policyConfig);
+  try {
+    const actual = String(await reader.call(selected.addresses.tokenPolicyRegistry, ["function policyConfigHashOf(address) view returns (bytes32)"], "policyConfigHashOf", [selected.addresses.token]));
+    check("policy-config-hash", actual.toLowerCase() === expectedHash.toLowerCase(), `expected=${expectedHash}; actual=${actual}`);
+  } catch (err: any) { check("policy-config-hash", false, `unavailable: ${err.message}`); }
+  const recipeById = new Map(selected.recipes.map((recipe) => [recipe.recipeId, recipe]));
+  const parameterByKey = new Map(selected.policyConfig!.elementParameters.map((entry) => [`${entry.bindingIndex}:${entry.elementId.toLowerCase()}`, entry.parameters.toLowerCase()]));
+  for (const [bindingIndex, binding] of selected.recipeBindings.entries()) {
+    const required = recipeById.get(binding.recipeId)!.requiredElements!;
+    const expected = required.map((elementId) => parameterByKey.get(`${bindingIndex}:${elementId.toLowerCase()}`) ?? "0x");
+    try {
+      const actual = Array.from(await reader.call(selected.addresses.tokenPolicyRegistry, ["function compiledParametersOf(address,uint256) view returns (bytes[] values)"], "compiledParametersOf", [selected.addresses.token, bindingIndex])).map((value) => String(value).toLowerCase());
+      check(`compiled-parameters-${bindingIndex}`, JSON.stringify(actual) === JSON.stringify(expected), `expected=${JSON.stringify(expected)}; actual=${JSON.stringify(actual)}`);
+    } catch (err: any) { check(`compiled-parameters-${bindingIndex}`, false, `unavailable: ${err.message}`); }
   }
 }
 

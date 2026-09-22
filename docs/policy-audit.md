@@ -80,7 +80,7 @@ production WORM, 복제, backup 또는 retention 보장이 아니다. production
 `PolicyAuditStore` 계약을 만족하는 operator-owned durable adapter와 독립 복구 검증이
 필요하다.
 
-## Onboarding v4 Gate
+## Onboarding v4/v5 Gate
 
 새 production onboarding은 schema v4를 사용한다.
 
@@ -102,6 +102,11 @@ corner-store production-onboarding-plan corner-store.production-onboarding.json 
 
 schema v1~v3는 기존 demo/호환성 입력으로 계속 읽지만, 저장된 감사 아티팩트 gate를
 제공하지 않으므로 새 production activation 근거로 사용하지 않는다.
+
+schema v5는 parameterized REGISTER와 UPDATE에 사용한다. UPDATE artifact는 config의
+`intendedPolicyVersion`, `previousArtifactHash`, compiled plan, Element parameter
+schema와 exact bytes에 모두 일치해야 한다. 하나라도 다르면 Safe calldata를
+출력하지 않는다.
 
 ## Reconciliation
 
