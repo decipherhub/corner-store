@@ -2,8 +2,16 @@ import {createHash} from "crypto";
 import {readFileSync} from "fs";
 import {resolve} from "path";
 import {AbiCoder, Interface, keccak256, toUtf8Bytes} from "ethers";
+import {
+  PolicyAuditArtifactFile,
+  PolicyAuditStore,
+  artifactHashBytes32,
+  canonicalPolicyAuditJson,
+  normalizeArtifactHash,
+  validatePolicyAuditArtifactFile
+} from "./policy-audit";
 
-export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 3;
+export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 4;
 export const MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION = 1;
 export const POLICY_STATUS = {UNKNOWN: 0, UNREGULATED: 1, ACTIVE: 2, SUSPENDED: 3, PROPOSED: 4, RETIRED: 5} as const;
 export const VENUE_TYPE = {AMM: 0, ORDER_BOOK: 1, RFQ: 2} as const;
@@ -14,6 +22,7 @@ export const EVIDENCE_TYPE = {TRANSACTION_CONTEXT: 1, ONCHAIN_STATE: 2, PROVIDER
 export const ENFORCEMENT_OVERRIDE_MODE = {USE_ELEMENT_DEFAULT: 0, ESCALATE_TO_OPERATOR_REVIEW: 1, ESCALATE_TO_BLOCK: 2, FORCE_FLAG_ONLY: 3} as const;
 export const MAX_ENFORCEMENT_OVERRIDES = 256;
 export const RECIPE_KEY_DOMAIN = keccak256(toUtf8Bytes("corner-store.recipe-key.v1"));
+export const POLICY_CONFIG_DOMAIN = keccak256(toUtf8Bytes("CORNER_STORE_MANIFEST_POLICY_CONFIG_V1"));
 
 type GovernanceStage = "governance-owner" | "operator" | "governance-delayed" | "verification";
 
@@ -26,6 +35,7 @@ export interface ProductionOnboardingConfig {
   governance: {safe: string; requiredApprovals: number; operatorExecutor: string};
   addresses: {
     token: string;
+    complianceEngine?: string;
     identityRegistry: string;
     compliance: string;
     topicsRegistry: string;
@@ -188,6 +198,11 @@ export interface OperatorOnboardingTransaction extends OnboardingTx {
 export interface ProductionOnboardingCheck {name: string; pass: boolean; detail: string}
 export interface ProductionOnboardingVerification {ready: boolean; checks: ProductionOnboardingCheck[]}
 
+export interface ProductionOnboardingAuditEvidence {
+  file: PolicyAuditArtifactFile;
+  store: PolicyAuditStore;
+}
+
 export interface OnboardingReader {
   chainId(): Promise<number>;
   getCode(address: string): Promise<string>;
@@ -232,7 +247,12 @@ const POLICY_REGISTRY = new Interface([
   "function compiledPlanHashOf(address token) view returns (bytes32)",
   "function compiledBindingCountOf(address token) view returns (uint256)",
   "function compiledBindingOf(address token,uint256 index) view returns (tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority) binding,bytes32 recipeKey,bytes32 bindingPlanHash)",
-  "function compiledRulesOf(address token,uint256 bindingIndex) view returns (tuple(bytes32 elementId,uint8 action)[])"
+  "function compiledRulesOf(address token,uint256 bindingIndex) view returns (tuple(bytes32 elementId,uint8 action)[])",
+  "function manifestVersionOf(address token) view returns (uint64)"
+]);
+const POLICY_AUDIT_ENGINE = new Interface([
+  "function recordPolicyAuditCheckpoint(address token) returns (bytes32 checkpointHash)",
+  "function policyHashesOf(address token) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)"
 ]);
 const VENUE_REGISTRY = new Interface([
   "function registerVenue(address venue,tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active) cfg)",
@@ -288,12 +308,13 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   if (!isAddress(c.governance.operatorExecutor)) throw new Error("governance.operatorExecutor must be a non-zero address");
   if (!Number.isSafeInteger(c.governance.requiredApprovals) || c.governance.requiredApprovals < 1 || c.governance.requiredApprovals > 50) throw new Error("governance.requiredApprovals must be between 1 and 50");
   if (!c.addresses || typeof c.addresses !== "object" || Array.isArray(c.addresses)) throw new Error("addresses are required");
-  assertKnownKeys(c.addresses, ["token", "identityRegistry", "compliance", "topicsRegistry", "issuersRegistry", "identityStorage", "elementRegistry", "recipeRegistry", "tokenPolicyRegistry", "operatorRegistry", "venueRegistry", "rfqAdapter", "makerAuthorizer"], "addresses");
+  assertKnownKeys(c.addresses, ["token", "complianceEngine", "identityRegistry", "compliance", "topicsRegistry", "issuersRegistry", "identityStorage", "elementRegistry", "recipeRegistry", "tokenPolicyRegistry", "operatorRegistry", "venueRegistry", "rfqAdapter", "makerAuthorizer"], "addresses");
   for (const key of ["token", "identityRegistry", "compliance", "topicsRegistry", "issuersRegistry", "identityStorage", "elementRegistry", "recipeRegistry", "tokenPolicyRegistry", "operatorRegistry", "venueRegistry"] as const) {
     if (!isAddress(c.addresses[key])) throw new Error(`addresses.${key} must be a non-zero address`);
   }
   if (c.addresses.rfqAdapter !== undefined && !isAddress(c.addresses.rfqAdapter)) throw new Error("addresses.rfqAdapter must be a non-zero address");
   if (c.addresses.makerAuthorizer !== undefined && !isAddress(c.addresses.makerAuthorizer)) throw new Error("addresses.makerAuthorizer must be a non-zero address");
+  if (isV4Onboarding(c) && !isAddress(c.addresses.complianceEngine)) throw new Error("addresses.complianceEngine is required for schemaVersion 4 onboarding");
   validateUniqueAddresses(c.addresses as Record<string, string | undefined>);
   if (c.codeHashes) {
     if (typeof c.codeHashes !== "object" || Array.isArray(c.codeHashes)) throw new Error("codeHashes must be an object");
@@ -301,6 +322,14 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
     for (const [key, value] of Object.entries(c.codeHashes)) {
       if (!addressKeys.has(key)) throw new Error(`codeHashes.${key} must match a configured address key`);
       if (!isHash32(value)) throw new Error(`codeHashes.${key} must be a 32-byte keccak256 hash`);
+    }
+  }
+  if (isV4Onboarding(c)) {
+    for (const key of ["complianceEngine", "tokenPolicyRegistry", "elementRegistry", "recipeRegistry"]) {
+      if (!isHash32(c.codeHashes?.[key])) throw new Error(`codeHashes.${key} is required for schemaVersion 4 onboarding`);
+    }
+    if (artifactHashBytes32(c.artifactHash).toLowerCase() !== c.manifest?.fullManifestHash?.toLowerCase()) {
+      throw new Error("schemaVersion 4 artifactHash must equal manifest.fullManifestHash bytes32 commitment");
     }
   }
   if (!Array.isArray(c.elements) || c.elements.length === 0) throw new Error("elements must contain at least one element");
@@ -446,11 +475,17 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   return c as ProductionOnboardingConfig;
 }
 
-export function createProductionOnboardingPlan(config: ProductionOnboardingConfig, generatedAt = "1970-01-01T00:00:00.000Z"): ProductionOnboardingPlan {
+export function createProductionOnboardingPlan(
+  config: ProductionOnboardingConfig,
+  generatedAt = "1970-01-01T00:00:00.000Z",
+  auditEvidence?: ProductionOnboardingAuditEvidence
+): ProductionOnboardingPlan {
   const selected = validateProductionOnboardingConfig(config);
   const v2 = isV2Onboarding(selected);
+  const v4 = isV4Onboarding(selected);
   const recipeKeyCommitments = v2 ? recipeCommitments(selected.recipes) : undefined;
   const compiledPlan = v2 ? compilePlanCommitment(selected) : undefined;
+  if (v4) assertPolicyAuditReady(selected, compiledPlan!, auditEvidence);
   const txs: OnboardingTx[] = [];
   const ids = {elements: [] as string[], recipes: [] as string[], venues: [] as string[], makers: [] as string[], delegates: [] as string[]};
   for (const [index, element] of selected.elements.entries()) {
@@ -476,10 +511,14 @@ export function createProductionOnboardingPlan(config: ProductionOnboardingConfi
   txs.push(tx(manifestId, "governance-owner", "Register token manifest as PROPOSED", selected.addresses.tokenPolicyRegistry, manifestData, ids.recipes, "safe-owner"));
   const approveManifestId = "manifest-approve";
   txs.push(tx(approveManifestId, "operator", "Approve token manifest as ACTIVE", selected.addresses.tokenPolicyRegistry, POLICY_REGISTRY.encodeFunctionData("approveManifest", [selected.addresses.token]), [manifestId], "operator"));
+  const policyReadyId = v4 ? "policy-audit-checkpoint" : approveManifestId;
+  if (v4) {
+    txs.push(tx(policyReadyId, "operator", "Record policyId/version/artifact audit checkpoint", selected.addresses.complianceEngine!, POLICY_AUDIT_ENGINE.encodeFunctionData("recordPolicyAuditCheckpoint", [selected.addresses.token]), [approveManifestId], "operator"));
+  }
   for (const [index, venue] of (selected.venues ?? []).entries()) {
     const id = `venue-${index + 1}`;
     ids.venues.push(id);
-    txs.push(tx(id, "governance-owner", `Register venue ${venue.venue}`, selected.addresses.venueRegistry, VENUE_REGISTRY.encodeFunctionData("registerVenue", [venue.venue, venueTuple(venue)]), [approveManifestId], "safe-owner"));
+    txs.push(tx(id, "governance-owner", `Register venue ${venue.venue}`, selected.addresses.venueRegistry, VENUE_REGISTRY.encodeFunctionData("registerVenue", [venue.venue, venueTuple(venue)]), [policyReadyId], "safe-owner"));
   }
   for (const [index, maker] of (selected.rfq?.makers ?? []).entries()) {
     const id = `maker-${index + 1}`;
@@ -562,6 +601,15 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
   } catch (err: any) { check("chain-id", false, `unavailable: ${err.message}`); }
   for (const [key, address] of Object.entries(selected.addresses)) {
     if (address) await verifyCode(reader, address, `code-${key}`, check, selected.codeHashes?.[key]);
+  }
+  if (isV4Onboarding(selected)) {
+    try {
+      const hashes = await reader.call(selected.addresses.complianceEngine!, ["function policyHashesOf(address) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)"], "policyHashesOf", [selected.addresses.token]);
+      const policyId = String(hashes.policyId ?? hashes[2]);
+      check("policy-id", isHash32(policyId) && !/^0x0{64}$/i.test(policyId), `actual=${policyId}`);
+      const version = await reader.call(selected.addresses.tokenPolicyRegistry, ["function manifestVersionOf(address) view returns (uint64)"], "manifestVersionOf", [selected.addresses.token]);
+      check("policy-version", BigInt(version.toString()) > 0n, `actual=${version.toString()}`);
+    } catch (err: any) { check("policy-audit-state", false, `unavailable: ${err.message}`); }
   }
   await verifyCallAddress(reader, selected.addresses.token, ERC3643_TOKEN, "identityRegistry", [], selected.addresses.identityRegistry, "erc3643-identity-registry", check);
   await verifyCallAddress(reader, selected.addresses.token, ERC3643_TOKEN, "compliance", [], selected.addresses.compliance, "erc3643-compliance", check);
@@ -690,7 +738,7 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
 }
 
 export function productionOnboardingInterfaces() {
-  return {ELEMENT_REGISTRY, RECIPE_REGISTRY, POLICY_REGISTRY, VENUE_REGISTRY, RFQ_ADAPTER, MAKER_AUTHORIZER};
+  return {ELEMENT_REGISTRY, RECIPE_REGISTRY, POLICY_REGISTRY, POLICY_AUDIT_ENGINE, VENUE_REGISTRY, RFQ_ADAPTER, MAKER_AUTHORIZER};
 }
 
 function tx(id: string, stage: GovernanceStage, description: string, to: string, data: string, dependsOn: string[], authority: OnboardingTx["authority"]): OnboardingTx {
@@ -740,6 +788,91 @@ function isV3Onboarding(config: Partial<ProductionOnboardingConfig>): boolean {
   return typeof config.schemaVersion === "number" && config.schemaVersion >= 3;
 }
 
+function isV4Onboarding(config: Partial<ProductionOnboardingConfig>): boolean {
+  return typeof config.schemaVersion === "number" && config.schemaVersion >= 4;
+}
+
+function assertPolicyAuditReady(
+  config: ProductionOnboardingConfig,
+  compiledPlan: CompiledPlanCommitment,
+  evidence?: ProductionOnboardingAuditEvidence
+): void {
+  if (!evidence) throw new Error("schemaVersion 4 onboarding requires a verified, stored policy audit artifact");
+  const file = validatePolicyAuditArtifactFile(evidence.file, config.artifactHash);
+  if (!evidence.store.exists(file.artifactHash)) throw new Error("policy audit artifact must be stored before onboarding plan export");
+  const stored = evidence.store.get(file.artifactHash);
+  if (canonicalPolicyAuditJson(stored) !== canonicalPolicyAuditJson(file)) throw new Error("stored policy audit artifact does not match reviewed artifact");
+  const artifact = file.artifact;
+  if (normalizeArtifactHash(config.artifactHash) !== file.artifactHash || config.manifest.fullManifestHash.toLowerCase() !== file.onchainArtifactHash.toLowerCase()) throw new Error("policy audit commitment mismatch");
+  if (artifact.chainId !== config.chainId || !same(artifact.token, config.addresses.token)) throw new Error("policy audit chain/token binding mismatch");
+  if (artifact.policy.configHash !== config.configHash || artifact.policy.legalPackageHash !== config.legalPackageHash) throw new Error("policy audit config/legal commitment mismatch");
+  if (artifact.policy.compiledPlanHash.toLowerCase() !== compiledPlan.compiledPlanHash.toLowerCase()) throw new Error("policy audit compiled plan mismatch");
+  if (artifact.lifecycleAction !== "REGISTER" || artifact.intendedPolicyVersion !== "1") throw new Error("production onboarding requires a REGISTER audit artifact for policy version 1");
+  for (const key of ["complianceEngine", "tokenPolicyRegistry", "elementRegistry", "recipeRegistry"] as const) {
+    if (!same(artifact.deployment[key], config.addresses[key]!)) throw new Error(`policy audit deployment.${key} mismatch`);
+    if (artifact.deployment.runtimeCodeHashes[key].toLowerCase() !== config.codeHashes![key].toLowerCase()) throw new Error(`policy audit runtime code hash ${key} mismatch`);
+  }
+  const expectedManifest = {
+    issuanceRecipeId: config.manifest.issuanceRecipeId,
+    issuanceRecipeVersion: config.manifest.issuanceRecipeVersion,
+    fundRecipeId: config.manifest.fundRecipeId,
+    enabledResalePaths: config.manifest.enabledResalePaths,
+    supportedEngines: config.manifest.supportedEngines,
+    stateScopeId: config.manifest.stateScopeId,
+    factsPacked: config.manifest.factsPacked,
+    coverageScope: config.manifest.coverageScope
+  };
+  if (canonicalJson(artifact.policy.manifest) !== canonicalJson(expectedManifest)) throw new Error("policy audit manifest mismatch");
+  const recipeById = new Map(config.recipes.map((recipe) => [recipe.recipeId, recipe]));
+  const expectedBindings = config.recipeBindings.map((binding) => {
+    const recipe = recipeById.get(binding.recipeId)!;
+    return {
+      recipeKey: deriveRecipeKey(recipeAliasHash(recipe.alias!)),
+      recipeId: binding.recipeId,
+      recipeVersion: binding.recipeVersion,
+      mode: enumValue(binding.mode, RECIPE_BINDING_MODE, "recipe binding mode"),
+      pathGroupId: binding.pathGroupId,
+      priority: binding.priority
+    };
+  });
+  if (canonicalJson(artifact.policy.recipeBindings) !== canonicalJson(expectedBindings)) throw new Error("policy audit recipe bindings mismatch");
+  const expectedOverrides = (config.enforcementOverrides ?? []).map((override) => ({
+    bindingIndex: override.bindingIndex,
+    elementId: override.elementId,
+    mode: enumValue(override.mode, ENFORCEMENT_OVERRIDE_MODE, "enforcement override mode")
+  }));
+  if (canonicalJson(artifact.policy.enforcementOverrides) !== canonicalJson(expectedOverrides)) throw new Error("policy audit enforcement overrides mismatch");
+
+  if (artifact.recipes.length !== config.recipes.length) throw new Error("policy audit recipes mismatch");
+  for (const configured of config.recipes) {
+    const configuredRecipeKey = deriveRecipeKey(recipeAliasHash(configured.alias!));
+    const audited = artifact.recipes.find((recipe) => recipe.recipeKey.toLowerCase() === configuredRecipeKey.toLowerCase() && recipe.version === configured.version);
+    if (!audited || audited.recipeId !== configured.recipeId || !same(audited.implementation, configured.implementation) ||
+        canonicalJson(audited.requiredElements.map((value) => value.toLowerCase())) !== canonicalJson(configured.requiredElements!.map((value) => value.toLowerCase()))) {
+      throw new Error(`policy audit recipe ${configured.recipeId} mismatch`);
+    }
+  }
+
+  const elementById = new Map(config.elements.map((element) => [element.elementId.toLowerCase(), element]));
+  const expectedElementKeys = new Set<string>();
+  for (const binding of compiledPlan.bindings) {
+    for (const rule of binding.rules) {
+      const key = `${binding.bindingIndex}:${rule.elementId.toLowerCase()}`;
+      expectedElementKeys.add(key);
+      const configured = elementById.get(rule.elementId.toLowerCase())!;
+      const audited = artifact.elements.find((element) => `${element.bindingIndex}:${element.elementId.toLowerCase()}` === key);
+      if (!audited || !same(audited.implementation, configured.implementation) ||
+          (configured.versionHash !== undefined && audited.versionHash.toLowerCase() !== configured.versionHash.toLowerCase()) ||
+          (configured.metadataHash !== undefined && audited.metadataHash.toLowerCase() !== configured.metadataHash.toLowerCase()) ||
+          audited.evidenceType !== enumValue(configured.evidenceType, EVIDENCE_TYPE, "element evidence type") ||
+          audited.defaultAction !== enumValue(configured.defaultAction, ENFORCEMENT_ACTION, "element default action")) {
+        throw new Error(`policy audit element ${key} mismatch`);
+      }
+    }
+  }
+  if (artifact.elements.length !== expectedElementKeys.size) throw new Error("policy audit elements mismatch");
+}
+
 function recipeCommitments(recipes: RecipeInput[]): RecipeKeyCommitment[] {
   return recipes.map((recipe) => {
     const normalizedAlias = normalizeRecipeAlias(recipe.alias!);
@@ -781,7 +914,11 @@ function compilePlanCommitment(config: ProductionOnboardingConfig): CompiledPlan
   const recipeById = new Map(config.recipes.map((recipe) => [recipe.recipeId, recipe]));
   const elementById = new Map(config.elements.map((element) => [element.elementId.toLowerCase(), element]));
   const overrideByBindingElement = new Map((config.enforcementOverrides ?? []).map((override) => [`${override.bindingIndex}:${override.elementId.toLowerCase()}`, override]));
-  let acc = "0x" + "00".repeat(32);
+  const emptyPolicyConfigHash = keccak256(coder.encode(
+    ["bytes32", "tuple(uint16 schemaVersion,tuple(uint8 bindingIndex,bytes32 elementId,bytes32 schemaId,uint16 schemaVersion,bytes parameters)[] elementParameters)"],
+    [POLICY_CONFIG_DOMAIN, [1, []]]
+  ));
+  let acc = emptyPolicyConfigHash;
   const bindings = config.recipeBindings.map((binding, bindingIndex) => {
     const recipe = recipeById.get(binding.recipeId);
     if (!recipe) throw new Error(`recipeBindings[${bindingIndex}].recipeId has no registered recipe`);
@@ -796,8 +933,8 @@ function compilePlanCommitment(config: ProductionOnboardingConfig): CompiledPlan
     });
     const bindingTuple = bindingTuples([binding])[0];
     const bindingPlanHash = keccak256(coder.encode(
-      ["tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)", "bytes32", "tuple(bytes32 elementId,uint8 action)[]"],
-      [bindingTuple, recipeKey, rules.map((rule) => [rule.elementId, rule.actionValue])]
+      ["tuple(uint16 recipeId,uint16 recipeVersion,uint8 mode,uint16 pathGroupId,uint8 priority)", "bytes32", "tuple(bytes32 elementId,uint8 action)[]", "bytes[]"],
+      [bindingTuple, recipeKey, rules.map((rule) => [rule.elementId, rule.actionValue]), rules.map(() => "0x")]
     ));
     acc = keccak256(coder.encode(["bytes32", "bytes32"], [acc, bindingPlanHash]));
     return {bindingIndex, recipeId: binding.recipeId, recipeVersion: binding.recipeVersion, recipeKey, bindingPlanHash, rules};

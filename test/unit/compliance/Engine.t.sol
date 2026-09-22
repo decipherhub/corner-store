@@ -642,6 +642,42 @@ contract EngineTest is Test {
         assertTrue(baseline.decisionHash != otherChain.decisionHash, "decision must bind final policy identity");
     }
 
+    function test_policyAuditCheckpoint_bindsPolicyVersionArtifactAndHistory() public {
+        ManifestCore memory m = _activeManifest(0, 0);
+        m.fullManifestHash = keccak256("canonical-policy-audit-artifact");
+        policyReg.registerManifest(RWA, m, _bindings(0));
+        policyReg.approveManifest(RWA);
+
+        (,, bytes32 policyId) = engine.policyHashesOf(RWA);
+        uint64 policyVersion = policyReg.manifestVersionOf(RWA);
+        bytes32 historyHash = policyReg.manifestHistoryHashOf(RWA);
+        bytes32 expected = keccak256(
+            abi.encode(
+                engine.POLICY_AUDIT_CHECKPOINT_DOMAIN(),
+                address(engine),
+                block.chainid,
+                RWA,
+                policyId,
+                policyVersion,
+                m.fullManifestHash,
+                PolicyStatus.ACTIVE,
+                historyHash
+            )
+        );
+
+        vm.expectEmit(true, true, true, true);
+        emit Events.PolicyAuditCheckpointRecorded(
+            RWA, policyId, m.fullManifestHash, policyVersion, PolicyStatus.ACTIVE, historyHash, expected, address(this)
+        );
+        assertEq(engine.recordPolicyAuditCheckpoint(RWA), expected);
+    }
+
+    function test_policyAuditCheckpoint_rejectsMissingArtifactCommitment() public {
+        _registerRWA(0, 0);
+        vm.expectRevert(Errors.InvalidManifestHash.selector);
+        engine.recordPolicyAuditCheckpoint(RWA);
+    }
+
     function test_executionBindingHash_changesWhenRecipeRuntimeCodeDrifts() public {
         _registerRWA(0, 0);
         (bytes32 logicalBefore, bytes32 executionBefore, bytes32 policyBefore) = engine.policyHashesOf(RWA);

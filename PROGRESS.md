@@ -11,10 +11,23 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음
+없음.
 
 ## Completed
 
+- `CORE-011 — Policy Audit Artifact`: domain-separated canonical PII-free policy
+  artifact와 content-addressed local reference store를 추가했다. production
+  onboarding schema v4는 저장·재검증된 artifact가 config/legal/compiled plan,
+  Manifest, binding/override, Element/Recipe와 Engine/Registry runtime code hash에
+  모두 일치해야 unsigned plan을 생성한다. artifact SHA-256은
+  `fullManifestHash`에 원자적으로 고정되고, 승인 직후 permissionless Engine
+  checkpoint가 final policyId/version/status/history와 연결한다. local store는
+  production WORM/retention을 주장하지 않으며 operator-owned durable adapter는
+  운영 책임으로 남겼다. 기존 schema v1~v3와 demo는 유지했다. 검증: Toolkit/CLI
+  artifact smoke, Engine 44/44, full Foundry 899/899, 전체 `scripts/check.sh`, clean
+  SDK consumer, deploy-v3 10/10, BUIDL-like/Reg-D E2E 각각 7/7 및
+  dashboard/CLI/RFQ flow. ComplianceEngine runtime 19,583 bytes(EIP-170 margin
+  4,993), TokenPolicyRegistry 24,035 bytes 유지, `git diff --check` 통과.
 - `CORE-010 — Policy Execution Binding`: logical policy와 chain/Engine/Registry/
   Recipe/Element runtime deployment를 domain-separated hash로 결합하고, Registry가
   등록 시점 code hash를 고정해 live drift를 fail-closed하도록 했다. final

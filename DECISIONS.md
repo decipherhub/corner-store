@@ -951,3 +951,55 @@ review and post-deployment reconciliation unreliable.
 - `services/cli/src/commands.ts`
 - `docs/architecture/asset-manifest.md`
 - `docs/architecture/compliance-policy.md`
+
+## D018 — Policy audit reuses the Manifest commitment and records a derived checkpoint
+
+Date: 2026-09-22
+
+### Context
+
+온체인 policy history만으로는 provider evidence, Element parameter와 reviewed
+deployment package 원문을 복원할 수 없다. 반대로 모든 자료를 온체인에 저장하면
+PII 노출, 비용과 vendor-specific retention 책임이 protocol에 들어온다. 별도 mutable
+audit registry는 현재 EIP-170 margin이 작은 Registry를 키우고 Manifest와 감사
+commitment가 서로 다르게 갱신될 위험도 만든다.
+
+### Decision
+
+1. domain-separated canonical JSON의 SHA-256 digest를 production onboarding schema
+   v4의 `ManifestCore.fullManifestHash`로 사용한다.
+2. 원문은 `PolicyAuditStore` port 뒤의 operator-owned immutable store에 보관한다.
+   저장 전후 hash를 재검증하며 SDK의 local adapter는 reference 구현일 뿐 production
+   WORM/retention 보장을 주장하지 않는다.
+3. artifact는 config/legal/compiled plan, exact binding/override, Element/Recipe,
+   deployment runtime code hash와 PII-free provider evidence reference를 포함한다.
+4. 최종 `policyId`는 artifact digest를 포함해 계산되므로 artifact 내부에 넣지 않는다.
+   Manifest 승인 후 permissionless Engine checkpoint event가 final policyId, version,
+   artifact digest, status와 history hash를 연결한다.
+5. schema v4 plan은 저장된 artifact 전체가 onboarding config와 일치해야만 생성되고,
+   checkpoint 이후에만 venue/maker activation으로 진행한다. lifecycle mutation 뒤에도
+   운영자가 checkpoint를 기록하고 reconciliation한다.
+
+### Alternatives Considered
+
+- 모든 감사 데이터를 온체인에 저장: PII/비용/확장성 경계 때문에 거절했다.
+- 새 mutable AuditRegistry에 artifact hash 저장: 이중 source of truth, 권한 표면과
+  bytecode 비용 때문에 거절했다.
+- artifact에 final policyId 포함: self-referential hash cycle 때문에 불가능하다.
+- local filesystem을 production WORM으로 간주: durability, replication, retention과
+  access control을 증명하지 못하므로 거절했다.
+
+### Consequences
+
+- Manifest activation transaction 자체가 artifact commitment를 원자적으로 고정한다.
+- checkpoint event는 상태 변경 권한 없이 최종 실행 identity를 연결하고 재현할 수 있다.
+- production operator는 durable/WORM adapter, retention, backup과 접근통제를 별도로
+  선택·운영해야 한다.
+- 기존 schema v1~v3와 local demos는 호환되지만 새 production readiness gate는 v4다.
+
+### Related Files
+
+- `docs/policy-audit.md`
+- `services/toolkit/src/policy-audit.ts`
+- `services/toolkit/src/production-onboarding.ts`
+- `src/compliance/ComplianceEngine.sol`

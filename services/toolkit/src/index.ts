@@ -3,6 +3,7 @@ export * from "./config";
 export * from "./deploy";
 export * from "./integration";
 export * from "./multisig";
+export * from "./policy-audit";
 export * from "./preflight";
 export * from "./production";
 export * from "./proposal";

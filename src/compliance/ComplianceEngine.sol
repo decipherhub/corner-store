@@ -22,6 +22,7 @@ import {DecisionHashLib} from "../libraries/DecisionHashLib.sol";
 import {PolicyHashLib} from "../libraries/PolicyHashLib.sol";
 import {ReasonCodes} from "../libraries/ReasonCodes.sol";
 import {Errors} from "../libraries/Errors.sol";
+import {Events} from "../libraries/Events.sol";
 import {Governed} from "../auth/Governed.sol";
 
 /// @notice Bounded RecipeBinding evaluator for both sides of a pair.
@@ -31,6 +32,7 @@ import {Governed} from "../auth/Governed.sol";
 contract ComplianceEngine is IComplianceEngine, Governed {
     uint256 public constant MAX_RECIPE_BINDINGS = 8;
     uint256 public constant MAX_ELEMENTS_PER_RECIPE = 32;
+    bytes32 public constant POLICY_AUDIT_CHECKPOINT_DOMAIN = keccak256("CORNER_STORE_POLICY_AUDIT_CHECKPOINT_V1");
 
     struct EvaluationState {
         bool allowed;
@@ -106,6 +108,40 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         ManifestCore memory manifest = policyReg.manifestOf(token);
         RecipeBinding[] memory bindings = policyReg.recipeBindingsOf(token);
         return _policyHashes(token, manifest, bindings);
+    }
+
+    /// @notice Emits a reproducible, PII-free checkpoint for the token's current
+    ///         policy lifecycle state. Anyone may record the checkpoint because
+    ///         every field is derived from immutable/live registry state.
+    function recordPolicyAuditCheckpoint(address token) external override returns (bytes32 checkpointHash) {
+        ManifestCore memory manifest = policyReg.manifestOf(token);
+        uint64 policyVersion = policyReg.manifestVersionOf(token);
+        if (manifest.fullManifestHash == bytes32(0) || policyVersion == 0) revert Errors.InvalidManifestHash();
+        (,, bytes32 policyId) = policyHashesOf(token);
+        bytes32 historyHash = policyReg.manifestHistoryHashOf(token);
+        checkpointHash = keccak256(
+            abi.encode(
+                POLICY_AUDIT_CHECKPOINT_DOMAIN,
+                address(this),
+                block.chainid,
+                token,
+                policyId,
+                policyVersion,
+                manifest.fullManifestHash,
+                manifest.status,
+                historyHash
+            )
+        );
+        emit Events.PolicyAuditCheckpointRecorded(
+            token,
+            policyId,
+            manifest.fullManifestHash,
+            policyVersion,
+            manifest.status,
+            historyHash,
+            checkpointHash,
+            msg.sender
+        );
     }
 
     function _isPermitted(PolicyStatus status) private pure returns (bool) {

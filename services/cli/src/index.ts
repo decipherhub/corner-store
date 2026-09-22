@@ -162,11 +162,43 @@ program
   .action(run((path, opts, command) => cmd.cmdProductionPreflight(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
 
 program
+  .command("policy-audit-build")
+  .description("build a canonical PII-free policy audit artifact")
+  .argument("<input>", "policy audit payload JSON path")
+  .requiredOption("--out <path>", "immutable artifact output JSON path")
+  .action(run((input, opts) => cmd.cmdPolicyAuditBuild(input, {out: opts.out})));
+
+program
+  .command("policy-audit-store")
+  .description("put a verified policy audit artifact into the local immutable reference store")
+  .argument("<artifact>", "policy audit artifact JSON path")
+  .requiredOption("--store <dir>", "local reference store directory")
+  .action(run((artifact, opts) => cmd.cmdPolicyAuditStore(artifact, {store: opts.store})));
+
+program
+  .command("policy-audit-verify")
+  .description("verify canonical hash and optional local-store presence")
+  .argument("<artifact>", "policy audit artifact JSON path")
+  .option("--expected <hash>", "expected sha256 or bytes32 artifact hash")
+  .option("--store <dir>", "local reference store directory")
+  .action(run((artifact, opts) => cmd.cmdPolicyAuditVerify(artifact, {expected: opts.expected, store: opts.store})));
+
+program
+  .command("policy-audit-reconstruct")
+  .description("reconstruct and reverify a policy audit artifact from the local reference store")
+  .argument("<hash>", "sha256 or bytes32 artifact hash")
+  .requiredOption("--store <dir>", "local reference store directory")
+  .option("--out <path>", "immutable reconstructed artifact output path")
+  .action(run((hash, opts) => cmd.cmdPolicyAuditReconstruct(hash, {store: opts.store, out: opts.out})));
+
+program
   .command("production-onboarding-plan")
   .description("render unsigned production ERC-3643 asset onboarding plan and Safe drafts")
   .argument("[path]", "production onboarding config JSON path", "corner-store.production-onboarding.json")
   .option("--out <path>", "immutable output JSON path")
-  .action(run((path, opts) => cmd.cmdProductionOnboardingPlan(path, {out: opts.out})));
+  .option("--audit-artifact <path>", "reviewed canonical policy audit artifact (required by schema v4)")
+  .option("--audit-store <dir>", "immutable audit store containing the artifact (required by schema v4)")
+  .action(run((path, opts) => cmd.cmdProductionOnboardingPlan(path, {out: opts.out, auditArtifact: opts.auditArtifact, auditStore: opts.auditStore})));
 
 program
   .command("production-onboarding-verify")

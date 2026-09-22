@@ -28,7 +28,16 @@ import {
   rfqDomain,
   writeQuoteFile
 } from "../src/rfq";
-import {cmdProductionDeploy, cmdProductionOnboardingPlan, cmdProductionOnboardingVerify, cmdProductionPlan} from "../src/commands";
+import {
+  cmdPolicyAuditBuild,
+  cmdPolicyAuditReconstruct,
+  cmdPolicyAuditStore,
+  cmdPolicyAuditVerify,
+  cmdProductionDeploy,
+  cmdProductionOnboardingPlan,
+  cmdProductionOnboardingVerify,
+  cmdProductionPlan
+} from "../src/commands";
 
 const CHAIN_ID = 31337;
 const RFQ_VERIFYING_CONTRACT = "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0";
@@ -69,6 +78,16 @@ async function main() {
   const productRoot = mkdtempSync(join(tmpdir(), "corner-store-product-"));
   const contractSource = join(productRoot, "contracts");
   const consumerRoot = join(productRoot, "consumer");
+  const policyAuditArtifact = join(productRoot, "policy-audit.json");
+  const policyAuditStore = join(productRoot, "policy-audit-store");
+  const reconstructedPolicyAudit = join(productRoot, "policy-audit-reconstructed.json");
+  const policyAuditInput = join(process.cwd(), "../toolkit/examples/corner-store.policy-audit.input.json");
+  cmdPolicyAuditBuild(policyAuditInput, {out: policyAuditArtifact});
+  const expectedPolicyAuditHash = JSON.parse(readFileSync(policyAuditArtifact, "utf8")).artifactHash as string;
+  cmdPolicyAuditStore(policyAuditArtifact, {store: policyAuditStore});
+  cmdPolicyAuditVerify(policyAuditArtifact, {expected: expectedPolicyAuditHash, store: policyAuditStore});
+  cmdPolicyAuditReconstruct(expectedPolicyAuditHash, {store: policyAuditStore, out: reconstructedPolicyAudit});
+  assert(readFileSync(policyAuditArtifact, "utf8") === readFileSync(reconstructedPolicyAudit, "utf8"), "policy audit CLI reconstructs exact verified artifact");
   for (const path of [
     "src",
     "script",

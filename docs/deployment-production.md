@@ -176,10 +176,10 @@ claims. Those require issuer/TA evidence and separate Safe-reviewed onboarding:
    user access.
 
 The Toolkit accepts explicit, versioned production onboarding files. Legacy v1
-input remains accepted for local/demo compatibility, and v2 remains readable for
-existing canonical Recipe/enforcement plans. New production onboarding should
-use v3 canonical policy and evidence fields such
-as
+input remains accepted for local/demo compatibility, and v2/v3 remain readable for
+existing canonical Recipe/enforcement plans. New production onboarding must use
+v4 stored policy-audit readiness fields. The v3 example remains the base policy
+configuration shape:
 [`services/toolkit/examples/corner-store.production-onboarding.json`](../services/toolkit/examples/corner-store.production-onboarding.json).
 It generates deterministic calldata and Safe-compatible unsigned drafts for the
 reviewed Element, Recipe, Manifest, venue, maker and signer activation sequence.
@@ -188,10 +188,22 @@ The v3 onboarding config must include governance Safe metadata (`safe` and bound
 enforcement action and evidence type, each Recipe's normalized alias/aliasHash/recipeKey and
 required Element set, bounded strengthen-only enforcement overrides, at least one active
 venue and at least one read-only inventory requirement. Active RFQ venues additionally require an approved maker,
-a signer delegate for an approved maker and inventory for an approved maker:
+a signer delegate for an approved maker and inventory for an approved maker.
+
+Before rendering a v4 plan, build and store the canonical PII-free artifact. Set
+the onboarding config's `artifactHash` to the printed `sha256:<digest>` and
+`manifest.fullManifestHash` to the printed `0x<digest>`. The artifact must carry
+the same config/legal/compiled-plan, Manifest, binding/override, Element/Recipe
+and deployment runtime-code commitments. Full schema and reconciliation details
+are in [`policy-audit.md`](./policy-audit.md):
 
 ```sh
-corner-store production-onboarding-plan corner-store.production-onboarding.json --out safe-onboarding.json
+corner-store policy-audit-build policy-audit.input.json --out policy-audit.json
+corner-store policy-audit-store policy-audit.json --store ./policy-audit-store
+corner-store policy-audit-verify policy-audit.json --store ./policy-audit-store
+corner-store production-onboarding-plan corner-store.production-onboarding.json \
+  --audit-artifact policy-audit.json --audit-store ./policy-audit-store \
+  --out safe-onboarding.json
 corner-store production-onboarding-verify corner-store.production-onboarding.json --rpc-url https://approved-rpc.example
 ```
 
@@ -210,7 +222,8 @@ enforce; these technical commitments do not prove legal correctness. The verify
 command reads chain state through RPC and fails closed on any
 unavailable or mismatched value: ERC-3643 token wiring, Identity Registry
 dependencies, governance Safe ownership of safe-owner targets, registered Elements/Recipes, recipe alias/key mapping, Element default action/version hashes,
-exact Manifest hash/fields/bindings, compiled plan hash/rules,
+exact Manifest hash/fields/bindings, compiled plan hash/rules, nonzero live
+policyId/version for v4,
 ACTIVE Manifest with non-zero declarer/approver, global/asset/venue pause gates,
 venue config, maker approval, active signer delegate and inventory minima. A
 pending signer delay is reported but is not considered ready.
@@ -246,7 +259,8 @@ transactions are required deployment inputs.
     the production artifact. Verification compares each deployed runtime
     bytecode hash with the hash written by the reviewed deployment script.
 11. Execute the reviewed Safe/operator onboarding transactions in order:
-    Element/Recipe registration, Manifest registration, Manifest approval, venue
+    Element/Recipe registration, Manifest registration, Manifest approval, policy
+    audit checkpoint, venue
     registration, RFQ maker approval, signer scheduling and owner-only delayed signer execution.
 12. Wait the signer authorization delay before executing the signer activation
     transaction; pending authorization is not production-ready.
@@ -255,6 +269,11 @@ transactions are required deployment inputs.
 14. Start monitoring, indexer finality tracking, alert routing and incident
     response readiness.
 15. Record immutable deployment evidence and update the production manifest.
+
+Every later Manifest suspend/resume/update/retire operation must be followed by
+`recordPolicyAuditCheckpoint(token)` and indexed reconciliation. A missing
+checkpoint is an operations incident and blocks readiness claims; the event does
+not replace the underlying Manifest lifecycle authority.
 
 The evidence file has this minimum shape:
 

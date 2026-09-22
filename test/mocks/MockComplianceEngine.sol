@@ -27,6 +27,10 @@ contract MockComplianceEngine is IComplianceEngine {
         return (bytes32(0), bytes32(0), _decision.policyId);
     }
 
+    function recordPolicyAuditCheckpoint(address) external view returns (bytes32 checkpointHash) {
+        return _decision.policyId;
+    }
+
     function commit(ComplianceContext calldata ctx) external {
         committed = true;
         commitCount++;

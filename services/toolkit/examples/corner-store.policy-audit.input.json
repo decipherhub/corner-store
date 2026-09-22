@@ -1,0 +1,87 @@
+{
+  "schema": "corner-store-policy-audit",
+  "schemaVersion": 1,
+  "chainId": 1,
+  "token": "0x1000000000000000000000000000000000000001",
+  "intendedPolicyVersion": "1",
+  "lifecycleAction": "REGISTER",
+  "policy": {
+    "configHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "legalPackageHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "compiledPlanHash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+    "manifest": {
+      "issuanceRecipeId": 1,
+      "issuanceRecipeVersion": 2,
+      "fundRecipeId": 0,
+      "enabledResalePaths": 1,
+      "supportedEngines": 5,
+      "stateScopeId": 7,
+      "factsPacked": "1",
+      "coverageScope": "3"
+    },
+    "recipeBindings": [
+      {
+        "recipeKey": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "recipeId": 1,
+        "recipeVersion": 2,
+        "mode": 0,
+        "pathGroupId": 0,
+        "priority": 100
+      }
+    ],
+    "enforcementOverrides": []
+  },
+  "deployment": {
+    "complianceEngine": "0x1000000000000000000000000000000000000007",
+    "tokenPolicyRegistry": "0x1000000000000000000000000000000000000008",
+    "elementRegistry": "0x1000000000000000000000000000000000000009",
+    "recipeRegistry": "0x1000000000000000000000000000000000000010",
+    "runtimeCodeHashes": {
+      "complianceEngine": "0x3333333333333333333333333333333333333333333333333333333333333333",
+      "tokenPolicyRegistry": "0x4444444444444444444444444444444444444444444444444444444444444444",
+      "elementRegistry": "0x5555555555555555555555555555555555555555555555555555555555555555",
+      "recipeRegistry": "0x6666666666666666666666666666666666666666666666666666666666666666"
+    }
+  },
+  "elements": [
+    {
+      "bindingIndex": 0,
+      "elementId": "0x7777777777777777777777777777777777777777777777777777777777777777",
+      "implementation": "0x2000000000000000000000000000000000000001",
+      "runtimeCodeHash": "0x8888888888888888888888888888888888888888888888888888888888888888",
+      "versionHash": "0x9999999999999999999999999999999999999999999999999999999999999999",
+      "metadataHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "evidenceType": 3,
+      "defaultAction": 2,
+      "parameterSchemaId": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parameterSchemaVersion": 1,
+      "parameters": "0x1234",
+      "parameterHash": "0x56570de287d73cd1cb6092bb8fdee6173974955fdef345ae579ee9f475ea7432"
+    }
+  ],
+  "recipes": [
+    {
+      "recipeKey": "0x2222222222222222222222222222222222222222222222222222222222222222",
+      "recipeId": 1,
+      "version": 2,
+      "implementation": "0x2000000000000000000000000000000000000002",
+      "runtimeCodeHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "requiredElements": [
+        "0x7777777777777777777777777777777777777777777777777777777777777777"
+      ]
+    }
+  ],
+  "providerEvidence": [
+    {
+      "providerIdHash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "evidenceHash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "signatureRefHash": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "validUntil": "2000000000"
+    }
+  ],
+  "evidenceChainHead": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "source": {
+    "toolVersion": "corner-store-toolkit-0.1.0",
+    "sourceCommit": "abcdef1234567890"
+  }
+}
