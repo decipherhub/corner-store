@@ -10,6 +10,35 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## PROFILE-002 — Generic-parameter BUIDL-like Demo Migration
+
+### Behavior
+
+- BUIDL-like demo는 전용 `BUIDL-MIN-v1` Element 대신 asset-independent
+  `MIN-AMOUNT-v1`과 versioned `ManifestPolicyConfig`를 사용한다.
+- QP+minimum 조합의 의미는 유지하므로 Recipe family id 3은 유지하고 immutable
+  version 2를 등록한다. legacy version 1은 신규 profile에 연결하지 않는다.
+- 5,000,000-token 값은 local demo fixture로만 명명·고정하고 실제 BUIDL 상품
+  정책이나 production default로 노출하지 않는다.
+- production onboarding은 issuer/legal 근거가 결합된 schema v5 artifact 없이
+  activation calldata를 생성하지 않는다.
+- 기존 BUIDL-like/Reg-D local Anvil 흐름과 CLI re-onboarding을 유지한다.
+
+### Verification
+
+- generic recipe/Factory/BUIDL-like targeted suites 23/23 통과
+- 전체 Foundry 906/906 및 `scripts/check.sh` 통과
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 및 dashboard/CLI/RFQ flow 통과
+- BUIDL-like CLI re-onboarding이 `registerRWATokenWithConfig`를 사용하고 Reg-D는
+  기존 parameterless path를 유지함을 live E2E로 검증
+- clean external SDK consumer install/build/conformance 통과
+- `git diff --check` 통과
+
+### State
+
+passing
+
+
 ## TOOLKIT-003 — Parameter-aware Production Safe Export
 
 ### Behavior

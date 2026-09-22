@@ -64,6 +64,25 @@ contract CornerStoreFactory is Governed {
         emit RWATokenRegistered(token, venue);
     }
 
+    /// @notice Register an RWA whose generic Elements require Manifest-owned
+    ///         parameters, while preserving the same atomic onboarding shape.
+    /// @dev Production callers should generate and review this config through
+    ///      the schema-v5 Toolkit path; this method does not supply defaults.
+    function registerRWATokenWithConfig(
+        address token,
+        ManifestCore calldata manifest,
+        RecipeBinding[] calldata bindings,
+        ManifestPolicyConfig calldata config,
+        address venue,
+        VenueConfig calldata venueCfg
+    ) external onlyOperator {
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        tokenPolicyRegistry.registerManifest(token, manifest, bindings, overrides_, config);
+        tokenPolicyRegistry.approveManifest(token);
+        venueRegistry.registerVenue(venue, venueCfg);
+        emit RWATokenRegistered(token, venue);
+    }
+
     /// @notice Schedule a delayed manifest reopening through the registry owner.
     /// @dev The factory owns the registry after deployment, while this factory's
     ///      owner is the external governance account (a Safe in production).

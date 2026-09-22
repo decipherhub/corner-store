@@ -2,10 +2,11 @@ import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "f
 import {createServer} from "http";
 import {tmpdir} from "os";
 import {join} from "path";
-import {Wallet, verifyTypedData} from "ethers";
+import {AbiCoder, Wallet, verifyTypedData} from "ethers";
 
 import {
   BUIDL_LIKE_MANIFEST_HASH,
+  BUIDL_LIKE_DEMO_MINIMUM_TRADE_AMOUNT,
   assetProfileBinding,
   resolveAssetProfile,
   resolveAssetProfileForArtifact
@@ -277,9 +278,14 @@ async function main() {
   );
   const buidl = assetProfileBinding("buidl-like");
   assert(
-    JSON.stringify(buidl.bindings) === JSON.stringify([[1, 2, 0, 0, 100], [3, 1, 0, 0, 90]]) &&
+    JSON.stringify(buidl.bindings) === JSON.stringify([[1, 2, 0, 0, 100], [3, 2, 0, 0, 90]]) &&
       buidl.factsPacked === 1n,
     "BUIDL-like RecipeBinding[]/facts binding"
+  );
+  assert(buidl.policyConfig?.[0] === 1 && buidl.policyConfig[1].length === 1, "BUIDL-like has one versioned policy parameter");
+  assert(
+    AbiCoder.defaultAbiCoder().decode(["uint256"], buidl.policyConfig![1][0][4])[0] === BUIDL_LIKE_DEMO_MINIMUM_TRADE_AMOUNT,
+    "BUIDL-like demo threshold is carried by ManifestPolicyConfig"
   );
   const regD = assetProfileBinding("reg-d");
   assert(
@@ -287,7 +293,7 @@ async function main() {
     "Reg D uses a single RecipeBinding[] without fund mirror behavior"
   );
   assert(
-    buidl.fullManifestHash === "0xdcf411c4cfd970828531bfbaa85d4e6f833b6fb731a32add099081e4eea5b7c9",
+    buidl.fullManifestHash === "0x744909471e0ff4dd681441302626bc3a1d6dde6def9073f79e66994351634c11",
     "BUIDL-like Manifest hash matches the Solidity profile"
   );
   assert(buidl.fullManifestHash === BUIDL_LIKE_MANIFEST_HASH, "BUIDL-like exported hash matches binding");

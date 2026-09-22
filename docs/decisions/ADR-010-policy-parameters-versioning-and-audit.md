@@ -253,6 +253,15 @@ reference/demo 구현을 실제 상품 승인으로 표현하지 않는다.
 - pause, 새 불변 version, timelock, 검증 후 resume 흐름
 - `buidl-like`와 `reg-d` local Anvil demo 유지
 
+## 7. BUIDL-like migration outcome
+
+`PROFILE-002`는 기존 `BUIDL-MIN-v1` binding을 신규 배포에서 제거하고 generic
+`MIN-AMOUNT-v1` + recipe family 3 version 2 + `ManifestPolicyConfig`로 이전한다.
+정책 의미(QP와 minimum의 누적 AND)는 같으므로 family id를 유지하고 immutable
+version만 올렸다. `5,000,000`은 local demo behavior lock이며 실제 상품값 결정은
+여전히 제5절의 외부 입력으로 남는다. legacy Element/Recipe는 historical policy
+재현을 위해 삭제하지 않지만 active demo/production wiring에는 사용하지 않는다.
+
 ## Related
 
 - [`ADR-010 최초 문제 분석과 대안 기록`](./context/ADR-010-origin-analysis.md)

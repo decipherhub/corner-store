@@ -270,6 +270,17 @@ The tool still cannot infer legal requirements from a token address. The issuer/
 legal-approved mapping, PII-free evidence hashes and reviewed onboarding
 transactions are required deployment inputs.
 
+#### BUIDL-like profile boundary
+
+The local `buidl-like` reference profile uses generic `MIN-AMOUNT-v1` through
+recipe family 3 version 2 and supplies `5,000,000` demo units with
+`BuidlLikeDemoAsset.demoPolicyConfig()`. That helper is intentionally demo-only.
+Do not copy its value into a production config. A production BUIDL-related
+activation must use schema v5 with issuer/legal-approved parameter semantics,
+legal package hash and a stored matching policy-audit artifact. Until those
+inputs exist, no production activation plan is valid; the demo passing does not
+change that fail-closed boundary.
+
 ## Deployment Flow
 
 1. Freeze release commit, artifacts and production configuration.

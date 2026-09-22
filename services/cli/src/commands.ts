@@ -1264,10 +1264,13 @@ export async function cmdOnboard(opts: GlobalOpts & {engines?: string; profile?:
   ];
   const venueCfg = [0, a.ammAdapter, a.pool, ZERO_ADDR, 1, true]; // AMM, custody POOL
   const nextNonce = await provider.getTransactionCount(await signer.getAddress(), "latest");
-  await logTx(
-    await factory(a, walletForAccount(0).connect(provider)).registerRWAToken(a.rwaToken, m, binding.bindings, a.pool, venueCfg, {nonce: nextNonce}),
-    "registerRWAToken"
-  );
+  const onboardingFactory = factory(a, walletForAccount(0).connect(provider));
+  const tx = binding.policyConfig
+    ? await onboardingFactory.registerRWATokenWithConfig(
+        a.rwaToken, m, binding.bindings, binding.policyConfig, a.pool, venueCfg, {nonce: nextNonce}
+      )
+    : await onboardingFactory.registerRWAToken(a.rwaToken, m, binding.bindings, a.pool, venueCfg, {nonce: nextNonce});
+  await logTx(tx, binding.policyConfig ? "registerRWATokenWithConfig" : "registerRWAToken");
   console.log(`Onboarded ${binding.profile} RWA ${a.rwaToken} with supportedEngines 0b${mask.toString(2).padStart(3, "0")} + AMM venue ${a.pool}`);
 }
 

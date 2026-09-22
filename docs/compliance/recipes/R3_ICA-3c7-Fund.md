@@ -55,7 +55,7 @@ R3는 underlying 증권을 담는 토큰 펀드·SPV가 1940년 투자회사법�
 
 ---
 
-# 제2부. 구현 명세 (컨트랙트 `Fund3c7Recipe.sol` · `BuidlLikeFundRecipe.sol` 기준)
+# 제2부. 구현 명세 (`Fund3c7Recipe.sol` · `QualifiedPurchaserMinimumAmountRecipe.sol` 기준)
 
 ## 5. 시스템 내 위치
 
@@ -64,7 +64,12 @@ R3 계열은 두 컨트랙트로 실장되어 있다. R-라벨(R3)과 컨트랙�
 | 컨트랙트 | recipeId · ver | 구성 요소 | 활성화 |
 |---|---|---|---|
 | `Fund3c7Recipe.sol` | `2` · `1` | `{A-13}` | fund-bit 조건부 |
-| `BuidlLikeFundRecipe.sol` | `3` · `1` | `{A-13, BUIDL-MIN}` | fund-bit 조건부 |
+| `QualifiedPurchaserMinimumAmountRecipe.sol` | `3` · `2` | `{A-13, MIN-AMOUNT-v1}` | fund-bit 조건부, threshold는 Manifest config |
+
+`BuidlLikeFundRecipe.sol`(`3` · `1`)은 historical binding 재현을 위해 남겨 둔
+legacy immutable 구현이며 신규 profile에는 등록하지 않는다. QP+minimum이라는
+정책 의미는 동일하므로 family id를 유지하고 구현·parameter source 변경을 version
+2로 표현한다.
 
 - 법률효과: §3(c)(7) 제외(ICA 면제) 유지.
 - 결합 방식: Router의 cumulative AND. R3는 R1·R2에 상시 곱해진다(§9).
@@ -78,7 +83,9 @@ R3 계열은 두 컨트랙트로 실장되어 있다. R-라벨(R3)과 컨트랙�
 ## 7. 구성 (Composition) — 요소 AND 집합
 
 - **REQ-R3-2 (Fund3c7 구성).** `Fund3c7Recipe`는 `{A-13}`(적격구매자)의 통과를 요구한다.
-- **REQ-R3-3 (BuidlLike 구성).** `BuidlLikeFundRecipe`는 `{A-13, BUIDL-MIN}`(적격구매자 + 데모 최소투자금)의 통과를 요구한다.
+- **REQ-R3-3 (QP+minimum 구성).** `QualifiedPurchaserMinimumAmountRecipe`는
+  `{A-13, MIN-AMOUNT-v1}`의 통과를 요구하고, minimum 값은 binding별
+  `ManifestPolicyConfig`에서 받아야 한다.
 - **REQ-R3-4 (상시 평가).** fund-bit 자산의 모든 이전에서 매수인 A-13이 평가되어야 한다(§3.4 상시성). 단 기존 보유자 집합 불변식은 현재 컨트랙트 범위 밖이다(§10 seam).
 
 ## 8. 거절 (reasonCode)
@@ -106,7 +113,7 @@ R3 실패는 `RECIPE_R3_3C7_FAIL`로 표면화하되, 실제 차단은 실패 El
 | exclusively 불변식(기존 보유자 비-QP 0) | **미포함** | 컨트랙트는 현재 매수인 A-13만 확인, 보유자 집합 상태 불변식 없음 |
 | §12(g) 보유자 수 — D-01 | R3 구성에 없음(별건 부착) | D-01은 Manifest 부착 별건, R3 requiredElements 아님 |
 
-즉 현재 `Fund3c7Recipe`는 "적격구매자 확인"이라는 ㉠의 자연인 축만 mock으로 구현하며, ㉡(공모 아님, B-04·A-12)과 법인 look-through(A-08·A-09), 상시 불변식은 production seam이다. `BuidlLikeFundRecipe`는 여기에 데모 최소투자금(BUIDL-MIN)을 더한 자산별 배선이다. production 확정 시 ㉡ 축과 법인 축의 편입, exclusively 상태 불변식의 온체인화를 검토하여야 한다.
+즉 현재 `Fund3c7Recipe`는 "적격구매자 확인"이라는 ㉠의 자연인 축만 mock으로 구현하며, ㉡(공모 아님, B-04·A-12)과 법인 look-through(A-08·A-09), 상시 불변식은 production seam이다. `QualifiedPurchaserMinimumAmountRecipe`는 generic minimum gate를 결합하지만 실제 값의 정책 타당성을 보증하지 않는다. production 확정 시 issuer/legal 근거가 결합된 Manifest config와 ㉡ 축·법인 축·exclusively 불변식의 편입을 별도로 검토하여야 한다.
 
 ## 11. 인수 기준
 
@@ -115,7 +122,7 @@ R3 실패는 `RECIPE_R3_3C7_FAIL`로 표면화하되, 실제 차단은 실패 El
 | 1 | fund-bit 미설정 자산 | R3 미발동(isApplicable=false) |
 | 2 | fund-bit 설정, 매수인 A-13 통과 | Fund3c7 PASS |
 | 3 | fund-bit 설정, 매수인 비적격구매자 | RECIPE_R3_...FAIL (전원 요건 hard block) |
-| 4 | BuidlLike, A-13 통과·BUIDL-MIN 미달 | BUIDL-MIN 코드로 차단 |
+| 4 | BUIDL-like demo, A-13 통과·configured MIN-AMOUNT 미달 | MIN-AMOUNT-v1 코드로 차단 |
 | 5 | D-01(§12(g)) 초과 | 별건 경고(R3 자체 실패 아님) |
 
 ## 12. 잔여 확정 항목

@@ -11,9 +11,20 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. 다음 우선순위는 #109 BUIDL-like profile의 generic parameter migration이다.
+없음. ADR-010 implementation epic의 코드 작업은 완료됐으며 실제 BUIDL 상품값,
+issuer/legal evidence와 production activation은 외부 입력 전까지 fail-closed한다.
 
 ## Completed
+
+- `PROFILE-002 — Generic-parameter BUIDL-like Demo Migration`: 신규 BUIDL-like
+  deployment에서 legacy `BUIDL-MIN-v1`과 recipe family 3 version 1 wiring을
+  제거하고 asset-independent `MIN-AMOUNT-v1`, 같은 의미의 immutable recipe
+  version 2와 binding별 `ManifestPolicyConfig`로 이전했다. 5,000,000-token 값은
+  `demoPolicyConfig()`에만 존재하는 local behavior lock이며 production default가
+  아니다. Factory/CLI/testnet onboarding은 config-aware path를 사용하고 Reg-D의
+  parameterless path는 유지한다. 검증: targeted 23/23, full Foundry 906/906,
+  전체 `scripts/check.sh`, clean SDK consumer, BUIDL-like/Reg-D E2E 각각 7/7 및
+  dashboard/CLI/RFQ flow, `git diff --check` 통과.
 
 - `TOOLKIT-003 — Parameter-aware Production Safe Export`: schema v5가 Element
   parameter capability와 bounded `ManifestPolicyConfig`를 검증하고, exact parameter

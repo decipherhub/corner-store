@@ -127,15 +127,29 @@ contract DemoScenarios is Script, DemoConstants {
         });
 
         vm.broadcast(deployerPk);
-        factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
+        if (useBuidlLikeProfile) {
+            factory.registerRWATokenWithConfig(
+                address(rwa), m, bindings, BuidlLikeDemoAsset.demoPolicyConfig(), pool, ammCfg
+            );
+        } else {
+            factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
+        }
 
         ManifestCore memory stored = policyReg.manifestOf(address(rwa));
         ManifestCore memory expected = _baseManifest();
         RecipeBinding[] memory storedBindings = policyReg.recipeBindingsOf(address(rwa));
-        bool profileOk = keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
+        bool profileOk =
+            keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
             && stored.factsPacked == expected.factsPacked && stored.fullManifestHash == expected.fullManifestHash;
-        bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
-            && stored.approvedBy == address(factory) && profileOk;
+        bool configOk = true;
+        if (useBuidlLikeProfile) {
+            bytes[] memory fundParameters = policyReg.compiledParametersOf(address(rwa), 1);
+            configOk = fundParameters.length == 2
+                && keccak256(fundParameters[1]) == keccak256(abi.encode(BuidlLikeDemoAsset.DEMO_MINIMUM_TRADE_AMOUNT));
+        }
+        bool ok =
+            stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
+            && stored.approvedBy == address(factory) && profileOk && configOk;
         _writeManifestSnapshot(stored, storedBindings);
         console2.log("    evidence: ACTIVE selected asset profile, approved by factory");
         console2.log("      status(2=ACTIVE) :", uint256(stored.status));
@@ -290,7 +304,13 @@ contract DemoScenarios is Script, DemoConstants {
             active: true
         });
         vm.broadcast(deployerPk);
-        factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
+        if (useBuidlLikeProfile) {
+            factory.registerRWATokenWithConfig(
+                address(rwa), m, bindings, BuidlLikeDemoAsset.demoPolicyConfig(), pool, ammCfg
+            );
+        } else {
+            factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
+        }
 
         uint256 threshold = 2;
         vm.broadcast(deployerPk);
