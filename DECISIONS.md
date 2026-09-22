@@ -1003,3 +1003,53 @@ commitment가 서로 다르게 갱신될 위험도 만든다.
 - `services/toolkit/src/policy-audit.ts`
 - `services/toolkit/src/production-onboarding.ts`
 - `src/compliance/ComplianceEngine.sol`
+
+## D019 — Element incident recovery uses immutable replacement and normal delays
+
+Date: 2026-09-22
+
+### Context
+
+활성 Element에서 치명적 결함이 발견되면 빠른 containment가 필요하지만 기존
+Element/Recipe binding을 덮어쓰면 이미 검토한 Manifest, audit artifact와 signed RFQ
+quote의 의미가 소급 변경된다. 반대로 교체와 재개를 모두 즉시 허용하면 사고 중
+검증되지 않은 완화 정책이 production에 적용될 수 있다.
+
+### Decision
+
+1. operator는 영향 asset/venue/global 실행과 Manifest를 즉시 suspend할 수 있다.
+2. replacement는 새 `elementId`, 새 immutable Element deployment와 새 exact Recipe
+   version으로만 등록한다. 기존 ID/version은 overwrite하지 않는다.
+3. 영향 자산만 full config/override를 보존한 Manifest semantic update로 전환한다.
+   update는 owner/Safe가 예약하고 기존 최소 delay 뒤 operator가 활성화한다.
+4. update activation은 기존 `SUSPENDED` 상태를 보존한다. artifact/checkpoint,
+   unaffected-asset 불변성, E2E와 stale RFQ quote 거부를 확인한 뒤에만 별도 delayed
+   resume/unpause를 수행한다.
+5. known RFQ nonce는 maker가 즉시 취소하며, 누락된 quote는 교체 뒤 signed
+   `policyId` mismatch가 settlement를 fail-closed하는 최종 방어선이다.
+
+### Alternatives Considered
+
+- 같은 Element ID의 in-place 교체: 과거 review와 quote 의미를 바꾸므로 거절했다.
+- emergency update/unpause timelock bypass: 신속하지만 결함 상태에서 compliance를
+  완화할 governance 공격 표면이 커져 거절했다.
+- 모든 공유 Recipe 자산 자동 migration: blast radius와 법률 승인 범위를 불필요하게
+  확대하므로 거절했다.
+- nonce 취소만 의존: 누락·재시작·동시성으로 모든 발급 nonce를 열거하지 못할 수 있어
+  policy-bound quote 검증과 함께 사용한다.
+
+### Consequences
+
+- containment는 즉시 가능하지만 검증된 재개에는 두 단계의 normal delay가 필요하다.
+- Factory가 TokenPolicyRegistry를 소유할 때 full update forwarding API가 필요하다.
+- 운영자는 before/after artifact와 checkpoint, pending Safe payload, 영향을 받지 않은
+  자산의 불변 증거를 보존해야 한다.
+- UPDATE Safe export 자동화는 #108에서 제공하며 그 전에는 reviewed external Safe
+  tooling을 사용한다.
+
+### Related Files
+
+- `docs/operations/element-emergency-replacement.md`
+- `src/factory/CornerStoreFactory.sol`
+- `test/integration/ElementEmergencyReplacement.t.sol`
+- `test/integration/RFQFlow.t.sol`

@@ -10,6 +10,39 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## CORE-012 — Safe Element Emergency Replacement
+
+### Behavior
+
+- 치명적 Element 결함은 영향 범위를 즉시 pause/suspend한 뒤 새 immutable Element
+  ID, 새 exact Recipe version과 delayed Manifest update로만 교체한다.
+- 기존 Element/Recipe binding은 덮어쓰지 않고 Safe/owner schedule과 정상 timelock을
+  우회하지 않는다.
+- 영향 자산만 새 policy version으로 전환하며 다른 자산의 Manifest, policyId와
+  실행 결과는 바뀌지 않는다.
+- 미체결 RFQ는 maker revoke/nonce cancel로 containment하고, 남은 quote도 policyId
+  변경 후 settlement에서 fail-closed한다.
+- 교체 전후 policy checkpoint와 PII-free artifact chain으로 복구 이력을 재현한다.
+
+### Verification
+
+- immutable Element/Recipe overwrite, unauthorized scheduling, early update/resume와
+  scoped two-asset replacement integration pass
+- Factory full `ManifestPolicyConfig`/override forwarding 12/12 pass
+- stale policy-bound RFQ quote rejection과 RFQ integration 9/9 pass
+- Engine 44/44, ElementRegistry 11/11, RecipeRegistry 7/7,
+  TokenPolicyRegistry 56/56 targeted pass
+- full Foundry 902/902와 `scripts/check.sh` 전체 pass
+- BUIDL-like/Reg-D Anvil E2E 각각 7/7 + dashboard/CLI/RFQ flow pass
+- runtime sizes: ComplianceEngine 19,583 bytes, TokenPolicyRegistry 24,035 bytes,
+  CornerStoreFactory 4,740 bytes
+- `git diff --check` pass
+
+### State
+
+passing
+
+
 ## CORE-011 — Policy Audit Artifact
 
 ### Behavior

@@ -358,7 +358,9 @@ Minimum monitoring evidence:
 - maker approval and signer authorization status
 - RFQ nonce/idempotency health if RFQ is enabled
 - failed compliance decision audit path without PII
-- incident-response contacts and pause/unpause procedure
+- incident-response contacts and pause/unpause procedure; Element 구현 결함은
+  [`operations/element-emergency-replacement.md`](./operations/element-emergency-replacement.md)의
+  immutable version 교체와 delayed resume 절차까지 사전 승인한다.
 
 Monitoring must not log private keys, mnemonic material, raw identity documents
 or sensitive transfer-agent payloads.

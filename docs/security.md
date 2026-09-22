@@ -80,6 +80,12 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   unpause, Manifest resume와 semantic update는 owner 예약과 timelock을 거친다.
 - 배포 후 `TokenPolicyRegistry.owner()`가 Factory인 구조에서는 governance가 Factory
   forwarding API를 사용한다. registry를 EOA가 직접 소유한다고 가정하지 않는다.
+- Element 결함 대응은 영향 scope를 즉시 suspend한 뒤 새 Element ID와 exact Recipe
+  version을 등록하고, full config/override가 포함된 Manifest semantic update를 정상
+  timelock으로 활성화한다. 기존 ID/version overwrite나 즉시 resume 경로를 두지
+  않는다. 실행 절차는
+  [`operations/element-emergency-replacement.md`](./operations/element-emergency-replacement.md)를
+  따른다.
 
 ## Input Validation
 
