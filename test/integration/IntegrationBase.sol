@@ -15,7 +15,7 @@ import {ComplianceEngine} from "../../src/compliance/ComplianceEngine.sol";
 import {Sanctions} from "../../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../../src/compliance/elements/QualifiedPurchaser.sol";
-import {BuidlMinimumInvestment} from "../../src/compliance/elements/BuidlMinimumInvestment.sol";
+import {MinimumTradeAmount} from "../../src/compliance/elements/MinimumTradeAmount.sol";
 import {SurveillanceFlag} from "../../src/compliance/elements/SurveillanceFlag.sol";
 import {Jurisdiction} from "../../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../../src/compliance/elements/IdentityUniqueness.sol";
@@ -27,7 +27,9 @@ import {Lockup} from "../../src/compliance/elements/Lockup.sol";
 import {IAcquisitionSource} from "../../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipe} from "../../src/compliance/recipes/RegD506cRecipe.sol";
 import {Fund3c7Recipe} from "../../src/compliance/recipes/Fund3c7Recipe.sol";
-import {BuidlLikeFundRecipe} from "../../src/compliance/recipes/BuidlLikeFundRecipe.sol";
+import {
+    QualifiedPurchaserMinimumAmountRecipe
+} from "../../src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol";
 
 import {ExecutionRouter} from "../../src/execution/ExecutionRouter.sol";
 import {VenueRegistry} from "../../src/execution/VenueRegistry.sol";
@@ -40,6 +42,8 @@ import {MockPool} from "../mocks/MockPool.sol";
 import {BuidlLikeDemoAsset} from "../../src/demo/BuidlLikeDemoAsset.sol";
 import {
     ManifestCore,
+    ElementEnforcementOverride,
+    ManifestPolicyConfig,
     PolicyStatus,
     RecipeBinding,
     RecipeBindingMode,
@@ -84,7 +88,7 @@ abstract contract IntegrationBase is TREXSuite {
     Sanctions internal sanctions;
     AccreditedInvestor internal accredited;
     QualifiedPurchaser internal qp;
-    BuidlMinimumInvestment internal buidlMinimum;
+    MinimumTradeAmount internal minimumTradeAmount;
     SurveillanceFlag internal surveillance;
     // 9-element Reg D 506(c) reference set (A-01/A-03 above + these):
     Jurisdiction internal jurisdiction; // A-02-v1
@@ -145,6 +149,28 @@ abstract contract IntegrationBase is TREXSuite {
         ManifestCore memory manifest,
         RecipeBinding[] memory bindings
     ) internal {
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        _deployStackWithManifest(tokenName, tokenSymbol, manifest, bindings, config);
+    }
+
+    function deployStackWithManifestAndConfig(
+        string memory tokenName,
+        string memory tokenSymbol,
+        ManifestCore memory manifest,
+        RecipeBinding[] memory bindings,
+        ManifestPolicyConfig memory config
+    ) internal {
+        _deployStackWithManifest(tokenName, tokenSymbol, manifest, bindings, config);
+    }
+
+    function _deployStackWithManifest(
+        string memory tokenName,
+        string memory tokenSymbol,
+        ManifestCore memory manifest,
+        RecipeBinding[] memory bindings,
+        ManifestPolicyConfig memory config
+    ) private {
         deployTREX(tokenName, tokenSymbol); // real ERC-3643 token() + identity registry
 
         // 1. compliance registries
@@ -158,12 +184,12 @@ abstract contract IntegrationBase is TREXSuite {
         sanctions = new Sanctions();
         accredited = new AccreditedInvestor();
         qp = new QualifiedPurchaser();
-        buidlMinimum = new BuidlMinimumInvestment();
+        minimumTradeAmount = new MinimumTradeAmount();
         surveillance = new SurveillanceFlag();
         elementReg.registerElement(bytes32("A-01-v1"), address(sanctions));
         elementReg.registerElement(bytes32("A-03-v1"), address(accredited));
         elementReg.registerElement(bytes32("A-13-v1"), address(qp));
-        elementReg.registerElement(bytes32("BUIDL-MIN-v1"), address(buidlMinimum));
+        elementReg.registerElement(bytes32("MIN-AMOUNT-v1"), address(minimumTradeAmount));
         elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
 
         // 2b. remaining 9-element Reg D 506(c) reference set. AssetClassification
@@ -187,7 +213,7 @@ abstract contract IntegrationBase is TREXSuite {
         // 3. recipes + register
         recipeReg.registerRecipe(1, 2, address(new RegD506cRecipe()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
-        recipeReg.registerRecipe(3, 1, address(new BuidlLikeFundRecipe()));
+        recipeReg.registerRecipe(3, 2, address(new QualifiedPurchaserMinimumAmountRecipe()));
 
         // 4. engine
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
@@ -212,7 +238,8 @@ abstract contract IntegrationBase is TREXSuite {
         // 7. manifests: onboarding goes through the lifecycle (propose -> approve).
         //    Keep the caller-provided manifest so BUIDL-like profiles can bind
         //    their own fund recipe/facts while still using the current lifecycle.
-        policyReg.registerManifest(address(rwaToken), manifest, bindings);
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        policyReg.registerManifest(address(rwaToken), manifest, bindings, overrides_, config);
         policyReg.approveManifest(address(rwaToken));
         // Quote/cash is out-of-scope: tag UNREGULATED directly from UNKNOWN.
         policyReg.setUnregulated(address(quote));
@@ -257,11 +284,12 @@ abstract contract IntegrationBase is TREXSuite {
     /// @dev BUIDL-like demo fixture: Reg D 506(c) + ICA 3(c)(7) fund fact.
     ///      This is a local demo asset, not integration with real BlackRock BUIDL.
     function deployBuidlLikeStack() internal {
-        deployStackWithManifest(
+        deployStackWithManifestAndConfig(
             BuidlLikeDemoAsset.TOKEN_NAME,
             BuidlLikeDemoAsset.TOKEN_SYMBOL,
             BuidlLikeDemoAsset.manifest(ENGINES_AMM),
-            BuidlLikeDemoAsset.recipeBindings()
+            BuidlLikeDemoAsset.recipeBindings(),
+            BuidlLikeDemoAsset.demoPolicyConfig()
         );
     }
 

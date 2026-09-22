@@ -155,6 +155,25 @@ contract FactoryTest is Test {
         assertEq(uint8(stored.custody), uint8(CustodyModel.POOL));
     }
 
+    function test_registerRWATokenWithConfig_preservesManifestOwnedParameters() public {
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] = ElementPolicyParameter({
+            bindingIndex: 0,
+            elementId: ELEMENT_ID,
+            schemaId: PARAM_SCHEMA_ID,
+            schemaVersion: 1,
+            parameters: abi.encode(uint256(42))
+        });
+
+        factory.registerRWATokenWithConfig(rwa, _manifest(), _bindings(), config, venue, _venueCfg());
+
+        bytes[] memory compiledParameters = tpr.compiledParametersOf(rwa, 0);
+        assertEq(compiledParameters[0], abi.encode(uint256(42)));
+        assertEq(uint8(tpr.statusOf(rwa)), uint8(PolicyStatus.ACTIVE));
+    }
+
     function test_registerRWAToken_onlyOperator() public {
         vm.prank(address(0xBEEF));
         vm.expectRevert();

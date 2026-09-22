@@ -29,9 +29,10 @@ The demo deploys a standard ERC-3643/T-REX token with BUIDL-like metadata:
 - token name: `BUIDL-like ERC-3643 Demo Asset`
 - token symbol: `bBUIDL`
 - issuance recipe: Reg D 506(c)
-- fund recipe: BUIDL-like ICA 3(c)(7) recipe
+- fund recipe: generic QP + minimum-amount recipe family `3`, immutable version `2`
 - fund applicability: `factsPacked` bit 0
-- minimum investment amount: `5,000,000` demo units, modeled as $5M at $1 NAV
+- minimum trade amount: `5,000,000` local demo units supplied through
+  versioned `ManifestPolicyConfig`
 - supported execution engine: AMM in the current fixture
 
 ## Compliance model
@@ -53,13 +54,20 @@ Current demo checks:
 - sanctions clear through `A-01-v1`
 - accredited investor through `A-03-v1`
 - qualified purchaser through `A-13-v1`
-- BUIDL-like minimum investment through `BUIDL-MIN-v1`
+- generic minimum trade amount through `MIN-AMOUNT-v1`
 - ERC-3643 recipient verification at token transfer time
 
 Investor facts are seeded through `MockSecuritizeTA`, not by calling the AI/QP
 Elements directly from the BUIDL flow test. This keeps the demo shaped like the
 production seam without pretending to have a real Securitize or transfer-agent
 connection.
+
+The `5,000,000` threshold is only a local behavior-lock value. It is not a
+production BUIDL product term, is not exported as a production default, and
+must not be activated without issuer/legal evidence in a schema-v5 onboarding
+artifact. The previous `BUIDL-MIN-v1` Element and recipe family `3` version `1`
+remain only as immutable historical implementations; current deployments do
+not register or bind them.
 
 ```text
 MockSecuritizeTA profile
@@ -127,7 +135,8 @@ The BUIDL-like profile should demonstrate:
 - Add claim expiry/freshness tests.
 - Add Securitize/DS adapter research issue once official/current integration details are available.
 - Split primary distribution, secondary DEX execution, redemption, and monthly distribution rails.
-- Promote BUIDL-like profile data into the future Manifest compiler/onboarding flow.
+- Replace the demo threshold only through reviewed schema-v5
+  `ManifestPolicyConfig` onboarding when issuer/legal evidence is available.
 
 ## References
 
