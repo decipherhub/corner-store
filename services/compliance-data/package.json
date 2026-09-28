@@ -5,9 +5,39 @@
   "description": "Provider-neutral Transfer Agent, compliance state, and audit SDK for Corner Store.",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "require": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    },
+    "./spi": {
+      "types": "./dist/src/kyc-spi.d.ts",
+      "require": "./dist/src/kyc-spi.js",
+      "default": "./dist/src/kyc-spi.js"
+    },
+    "./demo": {
+      "types": "./dist/src/kyc-demo.d.ts",
+      "require": "./dist/src/kyc-demo.js",
+      "default": "./dist/src/kyc-demo.js"
+    },
+    "./conformance": {
+      "types": "./dist/src/kyc-conformance.d.ts",
+      "require": "./dist/src/kyc-conformance.js",
+      "default": "./dist/src/kyc-conformance.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "spi": ["dist/src/kyc-spi.d.ts"],
+      "demo": ["dist/src/kyc-demo.d.ts"],
+      "conformance": ["dist/src/kyc-conformance.d.ts"]
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node dist/test/smoke.js"
+    "test": "npm run build && node dist/test/smoke.js && node dist/test/kyc-provider.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
