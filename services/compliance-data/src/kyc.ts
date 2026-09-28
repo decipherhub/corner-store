@@ -1,52 +1,26 @@
 import {setTimeout as sleep} from "timers/promises";
 import {assertAddress, assertBytes32, assertTimestamp, canonicalJson, hash} from "./canonical";
+import {
+  isKycProviderError,
+  KYC_PROVIDER_ID_RE,
+  KYC_PROVIDER_SCHEMA_VERSION_RE,
+  KycProviderEnvironment,
+  KycProviderMetadata,
+  PositiveFactStatus,
+  ProviderAssessmentStatus,
+  ProviderKycAdapter,
+  ProviderKycAssessment,
+  ProviderKycRequest,
+  ProviderNeutralKycFacts,
+  SanctionsFactStatus,
+  validateKycProviderMetadata
+} from "./kyc-spi";
 import {Address, Hex} from "./types";
-
-export type ProviderAssessmentStatus = "ACTIVE" | "REVOKED" | "INELIGIBLE";
-export type PositiveFactStatus = "VERIFIED" | "NOT_VERIFIED";
-export type SanctionsFactStatus = "CLEAR" | "HIT";
-
-export interface ProviderNeutralKycFacts {
-  kyc: PositiveFactStatus;
-  sanctions: SanctionsFactStatus;
-  accreditedInvestor?: PositiveFactStatus;
-  qualifiedPurchaser?: PositiveFactStatus;
-  jurisdiction?: string;
-}
-
-export interface ProviderKycRequest {
-  subject: Address;
-  identity?: Address;
-  asset: Address;
-  requestRefHash: Hex;
-}
-
-export interface ProviderKycAssessment {
-  providerId: string;
-  providerSchemaVersion: string;
-  assessmentRefHash: Hex;
-  sourceEvidenceHash: Hex;
-  subject: Address;
-  identity?: Address;
-  asset: Address;
-  facts: ProviderNeutralKycFacts;
-  observedAt: number;
-  validUntil: number;
-  status: ProviderAssessmentStatus;
-}
 
 export interface ProviderNeutralKycEvidence extends ProviderKycAssessment {
   evidenceHash: Hex;
   materializedAt: number;
   eligible: boolean;
-}
-
-export interface ProviderKycAdapterContext {
-  signal: AbortSignal;
-}
-
-export interface ProviderKycAdapter {
-  assess(request: ProviderKycRequest, context?: ProviderKycAdapterContext): Promise<ProviderKycAssessment>;
 }
 
 export interface KycEvidenceStore {
@@ -57,6 +31,8 @@ export interface KycEvidenceStore {
 export type KycRefreshReason =
   | "OK"
   | "PROVIDER_UNAVAILABLE"
+  | "PROVIDER_TIMEOUT"
+  | "PROVIDER_INCOMPATIBLE"
   | "MALFORMED_PROVIDER_RESULT"
   | "BINDING_MISMATCH"
   | "STALE_OR_FUTURE_ASSESSMENT"
@@ -103,6 +79,7 @@ export interface KycRefreshFailure {
 export type KycRefreshResult = KycRefreshSuccess | KycRefreshFailure;
 
 export interface KycEvidenceCoordinatorOptions {
+  mode: KycProviderEnvironment;
   now?: () => number;
   maxFutureSkewSeconds?: number;
   freshnessSeconds?: number;
@@ -115,8 +92,14 @@ export interface KycEvidenceCoordinatorOptions {
 const DEFAULT_MAX_FUTURE_SKEW_SECONDS = 60;
 const DEFAULT_FRESHNESS_SECONDS = 86_400;
 const DEFAULT_PROVIDER_TIMEOUT_MS = 2_000;
-const SLUG_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-const SCHEMA_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const PROVIDER_TIMEOUT = Symbol("kyc provider timeout");
+const PROVIDER_FAILURE_REASONS = new Map<unknown, Exclude<KycRefreshReason, "OK">>([
+  ["UNAVAILABLE", "PROVIDER_UNAVAILABLE"],
+  ["TIMEOUT", "PROVIDER_TIMEOUT"],
+  ["STALE", "STALE_OR_FUTURE_ASSESSMENT"],
+  ["INCOMPATIBLE", "PROVIDER_INCOMPATIBLE"]
+]);
+const OPTIONAL_FACT_CAPABILITIES = ["accreditedInvestor", "qualifiedPurchaser", "jurisdiction"] as const;
 const JURISDICTION_RE = /^[A-Z]{2}(-[A-Z0-9]{1,3})?$/;
 const FORBIDDEN_PII_KEYS = new Set([
   "name",
@@ -154,12 +137,15 @@ export class KycEvidenceCoordinator {
   private readonly strictAudit: boolean;
   private readonly audit?: (record: KycAuditRecord) => void | Promise<void>;
   private readonly incident?: (record: KycIncidentRecord) => void | Promise<void>;
+  private readonly metadata: KycProviderMetadata;
 
   constructor(
     private readonly provider: ProviderKycAdapter,
     private readonly store: KycEvidenceStore,
-    options: KycEvidenceCoordinatorOptions = {}
+    options: KycEvidenceCoordinatorOptions
   ) {
+    const mode = options?.mode;
+    if (mode !== "demo" && mode !== "production") throw new Error("mode must be demo or production");
     this.now = options.now ?? (() => Math.floor(Date.now() / 1_000));
     this.maxFutureSkewSeconds = options.maxFutureSkewSeconds ?? DEFAULT_MAX_FUTURE_SKEW_SECONDS;
     this.freshnessSeconds = options.freshnessSeconds ?? DEFAULT_FRESHNESS_SECONDS;
@@ -176,6 +162,14 @@ export class KycEvidenceCoordinator {
     if (!Number.isSafeInteger(this.providerTimeoutMs) || this.providerTimeoutMs <= 0 || this.providerTimeoutMs > 60_000) {
       throw new Error("providerTimeoutMs must be a positive safe integer no greater than 60000");
     }
+    let declared: unknown;
+    try {
+      declared = provider.metadata;
+    } catch {
+      throw new Error("KYC provider metadata is unreadable");
+    }
+    this.metadata = validateKycProviderMetadata(declared);
+    if (mode === "production" && this.metadata.environment !== "production") throw new Error("production mode refuses a non-production KYC provider adapter");
   }
 
   async refresh(request: ProviderKycRequest): Promise<KycRefreshResult> {
@@ -194,11 +188,11 @@ export class KycEvidenceCoordinator {
       providerResult = await Promise.race([
         this.provider.assess(normalizedRequest, {signal: abort.signal}),
         sleep(this.providerTimeoutMs, undefined, {signal: abort.signal}).then(() => {
-          throw new Error("provider timeout");
+          throw PROVIDER_TIMEOUT;
         })
       ]);
-    } catch {
-      return this.fail(normalizedRequest, timestamp, "PROVIDER_UNAVAILABLE");
+    } catch (error) {
+      return this.fail(normalizedRequest, timestamp, providerFailureReason(error));
     } finally {
       abort.abort();
     }
@@ -211,6 +205,7 @@ export class KycEvidenceCoordinator {
       return this.fail(normalizedRequest, timestamp, "MALFORMED_PROVIDER_RESULT");
     }
 
+    if (!matchesMetadata(assessment, this.metadata)) return this.fail(normalizedRequest, timestamp, "PROVIDER_INCOMPATIBLE", assessment);
     if (!matchesRequest(assessment, normalizedRequest)) return this.fail(normalizedRequest, timestamp, "BINDING_MISMATCH", assessment);
     if (!isFresh(assessment, timestamp, this.maxFutureSkewSeconds, this.freshnessSeconds)) {
       return this.fail(normalizedRequest, timestamp, "STALE_OR_FUTURE_ASSESSMENT", assessment);
@@ -330,8 +325,8 @@ function validateRequest(request: ProviderKycRequest): void {
 function validateAssessment(assessment: ProviderKycAssessment): void {
   assertPlainObjectWithExactKeys(assessment, ASSESSMENT_KEYS, "assessment");
   rejectForbiddenKeysDeep(assessment);
-  if (!SLUG_RE.test(assessment.providerId)) throw new Error("providerId must be a bounded slug");
-  if (!SCHEMA_RE.test(assessment.providerSchemaVersion)) throw new Error("providerSchemaVersion must be bounded");
+  if (!KYC_PROVIDER_ID_RE.test(assessment.providerId)) throw new Error("providerId must be a bounded slug");
+  if (!KYC_PROVIDER_SCHEMA_VERSION_RE.test(assessment.providerSchemaVersion)) throw new Error("providerSchemaVersion must be bounded");
   assertBytes32(assessment.assessmentRefHash, "assessmentRefHash");
   assertBytes32(assessment.sourceEvidenceHash, "sourceEvidenceHash");
   assertAddress(assessment.subject, "assessment subject");
@@ -414,6 +409,21 @@ function sanitizeAssessment(input: ProviderKycAssessment): ProviderKycAssessment
     validUntil: input.validUntil,
     status: input.status
   };
+}
+
+function providerFailureReason(error: unknown): Exclude<KycRefreshReason, "OK"> {
+  if (error === PROVIDER_TIMEOUT) return "PROVIDER_TIMEOUT";
+  try {
+    return isKycProviderError(error) ? PROVIDER_FAILURE_REASONS.get(error.code) ?? "PROVIDER_UNAVAILABLE" : "PROVIDER_UNAVAILABLE";
+  } catch {
+    return "PROVIDER_UNAVAILABLE";
+  }
+}
+
+function matchesMetadata(assessment: ProviderKycAssessment, metadata: KycProviderMetadata): boolean {
+  return assessment.providerId === metadata.providerId &&
+    metadata.providerSchemaVersions.includes(assessment.providerSchemaVersion) &&
+    OPTIONAL_FACT_CAPABILITIES.every((capability) => assessment.facts[capability] === undefined || metadata.capabilities.includes(capability));
 }
 
 function matchesRequest(assessment: Pick<ProviderKycAssessment, "subject" | "identity" | "asset">, request: ProviderKycRequest): boolean {
