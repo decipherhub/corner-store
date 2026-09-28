@@ -6,6 +6,7 @@ import {
   AcquisitionResolver,
   HashChainAuditLog,
   InMemoryKycEvidenceStore,
+  KYC_PROVIDER_SPI_VERSION,
   KycEvidenceCoordinator,
   kycEvidenceHash,
   PersonGroupLedger,
@@ -167,12 +168,20 @@ async function main(): Promise<void> {
     validUntil: 10_500,
     status: "ACTIVE"
   } as const;
+  const providerMetadata = {
+    spiVersion: KYC_PROVIDER_SPI_VERSION,
+    providerId: "provider-a",
+    providerSchemaVersions: ["v1"],
+    capabilities: ["kyc", "sanctions", "accreditedInvestor", "qualifiedPurchaser", "jurisdiction"],
+    environment: "production"
+  } as const;
 
   async function refreshWith(assessmentOrError: any, options: any = {}) {
     const store = options.store ?? new InMemoryKycEvidenceStore();
     const auditRecords: any[] = [];
     const incidentRecords: any[] = [];
     const provider = {
+      metadata: options.metadata ?? providerMetadata,
       async assess(_request: any, context?: {signal: AbortSignal}) {
         if (options.captureSignal) options.captureSignal(context?.signal);
         if (assessmentOrError instanceof Error) throw assessmentOrError;
@@ -180,6 +189,7 @@ async function main(): Promise<void> {
       }
     };
     const coordinator = new KycEvidenceCoordinator(provider, store, {
+      mode: "production",
       now: () => 10_000,
       audit: options.audit === undefined && options.noAudit ? undefined : options.audit ?? ((record: any) => { auditRecords.push(record); }),
       incident: options.incident ?? ((record: any) => { incidentRecords.push(record); }),
@@ -193,7 +203,7 @@ async function main(): Promise<void> {
   const ok = await refreshWith(baseAssessment);
   if (!ok.result.eligible || ok.result.materialization.providerId !== "provider-a") throw new Error("eligible provider-neutral KYC materialization rejected");
   if (ok.auditRecords.length !== 1 || ok.incidentRecords.length !== 0) throw new Error("eligible refresh audit/incident regression");
-  const providerB = await refreshWith({...baseAssessment, providerId: "provider-b", assessmentRefHash: assessmentRefHash2});
+  const providerB = await refreshWith({...baseAssessment, providerId: "provider-b", assessmentRefHash: assessmentRefHash2}, {metadata: {...providerMetadata, providerId: "provider-b"}});
   if (!providerB.result.eligible || providerB.result.materialization.providerId !== "provider-b") throw new Error("second provider ID was not neutral");
 
   const deterministicA = kycEvidenceHash(baseAssessment);
@@ -261,7 +271,7 @@ async function main(): Promise<void> {
     providerTimeoutMs: 25,
     captureSignal(signal: AbortSignal | undefined) { if (signal) signal.addEventListener("abort", () => { aborted = true; }); }
   });
-  if (timeout.result.eligible || timeout.result.reason !== "PROVIDER_UNAVAILABLE" || !aborted) throw new Error("provider timeout did not fail closed and abort");
+  if (timeout.result.eligible || timeout.result.reason !== "PROVIDER_TIMEOUT" || !aborted) throw new Error("provider timeout did not fail closed and abort");
 
   const extraTop = await refreshWith({...baseAssessment, extra: "ignored?"} as any);
   if (extraTop.result.eligible || extraTop.result.reason !== "MALFORMED_PROVIDER_RESULT") throw new Error("unknown top-level assessment key was accepted");

@@ -16,6 +16,22 @@ issuer/legal evidence와 production activation은 외부 입력 전까지 fail-c
 
 ## Completed
 
+- `DATA-003: Isolated Demo and Production TA/KYC Provider Adapters` (issue #128):
+  `services/compliance-data` now defines KYC provider SPI 1.0.0 (`/spi`) with adapter metadata
+  (SPI version, providerId, schema versions, fact capabilities, environment) and typed
+  `KycProviderError` codes. `KycEvidenceCoordinator` requires `mode`, snapshots validated
+  metadata at construction, refuses other SPI majors/newer minors and, in production mode, any
+  adapter not declared `production`. Undeclared providerId/schema/optional facts fail closed as
+  `PROVIDER_INCOMPATIBLE`; timeouts are `PROVIDER_TIMEOUT`. The deterministic demo adapter is
+  reachable only through `/demo`; `/conformance` runs the same suite against the demo adapter and
+  a production-style HTTP example. Evidence hash domain and store semantics are unchanged.
+  검증: `npm test --prefix services/compliance-data` pass (local and Node 20.20.2);
+  `scripts/check.sh` pass under Node 20 with yarn 1.22.22 (Foundry 906/906, all service smokes,
+  deploy-v3 10/10); `scripts/e2e-anvil.sh` buidl-like 7/7 plus RFQ/backend/CLI flow pass;
+  `git diff --check` pass. Independent Codex and Opus reviews found no
+  blocking issue; two pre-existing coordinator gaps they reported (hostile request getters,
+  store-return re-read) are fixed in a separate PR.
+
 - `PROFILE-002 — Generic-parameter BUIDL-like Demo Migration`: 신규 BUIDL-like
   deployment에서 legacy `BUIDL-MIN-v1`과 recipe family 3 version 1 wiring을
   제거하고 asset-independent `MIN-AMOUNT-v1`, 같은 의미의 immutable recipe
