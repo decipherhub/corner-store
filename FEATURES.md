@@ -9,6 +9,47 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DATA-003: Isolated Demo and Production TA/KYC Provider Adapters
+
+### Behavior
+
+- `services/compliance-data` defines a versioned TA/KYC provider SPI (`KYC_PROVIDER_SPI_VERSION`
+  1.0.0) with normalized requests/assessments, PII-free evidence hashes, freshness metadata,
+  provider capability/version metadata and typed `UNAVAILABLE | TIMEOUT | STALE | INCOMPATIBLE`
+  provider failures. The SPI exposes no provider-native payloads, credentials or core internals.
+- The package exposes explicit module boundaries: root (coordinator, store, SPI), `/spi`,
+  `/demo` and `/conformance`. The deterministic demo adapter is reachable only through `/demo`
+  and declares `environment: "demo"`.
+- `KycEvidenceCoordinator` requires `mode: "demo" | "production"`. It validates adapter metadata
+  at construction, refuses an incompatible SPI major/minor, and in production mode refuses any
+  adapter that is not declared `production`.
+- Provider timeouts, unavailable providers, stale data and incompatible results (unknown
+  providerId, undeclared schema version or undeclared fact capability) fail closed with typed
+  reasons. Evidence hash domain and store semantics are unchanged.
+- A reusable provider-adapter conformance suite passes for both the demo adapter and a
+  production-style HTTP example adapter. Providers are replaced by injection without core
+  source changes.
+- SPI compatibility, SemVer and migration rules are documented in the package README.
+
+### Verification
+
+- `npm test --prefix services/compliance-data` (also on Node 20)
+- `scripts/check.sh`
+- `scripts/e2e-anvil.sh` (buidl-like)
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Tracks GitHub issue #128. Builds on DATA-002 without selecting a TA/KYC vendor.
+- The conformance suite checks `metadata-contract`, `environment-guard`, `eligible-evidence`,
+  `fail-closed-evidence` and `abort-signal` (pre-aborted signal only).
+- Production mode still accepts `InMemoryKycEvidenceStore` and `strictAudit: false`; refusing
+  them is a separate decision.
+
 
 ## PROFILE-002 — Generic-parameter BUIDL-like Demo Migration
 

@@ -1053,3 +1053,62 @@ quote의 의미가 소급 변경된다. 반대로 교체와 재개를 모두 즉
 - `src/factory/CornerStoreFactory.sol`
 - `test/integration/ElementEmergencyReplacement.t.sol`
 - `test/integration/RFQFlow.t.sol`
+
+## D020 - TA/KYC providers plug in through a versioned SPI with isolated demo adapters
+
+Date: 2026-09-29
+
+### Context
+
+DATA-002 added a provider-neutral `ProviderKycAdapter` boundary, but the adapter carried no
+version, capability or environment metadata. Nothing stopped a deterministic demo adapter from
+being wired into a production coordinator, and provider timeouts, outages and incompatible
+payloads collapsed into the same reason. Vendor adapters also had no stable contract to test
+against across Compliance Core refactors (issue #128).
+
+### Decision
+
+1. TA/KYC providers implement a versioned SPI (`KYC_PROVIDER_SPI_VERSION`, SemVer) that exposes
+   only normalized requests/assessments, PII-free hashes, freshness timestamps, provider
+   capability/version metadata and typed `UNAVAILABLE | TIMEOUT | STALE | INCOMPATIBLE` failures.
+   Provider-native payloads, credentials and core internals are not part of the SPI.
+2. `@corner-store/compliance-data` keeps one npm package with explicit subpath boundaries:
+   root (coordinator, store, SPI), `/spi`, `/demo` and `/conformance`. The demo adapter is not
+   reachable from the root export, and no core module imports it.
+3. `KycEvidenceCoordinator` requires an explicit `mode`. It validates and snapshots adapter
+   metadata at construction, refuses a different SPI major or a newer SPI minor, and in
+   `production` mode refuses any adapter not declared `production`.
+4. Results whose providerId, schema version or optional facts fall outside the declared
+   metadata fail closed as `PROVIDER_INCOMPATIBLE`. Coordinator-enforced and adapter-reported
+   timeouts fail closed as `PROVIDER_TIMEOUT`.
+5. One conformance suite validates any adapter against the SPI and is run for both the demo
+   adapter and a production-style example adapter. Vendor adapters stay optional and outside
+   the core.
+
+### Alternatives Considered
+
+- Separate npm packages for SPI, demo and conformance: rejected for now because the package is
+  still private and unreleased; subpath exports give the same import boundary with less release
+  overhead and can be split later without changing the SPI.
+- Detect demo adapters with `instanceof`: rejected because a second copy of the package would
+  bypass the check; the declared `environment` metadata is validated structurally instead.
+- Infer production mode from `NODE_ENV` or similar: rejected because an implicit default could
+  silently accept a demo adapter; the mode must be stated by the operator.
+
+### Consequences
+
+- Existing adapters must add `metadata`, and coordinators must pass `mode`. Timeouts that were
+  reported as `PROVIDER_UNAVAILABLE` are now `PROVIDER_TIMEOUT`.
+- The evidence hash domain and store semantics are unchanged, so previously materialized
+  evidence remains valid.
+- The declared `environment` is an operator attestation, not proof. Production readiness still
+  depends on operator-supplied provider credentials, durable store, audit sink and review.
+
+### Related Files
+
+- `services/compliance-data/src/kyc-spi.ts`
+- `services/compliance-data/src/kyc.ts`
+- `services/compliance-data/src/kyc-demo.ts`
+- `services/compliance-data/src/kyc-conformance.ts`
+- `services/compliance-data/examples/http-kyc-provider-adapter.ts`
+- `services/compliance-data/README.md`
