@@ -192,7 +192,7 @@ export class KycEvidenceCoordinator {
     const abort = new AbortController();
     try {
       providerResult = await Promise.race([
-        this.provider.assess(normalizedRequest, {signal: abort.signal}),
+        this.provider.assess({...normalizedRequest}, {signal: abort.signal}),
         sleep(this.providerTimeoutMs, undefined, {signal: abort.signal}).then(() => {
           throw new Error("provider timeout");
         })
@@ -220,7 +220,8 @@ export class KycEvidenceCoordinator {
     const eligibilityReason = failClosedEligibilityReason(snapshot);
     if (eligibilityReason) {
       try {
-        const stored = (await this.store.replaceCurrent(snapshot)).stored;
+        const storedRaw = (await this.store.replaceCurrent(cloneEvidence(snapshot))).stored;
+        const stored = cloneEvidence(storedRaw);
         validateStoredSnapshot(stored, snapshot, normalizedRequest, timestamp, this.maxFutureSkewSeconds, this.freshnessSeconds);
       } catch {
         return this.fail(normalizedRequest, timestamp, "STORE_CONFLICT", assessment, snapshot.evidenceHash);
@@ -246,12 +247,13 @@ export class KycEvidenceCoordinator {
 
     let stored: ProviderNeutralKycEvidence;
     try {
-      stored = (await this.store.replaceCurrent(snapshot)).stored;
+      const storedRaw = (await this.store.replaceCurrent(cloneEvidence(snapshot))).stored;
+      stored = cloneEvidence(storedRaw);
       validateStoredSnapshot(stored, snapshot, normalizedRequest, timestamp, this.maxFutureSkewSeconds, this.freshnessSeconds);
     } catch {
       return this.fail(normalizedRequest, timestamp, "STORE_CONFLICT", assessment, snapshot.evidenceHash);
     }
-    return {eligible: true, materialization: cloneEvidence(stored), audit};
+    return {eligible: true, materialization: stored, audit};
   }
 
   private async fail(
@@ -476,14 +478,22 @@ function makeAudit(
 }
 
 function safeRequestRefs(request: unknown): Partial<Pick<KycAuditRecord, "subject" | "identity" | "asset" | "requestRefHash">> {
-  if (!request || typeof request !== "object" || Array.isArray(request)) return {};
-  const object = request as Record<string, unknown>;
-  const safe: Partial<Pick<KycAuditRecord, "subject" | "identity" | "asset" | "requestRefHash">> = {};
-  if (typeof object.subject === "string" && /^0x[0-9a-fA-F]{40}$/.test(object.subject)) safe.subject = object.subject.toLowerCase() as Address;
-  if (typeof object.identity === "string" && /^0x[0-9a-fA-F]{40}$/.test(object.identity)) safe.identity = object.identity.toLowerCase() as Address;
-  if (typeof object.asset === "string" && /^0x[0-9a-fA-F]{40}$/.test(object.asset)) safe.asset = object.asset.toLowerCase() as Address;
-  if (typeof object.requestRefHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(object.requestRefHash)) safe.requestRefHash = object.requestRefHash.toLowerCase() as Hex;
-  return safe;
+  try {
+    if (!request || typeof request !== "object" || Array.isArray(request)) return {};
+    const object = request as Record<string, unknown>;
+    const subject = object.subject;
+    const identity = object.identity;
+    const asset = object.asset;
+    const requestRefHash = object.requestRefHash;
+    const safe: Partial<Pick<KycAuditRecord, "subject" | "identity" | "asset" | "requestRefHash">> = {};
+    if (typeof subject === "string" && /^0x[0-9a-fA-F]{40}$/.test(subject)) safe.subject = subject.toLowerCase() as Address;
+    if (typeof identity === "string" && /^0x[0-9a-fA-F]{40}$/.test(identity)) safe.identity = identity.toLowerCase() as Address;
+    if (typeof asset === "string" && /^0x[0-9a-fA-F]{40}$/.test(asset)) safe.asset = asset.toLowerCase() as Address;
+    if (typeof requestRefHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(requestRefHash)) safe.requestRefHash = requestRefHash.toLowerCase() as Hex;
+    return safe;
+  } catch {
+    return {};
+  }
 }
 
 function assertPlainObjectWithExactKeys(value: unknown, allowed: Set<string>, name: string): void {
