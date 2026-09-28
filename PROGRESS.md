@@ -15,6 +15,23 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `DATA-003: Isolated Demo and Production TA/KYC Provider Adapters` (issue #128):
+  `services/compliance-data` now defines KYC provider SPI 1.0.0 (`/spi`) with adapter metadata
+  (SPI version, providerId, schema versions, fact capabilities, environment) and typed
+  `KycProviderError` codes. `KycEvidenceCoordinator` requires `mode`, snapshots validated
+  metadata at construction, refuses other SPI majors/newer minors and, in production mode, any
+  adapter not declared `production`. Undeclared providerId/schema/optional facts fail closed as
+  `PROVIDER_INCOMPATIBLE`; timeouts are `PROVIDER_TIMEOUT`. The deterministic demo adapter is
+  reachable only through `/demo`; `/conformance` runs the same suite against the demo adapter and
+  a production-style HTTP example. Evidence hash domain and store semantics are unchanged.
+  검증: `npm test --prefix services/compliance-data` pass (local and Node 20.20.2);
+  `scripts/check.sh` pass under Node 20 with yarn 1.22.22 after rebasing onto `a5199b8`
+  (Foundry 956/956, all service smokes, deploy-v3 10/10); `scripts/e2e-anvil.sh` buidl-like 7/7
+  plus RFQ/backend/CLI flow passed on the pre-rebase base and is pending re-run on this base;
+  `git diff --check` pass. Independent Codex and Opus reviews found no
+  blocking issue; two pre-existing coordinator gaps they reported (hostile request getters,
+  store-return re-read) are fixed in a separate PR.
+
 - `AMM-002 — Self-Directed Actor Consistency`: 현재 AMM 모델에서 initiator, payer와
   output recipient가 하나의 authenticated buyer로 일치하도록 adapter 경계를
   명확히 했다. 불일치 context는 pool 실행 전에 거부하고, 위임 실행은
