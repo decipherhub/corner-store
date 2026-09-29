@@ -123,6 +123,12 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   safe wrapper를 사용한다.
 - 실패한 실행은 nonce, fill accounting과 token balance를 원자적으로 되돌려야 한다.
 - ERC-3643 transfer 실패를 성공으로 취급하거나 swallow하지 않는다.
+- regulated asset Element는 `ctx.buyer`를 token recipient로 가정하지 않는다.
+  `tokenOut` RWA는 `seller -> buyer`, `tokenIn` RWA는 `buyer -> seller`로 해석해
+  sender balance/acquisition evidence, recipient identity와 `canTransfer(from,to,amount)`를
+  같은 방향으로 검증한다. 자산이 context의 어느 leg에도 없으면 fail-closed한다.
+- stateful surveillance의 threshold/configuration setter는 owner/operator control
+  plane으로 제한하고, permissionless runtime mutation을 허용하지 않는다.
 
 ## Venue Integration Security
 

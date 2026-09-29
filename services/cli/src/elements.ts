@@ -8,7 +8,7 @@ export const ELEMENT_IDS: Record<string, string> = {
   identity: "A-04-v1",
   "us-tax": "A-05-v1",
   "asset-class": "B-01-v1",
-  erc3643: "B-02-v1",
+  erc3643: "B-02-v2",
   "form-d": "E-01-v1",
   qp: "A-13-v1"
 };

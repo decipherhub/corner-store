@@ -25,7 +25,7 @@ library BuidlLikeDemoAsset {
     string internal constant TOKEN_SYMBOL = "bBUIDL";
 
     uint16 internal constant ISSUANCE_RECIPE_ID = 1; // Reg D 506(c)
-    uint16 internal constant ISSUANCE_RECIPE_VERSION = 2;
+    uint16 internal constant ISSUANCE_RECIPE_VERSION = 3;
     uint16 internal constant FUND_RECIPE_ID = 3; // generic QP + minimum-amount family
     uint16 internal constant FUND_RECIPE_VERSION = 2;
 

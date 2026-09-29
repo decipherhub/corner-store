@@ -11,10 +11,22 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. ADR-010 implementation epic의 코드 작업은 완료됐으며 실제 BUIDL 상품값,
-issuer/legal evidence와 production activation은 외부 입력 전까지 fail-closed한다.
+없음.
 
 ## Completed
+
+- `CORE-013 — RWA Flow Direction and Surveillance Authorization`: issue #132의
+  즉시 수정 항목 1·2·10을 immutable replacement로 해결했다. `AssetFlow`가 RWA
+  tokenOut buy를 seller→buyer, tokenIn sell을 buyer→seller로 해석하고,
+  `C-01-v2`는 실제 sender의 취득 증빙을, `B-02-v2`는 같은 방향의 잔액·recipient
+  identity·`canTransfer`를 검증한다. `F-02-v2` threshold는 owner/operator만
+  변경한다. Reg D recipe family 1 version 3과 reference/demo/testnet/CLI를 새
+  exact binding으로 이전하고 v1 계약/reason decode는 보존했다. 검증: 신규
+  Element/Recipe 39/39, Engine 44/44, RFQ 9/9, canonical Uniswap v3 5/5,
+  full Foundry 942/942, CLI smoke, 전체 `scripts/check.sh`, clean SDK consumer,
+  deploy-v3 10/10, BUIDL-like/Reg-D E2E 각 7/7 및 dashboard/CLI/RFQ buy/sell,
+  `git diff --check` 통과. #132의 primary-distribution lockup 정책과 나머지
+  finding/question은 별도 후속 범위로 남는다.
 
 - `PROFILE-002 — Generic-parameter BUIDL-like Demo Migration`: 신규 BUIDL-like
   deployment에서 legacy `BUIDL-MIN-v1`과 recipe family 3 version 1 wiring을

@@ -1,5 +1,54 @@
 # Decisions
 
+## D020 — Asset-side checks follow the actual regulated-token flow
+
+Date: 2026-09-29
+
+### Context
+
+`ComplianceContext.buyer`는 심사 대상 투자자이지 항상 RWA 수령자는 아니다. 매수는
+RWA가 `seller -> buyer`로 이동하지만 매도는 `buyer -> seller`로 이동한다. 기존
+`C-01-v1`은 양 방향에서 buyer의 취득 이력만 읽었고, `B-02-v1` live wiring도 항상
+seller의 잔액과 buyer의 identity를 검사해 RWA 매도 방향을 잘못 해석했다. 또한
+`F-02-v1.setThreshold`는 누구나 변경할 수 있었다.
+
+### Decision
+
+1. `ComplianceContext.tokenIn/tokenOut`과 평가 중인 regulated asset으로 실제
+   `from/to`를 결정하는 공통 `AssetFlow` 해석을 사용한다.
+2. RWA가 tokenOut이면 `seller -> buyer`, tokenIn이면 `buyer -> seller`로 처리하고,
+   어느 leg에도 없으면 fail-closed한다.
+3. `C-01-v2`는 실제 RWA sender의 acquisition evidence를 읽고, `B-02-v2`는 같은
+   sender/recipient 방향으로 free balance, identity와 `canTransfer`를 검사한다.
+4. `F-02-v2` threshold 변경은 owner 또는 명시적 operator만 수행한다.
+5. D017/D019의 immutable version 원칙에 따라 v1 계약을 수정하지 않는다. 신규
+   reference deployment는 Reg D recipe family 1 version 3과 새 Element ID를 exact
+   binding하며 기존 배포와 reason decode는 보존한다.
+
+### Alternatives Considered
+
+- v1 계약을 in-place 수정: 과거 review, policy ID와 배포 의미를 소급 변경하므로 제외
+- buyer/seller 인자만 사용: regulated asset이 tokenIn인지 tokenOut인지 구분할 수 없어
+  매도 방향 오류가 남으므로 제외
+- venue별 분기: AMM/RFQ마다 중복되고 새 venue가 같은 오류를 반복하므로 제외
+- surveillance threshold를 owner-only로 제한: 안전하지만 운영 자동화/incident 대응의
+  operator plane을 불필요하게 제거하므로 owner+operator를 선택
+
+### Consequences
+
+- 신규 buy에서는 pool/maker 같은 실제 RWA source에도 acquisition evidence가 필요하다.
+- 신규 sell에서는 investor가 RWA sender이고 maker/pool이 identity-verified recipient여야 한다.
+- reference Anvil/testnet/CLI는 recipe v3와 B/C/F v2를 사용한다.
+- primary issuance에서 holding-period 검사를 생략할지는 별도 legal/product 결정으로 남는다.
+
+### Related Files
+
+- `src/compliance/libraries/AssetFlow.sol`
+- `src/compliance/elements/LockupV2.sol`
+- `src/compliance/elements/Erc3643NativeV2.sol`
+- `src/compliance/elements/SurveillanceFlagV2.sol`
+- `src/compliance/recipes/RegD506cRecipeV3.sol`
+
 ## D018 — 정책 파라미터와 실행 인스턴스를 versioned commitment로 고정한다
 
 Date: 2026-09-15

@@ -7,7 +7,7 @@ import {ManifestCore, RecipeBinding, RecipeBindingMode} from "../../src/types/Co
 import {Events} from "../../src/libraries/Events.sol";
 import {ReasonCodes} from "../../src/libraries/ReasonCodes.sol";
 
-/// @notice Surveillance (F-02-v1) is flag-not-block: `check` always passes, so
+/// @notice Surveillance (F-02-v2) is flag-not-block: `check` always passes, so
 ///         the swap SUCCEEDS, and the router's post-trade `engine.commit` drives
 ///         the stateful `onTransfer`, emitting Events.SurveillanceFlag once the
 ///         transfer count exceeds the threshold. We prove the flag fires through
@@ -17,11 +17,11 @@ contract SurveillanceTest is IntegrationBase {
         deployStack(); // base wiring; we override the issuance recipe below
 
         // Build a recipe that requires accredited (A-03-v1) + surveillance
-        // (F-02-v1, STATEFUL). Register it as recipe id 7 and re-point the RWA
+        // (F-02-v2, STATEFUL). Register it as recipe id 7 and re-point the RWA
         // manifest's issuance recipe at it so commit runs onTransfer.
         bytes32[] memory els = new bytes32[](2);
         els[0] = bytes32("A-03-v1");
-        els[1] = bytes32("F-02-v1");
+        els[1] = bytes32("F-02-v2");
         SurveilRecipe r = new SurveilRecipe(els);
         recipeReg.registerRecipe(7, 1, address(r));
 
@@ -46,10 +46,10 @@ contract SurveillanceTest is IntegrationBase {
         ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 100 ether);
 
         // commit runs onTransfer(seller=pool, buyer=alice, rwaAmount). The flag's
-        // `from` is the seller (the pool). reasonCode encodes (recipe 0, F-02-v1, 1).
+        // `from` is the seller (the pool). reasonCode encodes (recipe 0, F-02-v2, 1).
         vm.expectEmit(true, true, false, true);
         emit Events.SurveillanceFlag(
-            bytes32("F-02-v1"), address(pool), ReasonCodes.encode(0, bytes32("F-02-v1"), uint32(1))
+            bytes32("F-02-v2"), address(pool), ReasonCodes.encode(0, bytes32("F-02-v2"), uint32(1))
         );
 
         vm.prank(alice);
@@ -62,7 +62,7 @@ contract SurveillanceTest is IntegrationBase {
 
     // --- STATEFUL: the counter accumulates ACROSS trades -----------------
     // Two successful router.execute swaps must drive transferCount 1 → 2,
-    // proving F-02-v1 is genuinely STATEFUL (persists across trades). A
+    // proving F-02-v2 is genuinely STATEFUL (persists across trades). A
     // stateless impl would reset and fail the `2` assertion. Both legs go
     // through the real engine.commit → onTransfer; distinct nonces come for
     // free from buildBuyRequest's `nextNonce++`, and the pool's 1_000e18 RWA

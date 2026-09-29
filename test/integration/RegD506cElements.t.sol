@@ -7,7 +7,7 @@ import {Errors} from "../../src/libraries/Errors.sol";
 import {IComplianceElement} from "../../src/interfaces/compliance/IComplianceElement.sol";
 
 /// @notice Full router-path coverage of the 9-element Reg D 506(c) recipe
-///         (RegD506cRecipe v2) against the REAL ERC-3643 stack. A fully-attested
+///         (RegD506cRecipe v3) against the REAL ERC-3643 stack. A fully-attested
 ///         buyer + fully-attested asset settles; breaking exactly one element
 ///         family rejects with THAT element's reasonCode.
 ///

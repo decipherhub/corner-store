@@ -24,11 +24,11 @@ import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../src/compliance/elements/IdentityUniqueness.sol";
 import {UsTaxResident} from "../src/compliance/elements/UsTaxResident.sol";
 import {AssetClassification} from "../src/compliance/elements/AssetClassification.sol";
-import {Erc3643Native} from "../src/compliance/elements/Erc3643Native.sol";
+import {Erc3643NativeV2} from "../src/compliance/elements/Erc3643NativeV2.sol";
 import {FormDFiling} from "../src/compliance/elements/FormDFiling.sol";
-import {Lockup} from "../src/compliance/elements/Lockup.sol";
+import {LockupV2} from "../src/compliance/elements/LockupV2.sol";
 import {IAcquisitionSource} from "../src/interfaces/compliance/IAcquisitionSource.sol";
-import {RegD506cRecipe} from "../src/compliance/recipes/RegD506cRecipe.sol";
+import {RegD506cRecipeV3} from "../src/compliance/recipes/RegD506cRecipeV3.sol";
 import {
     QualifiedPurchaserMinimumAmountRecipe
 } from "../src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol";
@@ -93,14 +93,14 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
     AccreditedInvestor internal accreditedInvestor;
     IdentityUniqueness internal identityUniqueness;
     AssetClassification internal assetClassification;
-    Erc3643Native internal erc3643Native;
+    Erc3643NativeV2 internal erc3643Native;
     FormDFiling internal formD;
     UsTaxResident internal usTaxResident;
     AttestedAcquisitionSource internal acquisitionSource;
     QualifiedPurchaser internal qualifiedPurchaser;
-    Lockup internal lockup;
+    LockupV2 internal lockup;
     MinimumTradeAmount internal minimumTradeAmount;
-    RegD506cRecipe internal issuanceRecipe;
+    RegD506cRecipeV3 internal issuanceRecipe;
     QualifiedPurchaserMinimumAmountRecipe internal fundRecipe;
     MockERC20 internal quoteToken;
     address internal makerIdentity;
@@ -210,12 +210,12 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         assetClassification = new AssetClassification(REG_D_CLASS);
         elementReg.registerElement(bytes32("B-01-v1"), address(assetClassification));
 
-        erc3643Native = new Erc3643Native();
-        elementReg.registerElement(bytes32("B-02-v1"), address(erc3643Native));
+        erc3643Native = new Erc3643NativeV2();
+        elementReg.registerElement(bytes32("B-02-v2"), address(erc3643Native));
 
         acquisitionSource = new AttestedAcquisitionSource();
-        lockup = new Lockup(address(acquisitionSource), LOCKUP_SECONDS);
-        elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
+        lockup = new LockupV2(address(acquisitionSource), LOCKUP_SECONDS);
+        elementReg.registerElement(bytes32("C-01-v2"), address(lockup));
 
         formD = new FormDFiling();
         elementReg.registerElement(bytes32("E-01-v1"), address(formD));
@@ -225,9 +225,9 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         minimumTradeAmount = new MinimumTradeAmount();
         elementReg.registerElement(bytes32("MIN-AMOUNT-v1"), address(minimumTradeAmount));
 
-        issuanceRecipe = new RegD506cRecipe();
+        issuanceRecipe = new RegD506cRecipeV3();
         fundRecipe = new QualifiedPurchaserMinimumAmountRecipe();
-        recipeReg.registerRecipe(1, 2, address(issuanceRecipe));
+        recipeReg.registerRecipe(1, 3, address(issuanceRecipe));
         recipeReg.registerRecipe(3, 2, address(fundRecipe));
     }
 
@@ -244,6 +244,7 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         eligibleInvestorBIdentity = _verifyAndAttest(actors.eligibleInvestorB, true);
         ineligibleInvestorIdentity = _verifyAndAttest(actors.ineligibleInvestor, false);
         makerIdentity = address(verifyInvestor(actors.maker));
+        _attestRwaSource(actors.maker);
 
         quoteToken.mint(actors.investor, balances.investorQuote);
         quoteToken.mint(actors.eligibleInvestorB, balances.investorQuote);
@@ -262,12 +263,16 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         identityUniqueness.bindIdentity(investor, keccak256(abi.encode("TESTNET_IDENTITY", investor)));
         accreditedInvestor.setAccredited(investor, true);
         qualifiedPurchaser.setQp(investor, isQp);
+        _attestRwaSource(investor);
+    }
+
+    function _attestRwaSource(address holder) internal {
         acquisitionSource.setSnapshot(
-            investor,
+            holder,
             address(rwaToken),
             uint64(1),
             uint64(block.timestamp + 30 days),
-            keccak256(abi.encode("HACKATHON_TESTNET_TA_FIXTURE", investor)),
+            keccak256(abi.encode("HACKATHON_TESTNET_TA_FIXTURE", holder)),
             IAcquisitionSource.AcquisitionStatus.VALID
         );
     }
