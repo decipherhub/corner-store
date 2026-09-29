@@ -197,6 +197,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         //    and the allowed investor jurisdiction.
         assetClass.setClassification(address(rwaToken), REG_D_CLASS);
         erc3643.setErc3643Native(address(rwaToken), true);
+        erc3643.registerWiring(address(rwaToken), address(idRegistry), address(compliance), address(rwaToken).codehash);
         formD.setFormDFiled(address(rwaToken), true, bytes32("EDGAR-ACCESSION"));
         jurisdiction.setJurisdictionAllowed(ALLOWED_JURISDICTION, true);
 
@@ -212,10 +213,12 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         verifyInvestor(ineligibleInvestor);
         _attestInvestor(ineligibleInvestor, ineligibleInvestorInitialQp);
         verifyInvestor(maker);
+        verifyInvestor(unapprovedMaker);
         registerVenueIdentity(address(pool));
         _attestRwaSource(maker);
-        // Negative RFQ fixture: keep the dealer unapproved while supplying the
-        // independent C-01 evidence needed to reach the maker-approval gate.
+        // Negative RFQ fixture: satisfy the independent ERC-3643 and C-01 gates
+        // while keeping the dealer unapproved, so the scenario reaches the exact
+        // maker-authorization rejection instead of failing an earlier asset gate.
         _attestRwaSource(unapprovedMaker);
         _attestRwaSource(address(pool));
 
@@ -227,6 +230,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         mint(eligibleInvestorB, investorRwaBalance);
         mint(ineligibleInvestor, investorRwaBalance);
         mint(maker, makerRwaBalance);
+        mint(unapprovedMaker, makerRwaBalance);
         mint(address(pool), poolRwaBalance);
 
         ammAdapter.setPool(address(pool), true);

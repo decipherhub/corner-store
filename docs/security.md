@@ -127,6 +127,12 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   `tokenOut` RWA는 `seller -> buyer`, `tokenIn` RWA는 `buyer -> seller`로 해석해
   sender balance/acquisition evidence, recipient identity와 `canTransfer(from,to,amount)`를
   같은 방향으로 검증한다. 자산이 context의 어느 leg에도 없으면 fail-closed한다.
+- `PRIMARY_DISTRIBUTION`은 호출자 제공 context이므로 그 값만으로 보유기간을
+  우회하지 않는다. C-01-v2는 Manifest parameter에 고정된 primary distributor와
+  실제 RWA sender 및 RWA `tokenOut` 방향까지 일치할 때만 resale lockup을 생략한다.
+- reference/demo/testnet에서도 B-02-v2 live wiring을 등록해 token의 Identity
+  Registry, Modular Compliance 또는 runtime code hash가 바뀌면 adapter 실행 전에
+  fail-closed한다. 선언-only 모드는 live wiring 검증의 대체물이 아니다.
 - stateful surveillance의 threshold/configuration setter는 owner/operator control
   plane으로 제한하고, permissionless runtime mutation을 허용하지 않는다.
 

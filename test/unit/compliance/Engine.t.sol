@@ -919,6 +919,34 @@ contract EngineTest is Test {
         assertTrue(dAfter.allowed, "lockup elapsed must allow");
         assertEq(dAfter.reasonCode, bytes32(0));
     }
+
+    function test_primary_distribution_lockup_bypass_requires_manifest_bound_sender() public {
+        _registerSingleElementRecipe(14, bytes32("C-01-v2"));
+
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] = ElementPolicyParameter({
+            bindingIndex: 0,
+            elementId: bytes32("C-01-v2"),
+            schemaId: lockup.PARAMETER_SCHEMA_ID(),
+            schemaVersion: 1,
+            parameters: abi.encode(SELLER)
+        });
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _singleBinding(14, 1), overrides_, config);
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+
+        ComplianceContext memory primary = _ctxBuy();
+        primary.flowType = FlowType.PRIMARY_DISTRIBUTION;
+        assertTrue(engine.evaluate(primary).allowed, "bound primary distributor bypasses resale lockup");
+
+        primary.seller = address(0xDEAD);
+        ComplianceDecision memory unbound = engine.evaluate(primary);
+        assertFalse(unbound.allowed, "flow marker alone must not bypass lockup");
+        assertEq(unbound.reasonCode, ReasonCodes.encode(0, bytes32("C-01-v2"), 1));
+    }
 }
 
 contract FailingElement is IComplianceElement {

@@ -24,6 +24,14 @@ seller의 잔액과 buyer의 identity를 검사해 RWA 매도 방향을 잘못 �
 5. D017/D019의 immutable version 원칙에 따라 v1 계약을 수정하지 않는다. 신규
    reference deployment는 Reg D recipe family 1 version 3과 새 Element ID를 exact
    binding하며 기존 배포와 reason decode는 보존한다.
+6. 1차 발행은 재판매 보유기간에서 제외하되 호출자가 지정할 수 있는 `flowType`만
+   신뢰하지 않는다. `PRIMARY_DISTRIBUTION`과 Manifest 설정에 고정된 실제 RWA
+   송신자 주소가 모두 일치하고 RWA가 `tokenOut`인 최초 판매 방향일 때만
+   C-01-v2를 건너뛴다. 설정이 없거나 주소·방향이 다르면 일반 보유기간 검사를
+   그대로 수행한다.
+7. reference/demo/testnet 자산은 B-02-v2의 선언 확인만 사용하지 않고 실제
+   Identity Registry, Modular Compliance 및 token runtime code hash를 배포 시점에
+   봉인한다. 이후 배선 변경은 다음 거래에서 fail-closed한다.
 
 ### Alternatives Considered
 
@@ -31,6 +39,8 @@ seller의 잔액과 buyer의 identity를 검사해 RWA 매도 방향을 잘못 �
 - buyer/seller 인자만 사용: regulated asset이 tokenIn인지 tokenOut인지 구분할 수 없어
   매도 방향 오류가 남으므로 제외
 - venue별 분기: AMM/RFQ마다 중복되고 새 venue가 같은 오류를 반복하므로 제외
+- `PRIMARY_DISTRIBUTION` 표지만으로 C-01을 생략: 거래 요청자가 flow type을
+  지정하므로 secondary resale을 primary로 가장할 수 있어 제외
 - surveillance threshold를 owner-only로 제한: 안전하지만 운영 자동화/incident 대응의
   operator plane을 불필요하게 제거하므로 owner+operator를 선택
 
@@ -39,7 +49,8 @@ seller의 잔액과 buyer의 identity를 검사해 RWA 매도 방향을 잘못 �
 - 신규 buy에서는 pool/maker 같은 실제 RWA source에도 acquisition evidence가 필요하다.
 - 신규 sell에서는 investor가 RWA sender이고 maker/pool이 identity-verified recipient여야 한다.
 - reference Anvil/testnet/CLI는 recipe v3와 B/C/F v2를 사용한다.
-- primary issuance에서 holding-period 검사를 생략할지는 별도 legal/product 결정으로 남는다.
+- primary distributor 주소는 자산별 Manifest config와 policy ID/history에 결합된다.
+- reference/demo/testnet B-02는 live wiring drift를 체결 전에 거절한다.
 
 ### Related Files
 

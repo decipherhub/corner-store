@@ -260,6 +260,7 @@ abstract contract IntegrationBase is TREXSuite {
         //    Allow the ALLOWED_JURISDICTION code for the investor-side screen.
         assetClass.setClassification(address(rwaToken), REG_D_CLASS);
         erc3643.setErc3643Native(address(rwaToken), true);
+        erc3643.registerWiring(address(rwaToken), address(idRegistry), address(compliance), address(rwaToken).codehash);
         formD.setFormDFiled(address(rwaToken), true, bytes32("EDGAR-ACCESSION"));
         jurisdiction.setJurisdictionAllowed(ALLOWED_JURISDICTION, true);
 

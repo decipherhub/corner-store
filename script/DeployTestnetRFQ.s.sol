@@ -236,6 +236,9 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
 
         assetClassification.setClassification(address(rwaToken), REG_D_CLASS);
         erc3643Native.setErc3643Native(address(rwaToken), true);
+        erc3643Native.registerWiring(
+            address(rwaToken), address(idRegistry), address(compliance), address(rwaToken).codehash
+        );
         formD.setFormDFiled(address(rwaToken), true, keccak256("HACKATHON.TESTNET.FORM_D_FIXTURE"));
         jurisdiction.setJurisdictionAllowed(ALLOWED_JURISDICTION, true);
         policyReg.setUnregulated(address(quoteToken));

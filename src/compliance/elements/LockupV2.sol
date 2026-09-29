@@ -11,7 +11,9 @@ import {
     ObligationTiming,
     Statefulness,
     EvidenceType,
-    EnforcementAction
+    EnforcementAction,
+    ComplianceContext,
+    FlowType
 } from "../../types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 import {AssetFlow} from "../libraries/AssetFlow.sol";
@@ -20,9 +22,13 @@ import {AssetFlow} from "../libraries/AssetFlow.sol";
 ///      snapshot from an injected provider-neutral source. Per-lot/PII data stays
 ///      off-chain and this contract fails closed on missing or broken lineage.
 ///      Unlike v1, the evidence subject is the actual RWA transfer source rather
-///      than the screened investor unconditionally.
+///      than the screened investor unconditionally. A primary distribution may
+///      bypass the resale holding period only when its actual RWA sender matches
+///      the optional Manifest-owned primary distributor parameter; an untrusted
+///      `flowType` marker alone never creates an exemption.
 contract LockupV2 is BaseElement {
     bytes32 internal constant ELEMENT_ID = "C-01-v2";
+    bytes32 public constant PARAMETER_SCHEMA_ID = keccak256("corner-store.element.lockup.primary-distributor.v1");
 
     IAcquisitionSource public immutable acquisitionSource;
     uint64 public immutable lockupSeconds;
@@ -38,9 +44,9 @@ contract LockupV2 is BaseElement {
                 statefulness: Statefulness.STATELESS,
                 evidenceType: EvidenceType.PROVIDER_ATTESTATION,
                 defaultEnforcement: EnforcementAction.BLOCK,
-                parameterSchemaId: bytes32(0),
-                parameterSchemaVersion: 0,
-                maxParameterBytes: 0,
+                parameterSchemaId: PARAMETER_SCHEMA_ID,
+                parameterSchemaVersion: 1,
+                maxParameterBytes: 32,
                 parametersRequired: false
             }))
     {
@@ -48,13 +54,22 @@ contract LockupV2 is BaseElement {
         lockupSeconds = lockupSeconds_;
     }
 
-    function _check(address, address, address asset, uint256, bytes calldata context, bytes calldata)
+    function _check(address, address, address asset, uint256, bytes calldata context, bytes calldata parameters)
         internal
         view
         override
         returns (bool passed, bytes32 reasonCode)
     {
+        (bool validParameters, address primaryDistributor) = _primaryDistributor(parameters);
+        if (!validParameters) return (false, ReasonCodes.invalidElementParameters(ELEMENT_ID));
+
+        ComplianceContext memory ctx = abi.decode(context, (ComplianceContext));
         (address from,) = AssetFlow.resolve(asset, context);
+        if (
+            ctx.flowType == FlowType.PRIMARY_DISTRIBUTION && asset == ctx.tokenOut && primaryDistributor != address(0)
+                && from == primaryDistributor
+        ) return (true, bytes32(0));
+
         IAcquisitionSource.AcquisitionSnapshot memory snapshot = acquisitionSource.acquisitionOf(from, asset);
         if (snapshot.status == IAcquisitionSource.AcquisitionStatus.MISSING) {
             return (false, ReasonCodes.encode(0, ELEMENT_ID, 1));
@@ -67,5 +82,17 @@ contract LockupV2 is BaseElement {
         }
         passed = snapshot.clockStart != 0 && block.timestamp >= uint256(snapshot.clockStart) + lockupSeconds;
         reasonCode = passed ? bytes32(0) : ReasonCodes.encode(0, ELEMENT_ID, 4);
+    }
+
+    function _primaryDistributor(bytes calldata parameters) private pure returns (bool valid, address distributor) {
+        if (parameters.length == 0) return (true, address(0));
+        if (parameters.length != 32) return (false, address(0));
+
+        uint256 word;
+        assembly {
+            word := calldataload(parameters.offset)
+        }
+        if (word == 0 || word > type(uint160).max) return (false, address(0));
+        return (true, address(uint160(word)));
     }
 }

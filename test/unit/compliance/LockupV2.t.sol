@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {LockupV2} from "../../../src/compliance/elements/LockupV2.sol";
 import {AttestedAcquisitionSource} from "../../../src/registry/AttestedAcquisitionSource.sol";
 import {IAcquisitionSource} from "../../../src/interfaces/compliance/IAcquisitionSource.sol";
-import {ComplianceContext, VenueType, FlowType} from "../../../src/types/ComplianceTypes.sol";
+import {ComplianceContext, ElementMetadata, VenueType, FlowType} from "../../../src/types/ComplianceTypes.sol";
 import {ReasonCodes} from "../../../src/libraries/ReasonCodes.sol";
 
 contract LockupV2Test is Test {
@@ -54,6 +54,55 @@ contract LockupV2Test is Test {
         assertEq(reasonCode, bytes32(0));
     }
 
+    function test_primary_distribution_bypasses_lockup_for_manifest_bound_distributor() public view {
+        (bool passed, bytes32 reasonCode) =
+            lockup.check(buyer, seller, rwa, 10, _context(true, FlowType.PRIMARY_DISTRIBUTION), abi.encode(seller));
+
+        assertTrue(passed);
+        assertEq(reasonCode, bytes32(0));
+    }
+
+    function test_primary_distribution_does_not_bypass_for_unbound_sender() public view {
+        (bool passed, bytes32 reasonCode) = lockup.check(
+            buyer, seller, rwa, 10, _context(true, FlowType.PRIMARY_DISTRIBUTION), abi.encode(address(0xDEAD))
+        );
+
+        assertFalse(passed);
+        assertEq(reasonCode, ReasonCodes.encode(0, bytes32("C-01-v2"), 1));
+    }
+
+    function test_primary_distribution_marker_alone_does_not_bypass() public view {
+        (bool passed, bytes32 reasonCode) =
+            lockup.check(buyer, seller, rwa, 10, _context(true, FlowType.PRIMARY_DISTRIBUTION), "");
+
+        assertFalse(passed);
+        assertEq(reasonCode, ReasonCodes.encode(0, bytes32("C-01-v2"), 1));
+    }
+
+    function test_primary_distribution_does_not_bypass_reverse_rwa_leg() public view {
+        (bool passed, bytes32 reasonCode) =
+            lockup.check(buyer, seller, rwa, 10, _context(false, FlowType.PRIMARY_DISTRIBUTION), abi.encode(buyer));
+
+        assertFalse(passed);
+        assertEq(reasonCode, ReasonCodes.encode(0, bytes32("C-01-v2"), 1));
+    }
+
+    function test_invalid_primary_distributor_parameter_fails_closed() public view {
+        (bool passed, bytes32 reasonCode) =
+            lockup.check(buyer, seller, rwa, 10, _context(true, FlowType.PRIMARY_DISTRIBUTION), hex"01");
+
+        assertFalse(passed);
+        assertEq(reasonCode, ReasonCodes.invalidElementParameters(bytes32("C-01-v2")));
+    }
+
+    function test_metadata_declares_optional_manifest_parameter() public view {
+        ElementMetadata memory metadata = lockup.elementMetadata();
+        assertEq(metadata.parameterSchemaId, lockup.PARAMETER_SCHEMA_ID());
+        assertEq(metadata.parameterSchemaVersion, 1);
+        assertEq(metadata.maxParameterBytes, 32);
+        assertFalse(metadata.parametersRequired);
+    }
+
     function _setValid(address holder) internal {
         source.setSnapshot(
             holder,
@@ -66,6 +115,10 @@ contract LockupV2Test is Test {
     }
 
     function _context(bool rwaIsOutput) internal view returns (bytes memory) {
+        return _context(rwaIsOutput, FlowType.SECONDARY_TRADE);
+    }
+
+    function _context(bool rwaIsOutput, FlowType flowType) internal view returns (bytes memory) {
         ComplianceContext memory ctx;
         ctx.initiator = buyer;
         ctx.buyer = buyer;
@@ -76,7 +129,7 @@ contract LockupV2Test is Test {
         ctx.amountOut = 10;
         ctx.venueType = VenueType.RFQ;
         ctx.venue = address(0x7001);
-        ctx.flowType = FlowType.SECONDARY_TRADE;
+        ctx.flowType = flowType;
         return abi.encode(ctx);
     }
 }

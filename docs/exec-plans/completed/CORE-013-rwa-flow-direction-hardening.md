@@ -13,6 +13,10 @@ without mutating the semantics of already-versioned Element IDs.
   the actual RWA direction for both buys and sells.
 - Introduce `F-02-v2` with owner/operator-gated threshold changes.
 - Add an immutable Reg D recipe version that binds the new Element versions.
+- Permit primary-distribution lockup exemption only when the flow marker and the
+  optional Manifest-bound actual RWA distributor both match.
+- Enable B-02-v2 live wiring in reference, integration and public-testnet deployment
+  paths and prove that a post-onboarding wiring change fails closed.
 - Move reference/demo deployment and tests to the new versions while preserving
   the old contracts for historical deployments.
 
