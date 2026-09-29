@@ -940,14 +940,21 @@ if (
   library.files.includes("compose.yaml") ||
   !library.files.includes("corner-store.config.json") ||
   !library.files.includes("corner-store.project.json") ||
+  !library.files.includes("corner-store.venue.json") ||
   !library.files.includes("corner-store.scenario.json") ||
+  !library.files.includes("contracts/CornerStoreVenueAdapter.sol") ||
+  !library.files.includes("test/CornerStoreVenueAdapter.t.sol") ||
+  !library.files.includes("src/venue-client.ts") ||
   !library.files.includes("src/policy.ts") ||
   !readFileSync(join(libraryTarget, "src/index.ts"), "utf8").includes('export * from "@corner-store/rfq-service"')
 ) {
   throw new Error("standalone library-only scaffold regression");
 }
 const libraryPackage = JSON.parse(readFileSync(join(libraryTarget, "package.json"), "utf8"));
-if (!libraryPackage.scripts.doctor || libraryPackage.scripts.start || !libraryPackage.scripts["test:module"]) {
+if (
+  !libraryPackage.scripts.doctor || libraryPackage.scripts.start ||
+  !libraryPackage.scripts["test:module"] || !libraryPackage.scripts["test:adapter"]
+) {
   throw new Error("standalone package scripts regression");
 }
 if (

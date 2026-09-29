@@ -196,6 +196,7 @@ node dist/cli/src/index.js create ../../my-onboarding \
 cd ../../my-corner-store
 npm install
 npm run policy:explain     # values first; 4-layer internals are advanced detail
+npm run test:adapter       # dex-integration: Router/Adapter conformance
 npm run doctor
 npm run deploy              # dry-run; add -- --broadcast only for local/demo submission
 npm run verify              # after a deployment artifact exists

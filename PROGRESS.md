@@ -15,6 +15,15 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `SDK-005 — External DEX Adapter Starter and Conformance`: 이슈 #116을 구현해
+  `dex-integration` template이 Router-only Solidity Adapter, TypeScript request
+  builder, versioned venue descriptor와 실제 ExecutionRouter conformance를 생성한다.
+  허용 거래는 venue 실행 뒤 commit되고, compliance 거절은 venue에 도달하지 않으며,
+  direct Adapter 호출과 venue 실패 시 nonce/commit 상태가 원자적으로 되돌아간다.
+  특정 venue settlement와 token/callback/slippage 보장은 integrator 책임으로 남겼다.
+  검증: generated external project Adapter 4/4, clean package smoke, full Foundry
+  950/950, 전체 `scripts/check.sh`, deploy-v3 10/10, `git diff --check` 통과.
+
 - `SDK-004 — Purpose-driven SDK Entry Point`: 이슈 #113의 사용자 목적 중심 진입점을
   구현했다. `create --template`이 sandbox, dex-integration, asset-onboarding,
   rfq-service를 versioned project descriptor로 고정하고 기존 `--mode`는 compatibility

@@ -67,6 +67,19 @@ The `sandbox` template is the entry point for #114; until that issue is complete
 optional Compose contains only the reference RFQ service and is not a full DEX or
 production environment.
 
+The `dex-integration` template additionally generates:
+
+- `contracts/CornerStoreVenueAdapter.sol`: Router-only, exact-target starter;
+- `src/venue-client.ts`: base-unit execution request builder;
+- `corner-store.venue.json`: versioned integration and responsibility descriptor;
+- `test/CornerStoreVenueAdapter.t.sol`: common allow/reject/direct-call/rollback
+  conformance using the real `ExecutionRouter` ordering.
+
+The starter deliberately delegates settlement to the external venue. Integrators
+must implement and audit token movement, callback origin checks, venue-specific
+slippage/accounting and custody behavior; passing conformance does not certify
+those responsibilities.
+
 ## Unified TypeScript Facade
 
 `@corner-store/toolkit` exports `connectCornerStore({config, artifact})`. The
@@ -162,6 +175,8 @@ Every scaffold includes:
 - `.env.example`: variable names and empty secret slots only
 - `src/index.ts`: reference service or existing-backend composition example
 - `src/policy.ts`: shared `connectCornerStore()` policy facade example
+- `src/venue-client.ts`, `contracts/CornerStoreVenueAdapter.sol` and adapter
+  conformance files for the `dex-integration` template
 - `src/module-conformance.ts`: public RFQ module conformance entrypoint
 - `package.json` and `tsconfig.json`
 - `vendor/rfq-service`: self-contained SDK source when generated from this repository
