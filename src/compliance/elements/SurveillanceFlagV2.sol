@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity 0.8.17;
+
+import {BaseStatefulElement} from "./BaseStatefulElement.sol";
+import {
+    ElementMetadata,
+    ElementCategory,
+    TemporalNature,
+    Decidability,
+    ObligationTiming,
+    Statefulness,
+    EvidenceType,
+    EnforcementAction
+} from "../../types/ComplianceTypes.sol";
+import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
+import {Events} from "../../libraries/Events.sol";
+import {Errors} from "../../libraries/Errors.sol";
+
+/// @dev F-02-v2 Conduct surveillance (mock, STATEFUL). Flag-not-block: `check`
+///      always passes; `onTransfer` accumulates a counter and emits a flag event
+///      once it exceeds an owner/operator-controlled threshold (post-trade,
+///      EX_POST_TRIGGER).
+contract SurveillanceFlagV2 is BaseStatefulElement {
+    bytes32 internal constant ELEMENT_ID = "F-02-v2";
+
+    mapping(address => bool) public isOperator;
+
+    modifier onlyOperator() {
+        if (msg.sender != owner && !isOperator[msg.sender]) revert Errors.NotAuthorized();
+        _;
+    }
+
+    uint256 public transferCount;
+    uint256 public threshold;
+
+    constructor()
+        BaseStatefulElement(ElementMetadata({
+                elementId: ELEMENT_ID,
+                category: ElementCategory.CONDUCT_MONITORING,
+                version: "F-02-v2",
+                temporal: TemporalNature.CUMULATIVE,
+                decidability: Decidability.MONITORING_BASED,
+                timing: ObligationTiming.EX_POST_TRIGGER,
+                statefulness: Statefulness.STATEFUL,
+                evidenceType: EvidenceType.ONCHAIN_STATE,
+                defaultEnforcement: EnforcementAction.BLOCK,
+                parameterSchemaId: bytes32(0),
+                parameterSchemaVersion: 0,
+                maxParameterBytes: 0,
+                parametersRequired: false
+            }))
+    {}
+
+    event OperatorSet(address indexed operator, bool enabled);
+    event ThresholdSet(uint256 threshold);
+
+    function setOperator(address operator, bool enabled) external {
+        if (msg.sender != owner) revert Errors.NotAuthorized();
+        isOperator[operator] = enabled;
+        emit OperatorSet(operator, enabled);
+    }
+
+    function setThreshold(uint256 threshold_) external onlyOperator {
+        threshold = threshold_;
+        emit ThresholdSet(threshold_);
+    }
+
+    /// @dev Never blocks — monitoring elements only flag.
+    function _check(address, address, address, uint256, bytes calldata, bytes calldata)
+        internal
+        pure
+        override
+        returns (bool passed, bytes32 reasonCode)
+    {
+        return (true, bytes32(0));
+    }
+
+    function onTransfer(address from, address, uint256) external override onlyEngine {
+        transferCount += 1;
+        if (transferCount > threshold) {
+            emit Events.SurveillanceFlag(ELEMENT_ID, from, ReasonCodes.encode(0, ELEMENT_ID, 1));
+        }
+    }
+}

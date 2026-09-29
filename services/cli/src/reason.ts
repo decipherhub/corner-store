@@ -3,7 +3,7 @@ import {AbiCoder, encodeBytes32String, keccak256} from "ethers";
 // Element id (bytes32 string) -> human label — in-repo elements. The first
 // 11 (A-01, A-02, A-03, A-04, A-05, B-01, B-02, C-01, E-01, A-13, F-02) are the
 // original illustrative elements — six of which (A-01, A-03, A-04, A-13, B-01,
-// B-02) were upgraded in place to the walkthrough-doc failure-code taxonomy
+// B-02) use the walkthrough-doc failure-code taxonomy
 // (wave-2b, see ELEMENT_CODE_NAMES below); the next 6 (A-08, A-09, A-11, B-03,
 // B-04, D-01) are the wave-2 illustrative elements (CMP-003); the last 6 (A-06,
 // A-12, E-03, F-01, F-03, F-04) are the wave-3 illustrative elements (CMP-004).
@@ -21,10 +21,13 @@ export const ELEMENT_LABELS: Record<string, string> = {
   "A-05-v1": "US Tax Resident",
   "B-01-v1": "Asset Classification",
   "B-02-v1": "ERC-3643 Native",
+  "B-02-v2": "ERC-3643 Native",
   "C-01-v1": "Lockup (Rule 144)",
+  "C-01-v2": "Lockup (Rule 144)",
   "E-01-v1": "Form D Filing",
   "A-13-v1": "Qualified Purchaser",
   "F-02-v1": "Surveillance Flag",
+  "F-02-v2": "Surveillance Flag",
   "A-08-v1": "Entity Eligibility",
   "A-09-v1": "Equity Owner Look-Through",
   "A-11-v1": "Claim Freshness",
@@ -128,6 +131,15 @@ export const ELEMENT_CODE_NAMES: Record<string, Record<number, string>> = {
   },
   // B-02-v1 Erc3643Native.
   "B-02-v1": {
+    1: "TOKEN_STANDARD_MISMATCH",
+    2: "TOKEN_WIRING_DRIFT",
+    3: "TOKEN_PAUSED",
+    4: "TOKEN_FROZEN_PARTY",
+    5: "TOKEN_INSUFFICIENT_UNFROZEN",
+    6: "TOKEN_TRANSFER_INELIGIBLE"
+  },
+  // B-02-v2 keeps the reason taxonomy while resolving the actual RWA flow.
+  "B-02-v2": {
     1: "TOKEN_STANDARD_MISMATCH",
     2: "TOKEN_WIRING_DRIFT",
     3: "TOKEN_PAUSED",

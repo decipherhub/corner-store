@@ -3,15 +3,18 @@ pragma solidity 0.8.17;
 
 import {Test} from "forge-std/Test.sol";
 import {RegD506cRecipe} from "../../../src/compliance/recipes/RegD506cRecipe.sol";
+import {RegD506cRecipeV3} from "../../../src/compliance/recipes/RegD506cRecipeV3.sol";
 import {Fund3c7Recipe} from "../../../src/compliance/recipes/Fund3c7Recipe.sol";
 import {ComplianceContext, VenueType, FlowType} from "../../../src/types/ComplianceTypes.sol";
 
 contract RecipesTest is Test {
     RegD506cRecipe internal regd;
+    RegD506cRecipeV3 internal regdV3;
     Fund3c7Recipe internal fund;
 
     function setUp() public {
         regd = new RegD506cRecipe();
+        regdV3 = new RegD506cRecipeV3();
         fund = new Fund3c7Recipe();
     }
 
@@ -53,6 +56,15 @@ contract RecipesTest is Test {
         bytes32[] memory e = fund.requiredElements();
         assertEq(e.length, 1);
         assertEq(e[0], bytes32("A-13-v1"));
+    }
+
+    function test_regd_v3_binds_direction_aware_elements() public {
+        assertEq(regdV3.recipeId(), uint16(1));
+        assertEq(regdV3.version(), uint16(3));
+        bytes32[] memory e = regdV3.requiredElements();
+        assertEq(e.length, 9);
+        assertEq(e[6], bytes32("B-02-v2"));
+        assertEq(e[7], bytes32("C-01-v2"));
     }
 
     function test_fund_isApplicable_gated_on_bit0() public {

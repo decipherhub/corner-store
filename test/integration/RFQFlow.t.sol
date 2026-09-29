@@ -91,9 +91,10 @@ contract RFQFlowTest is IntegrationBase {
         vm.prank(alice);
         quote.approve(address(rfqAdapter), type(uint256).max);
 
-        // maker: KYC-verified real T-REX holder of RWA, approves the adapter to
-        // deliver RWA out. NOT engine-attested: the engine screens ctx.buyer only.
+        // maker: KYC-verified real T-REX holder of RWA, with acquisition evidence
+        // for C-01-v2's actual-sender check, and approval to deliver RWA out.
         verifyInvestor(maker);
+        acqSource.setAcquiredAt(maker, address(rwaToken), uint64(1));
         mint(maker, 1_000 ether);
         vm.prank(maker);
         rwaToken.approve(address(rfqAdapter), type(uint256).max);
