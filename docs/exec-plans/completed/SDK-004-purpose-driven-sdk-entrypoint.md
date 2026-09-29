@@ -37,3 +37,14 @@
 - Facade methods share one validated config and deployment artifact source.
 - Verification failures include expected, actual and remediation fields.
 - Existing local demo, production commands and RFQ module conformance remain passing.
+
+## Result
+
+- Added four purpose templates with a versioned descriptor and explicit maturity,
+  capability and next-step metadata while preserving all three legacy modes.
+- Added the package-exported `connectCornerStore()` facade with deterministic config
+  commitment, value-first explanation and fail-closed actionable verification.
+- Generated projects consume packed Toolkit, CLI and RFQ artifacts without a
+  repository-relative runtime import and keep deployment mutation dry-run by default.
+- Toolkit and CLI smoke, clean package consumer, Foundry 950/950, every service
+  smoke, deploy-v3 10/10 and the complete `scripts/check.sh` pass on Foundry 1.7.1.

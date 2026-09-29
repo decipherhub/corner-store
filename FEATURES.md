@@ -28,15 +28,15 @@
 
 ### Verification
 
-- Toolkit purpose-template/facade tests
-- CLI create/help compatibility tests
-- packed clean-project install/build/conformance/facade smoke
-- full `scripts/check.sh`
-- `git diff --check`
+- Toolkit purpose-template/facade and hostile-input smoke pass
+- CLI create/help and legacy-mode compatibility smoke pass
+- packed clean-project install/build/conformance/facade/doctor/deploy dry-run pass
+- full `scripts/check.sh`: Foundry 950/950, all service/package smoke and deploy-v3 10/10
+- `git diff --check` pass
 
 ### State
 
-active
+passing
 
 
 ## CORE-013 — RWA Flow Direction and Surveillance Authorization

@@ -11,13 +11,21 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-`SDK-004 — Purpose-driven SDK Entry Point`: 이슈 #113에 따라 내부 RFQ mode보다
-사용 목적을 먼저 선택하는 create template, 통합 Toolkit facade와 actionable
-검증 결과를 구현한다. 기존 mode, local Anvil demo와 production onboarding 명령은
-호환 유지하며 #114의 full Docker sandbox와 #116의 Solidity adapter starter는
-별도 후속 범위다.
+없음.
 
 ## Completed
+
+- `SDK-004 — Purpose-driven SDK Entry Point`: 이슈 #113의 사용자 목적 중심 진입점을
+  구현했다. `create --template`이 sandbox, dex-integration, asset-onboarding,
+  rfq-service를 versioned project descriptor로 고정하고 기존 `--mode`는 compatibility
+  alias로 유지한다. `connectCornerStore()`는 하나의 immutable config/artifact에서
+  `policy.validate/compile/simulate/explain/verify`를 제공하며 값 우선 설명과
+  expected/actual/remediation 검증을 반환한다. source checkout은 CLI와 Toolkit
+  tarball을 함께 vendor하고 packed external project도 repository-relative import 없이
+  install/build/conformance/policy explain/doctor/deploy dry-run을 통과한다. 검증:
+  Toolkit·CLI smoke, clean SDK product smoke, full Foundry 950/950, 전체
+  `scripts/check.sh`, deploy-v3 10/10, `git diff --check` 통과. #114 full Compose
+  sandbox와 #116 VenueAdapter starter는 의도적으로 후속 범위에 남겼다.
 
 - `CORE-013 — RWA Flow Direction and Surveillance Authorization`: issue #132의
   즉시 수정 항목 1·2·10을 immutable replacement로 해결했다. `AssetFlow`가 RWA
