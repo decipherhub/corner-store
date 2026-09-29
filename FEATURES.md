@@ -39,6 +39,40 @@
 active
 
 
+## CORE-013 — RWA Flow Direction and Surveillance Authorization
+
+### Behavior
+
+- Versioned replacement Elements derive the regulated token's actual sender and
+  recipient from `ComplianceContext` for both buy and sell directions.
+- Holding-period evidence is read from the RWA transfer source rather than the
+  screened investor unconditionally.
+- Primary-distribution lockup bypass requires both the primary flow marker and
+  an exact Manifest-owned distributor address and RWA-output direction match; the
+  marker alone fails closed.
+- ERC-3643 live-wiring probes use the actual sender balance, recipient identity,
+  and `canTransfer(from, to, amount)` direction.
+- Reference, integration and public-testnet deployments seal the live ERC-3643
+  Identity Registry, compliance contract and token runtime code hash.
+- Surveillance threshold mutation is restricted to the owner/operator plane.
+- Existing v1 Element contracts remain unchanged; reference deployments migrate
+  through new immutable Element IDs and an exact new Recipe version.
+
+### Verification
+
+- LockupV2 9/9, Engine 45/45, direction-aware Element/Recipe suites, RFQ 9/9,
+  canonical Uniswap v3 5/5 and affected integration suites pass
+- Full Foundry 950/950 and CLI smoke pass
+- Full `scripts/check.sh`, including clean SDK consumer and deploy-v3 10/10, pass
+- BUIDL-like and Reg-D Anvil E2E each pass all 7 scenarios plus dashboard,
+  CLI and protected RFQ buy/sell flows
+- `git diff --check` pass
+
+### State
+
+passing
+
+
 ## PROFILE-002 — Generic-parameter BUIDL-like Demo Migration
 
 ### Behavior

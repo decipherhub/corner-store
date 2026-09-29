@@ -18,16 +18,16 @@ import {Sanctions} from "../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../src/compliance/elements/QualifiedPurchaser.sol";
 import {MinimumTradeAmount} from "../src/compliance/elements/MinimumTradeAmount.sol";
-import {SurveillanceFlag} from "../src/compliance/elements/SurveillanceFlag.sol";
+import {SurveillanceFlagV2} from "../src/compliance/elements/SurveillanceFlagV2.sol";
 import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../src/compliance/elements/IdentityUniqueness.sol";
 import {UsTaxResident} from "../src/compliance/elements/UsTaxResident.sol";
 import {AssetClassification} from "../src/compliance/elements/AssetClassification.sol";
-import {Erc3643Native} from "../src/compliance/elements/Erc3643Native.sol";
+import {Erc3643NativeV2} from "../src/compliance/elements/Erc3643NativeV2.sol";
 import {FormDFiling} from "../src/compliance/elements/FormDFiling.sol";
-import {Lockup} from "../src/compliance/elements/Lockup.sol";
+import {LockupV2} from "../src/compliance/elements/LockupV2.sol";
 import {IAcquisitionSource} from "../src/interfaces/compliance/IAcquisitionSource.sol";
-import {RegD506cRecipe} from "../src/compliance/recipes/RegD506cRecipe.sol";
+import {RegD506cRecipeV3} from "../src/compliance/recipes/RegD506cRecipeV3.sol";
 import {Fund3c7Recipe} from "../src/compliance/recipes/Fund3c7Recipe.sol";
 import {
     QualifiedPurchaserMinimumAmountRecipe
@@ -82,11 +82,11 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
     ComplianceEngine internal engine;
 
     Jurisdiction internal jurisdiction;
-    SurveillanceFlag internal surveillance;
+    SurveillanceFlagV2 internal surveillance;
     AssetClassification internal assetClass;
-    Erc3643Native internal erc3643;
+    Erc3643NativeV2 internal erc3643;
     FormDFiling internal formD;
-    Lockup internal lockup;
+    LockupV2 internal lockup;
     AttestedAcquisitionSource internal acqSource;
     QualifiedPurchaser internal qualifiedPurchaser;
 
@@ -177,10 +177,10 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         // 4. recipes: RegD 506(c) (id 1) + generic 3(c)(7) fund (id 2) +
         //    generic QP/minimum profile (id 3, v2) + a surveillance-enabled RegD
         //    variant (id 7) used by scenario 6.
-        recipeReg.registerRecipe(1, 2, address(new RegD506cRecipe()));
+        recipeReg.registerRecipe(1, 3, address(new RegD506cRecipeV3()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
         recipeReg.registerRecipe(3, 2, address(new QualifiedPurchaserMinimumAmountRecipe()));
-        recipeReg.registerRecipe(SURVEIL_RECIPE_ID, 1, address(new DemoSurveillanceRecipe()));
+        recipeReg.registerRecipe(SURVEIL_RECIPE_ID, 2, address(new DemoSurveillanceRecipe()));
 
         // 5. Demo-only onboarding helper. The core registries, engine, router
         //    and adapters above came from DeployProductionCore.
@@ -197,6 +197,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         //    and the allowed investor jurisdiction.
         assetClass.setClassification(address(rwaToken), REG_D_CLASS);
         erc3643.setErc3643Native(address(rwaToken), true);
+        erc3643.registerWiring(address(rwaToken), address(idRegistry), address(compliance), address(rwaToken).codehash);
         formD.setFormDFiled(address(rwaToken), true, bytes32("EDGAR-ACCESSION"));
         jurisdiction.setJurisdictionAllowed(ALLOWED_JURISDICTION, true);
 
@@ -212,7 +213,14 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         verifyInvestor(ineligibleInvestor);
         _attestInvestor(ineligibleInvestor, ineligibleInvestorInitialQp);
         verifyInvestor(maker);
+        verifyInvestor(unapprovedMaker);
         registerVenueIdentity(address(pool));
+        _attestRwaSource(maker);
+        // Negative RFQ fixture: satisfy the independent ERC-3643 and C-01 gates
+        // while keeping the dealer unapproved, so the scenario reaches the exact
+        // maker-authorization rejection instead of failing an earlier asset gate.
+        _attestRwaSource(unapprovedMaker);
+        _attestRwaSource(address(pool));
 
         quote.mint(investor, investorQuoteBalance);
         quote.mint(eligibleInvestorB, investorQuoteBalance);
@@ -222,6 +230,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         mint(eligibleInvestorB, investorRwaBalance);
         mint(ineligibleInvestor, investorRwaBalance);
         mint(maker, makerRwaBalance);
+        mint(unapprovedMaker, makerRwaBalance);
         mint(address(pool), poolRwaBalance);
 
         ammAdapter.setPool(address(pool), true);
@@ -360,18 +369,18 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         elementReg.registerElement(bytes32("A-05-v1"), address(new UsTaxResident()));
         assetClass = new AssetClassification(REG_D_CLASS);
         elementReg.registerElement(bytes32("B-01-v1"), address(assetClass));
-        erc3643 = new Erc3643Native();
-        elementReg.registerElement(bytes32("B-02-v1"), address(erc3643));
+        erc3643 = new Erc3643NativeV2();
+        elementReg.registerElement(bytes32("B-02-v2"), address(erc3643));
         acqSource = new AttestedAcquisitionSource();
-        lockup = new Lockup(address(acqSource), LOCKUP_SECONDS);
-        elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
+        lockup = new LockupV2(address(acqSource), LOCKUP_SECONDS);
+        elementReg.registerElement(bytes32("C-01-v2"), address(lockup));
         formD = new FormDFiling();
         elementReg.registerElement(bytes32("E-01-v1"), address(formD));
-        surveillance = new SurveillanceFlag();
+        surveillance = new SurveillanceFlagV2();
         qualifiedPurchaser = new QualifiedPurchaser();
         elementReg.registerElement(bytes32("A-13-v1"), address(qualifiedPurchaser));
         elementReg.registerElement(bytes32("MIN-AMOUNT-v1"), address(new MinimumTradeAmount()));
-        elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
+        elementReg.registerElement(bytes32("F-02-v2"), address(surveillance));
     }
 
     /// @dev Full investor-side engine attestations for the 9-element recipe.
@@ -383,12 +392,19 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         IdentityUniqueness(elementReg.elementOf(bytes32("A-04-v1"))).bindIdentity(who, keccak256(abi.encode("ID", who))); // A-04
         AccreditedInvestor(elementReg.elementOf(bytes32("A-03-v1"))).setAccredited(who, true); // A-03
         if (useBuidlLikeProfile) qualifiedPurchaser.setQp(who, initialQp); // A-13
+        _attestRwaSource(who);
+    }
+
+    /// @dev C-01-v2 evaluates the actual RWA sender. Seed every demo holder that
+    ///      can sell RWA (investor, RFQ maker, or AMM pool), not only the screened
+    ///      investor.
+    function _attestRwaSource(address holder) internal {
         acqSource.setSnapshot(
-            who,
+            holder,
             address(rwaToken),
             uint64(1),
             uint64(block.timestamp + 30 days),
-            keccak256("demo-ta-fixture"),
+            keccak256(abi.encode("demo-ta-fixture", holder)),
             IAcquisitionSource.AcquisitionStatus.VALID
         ); // C-01 seed
     }
@@ -467,7 +483,7 @@ contract DemoSurveillanceRecipe {
     }
 
     function version() external pure returns (uint16) {
-        return 1;
+        return 2;
     }
 
     function isApplicable(bytes calldata) external pure returns (bool) {
@@ -482,9 +498,9 @@ contract DemoSurveillanceRecipe {
         e[3] = "A-04-v1";
         e[4] = "A-05-v1";
         e[5] = "B-01-v1";
-        e[6] = "B-02-v1";
-        e[7] = "C-01-v1";
+        e[6] = "B-02-v2";
+        e[7] = "C-01-v2";
         e[8] = "E-01-v1";
-        e[9] = "F-02-v1";
+        e[9] = "F-02-v2";
     }
 }

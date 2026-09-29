@@ -3,14 +3,17 @@ pragma solidity 0.8.17;
 
 import {IntegrationBase} from "./IntegrationBase.sol";
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
+import {Errors} from "../../src/libraries/Errors.sol";
+import {ReasonCodes} from "../../src/libraries/ReasonCodes.sol";
+import {ModularCompliance} from "@erc3643/compliance/modular/ModularCompliance.sol";
 
 /// @notice End-to-end swap flows through the REAL router + REAL ERC-3643 token.
 ///
 /// Every BUY pushes a genuine T-REX transfer (pool → buyer) with full
 /// isVerified + canTransfer enforcement (gas in the millions). See the
-/// direction note in {IntegrationBase}: the engine is NOT direction-aware, so
-/// "sell-shaped" is represented by tokenIn/tokenOut + which verified address
-/// holds RWA, NOT by any engine-side direction gating.
+/// direction note in {IntegrationBase}: investor qualification remains bound to
+/// `ctx.buyer`, while B-02-v2 and C-01-v2 derive the actual RWA direction from
+/// tokenIn/tokenOut.
 contract SwapFlowTest is IntegrationBase {
     address internal bob = address(0xB0B);
 
@@ -58,8 +61,8 @@ contract SwapFlowTest is IntegrationBase {
     // `ctx.buyer` is the party the engine validates — investor elements
     // (accredited / sanctioned / qp) all check `ctx.buyer`, regardless of which
     // token leg that party sends or receives. `ctx.seller` is the counterparty
-    // and the surveillance `from`. The engine is NOT direction-aware (see the
-    // direction note in {IntegrationBase}), so a maintainer must NOT assume
+    // and the surveillance `from`. Investor-side checks retain that role model,
+    // so a maintainer must NOT assume
     // `ctx.buyer == token-receiver`: here the engine-"buyer" alice is actually
     // the one SENDING RWA. Direction is expressed only via tokenIn/tokenOut and
     // which real address holds/receives RWA.
@@ -130,14 +133,10 @@ contract SwapFlowTest is IntegrationBase {
         assertEq(rwaToken.balanceOf(alice), 0, "no RWA delivered to sanctioned buyer");
     }
 
-    // --- rejection: unverified RWA recipient → ERC-3643 rollback ---------
-    // Compliance PASSES (the engine is not ERC-3643 aware) but the RWA transfer
-    // leg reverts inside canTransfer; the whole swap reverts and balances are
-    // unchanged. This proves the real token enforcement and atomic rollback.
-    function test_reject_unverifiedRecipient_erc3643Rollback() public {
-        // bob passes ALL 9 engine elements (accredited, jurisdiction, identity,
-        // lockup, asset-side attestations) but is NOT a verified ERC-3643 holder —
-        // so compliance passes and the RWA transfer to bob reverts in canTransfer.
+    // --- rejection: unverified RWA recipient at the B-02 preflight -------
+    function test_reject_unverifiedRecipient_beforeTokenTransfer() public {
+        // bob passes the investor-side attestations but is NOT a verified ERC-3643
+        // holder. Live B-02 wiring must reject before adapter dispatch.
         attestInvestor(bob);
         fundPoolRWA(1_000 ether);
         fundBuyerQuote(bob, 1_000 ether);
@@ -148,14 +147,36 @@ contract SwapFlowTest is IntegrationBase {
         uint256 poolRwaBefore = rwaToken.balanceOf(address(pool));
 
         vm.prank(bob);
-        vm.expectRevert(bytes("Transfer not possible")); // real T-REX rejection
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.ComplianceRejected.selector, ReasonCodes.encode(0, bytes32("B-02-v2"), 6))
+        );
         router.execute(req);
 
-        // atomic rollback: nothing moved on either leg
+        // Compliance preflight: nothing moved on either leg.
         assertEq(quote.balanceOf(bob), bobQuoteBefore, "quote unchanged after rollback");
         assertEq(rwaToken.balanceOf(bob), 0, "no RWA to unverified bob");
         assertEq(rwaToken.balanceOf(address(pool)), poolRwaBefore, "pool RWA unchanged");
         assertEq(quote.balanceOf(address(pool)), 0, "pool received no quote");
+    }
+
+    function test_reject_when_live_erc3643_compliance_wiring_drifts() public {
+        setupBuyer(alice);
+        fundPoolRWA(1_000 ether);
+        fundBuyerQuote(alice, 1_000 ether);
+
+        ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 100 ether);
+        ModularCompliance replacement = new ModularCompliance();
+        replacement.init();
+        rwaToken.setCompliance(address(replacement));
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.ComplianceRejected.selector, ReasonCodes.encode(0, bytes32("B-02-v2"), 2))
+        );
+        router.execute(req);
+
+        assertEq(rwaToken.balanceOf(alice), 0, "no RWA delivered after wiring drift");
+        assertEq(quote.balanceOf(alice), 1_000 ether, "no quote spent after wiring drift");
     }
 
     // --- Layer-2 (compliance) reject happens BEFORE any token moves ------

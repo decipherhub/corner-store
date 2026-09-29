@@ -56,7 +56,7 @@ export function assetProfileBinding(value?: string): AssetProfileBinding {
     return {
       profile,
       bindings: [
-        [1, 2, 0, 0, 100],
+        [1, 3, 0, 0, 100],
         [3, 2, 0, 0, 90]
       ],
       factsPacked: 1n,
@@ -67,5 +67,5 @@ export function assetProfileBinding(value?: string): AssetProfileBinding {
       ]
     };
   }
-  return {profile, bindings: [[1, 2, 0, 0, 100]], factsPacked: 0n, fullManifestHash: ZERO32};
+  return {profile, bindings: [[1, 3, 0, 0, 100]], factsPacked: 0n, fullManifestHash: ZERO32};
 }

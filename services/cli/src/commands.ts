@@ -1397,7 +1397,7 @@ export async function cmdInvestorSetup(subject: string, opts: GlobalOpts & {fund
 
   // C-01 Rule 144 lockup: seed a PII-free, expiring mock TA snapshot at t=1 so
   // the elapsed demo lockup passes. Production uses a verified provider adapter.
-  const lockupAddr = await elementRegistry(a, reg).elementOf(encodeBytes32String("C-01-v1"));
+  const lockupAddr = await elementRegistry(a, reg).elementOf(encodeBytes32String("C-01-v2"));
   const acqAddr = await new Contract(lockupAddr, LOCKUP_ABI, reg).acquisitionSource();
   const acq = new Contract(acqAddr, ACQ_SOURCE_ABI, signer);
   const latest = await provider.getBlock("latest");
@@ -1645,7 +1645,7 @@ export function cmdReason(code: string, opts: {json?: boolean}): void {
 // Elements whose check() ignores its `user` argument and gates purely on the
 // asset (see src/compliance/elements/{AssetClassification,Erc3643Native,
 // FormDFiling}.sol). Labelled asset-side so a per-buyer FAIL isn't misread.
-const ASSET_SIDE_ELEMENTS = new Set(["B-01-v1", "B-02-v1", "E-01-v1"]);
+const ASSET_SIDE_ELEMENTS = new Set(["B-01-v1", "B-02-v2", "E-01-v1"]);
 
 export async function cmdCheck(
   buyer: string,
@@ -1660,8 +1660,8 @@ export async function cmdCheck(
   const venueType = venue === "rfq" ? 2 : 0;
   const venueAddr = venue === "rfq" ? a.rfqVenue : a.pool;
 
-  // Buy-direction context: tokenIn=QUOTE, tokenOut=RWA. The engine screens
-  // ctx.buyer for investor elements (documented non-direction-aware limitation).
+  // Buy-direction context: tokenIn=QUOTE, tokenOut=RWA. Investor elements screen
+  // ctx.buyer; direction-aware asset elements resolve pool -> buyer for the RWA.
   const ctx = [buyer, buyer, seller, a.quote, a.rwaToken, amount, amount, venueType, venueAddr, 0, false];
 
   // Active manifest's recipe ids -> requiredElements -> element addresses.

@@ -10,7 +10,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {CornerStoreFactory} from "../src/factory/CornerStoreFactory.sol";
 import {TokenPolicyRegistry} from "../src/registry/TokenPolicyRegistry.sol";
 import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
-import {SurveillanceFlag} from "../src/compliance/elements/SurveillanceFlag.sol";
+import {SurveillanceFlagV2} from "../src/compliance/elements/SurveillanceFlagV2.sol";
 import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
 import {UniswapV3Adapter} from "../src/execution/adapters/amm/UniswapV3Adapter.sol";
 import {RFQAdapter} from "../src/execution/adapters/rfq/RFQAdapter.sol";
@@ -67,7 +67,7 @@ contract DemoScenarios is Script, DemoConstants {
     CornerStoreFactory internal factory;
     TokenPolicyRegistry internal policyReg;
     Jurisdiction internal jurisdiction;
-    SurveillanceFlag internal surveillance;
+    SurveillanceFlagV2 internal surveillance;
     ExecutionRouter internal router;
     UniswapV3Adapter internal ammAdapter;
     RFQAdapter internal rfqAdapter;
@@ -608,7 +608,7 @@ contract DemoScenarios is Script, DemoConstants {
         factory = CornerStoreFactory(vm.parseJsonAddress(json, ".factory"));
         policyReg = TokenPolicyRegistry(vm.parseJsonAddress(json, ".policyReg"));
         jurisdiction = Jurisdiction(vm.parseJsonAddress(json, ".jurisdiction"));
-        surveillance = SurveillanceFlag(vm.parseJsonAddress(json, ".surveillance"));
+        surveillance = SurveillanceFlagV2(vm.parseJsonAddress(json, ".surveillance"));
         router = ExecutionRouter(vm.parseJsonAddress(json, ".router"));
         ammAdapter = UniswapV3Adapter(vm.parseJsonAddress(json, ".ammAdapter"));
         rfqAdapter = RFQAdapter(vm.parseJsonAddress(json, ".rfqAdapter"));
@@ -622,13 +622,13 @@ contract DemoScenarios is Script, DemoConstants {
     function _baseBindings() internal view returns (RecipeBinding[] memory bindings) {
         if (useBuidlLikeProfile) return BuidlLikeDemoAsset.recipeBindings();
         bindings = new RecipeBinding[](1);
-        bindings[0] = RecipeBinding(1, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[0] = RecipeBinding(1, 3, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
     }
 
     function _surveillanceBindings() internal view returns (RecipeBinding[] memory bindings) {
         uint256 count = useBuidlLikeProfile ? 2 : 1;
         bindings = new RecipeBinding[](count);
-        bindings[0] = RecipeBinding(SURVEIL_RECIPE_ID, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[0] = RecipeBinding(SURVEIL_RECIPE_ID, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         if (useBuidlLikeProfile) {
             bindings[1] = RecipeBinding(
                 BuidlLikeDemoAsset.FUND_RECIPE_ID,

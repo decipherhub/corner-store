@@ -278,7 +278,7 @@ async function main() {
   );
   const buidl = assetProfileBinding("buidl-like");
   assert(
-    JSON.stringify(buidl.bindings) === JSON.stringify([[1, 2, 0, 0, 100], [3, 2, 0, 0, 90]]) &&
+    JSON.stringify(buidl.bindings) === JSON.stringify([[1, 3, 0, 0, 100], [3, 2, 0, 0, 90]]) &&
       buidl.factsPacked === 1n,
     "BUIDL-like RecipeBinding[]/facts binding"
   );
@@ -289,7 +289,7 @@ async function main() {
   );
   const regD = assetProfileBinding("reg-d");
   assert(
-    JSON.stringify(regD.bindings) === JSON.stringify([[1, 2, 0, 0, 100]]) && regD.factsPacked === 0n,
+    JSON.stringify(regD.bindings) === JSON.stringify([[1, 3, 0, 0, 100]]) && regD.factsPacked === 0n,
     "Reg D uses a single RecipeBinding[] without fund mirror behavior"
   );
   assert(
@@ -317,12 +317,13 @@ async function main() {
   // A-04:9, A-13:9, B-01:6, B-02:6); the wave-2 illustrative elements
   // (A-08:8, A-09:2, A-11:5, B-03:6, B-04:7, D-01:4) and the wave-3
   // illustrative elements (A-06:4, A-12:8, E-03:9, F-01:3, F-03:4, F-04:5) are
-  // also enumerated; the remaining 6 single-code Elements (A-02, A-05, C-01,
-  // E-01, F-02, BUIDL-MIN-v1) contribute 1 each. Generic MIN-AMOUNT-v1 adds
-  // one named threshold code.
+  // also enumerated; the remaining 6 legacy single-code Elements (A-02, A-05,
+  // C-01-v1, E-01, F-02-v1, BUIDL-MIN-v1) contribute 1 each. The versioned
+  // replacements add B-02-v2's 6-code taxonomy plus C-01-v2/F-02-v2, and
+  // generic MIN-AMOUNT-v1 adds one named threshold code.
   const CODES_PER_ELEMENT =
-    10 + 1 + 9 + 9 + 1 + 6 + 6 + 1 + 1 + 9 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 1 + 1; // = 121
-  assert(tableSize() === 4 * CODES_PER_ELEMENT + 25 + 6, "reason table size");
+    10 + 1 + 9 + 9 + 1 + 6 + 6 + 6 + 1 + 1 + 1 + 9 + 1 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 1 + 1; // = 129
+  assert(tableSize() === 4 * CODES_PER_ELEMENT + 28 + 6, "reason table size");
 
   const jur = decodeReason(A02_RECIPE1);
   assert(jur.label.includes("Jurisdiction") && jur.label.includes("A-02-v1"), "decodes A-02 to Jurisdiction");

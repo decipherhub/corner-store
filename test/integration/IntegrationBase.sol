@@ -16,16 +16,16 @@ import {Sanctions} from "../../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../../src/compliance/elements/QualifiedPurchaser.sol";
 import {MinimumTradeAmount} from "../../src/compliance/elements/MinimumTradeAmount.sol";
-import {SurveillanceFlag} from "../../src/compliance/elements/SurveillanceFlag.sol";
+import {SurveillanceFlagV2} from "../../src/compliance/elements/SurveillanceFlagV2.sol";
 import {Jurisdiction} from "../../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../../src/compliance/elements/IdentityUniqueness.sol";
 import {UsTaxResident} from "../../src/compliance/elements/UsTaxResident.sol";
 import {AssetClassification} from "../../src/compliance/elements/AssetClassification.sol";
-import {Erc3643Native} from "../../src/compliance/elements/Erc3643Native.sol";
+import {Erc3643NativeV2} from "../../src/compliance/elements/Erc3643NativeV2.sol";
 import {FormDFiling} from "../../src/compliance/elements/FormDFiling.sol";
-import {Lockup} from "../../src/compliance/elements/Lockup.sol";
+import {LockupV2} from "../../src/compliance/elements/LockupV2.sol";
 import {IAcquisitionSource} from "../../src/interfaces/compliance/IAcquisitionSource.sol";
-import {RegD506cRecipe} from "../../src/compliance/recipes/RegD506cRecipe.sol";
+import {RegD506cRecipeV3} from "../../src/compliance/recipes/RegD506cRecipeV3.sol";
 import {Fund3c7Recipe} from "../../src/compliance/recipes/Fund3c7Recipe.sol";
 import {
     QualifiedPurchaserMinimumAmountRecipe
@@ -67,14 +67,10 @@ import {VenueConfig, CustodyModel} from "../../src/types/VenueTypes.sol";
 ///     QUOTE buyer→pool; the pool then does the REAL ERC-3643 RWA transfer
 ///     pool→buyer (genuine isVerified + canTransfer, gas in the millions).
 ///
-/// NOTE on direction (skeleton honesty): the engine is NOT direction-aware — it
-/// always checks `ctx.buyer` for investor elements (accredited / sanctioned / qp).
-/// We represent BUY vs SELL via tokenIn/tokenOut and which real address holds /
-/// receives RWA, but we do NOT pretend the engine gates by direction. Rejection
-/// scenarios therefore use mechanisms the skeleton actually has (non-accredited
-/// buyer, sanctioned buyer, unverified RWA recipient → ERC-3643 rollback,
-/// SUSPENDED policy, suspended venue, maxAmount, nonce reuse). Direction-specific
-/// element application is a documented future concern.
+/// Direction-aware asset elements resolve the actual RWA sender and recipient
+/// from tokenIn/tokenOut. Investor-qualification elements still evaluate the
+/// screened `ctx.buyer`, while C-01-v2 and B-02-v2 evaluate the regulated token's
+/// actual transfer direction.
 abstract contract IntegrationBase is TREXSuite {
     // --- registries / engine ---------------------------------------------
     ElementRegistry internal elementReg;
@@ -89,14 +85,14 @@ abstract contract IntegrationBase is TREXSuite {
     AccreditedInvestor internal accredited;
     QualifiedPurchaser internal qp;
     MinimumTradeAmount internal minimumTradeAmount;
-    SurveillanceFlag internal surveillance;
+    SurveillanceFlagV2 internal surveillance;
     // 9-element Reg D 506(c) reference set (A-01/A-03 above + these):
     Jurisdiction internal jurisdiction; // A-02-v1
     IdentityUniqueness internal identity; // A-04-v1
     UsTaxResident internal usTax; // A-05-v1
     AssetClassification internal assetClass; // B-01-v1
-    Erc3643Native internal erc3643; // B-02-v1
-    Lockup internal lockup; // C-01-v1
+    Erc3643NativeV2 internal erc3643; // B-02-v2
+    LockupV2 internal lockup; // C-01-v2
     FormDFiling internal formD; // E-01-v1
     MockAcquisitionSource internal acqSource; // Lockup CR-3 seam
 
@@ -185,12 +181,12 @@ abstract contract IntegrationBase is TREXSuite {
         accredited = new AccreditedInvestor();
         qp = new QualifiedPurchaser();
         minimumTradeAmount = new MinimumTradeAmount();
-        surveillance = new SurveillanceFlag();
+        surveillance = new SurveillanceFlagV2();
         elementReg.registerElement(bytes32("A-01-v1"), address(sanctions));
         elementReg.registerElement(bytes32("A-03-v1"), address(accredited));
         elementReg.registerElement(bytes32("A-13-v1"), address(qp));
         elementReg.registerElement(bytes32("MIN-AMOUNT-v1"), address(minimumTradeAmount));
-        elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
+        elementReg.registerElement(bytes32("F-02-v2"), address(surveillance));
 
         // 2b. remaining 9-element Reg D 506(c) reference set. AssetClassification
         //     requires REG_D; Lockup reads acquisition time via an injected mock.
@@ -198,20 +194,20 @@ abstract contract IntegrationBase is TREXSuite {
         identity = new IdentityUniqueness();
         usTax = new UsTaxResident();
         assetClass = new AssetClassification(REG_D_CLASS);
-        erc3643 = new Erc3643Native();
+        erc3643 = new Erc3643NativeV2();
         formD = new FormDFiling();
         acqSource = new MockAcquisitionSource();
-        lockup = new Lockup(address(acqSource), LOCKUP_SECONDS);
+        lockup = new LockupV2(address(acqSource), LOCKUP_SECONDS);
         elementReg.registerElement(bytes32("A-02-v1"), address(jurisdiction));
         elementReg.registerElement(bytes32("A-04-v1"), address(identity));
         elementReg.registerElement(bytes32("A-05-v1"), address(usTax));
         elementReg.registerElement(bytes32("B-01-v1"), address(assetClass));
-        elementReg.registerElement(bytes32("B-02-v1"), address(erc3643));
-        elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
+        elementReg.registerElement(bytes32("B-02-v2"), address(erc3643));
+        elementReg.registerElement(bytes32("C-01-v2"), address(lockup));
         elementReg.registerElement(bytes32("E-01-v1"), address(formD));
 
         // 3. recipes + register
-        recipeReg.registerRecipe(1, 2, address(new RegD506cRecipe()));
+        recipeReg.registerRecipe(1, 3, address(new RegD506cRecipeV3()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
         recipeReg.registerRecipe(3, 2, address(new QualifiedPurchaserMinimumAmountRecipe()));
 
@@ -264,6 +260,7 @@ abstract contract IntegrationBase is TREXSuite {
         //    Allow the ALLOWED_JURISDICTION code for the investor-side screen.
         assetClass.setClassification(address(rwaToken), REG_D_CLASS);
         erc3643.setErc3643Native(address(rwaToken), true);
+        erc3643.registerWiring(address(rwaToken), address(idRegistry), address(compliance), address(rwaToken).codehash);
         formD.setFormDFiled(address(rwaToken), true, bytes32("EDGAR-ACCESSION"));
         jurisdiction.setJurisdictionAllowed(ALLOWED_JURISDICTION, true);
 
@@ -274,6 +271,7 @@ abstract contract IntegrationBase is TREXSuite {
         if (block.timestamp <= uint256(LOCKUP_SECONDS)) {
             vm.warp(uint256(LOCKUP_SECONDS) + 1);
         }
+        acqSource.setAcquiredAt(address(pool), address(rwaToken), uint64(1));
     }
 
     /// @dev Convenience overload: plain RegD506c, no fund recipe.
@@ -303,7 +301,7 @@ abstract contract IntegrationBase is TREXSuite {
 
     function _bindings(uint16 fundRecipeId) internal pure returns (RecipeBinding[] memory bindings) {
         bindings = new RecipeBinding[](fundRecipeId == 0 ? 1 : 2);
-        bindings[0] = RecipeBinding(1, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[0] = RecipeBinding(1, 3, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         if (fundRecipeId != 0) {
             bindings[1] = RecipeBinding(fundRecipeId, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
         }
@@ -473,7 +471,7 @@ abstract contract IntegrationBase is TREXSuite {
     }
 }
 
-/// @dev Test-only settable acquisition-time source for the Lockup (C-01-v1)
+/// @dev Test-only settable acquisition-time source for the Lockup (C-01-v2)
 ///      element's injected CR-3 seam. Mirrors the unit-test helper.
 contract MockAcquisitionSource is IAcquisitionSource {
     mapping(bytes32 => AcquisitionSnapshot) internal _snapshots;

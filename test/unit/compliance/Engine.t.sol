@@ -9,18 +9,18 @@ import {TokenPolicyRegistry} from "../../../src/registry/TokenPolicyRegistry.sol
 import {Sanctions} from "../../../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../../../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../../../src/compliance/elements/QualifiedPurchaser.sol";
-import {SurveillanceFlag} from "../../../src/compliance/elements/SurveillanceFlag.sol";
-import {Lockup} from "../../../src/compliance/elements/Lockup.sol";
+import {SurveillanceFlagV2} from "../../../src/compliance/elements/SurveillanceFlagV2.sol";
+import {LockupV2} from "../../../src/compliance/elements/LockupV2.sol";
 import {Jurisdiction} from "../../../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../../../src/compliance/elements/IdentityUniqueness.sol";
 import {UsTaxResident} from "../../../src/compliance/elements/UsTaxResident.sol";
 import {AssetClassification} from "../../../src/compliance/elements/AssetClassification.sol";
-import {Erc3643Native} from "../../../src/compliance/elements/Erc3643Native.sol";
+import {Erc3643NativeV2} from "../../../src/compliance/elements/Erc3643NativeV2.sol";
 import {FormDFiling} from "../../../src/compliance/elements/FormDFiling.sol";
 import {MinimumTradeAmount} from "../../../src/compliance/elements/MinimumTradeAmount.sol";
 import {IAcquisitionSource} from "../../../src/interfaces/compliance/IAcquisitionSource.sol";
 import {IComplianceElement, IStatefulElement} from "../../../src/interfaces/compliance/IComplianceElement.sol";
-import {RegD506cRecipe} from "../../../src/compliance/recipes/RegD506cRecipe.sol";
+import {RegD506cRecipeV3} from "../../../src/compliance/recipes/RegD506cRecipeV3.sol";
 import {Fund3c7Recipe} from "../../../src/compliance/recipes/Fund3c7Recipe.sol";
 import {
     ComplianceContext,
@@ -56,17 +56,17 @@ contract EngineTest is Test {
     Sanctions internal sanctions;
     AccreditedInvestor internal accredited;
     QualifiedPurchaser internal qp;
-    SurveillanceFlag internal surveillance;
-    // 9-element Reg D 506(c) reference set (RegD506cRecipe is now version 2).
+    SurveillanceFlagV2 internal surveillance;
+    // 9-element Reg D 506(c) reference set (RegD506cRecipeV3).
     Jurisdiction internal jurisdiction; // A-02-v1
     IdentityUniqueness internal identity; // A-04-v1
     UsTaxResident internal usTax; // A-05-v1
     AssetClassification internal assetClass; // B-01-v1
-    Erc3643Native internal erc3643; // B-02-v1
-    Lockup internal lockup; // C-01-v1
+    Erc3643NativeV2 internal erc3643; // B-02-v2
+    LockupV2 internal lockup; // C-01-v2
     FormDFiling internal formD; // E-01-v1
     MockAcquisitionSource internal acqSource;
-    RegD506cRecipe internal regdRecipe;
+    RegD506cRecipeV3 internal regdRecipe;
 
     bytes32 internal constant ALLOWED_JX = bytes32("US");
     bytes32 internal constant REG_D_CLASS = bytes32("REG_D");
@@ -86,28 +86,28 @@ contract EngineTest is Test {
         sanctions = new Sanctions();
         accredited = new AccreditedInvestor();
         qp = new QualifiedPurchaser();
-        surveillance = new SurveillanceFlag();
+        surveillance = new SurveillanceFlagV2();
 
         elementReg.registerElement(bytes32("A-01-v1"), address(sanctions));
         elementReg.registerElement(bytes32("A-03-v1"), address(accredited));
         elementReg.registerElement(bytes32("A-13-v1"), address(qp));
-        elementReg.registerElement(bytes32("F-02-v1"), address(surveillance));
+        elementReg.registerElement(bytes32("F-02-v2"), address(surveillance));
 
-        // Remaining 9-element Reg D 506(c) reference set (RegD506cRecipe v2).
+        // Remaining 9-element Reg D 506(c) reference set (RegD506cRecipeV3).
         jurisdiction = new Jurisdiction();
         identity = new IdentityUniqueness();
         usTax = new UsTaxResident();
         assetClass = new AssetClassification(REG_D_CLASS);
-        erc3643 = new Erc3643Native();
+        erc3643 = new Erc3643NativeV2();
         formD = new FormDFiling();
         acqSource = new MockAcquisitionSource();
-        lockup = new Lockup(address(acqSource), LOCKUP_SECONDS);
+        lockup = new LockupV2(address(acqSource), LOCKUP_SECONDS);
         elementReg.registerElement(bytes32("A-02-v1"), address(jurisdiction));
         elementReg.registerElement(bytes32("A-04-v1"), address(identity));
         elementReg.registerElement(bytes32("A-05-v1"), address(usTax));
         elementReg.registerElement(bytes32("B-01-v1"), address(assetClass));
-        elementReg.registerElement(bytes32("B-02-v1"), address(erc3643));
-        elementReg.registerElement(bytes32("C-01-v1"), address(lockup));
+        elementReg.registerElement(bytes32("B-02-v2"), address(erc3643));
+        elementReg.registerElement(bytes32("C-01-v2"), address(lockup));
         elementReg.registerElement(bytes32("E-01-v1"), address(formD));
 
         // Asset-side attestations for the RWA tokens + allowed jurisdiction.
@@ -118,9 +118,9 @@ contract EngineTest is Test {
         // time pass C-01. (No deadlines are built in these unit tests.)
         vm.warp(uint256(LOCKUP_SECONDS) + 1);
 
-        regdRecipe = new RegD506cRecipe();
+        regdRecipe = new RegD506cRecipeV3();
         Fund3c7Recipe fund = new Fund3c7Recipe();
-        recipeReg.registerRecipe(1, 2, address(regdRecipe));
+        recipeReg.registerRecipe(1, 3, address(regdRecipe));
         recipeReg.registerRecipe(2, 1, address(fund));
 
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
@@ -139,14 +139,17 @@ contract EngineTest is Test {
         formD.setFormDFiled(asset, true, bytes32("EDGAR"));
     }
 
-    /// @dev All investor-side pass-conditions for BUYER EXCEPT accreditation
-    ///      (A-02 jurisdiction, A-04 identity, C-01 lockup on both RWA tokens).
+    /// @dev All investor-side pass-conditions for BUYER EXCEPT accreditation.
+    ///      C-01-v2 snapshots cover BUYER as a sell source and SELLER as a buy
+    ///      source for both regulated assets used in these tests.
     ///      A-01 sanctions / A-05 US-tax pass by default.
     function _attestBuyerBase() internal {
         jurisdiction.setJurisdiction(BUYER, ALLOWED_JX);
         identity.bindIdentity(BUYER, keccak256(abi.encode("ID", BUYER)));
         acqSource.setAcquiredAt(BUYER, RWA, uint64(1));
         acqSource.setAcquiredAt(BUYER, RWA2, uint64(1));
+        acqSource.setAcquiredAt(SELLER, RWA, uint64(1));
+        acqSource.setAcquiredAt(SELLER, RWA2, uint64(1));
     }
 
     /// @dev BUYER passes every investor-side element in the 9-element recipe.
@@ -165,7 +168,7 @@ contract EngineTest is Test {
 
     function _bindings(uint16 fundRecipeId) internal pure returns (RecipeBinding[] memory bindings) {
         bindings = new RecipeBinding[](fundRecipeId == 0 ? 1 : 2);
-        bindings[0] = RecipeBinding(1, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[0] = RecipeBinding(1, 3, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         if (fundRecipeId != 0) {
             bindings[1] = RecipeBinding(fundRecipeId, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
         }
@@ -259,11 +262,11 @@ contract EngineTest is Test {
         bytes32 recipeKey = recipeReg.recipeKeyOf(1);
         bytes32[] memory latestElements = new bytes32[](1);
         latestElements[0] = bytes32("A-13-v1");
-        recipeReg.registerRecipe(1, 3, address(new VersionedTestRecipe(1, 3, latestElements)));
+        recipeReg.registerRecipe(1, 4, address(new VersionedTestRecipe(1, 4, latestElements)));
 
-        assertEq(recipeReg.latestRegisteredVersionOf(recipeKey), 3, "catalog latest should advance");
+        assertEq(recipeReg.latestRegisteredVersionOf(recipeKey), 4, "catalog latest should advance");
         ComplianceDecision memory after_ = engine.evaluate(_ctxBuy());
-        assertTrue(after_.allowed, "active manifest remains bound to recipe v2");
+        assertTrue(after_.allowed, "active manifest remains bound to recipe v3");
         assertEq(after_.policyId, before_.policyId, "catalog registration cannot mutate policy identity");
         assertEq(after_.policyVersion, before_.policyVersion, "catalog registration cannot mutate policy version");
     }
@@ -683,7 +686,7 @@ contract EngineTest is Test {
         (bytes32 logicalBefore, bytes32 executionBefore, bytes32 policyBefore) = engine.policyHashesOf(RWA);
         assertTrue(logicalBefore != bytes32(0) && executionBefore != bytes32(0) && policyBefore != bytes32(0));
 
-        bytes32 expectedCodeHash = recipeReg.runtimeCodeHashOf(recipeReg.recipeKeyOf(1), 2);
+        bytes32 expectedCodeHash = recipeReg.runtimeCodeHashOf(recipeReg.recipeKeyOf(1), 3);
         vm.etch(address(regdRecipe), hex"00");
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -733,10 +736,10 @@ contract EngineTest is Test {
     }
 
     function test_commit_emits_surveillance_flag() public {
-        // Build a recipe whose required elements include the stateful F-02-v1.
+        // Build a recipe whose required elements include the stateful F-02-v2.
         bytes32[] memory els = new bytes32[](2);
         els[0] = bytes32("A-03-v1");
-        els[1] = bytes32("F-02-v1");
+        els[1] = bytes32("F-02-v2");
         UnregisteredElementRecipe surveilRecipe = new UnregisteredElementRecipe(4, els);
         recipeReg.registerRecipe(4, 1, address(surveilRecipe));
 
@@ -751,7 +754,7 @@ contract EngineTest is Test {
         // commit on seller→buyer. RWA-side amount = amountOut (tokenOut == RWA).
         vm.expectEmit(true, true, false, true);
         emit Events.SurveillanceFlag(
-            bytes32("F-02-v1"), SELLER, keccak256(abi.encode(uint16(0), bytes32("F-02-v1"), uint32(1)))
+            bytes32("F-02-v2"), SELLER, keccak256(abi.encode(uint16(0), bytes32("F-02-v2"), uint32(1)))
         );
         engine.commit(_ctxBuy());
         assertEq(surveillance.transferCount(), 1);
@@ -777,8 +780,8 @@ contract EngineTest is Test {
     }
 
     function test_commit_deduplicatesStatefulElementAcrossBindings() public {
-        _registerSingleElementRecipe(3, bytes32("F-02-v1"));
-        _registerSingleElementRecipe(4, bytes32("F-02-v1"));
+        _registerSingleElementRecipe(3, bytes32("F-02-v2"));
+        _registerSingleElementRecipe(4, bytes32("F-02-v2"));
         RecipeBinding[] memory bindings = new RecipeBinding[](2);
         bindings[0] = RecipeBinding(3, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         bindings[1] = RecipeBinding(4, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 10);
@@ -822,9 +825,9 @@ contract EngineTest is Test {
     }
 
     // Auth: a non-engine caller cannot forge a stateful element's runtime
-    // counter. SurveillanceFlag.onTransfer is gated to its wired engine.
+    // counter. SurveillanceFlagV2.onTransfer is gated to its wired engine.
     function test_onTransfer_revertsForNonEngine() public {
-        SurveillanceFlag s = new SurveillanceFlag();
+        SurveillanceFlagV2 s = new SurveillanceFlagV2();
         s.setEngine(address(engine)); // only the engine is authorized
 
         vm.prank(address(0xDEAD));
@@ -888,15 +891,15 @@ contract EngineTest is Test {
     }
 
     // (c) Lockup through the engine end-to-end, exercising the IAcquisitionSource
-    // injection seam. Register Lockup (C-01-v1) wired to a MockAcquisitionSource and a
+    // injection seam. Register Lockup (C-01-v2) wired to a MockAcquisitionSource and a
     // recipe that requires it. Before lockup elapses → reject; after warp → allow.
     function test_lockup_through_engine_time_gated() public {
         uint64 lockupSeconds = LOCKUP_SECONDS;
         uint64 acquiredAt = uint64(block.timestamp);
-        acqSource.setAcquiredAt(BUYER, RWA, acquiredAt);
+        acqSource.setAcquiredAt(SELLER, RWA, acquiredAt);
 
         bytes32[] memory els = new bytes32[](1);
-        els[0] = bytes32("C-01-v1");
+        els[0] = bytes32("C-01-v2");
         UnregisteredElementRecipe lockupRecipe = new UnregisteredElementRecipe(6, els);
         recipeReg.registerRecipe(6, 1, address(lockupRecipe));
 
@@ -915,6 +918,34 @@ contract EngineTest is Test {
         ComplianceDecision memory dAfter = engine.evaluate(_ctxBuy());
         assertTrue(dAfter.allowed, "lockup elapsed must allow");
         assertEq(dAfter.reasonCode, bytes32(0));
+    }
+
+    function test_primary_distribution_lockup_bypass_requires_manifest_bound_sender() public {
+        _registerSingleElementRecipe(14, bytes32("C-01-v2"));
+
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] = ElementPolicyParameter({
+            bindingIndex: 0,
+            elementId: bytes32("C-01-v2"),
+            schemaId: lockup.PARAMETER_SCHEMA_ID(),
+            schemaVersion: 1,
+            parameters: abi.encode(SELLER)
+        });
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _singleBinding(14, 1), overrides_, config);
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+
+        ComplianceContext memory primary = _ctxBuy();
+        primary.flowType = FlowType.PRIMARY_DISTRIBUTION;
+        assertTrue(engine.evaluate(primary).allowed, "bound primary distributor bypasses resale lockup");
+
+        primary.seller = address(0xDEAD);
+        ComplianceDecision memory unbound = engine.evaluate(primary);
+        assertFalse(unbound.allowed, "flow marker alone must not bypass lockup");
+        assertEq(unbound.reasonCode, ReasonCodes.encode(0, bytes32("C-01-v2"), 1));
     }
 }
 

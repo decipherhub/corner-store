@@ -148,6 +148,7 @@ contract RealUniswapV3Test is IntegrationBase {
 
         quoteIsToken0 = address(quote) < address(rwaToken);
         registerVenueIdentity(realPool);
+        acqSource.setAcquiredAt(realPool, address(rwaToken), uint64(1));
         venueReg.registerVenue(
             realPool,
             VenueConfig({
