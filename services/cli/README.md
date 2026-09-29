@@ -40,6 +40,8 @@ Generated projects include `corner-store.config.json`,
 `corner-store.scenario.json`, `.env.example`, `src/index.ts`, `src/policy.ts`,
 `src/module-conformance.ts`, `package.json`, `tsconfig.json` and
 the RFQ SDK source in `vendor/rfq-service` when generated from this repository.
+The `dex-integration` template also includes a Router-only Solidity Adapter,
+TypeScript request builder and real-Router Foundry conformance tests.
 `create` refuses to overwrite an existing target directory.
 For an unpublished source checkout, `create` also writes
 `vendor/corner-store-cli.tgz` and `vendor/corner-store-toolkit.tgz`, so the

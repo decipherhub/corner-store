@@ -115,6 +115,13 @@ function generatedFiles(
     files["corner-store.config.json"] = json(defaultConfig());
     files["corner-store.scenario.json"] = scenario ?? json(defaultScenario());
   }
+  if (project.template === "dex-integration") {
+    files["corner-store.venue.json"] = json(venueDescriptor());
+    files["foundry.toml"] = dexFoundryConfig();
+    files["contracts/CornerStoreVenueAdapter.sol"] = venueAdapterSource();
+    files["test/CornerStoreVenueAdapter.t.sol"] = venueAdapterTestSource();
+    files["src/venue-client.ts"] = venueClientSource();
+  }
   if (manifest.deployment.dockerCompose) {
     files["Dockerfile"] = dockerfile(vendoredSdk);
     files["compose.yaml"] = compose();
@@ -142,8 +149,11 @@ function packageManifest(
     scripts: {
       build: "tsc -p tsconfig.json",
       ...(manifest.mode === "reference-service" ? {start: "node dist/index.js"} : {}),
-      test: "npm run build && npm run test:module",
+      test: project.template === "dex-integration"
+        ? "npm run build && npm run test:module && npm run test:adapter"
+        : "npm run build && npm run test:module",
       "test:module": "corner-store test-module dist/module-conformance.js",
+      ...(project.template === "dex-integration" ? {"test:adapter": "forge test --offline"} : {}),
       ...(standalone ? {
         doctor: "corner-store doctor",
         deploy: "corner-store deploy",
@@ -392,6 +402,258 @@ function defaultScenario(): unknown {
     schemaVersion: 2,
     note: "Replace with an operator-reviewed deployment scenario before broadcast."
   };
+}
+
+function venueDescriptor(): unknown {
+  return {
+    schemaVersion: 1,
+    venueType: "AMM",
+    adapterSource: "contracts/CornerStoreVenueAdapter.sol",
+    conformanceTest: "test/CornerStoreVenueAdapter.t.sol",
+    policyBinding: "registry-configured",
+    settlementTarget: "external-venue",
+    productionResponsibilities: [
+      "token transfer safety",
+      "callback origin validation when applicable",
+      "venue-specific slippage and settlement accounting",
+      "independent audit and deployment review"
+    ]
+  };
+}
+
+function dexFoundryConfig(): string {
+  return `[profile.default]
+src = "contracts"
+test = "test"
+out = "out"
+libs = ["node_modules/@corner-store/cli/bundle/contracts/lib"]
+solc = "0.8.17"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+remappings = [
+  "corner-store/=node_modules/@corner-store/cli/bundle/contracts/",
+  "forge-std/=node_modules/@corner-store/cli/bundle/contracts/lib/forge-std/src/",
+  "@openzeppelin/contracts/=node_modules/@corner-store/cli/bundle/contracts/lib/openzeppelin-contracts/contracts/",
+  "@openzeppelin/contracts-upgradeable/=node_modules/@corner-store/cli/bundle/contracts/lib/openzeppelin-contracts-upgradeable/contracts/",
+  "@onchain-id/solidity/=node_modules/@corner-store/cli/bundle/contracts/lib/solidity/",
+  "@erc3643/=node_modules/@corner-store/cli/bundle/contracts/lib/ERC-3643/contracts/"
+]
+`;
+}
+
+function venueAdapterSource(): string {
+  return `// SPDX-License-Identifier: GPL-3.0
+pragma solidity 0.8.17;
+
+import {IExecutionAdapter} from "corner-store/src/interfaces/execution/IExecutionAdapter.sol";
+import {ExecutionRequest, ExecutionResult} from "corner-store/src/types/ExecutionTypes.sol";
+import {ComplianceDecision} from "corner-store/src/types/ComplianceTypes.sol";
+
+interface IExternalVenue {
+    function execute(ExecutionRequest calldata request) external returns (ExecutionResult memory);
+}
+
+/// @notice Minimal integration boundary. The external venue owns settlement;
+/// this adapter owns only Router authorization and exact target binding.
+contract CornerStoreVenueAdapter is IExecutionAdapter {
+    error NotOwner();
+    error NotRouter();
+    error InvalidAddress();
+    error VenueMismatch();
+
+    address public immutable owner;
+    IExternalVenue public immutable target;
+    address public router;
+
+    constructor(IExternalVenue target_) {
+        if (address(target_) == address(0)) revert InvalidAddress();
+        owner = msg.sender;
+        target = target_;
+    }
+
+    function setRouter(address router_) external {
+        if (msg.sender != owner) revert NotOwner();
+        if (router_ == address(0)) revert InvalidAddress();
+        router = router_;
+    }
+
+    function execute(ExecutionRequest calldata request, ComplianceDecision calldata)
+        external
+        returns (ExecutionResult memory)
+    {
+        if (msg.sender != router) revert NotRouter();
+        if (request.context.venue != address(target)) revert VenueMismatch();
+        return target.execute(request);
+    }
+}
+`;
+}
+
+function venueAdapterTestSource(): string {
+  return `// SPDX-License-Identifier: GPL-3.0
+pragma solidity 0.8.17;
+
+import {Test} from "forge-std/Test.sol";
+import {CornerStoreVenueAdapter, IExternalVenue} from "../contracts/CornerStoreVenueAdapter.sol";
+import {ExecutionRouter} from "corner-store/src/execution/ExecutionRouter.sol";
+import {VenueRegistry} from "corner-store/src/execution/VenueRegistry.sol";
+import {VenueSelector} from "corner-store/src/execution/VenueSelector.sol";
+import {OperatorRegistry} from "corner-store/src/registry/OperatorRegistry.sol";
+import {MockComplianceEngine} from "corner-store/test/mocks/MockComplianceEngine.sol";
+import {ExecutionRequest, ExecutionResult} from "corner-store/src/types/ExecutionTypes.sol";
+import {ComplianceContext, ComplianceDecision, FlowType, VenueType} from "corner-store/src/types/ComplianceTypes.sol";
+import {CustodyModel, VenueConfig} from "corner-store/src/types/VenueTypes.sol";
+import {Errors} from "corner-store/src/libraries/Errors.sol";
+
+contract ExampleExternalVenue is IExternalVenue {
+    MockComplianceEngine public immutable engine;
+    bool public failExecution;
+    bool public committedDuringExecute;
+    uint256 public callCount;
+
+    constructor(MockComplianceEngine engine_) { engine = engine_; }
+    function setFailExecution(bool value) external { failExecution = value; }
+    function execute(ExecutionRequest calldata request) external returns (ExecutionResult memory) {
+        if (failExecution) revert("venue failure");
+        committedDuringExecute = engine.committed();
+        callCount++;
+        return ExecutionResult({amountOut: request.context.amountOut, executionId: keccak256(abi.encode(request.nonce))});
+    }
+}
+
+contract CornerStoreVenueAdapterConformanceTest is Test {
+    address internal constant USER = address(0xB0B);
+    MockComplianceEngine internal engine;
+    ExampleExternalVenue internal venue;
+    CornerStoreVenueAdapter internal adapter;
+    ExecutionRouter internal router;
+
+    function setUp() public {
+        engine = new MockComplianceEngine();
+        venue = new ExampleExternalVenue(engine);
+        adapter = new CornerStoreVenueAdapter(venue);
+        VenueRegistry registry = new VenueRegistry();
+        VenueSelector selector = new VenueSelector();
+        OperatorRegistry operators = new OperatorRegistry();
+        router = new ExecutionRouter(engine, registry, selector, operators);
+        adapter.setRouter(address(router));
+        registry.registerVenue(address(venue), VenueConfig({
+            venueType: VenueType.AMM,
+            adapter: address(adapter),
+            target: address(venue),
+            operator: address(this),
+            custody: CustodyModel.NONE,
+            active: true
+        }));
+        engine.setDecision(_decision(true));
+    }
+
+    function test_allowed_flow_executes_then_commits() public {
+        vm.prank(USER);
+        ExecutionResult memory result = router.execute(_request(1));
+        assertEq(result.amountOut, 90);
+        assertEq(venue.callCount(), 1);
+        assertFalse(venue.committedDuringExecute(), "commit must happen after venue execution");
+        assertTrue(engine.committed(), "successful venue execution must commit compliance state");
+    }
+
+    function test_compliance_rejection_never_reaches_venue() public {
+        engine.setDecision(_decision(false));
+        vm.prank(USER);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ComplianceRejected.selector, bytes32("REJECTED")));
+        router.execute(_request(2));
+        assertEq(venue.callCount(), 0);
+        assertFalse(engine.committed());
+    }
+
+    function test_direct_adapter_call_cannot_bypass_router() public {
+        ComplianceDecision memory decision = _decision(true);
+        vm.prank(USER);
+        vm.expectRevert(CornerStoreVenueAdapter.NotRouter.selector);
+        adapter.execute(_request(3), decision);
+    }
+
+    function test_venue_failure_rolls_back_nonce_and_commit() public {
+        venue.setFailExecution(true);
+        vm.prank(USER);
+        vm.expectRevert("venue failure");
+        router.execute(_request(4));
+        assertFalse(router.usedNonce(USER, 4));
+        assertFalse(engine.committed());
+        assertEq(venue.callCount(), 0);
+    }
+
+    function _request(uint256 nonce) internal view returns (ExecutionRequest memory request) {
+        request.context = ComplianceContext({
+            initiator: USER,
+            buyer: USER,
+            seller: address(0xCAFE),
+            tokenIn: address(0x1111),
+            tokenOut: address(0x2222),
+            amountIn: 100,
+            amountOut: 90,
+            venueType: VenueType.AMM,
+            venue: address(venue),
+            flowType: FlowType.SECONDARY_TRADE,
+            sellerIsAffiliate: false
+        });
+        request.amountOutMin = 90;
+        request.deadline = uint64(block.timestamp + 1 hours);
+        request.nonce = nonce;
+    }
+
+    function _decision(bool allowed) internal pure returns (ComplianceDecision memory decision) {
+        decision.allowed = allowed;
+        decision.reasonCode = allowed ? bytes32(0) : bytes32("REJECTED");
+        decision.maxAmount = type(uint256).max;
+        decision.allowedVenueTypes = uint256(1) << uint256(VenueType.AMM);
+    }
+}
+`;
+}
+
+function venueClientSource(): string {
+  return `export interface VenueOrder {
+  initiator: string;
+  buyer: string;
+  seller: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+  amountOut: string;
+  venue: string;
+  deadline: number;
+  nonce: string;
+  venueData?: string;
+}
+
+export function buildVenueExecutionRequest(order: VenueOrder) {
+  for (const [name, value] of Object.entries(order)) {
+    if (typeof value === "string" && name !== "venueData" && value.length === 0) throw new Error(\`missing \${name}\`);
+  }
+  if (!Number.isSafeInteger(order.deadline) || order.deadline <= 0) throw new Error("deadline must be a positive safe integer");
+  return {
+    context: {
+      initiator: order.initiator,
+      buyer: order.buyer,
+      seller: order.seller,
+      tokenIn: order.tokenIn,
+      tokenOut: order.tokenOut,
+      amountIn: order.amountIn,
+      amountOut: order.amountOut,
+      venueType: 0,
+      venue: order.venue,
+      flowType: 0,
+      sellerIsAffiliate: false
+    },
+    amountOutMin: order.amountOut,
+    deadline: order.deadline,
+    nonce: order.nonce,
+    venueData: order.venueData ?? "0x"
+  };
+}
+`;
 }
 
 function dockerfile(vendoredSdk: boolean): string {

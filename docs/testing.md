@@ -116,6 +116,9 @@ dry-run `deploy`, `verify`/preflight와 `test-module` command path도 별도로
 tarball로 pack한 뒤 clean temporary project에 설치해야 하며 Toolkit public export,
 generated policy facade, RFQ conformance, CLI doctor/deploy와 packaged contract
 build를 검증한다.
+`dex-integration` clean project는 추가로 generated Solidity Adapter를 build하고
+real Router 기반 allow/reject/direct-call/atomic rollback 4-scenario conformance를
+실행한다.
 
 Policy audit smoke는 canonical/domain-separated hash 결정성, bytes32 commitment,
 unknown/PII-shaped field와 parameter hash 변조 거부, immutable store put/get/exists와

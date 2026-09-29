@@ -10,6 +10,31 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## SDK-005 — External DEX Adapter Starter and Conformance
+
+### Behavior
+
+- `dex-integration` template은 Router-only Solidity Adapter, TypeScript request
+  builder, venue descriptor와 Foundry conformance test를 함께 생성한다.
+- Adapter는 등록된 외부 venue target만 호출하며 compliance policy나 특정 자산을
+  하드코딩하지 않는다.
+- 생성 conformance는 허용 거래의 evaluate→execute→commit 순서, compliance 거절,
+  direct-call 우회 방지와 venue 실패의 원자적 rollback을 검증한다.
+- 외부 venue의 token transfer, callback, slippage와 audit 책임은 명시적으로
+  integrator 범위에 남긴다.
+
+### Verification
+
+- Toolkit scaffold smoke pass
+- packed clean-project TypeScript/RFQ/Solidity build and 4/4 Adapter conformance pass
+- full `scripts/check.sh`: Foundry 950/950 and deploy-v3 10/10
+- `git diff --check` pass
+
+### State
+
+passing
+
+
 ## SDK-004 — Purpose-driven SDK Entry Point
 
 ### Behavior
