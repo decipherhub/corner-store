@@ -10,6 +10,24 @@ const config = validateConfig(defaultConfig());
 const simulation = simulateConfig(config);
 ```
 
+For the purpose-driven facade, keep one config and optionally attach the
+deployment artifact used by every policy operation:
+
+```ts
+import {connectCornerStore, defaultConfig} from "@corner-store/toolkit";
+
+const cornerStore = connectCornerStore({config: defaultConfig(), artifact});
+cornerStore.policy.validate();
+cornerStore.policy.compile();
+cornerStore.policy.simulate();
+cornerStore.policy.explain();
+cornerStore.policy.verify();
+```
+
+`explain()` returns asset/profile values before the advanced 4-layer model.
+`verify()` fails closed and includes `expected`, `actual`, and `remediation` for
+every deployment check. It never submits transactions.
+
 The Toolkit prepares and verifies operator-owned deployment inputs. It never owns
 signer custody, submits Safe transactions, or treats ERC-3643/ONCHAINID evidence as
 trusted without the configured production checks.

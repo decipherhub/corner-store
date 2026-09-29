@@ -11,8 +11,11 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. ADR-010 implementation epic의 코드 작업은 완료됐으며 실제 BUIDL 상품값,
-issuer/legal evidence와 production activation은 외부 입력 전까지 fail-closed한다.
+`SDK-004 — Purpose-driven SDK Entry Point`: 이슈 #113에 따라 내부 RFQ mode보다
+사용 목적을 먼저 선택하는 create template, 통합 Toolkit facade와 actionable
+검증 결과를 구현한다. 기존 mode, local Anvil demo와 production onboarding 명령은
+호환 유지하며 #114의 full Docker sandbox와 #116의 Solidity adapter starter는
+별도 후속 범위다.
 
 ## Completed
 

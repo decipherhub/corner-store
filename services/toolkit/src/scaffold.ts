@@ -8,13 +8,22 @@ import {
   validateIntegrationManifest
 } from "./integration";
 import {defaultConfig} from "./config";
+import {
+  ProjectDescriptor,
+  ProjectTemplateId,
+  createProjectDescriptor,
+  projectTemplate,
+  resolveProjectTemplate
+} from "./project-templates";
 
 export interface ScaffoldOptions {
-  mode: RFQIntegrationMode;
+  mode?: RFQIntegrationMode;
+  template?: ProjectTemplateId;
   dockerCompose?: boolean;
   sdkDependency?: string;
   sdkSourceRoot?: string;
   cliDependency?: string;
+  toolkitDependency?: string;
   standalone?: boolean;
   scenario?: string;
 }
@@ -23,15 +32,19 @@ export interface ScaffoldResult {
   root: string;
   files: string[];
   manifest: RFQIntegrationManifest;
+  project: ProjectDescriptor;
 }
 
 export function scaffoldRFQIntegration(target: string, options: ScaffoldOptions): ScaffoldResult {
   const root = resolve(target);
   if (existsSync(root)) throw new Error(`scaffold target already exists: ${root}`);
-  const manifest = validateIntegrationManifest(defaultIntegrationManifest(options.mode, options.dockerCompose === true));
-  if (options.dockerCompose && options.mode !== "reference-service") {
-    throw new Error("Docker export is available only for reference-service mode");
-  }
+  const selection = resolveProjectTemplate({
+    template: options.template,
+    mode: options.mode,
+    dockerCompose: options.dockerCompose
+  });
+  const manifest = validateIntegrationManifest(defaultIntegrationManifest(selection.mode, options.dockerCompose === true));
+  const project = createProjectDescriptor(selection, options.dockerCompose === true);
   const sdkDependency = options.sdkDependency ??
     (options.sdkSourceRoot ? "file:vendor/rfq-service" : `^${manifest.sdk.version}`);
   if (!sdkDependency || /\s/.test(sdkDependency)) throw new Error("sdkDependency must be a non-empty npm dependency specifier");
@@ -41,8 +54,10 @@ export function scaffoldRFQIntegration(target: string, options: ScaffoldOptions)
     manifest,
     sdkDependency,
     cliDependency,
+    options.toolkitDependency,
     options.sdkSourceRoot !== undefined,
     options.standalone === true,
+    project,
     options.scenario
   );
   if (options.sdkSourceRoot) {
@@ -60,20 +75,23 @@ export function scaffoldRFQIntegration(target: string, options: ScaffoldOptions)
     mkdirSync(resolve(output, ".."), {recursive: true});
     writeFileSync(output, content, {flag: "wx"});
   }
-  return {root, files: Object.keys(files).sort(), manifest};
+  return {root, files: Object.keys(files).sort(), manifest, project};
 }
 
 function generatedFiles(
   manifest: RFQIntegrationManifest,
   sdkDependency: string,
   cliDependency: string,
+  toolkitDependency: string | undefined,
   vendoredSdk: boolean,
   standalone: boolean,
+  project: ProjectDescriptor,
   scenario?: string
 ): Record<string, string> {
   const files: Record<string, string> = {
     "corner-store.integration.json": json(manifest),
-    "package.json": json(packageManifest(manifest, sdkDependency, cliDependency, standalone)),
+    "corner-store.project.json": json(project),
+    "package.json": json(packageManifest(manifest, project, sdkDependency, cliDependency, toolkitDependency, standalone)),
     "tsconfig.json": json({
       compilerOptions: {
         target: "ES2020",
@@ -88,10 +106,11 @@ function generatedFiles(
     }),
     ".env.example": envExample(manifest),
     ".gitignore": "node_modules/\ndist/\n.env\n.corner-store/runtime/\ndeployments/\n",
-    "README.md": readme(manifest),
+    "README.md": readme(manifest, project, toolkitDependency !== undefined),
     "src/index.ts": sourceForMode(manifest.mode),
     "src/module-conformance.ts": moduleConformanceSource()
   };
+  if (toolkitDependency) files["src/policy.ts"] = policyFacadeSource();
   if (standalone) {
     files["corner-store.config.json"] = json(defaultConfig());
     files["corner-store.scenario.json"] = scenario ?? json(defaultScenario());
@@ -105,16 +124,19 @@ function generatedFiles(
 
 function packageManifest(
   manifest: RFQIntegrationManifest,
+  project: ProjectDescriptor,
   sdkDependency: string,
   cliDependency: string,
+  toolkitDependency: string | undefined,
   standalone: boolean
 ) {
   const dependencies: Record<string, string> = {
     [manifest.sdk.package]: sdkDependency,
     ethers: "^6.13.5"
   };
+  if (toolkitDependency) dependencies["@corner-store/toolkit"] = toolkitDependency;
   return {
-    name: "corner-store-rfq-integration",
+    name: `corner-store-${project.template}`,
     version: "0.1.0",
     private: true,
     scripts: {
@@ -125,7 +147,8 @@ function packageManifest(
       ...(standalone ? {
         doctor: "corner-store doctor",
         deploy: "corner-store deploy",
-        verify: "corner-store verify"
+        verify: "corner-store verify",
+        ...(toolkitDependency ? {"policy:explain": "node dist/policy.js"} : {})
       } : {})
     },
     dependencies,
@@ -315,10 +338,37 @@ export const fixture = {
 `;
 }
 
-function readme(manifest: RFQIntegrationManifest): string {
-  return `# Corner Store RFQ integration
+function policyFacadeSource(): string {
+  return `import {readFileSync} from "fs";
+import {connectCornerStore} from "@corner-store/toolkit";
 
-Mode: \`${manifest.mode}\`
+const config = JSON.parse(readFileSync("corner-store.config.json", "utf8"));
+const client = connectCornerStore({config});
+
+console.log(JSON.stringify({
+  compiled: client.policy.compile(),
+  simulation: client.policy.simulate(),
+  explanation: client.policy.explain(),
+  verification: client.policy.verify()
+}, null, 2));
+`;
+}
+
+function readme(manifest: RFQIntegrationManifest, project: ProjectDescriptor, hasPolicyFacade: boolean): string {
+  const purpose = projectTemplate(project.template);
+  return `# Corner Store ${project.template}
+
+Purpose: ${purpose.summary}
+
+Template maturity: \`${project.maturity}\`; compatibility mode: \`${manifest.mode}\`.
+
+The user-facing policy values live in \`corner-store.config.json\`. The generated
+\`corner-store.project.json\` binds this template, config and deployment artifact;
+do not copy contract addresses into source files.
+
+${hasPolicyFacade
+  ? "Run `npm run policy:explain` to see profile and venue values first. The Element/Recipe/Manifest/Operator model remains available as advanced detail."
+  : "Install `@corner-store/toolkit` to use the optional `connectCornerStore()` policy facade."}
 
 This scaffold is an integration starting point, not a hosted dealer or production
 pricing/risk/custody system. Replace every module marked \`reference\` before

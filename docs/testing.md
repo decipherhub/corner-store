@@ -98,10 +98,12 @@ cd services/toolkit
 npm test
 ```
 
-Toolkit smoke는 unified `create`가 생성하는 `library-only`,
-`reference-service`, `existing-backend` 세 mode의 manifest, `.env.example`,
+Toolkit smoke는 unified `create`의 네 purpose template과 legacy
+`library-only`, `reference-service`, `existing-backend` mode mapping,
+versioned project descriptor, policy facade의 immutable config commitment,
+actionable verification, `.env.example`,
 vendored `vendor/rfq-service`, optional Docker files, overwrite refusal과
-standalone package scripts(`doctor`, `deploy`, `verify`, `test:module`)를
+standalone package scripts(`doctor`, `deploy`, `verify`, `policy:explain`, `test:module`)를
 검증한다. Production onboarding smoke는 exact schema/unknown-field rejection,
 PII/secret rejection, deterministic Element/Recipe/Manifest/Venue/RFQ calldata,
 Safe/operator draft governance/proposal metadata, authority partition, explicit
@@ -112,7 +114,8 @@ pending-vs-active signer and safe-owner target owner mismatch/unavailable and op
 dry-run `deploy`, `verify`/preflight와 `test-module` command path도 별도로
 확인한다. `scripts/sdk-product-smoke.sh`는 CLI, Toolkit과 RFQ package를 모두
 tarball로 pack한 뒤 clean temporary project에 설치해야 하며 Toolkit public export,
-generated RFQ conformance, CLI doctor/deploy와 packaged contract build를 검증한다.
+generated policy facade, RFQ conformance, CLI doctor/deploy와 packaged contract
+build를 검증한다.
 
 Policy audit smoke는 canonical/domain-separated hash 결정성, bytes32 commitment,
 unknown/PII-shaped field와 parameter hash 변조 거부, immutable store put/get/exists와

@@ -33,12 +33,13 @@ CLI_TARBALL="$PACK_DIR/$CLI_TARBALL_NAME"
 TOOLKIT_TARBALL="$PACK_DIR/$TOOLKIT_TARBALL_NAME"
 
 node "$ROOT_DIR/services/cli/dist/cli/src/index.js" create "$LOCAL_TARGET_DIR" \
-  --mode library-only \
+  --template dex-integration \
   --sdk "file:$RFQ_TARBALL" >/dev/null
 (
   cd "$LOCAL_TARGET_DIR"
   npm install --prefer-offline --silent
   npm test
+  npm run policy:explain >/dev/null
 )
 
 (
@@ -47,8 +48,9 @@ node "$ROOT_DIR/services/cli/dist/cli/src/index.js" create "$LOCAL_TARGET_DIR" \
   npm install --prefer-offline --silent "$CLI_TARBALL" "$TOOLKIT_TARBALL"
   node -e 'const t = require("@corner-store/toolkit"); const c = t.validateConfig(t.defaultConfig()); if (c.schemaVersion !== t.TOOLKIT_SCHEMA_VERSION || t.simulateConfig(c).venues.length === 0) process.exit(1)'
   ./node_modules/.bin/corner-store create "$TARGET_DIR" \
-    --mode library-only \
+    --template dex-integration \
     --sdk "file:$RFQ_TARBALL" \
+    --toolkit "file:$TOOLKIT_TARBALL" \
     --cli "file:$CLI_TARBALL" >/dev/null
 )
 
@@ -56,6 +58,7 @@ node "$ROOT_DIR/services/cli/dist/cli/src/index.js" create "$LOCAL_TARGET_DIR" \
   cd "$TARGET_DIR"
   npm install --prefer-offline --silent
   npm test
+  npm run policy:explain >/dev/null
   npm run doctor
   npm run deploy
 )

@@ -10,6 +10,35 @@
 동시에 하나의 feature만 `active` 상태로 둔다.
 
 
+## SDK-004 — Purpose-driven SDK Entry Point
+
+### Behavior
+
+- `corner-store create --template`은 `sandbox`, `dex-integration`,
+  `asset-onboarding`, `rfq-service` 목적을 먼저 선택하게 하고 기존 `--mode`는
+  compatibility alias로 유지한다.
+- 생성 프로젝트는 단일 versioned project descriptor와 Toolkit config를 공유하며,
+  주소를 소스 코드에 복사하지 않는다.
+- `@corner-store/toolkit`은 `connectCornerStore()`와
+  `policy.validate/compile/simulate/explain/verify` facade를 제공한다.
+- 기본 출력은 profile, venue와 사용자 설정값을 먼저 설명하고
+  Element/Recipe/Manifest는 advanced detail로 분리한다.
+- 검증 오류는 expected, actual과 remediation을 포함하며 생성 프로젝트는
+  dry-run deployment를 기본값으로 유지한다.
+
+### Verification
+
+- Toolkit purpose-template/facade tests
+- CLI create/help compatibility tests
+- packed clean-project install/build/conformance/facade smoke
+- full `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+active
+
+
 ## PROFILE-002 — Generic-parameter BUIDL-like Demo Migration
 
 ### Behavior

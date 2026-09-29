@@ -26,6 +26,8 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `services/rfq/` | RFQ quote/signing SDK, versioned module contracts와 conformance suite |
 | `services/rfq-demo-backend/` | RFQ SDK를 사용하는 local Anvil 전용 demo application |
 | `services/toolkit/` | versioned deployment/integration schema, validation과 scaffold generator |
+| `services/toolkit/src/sdk.ts` | config/artifact를 공유하는 `connectCornerStore()` policy facade |
+| `services/toolkit/src/project-templates.ts` | 사용자 목적 template과 legacy RFQ mode compatibility mapping |
 | `services/deployment-studio/` | local reference deployment 실행과 production core config/preflight/plan export를 분리한 control UI |
 | `services/operator-api/` | private-key 없는 read-only operator snapshot/event API |
 | `services/operator-dashboard/` | Operator API를 소비하는 read-only snapshot/proposal review 화면 |

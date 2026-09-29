@@ -14,7 +14,7 @@ host every repository component.
 The external CLI workflow is:
 
 ```sh
-corner-store create ./my-corner-store --mode library-only
+corner-store create ./my-corner-store --template dex-integration
 cd my-corner-store
 npm install
 npm test
@@ -24,8 +24,9 @@ npm run verify   # after a deployment artifact exists
 ```
 
 `create` writes a standalone project. It includes `corner-store.config.json`,
-`corner-store.integration.json`, `corner-store.scenario.json`, `.env.example`,
-TypeScript sources and the public RFQ module conformance file. It never
+`corner-store.project.json`, `corner-store.integration.json`,
+`corner-store.scenario.json`, `.env.example`, TypeScript policy/RFQ sources and
+the public RFQ module conformance file. It never
 overwrites an existing target directory.
 
 `init` is for an existing directory that does not already have a config:
@@ -45,11 +46,37 @@ The generated `package.json` scripts map to the same CLI commands:
 | `corner-store verify [path]` | preflight config and deployment artifact bindings after an artifact exists |
 | `corner-store test-module <path>` | run the public RFQ module conformance suite against a built CommonJS module |
 | `npm test` | build the generated project and run `corner-store test-module dist/module-conformance.js` |
+| `npm run policy:explain` | compile/simulate/explain the shared config and show missing artifact remediation |
 
 `deploy` uses `DeployStack.s.sol`. It is a dry-run unless `--broadcast` is
 passed. Docker is not required for deployment.
 
-## Integration Modes
+## Purpose Templates
+
+Prefer `create --template` so a user chooses the intended outcome before the
+internal RFQ integration shape:
+
+| Template | Outcome | Compatibility mode |
+| --- | --- | --- |
+| `sandbox` | evaluate the reference policy and RFQ boundary | `reference-service` |
+| `dex-integration` | connect policy/RFQ helpers to an existing venue | `library-only` |
+| `asset-onboarding` | prepare dry-run and unsigned onboarding work | `library-only` |
+| `rfq-service` | connect replaceable RFQ modules | `reference-service` |
+
+The `sandbox` template is the entry point for #114; until that issue is complete,
+optional Compose contains only the reference RFQ service and is not a full DEX or
+production environment.
+
+## Unified TypeScript Facade
+
+`@corner-store/toolkit` exports `connectCornerStore({config, artifact})`. The
+returned `policy` facade exposes `validate`, `compile`, `simulate`, `explain`, and
+`verify` over the same config/artifact source. `explain` presents profile, venues,
+network and governance values first and keeps Element/Recipe/Manifest/Operator as
+advanced detail. `verify` is read-only, fails closed without an artifact, and
+returns `expected`, `actual`, and `remediation` per check.
+
+## Legacy Integration Modes
 
 `create --mode` supports three modes:
 
@@ -62,7 +89,7 @@ passed. Docker is not required for deployment.
 Docker Compose is optional and only valid with `reference-service`:
 
 ```sh
-corner-store create ./my-rfq-service --mode reference-service --docker
+corner-store create ./my-rfq-service --template rfq-service --docker
 ```
 
 Docker output contains `Dockerfile` and `compose.yaml`. It reads `.env`; it does
@@ -87,33 +114,33 @@ quote service. This backend composition does not decide final compliance.
 `ExecutionRouter` and `ComplianceEngine` always evaluate the current state again
 when a quote is filled.
 
-## Generate an RFQ Integration
+## Generate a Purpose-driven Integration
 
-When working inside this repository, build the CLI, then choose a mode:
+When working inside this repository, build the CLI, then choose a purpose:
 
 ```sh
 cd services/cli
 npm test
 
 node dist/cli/src/index.js create ../../my-rfq-lib \
-  --mode library-only
+  --template dex-integration
 
 node dist/cli/src/index.js create ../../my-rfq \
-  --mode reference-service --docker
+  --template rfq-service --docker
 
-node dist/cli/src/index.js create ../../my-backend-rfq \
-  --mode existing-backend
+node dist/cli/src/index.js create ../../my-onboarding \
+  --template asset-onboarding
 ```
 
 When the CLI runs inside this repository it copies the RFQ SDK source into a
 self-contained `vendor/rfq-service` package so the generated project and Docker
 context do not depend on an absolute host path or prebuilt `dist`. A packaged
 CLI can instead use a published package, Git URL or explicit local package
-through `--sdk <specifier>`. The generated package can also pin the CLI through
-`--cli <specifier>`.
-For an unpublished source checkout, `create` automatically packs the current CLI
-into `vendor/corner-store-cli.tgz`; the generated project therefore installs
-without a registry-published CLI.
+through `--sdk <specifier>`. The generated package can also pin the Toolkit and
+CLI through `--toolkit <specifier>` and `--cli <specifier>`.
+For an unpublished source checkout, `create` automatically packs the current
+Toolkit and CLI into `vendor/`; the generated project therefore installs without
+registry-published packages.
 
 The legacy scaffold command remains available for RFQ-only generation:
 
@@ -129,14 +156,18 @@ existing integration.
 Every scaffold includes:
 
 - `corner-store.integration.json`: versioned mode and module binding metadata
+- `corner-store.project.json`: versioned purpose, maturity, shared config/artifact paths and next steps
 - `corner-store.config.json`: standalone deployment config when generated with `create`
 - `corner-store.scenario.json`: standalone local/demo scenario input when generated with `create`
 - `.env.example`: variable names and empty secret slots only
 - `src/index.ts`: reference service or existing-backend composition example
+- `src/policy.ts`: shared `connectCornerStore()` policy facade example
 - `src/module-conformance.ts`: public RFQ module conformance entrypoint
 - `package.json` and `tsconfig.json`
 - `vendor/rfq-service`: self-contained SDK source when generated from this repository
 - `vendor/corner-store-cli.tgz`: self-contained local CLI package when generated
+  from an unpublished source checkout
+- `vendor/corner-store-toolkit.tgz`: self-contained Toolkit package when generated
   from an unpublished source checkout
 - optional `Dockerfile` and `compose.yaml`
 

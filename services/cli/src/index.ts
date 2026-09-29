@@ -22,9 +22,11 @@ program
   .command("create")
   .description("create a standalone Corner Store integration project")
   .argument("<target>", "new output directory")
-  .option("--mode <mode>", "library-only | reference-service | existing-backend", "library-only")
+  .option("--template <template>", "sandbox | dex-integration | asset-onboarding | rfq-service")
+  .option("--mode <mode>", "legacy compatibility alias: library-only | reference-service | existing-backend")
   .option("--docker", "include optional Dockerfile and Compose reference deployment")
   .option("--sdk <specifier>", "npm dependency specifier for @corner-store/rfq-service")
+  .option("--toolkit <specifier>", "npm dependency specifier for @corner-store/toolkit")
   .option("--cli <specifier>", "npm dependency specifier for @corner-store/cli")
   .action(run((target, opts) => cmd.cmdCreate(target, opts)));
 

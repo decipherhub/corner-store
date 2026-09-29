@@ -5,7 +5,7 @@ Corner Store publishes three independent npm package boundaries:
 | Package | Public contract |
 | --- | --- |
 | `@corner-store/cli` | project creation, doctor, deploy/verify and conformance commands |
-| `@corner-store/toolkit` | versioned configuration, onboarding plans and Safe exports |
+| `@corner-store/toolkit` | versioned configuration, purpose templates, policy facade, onboarding plans and Safe exports |
 | `@corner-store/rfq-service` | RFQ types, modules, coordinator and conformance helpers |
 
 ## Semantic Versioning
@@ -27,7 +27,7 @@ them independently when their declared schemas and capabilities match.
 
 Before publishing, run package tests and `scripts/sdk-product-smoke.sh`. The smoke
 test builds tarballs, installs all three packages in temporary clean projects,
-imports the Toolkit package, runs RFQ conformance through the generated project,
+imports the Toolkit package, runs the policy facade and RFQ conformance through the generated project,
 executes CLI doctor/deploy dry-runs, and builds the packaged contract bundle. No
 step may resolve package code through a repository-relative path.
 

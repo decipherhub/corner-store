@@ -29,25 +29,28 @@ EIP-712 RFQ quotes REUSE the sibling `services/rfq` signer library.
 External consumers should start with the unified SDK commands:
 
 ```sh
-corner-store create ./my-corner-store --mode library-only
-corner-store create ./my-rfq-service --mode reference-service --docker
-corner-store create ./my-existing-backend --mode existing-backend
+corner-store create ./my-sandbox --template sandbox
+corner-store create ./my-dex --template dex-integration
+corner-store create ./my-onboarding --template asset-onboarding
+corner-store create ./my-rfq-service --template rfq-service --docker
 ```
 
 Generated projects include `corner-store.config.json`,
-`corner-store.integration.json`, `corner-store.scenario.json`, `.env.example`,
-`src/index.ts`, `src/module-conformance.ts`, `package.json`, `tsconfig.json` and
+`corner-store.project.json`, `corner-store.integration.json`,
+`corner-store.scenario.json`, `.env.example`, `src/index.ts`, `src/policy.ts`,
+`src/module-conformance.ts`, `package.json`, `tsconfig.json` and
 the RFQ SDK source in `vendor/rfq-service` when generated from this repository.
 `create` refuses to overwrite an existing target directory.
 For an unpublished source checkout, `create` also writes
-`vendor/corner-store-cli.tgz`, so the generated project does not depend on a
-registry-published CLI.
+`vendor/corner-store-cli.tgz` and `vendor/corner-store-toolkit.tgz`, so the
+generated project does not depend on registry-published CLI or Toolkit packages.
 
 Inside a generated project:
 
 ```sh
 npm install
 npm test
+npm run policy:explain
 npm run doctor
 npm run deploy
 npm run verify   # after a deployment artifact exists
@@ -58,7 +61,20 @@ npm run verify   # after a deployment artifact exists
 dry-run by default; pass `-- --broadcast` only for a local/demo transaction
 submission. `npm run verify` requires the configured deployment artifact.
 
-### Integration modes
+### Purpose templates
+
+| template | start here when | compatibility mode |
+| --- | --- | --- |
+| `sandbox` | evaluating the local reference stack | `reference-service` |
+| `dex-integration` | connecting an existing venue/backend | `library-only` |
+| `asset-onboarding` | preparing dry-run/unsigned onboarding inputs | `library-only` |
+| `rfq-service` | connecting pricing/risk/signer/nonce modules | `reference-service` |
+
+The full multi-service Compose sandbox is tracked separately in #114; this
+template does not claim that the current RFQ-only Compose file is production or
+the complete reference DEX.
+
+### Legacy integration modes
 
 | mode | purpose | notes |
 | --- | --- | --- |
@@ -72,7 +88,8 @@ Docker Compose is optional and only valid for `reference-service`. Compose reads
 ### Unified commands
 
 ```
-corner-store create <target> [--mode library-only|reference-service|existing-backend] [--docker] [--sdk <specifier>] [--cli <specifier>]
+corner-store create <target> [--template sandbox|dex-integration|asset-onboarding|rfq-service] [--docker] [--sdk <specifier>] [--toolkit <specifier>] [--cli <specifier>]
+corner-store create <target> [--mode library-only|reference-service|existing-backend] # compatibility alias
 corner-store init [path]
 corner-store doctor [path]
 corner-store deploy [path] [--broadcast]
