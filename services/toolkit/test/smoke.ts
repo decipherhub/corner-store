@@ -38,6 +38,13 @@ import {toSafeTransactionDraft} from "../src/multisig";
 import {defaultIntegrationManifest, validateIntegrationManifest} from "../src/integration";
 import {scaffoldRFQIntegration} from "../src/scaffold";
 import {
+  createProjectDescriptor,
+  listProjectTemplates,
+  resolveProjectTemplate,
+  validateProjectDescriptor
+} from "../src/project-templates";
+import {CornerStoreSDKError, connectCornerStore} from "../src/sdk";
+import {
   LocalPolicyAuditStore,
   PolicyAuditArtifact,
   artifactHashBytes32,
@@ -92,6 +99,67 @@ const artifact = {
   rfqVenue: "0x6666666666666666666666666666666666666666"
 };
 if (!preflightConfig(config, artifact).ready) throw new Error("preflight should be ready");
+if (listProjectTemplates().map((entry) => entry.id).join(",") !== "sandbox,dex-integration,asset-onboarding,rfq-service") {
+  throw new Error("purpose template catalog regression");
+}
+for (const [template, expectedMode] of Object.entries({
+  sandbox: "reference-service",
+  "dex-integration": "library-only",
+  "asset-onboarding": "library-only",
+  "rfq-service": "reference-service"
+})) {
+  if (resolveProjectTemplate({template}).mode !== expectedMode) {
+    throw new Error(`${template} purpose mapping regression`);
+  }
+}
+const sandboxSelection = resolveProjectTemplate({template: "sandbox", dockerCompose: true});
+if (sandboxSelection.mode !== "reference-service" || sandboxSelection.source !== "template") {
+  throw new Error("sandbox template mapping regression");
+}
+const legacySelection = resolveProjectTemplate({mode: "existing-backend"});
+if (legacySelection.mode !== "existing-backend" || legacySelection.definition.id !== "rfq-service") {
+  throw new Error("legacy mode compatibility mapping regression");
+}
+validateProjectDescriptor(createProjectDescriptor(sandboxSelection, true));
+assertThrows(
+  () => resolveProjectTemplate({template: "dex-integration", dockerCompose: true}),
+  "non-service purpose accepted Docker export"
+);
+assertThrows(
+  () => resolveProjectTemplate({template: "sandbox", mode: "reference-service"}),
+  "template and legacy mode accepted together"
+);
+assertThrows(() => resolveProjectTemplate({template: "toString"}), "prototype-shaped template accepted");
+const sdk = connectCornerStore({config, artifact});
+if (sdk.policy.validate().asset.profile !== "buidl-like") throw new Error("SDK facade validation regression");
+const compiled = sdk.policy.compile();
+if (!compiled.configHash.startsWith("0x") || compiled.venues.join(",") !== "amm,rfq") {
+  throw new Error("SDK facade compile regression");
+}
+const returnedConfig = sdk.policy.validate();
+returnedConfig.accounts.operator = "mutated-copy";
+if (sdk.policy.compile().configHash !== compiled.configHash) throw new Error("SDK facade leaked mutable config state");
+const changedConfigHash = connectCornerStore({
+  config: {...config, governance: {...config.governance, multisig: "different-multisig"}}
+}).policy.compile().configHash;
+if (changedConfigHash === compiled.configHash) throw new Error("SDK facade config commitment omitted policy values");
+if (sdk.policy.simulate().profile !== "buidl-like" || !sdk.policy.explain().advanced.model.includes("Manifest")) {
+  throw new Error("SDK facade simulation/explanation regression");
+}
+const verified = sdk.policy.verify();
+if (!verified.ready || verified.checks.some((check) => !check.expected || !check.actual || !check.remediation)) {
+  throw new Error("SDK facade actionable verification regression");
+}
+const missingArtifact = connectCornerStore({config}).policy.verify();
+if (missingArtifact.ready || missingArtifact.checks[0].actual !== "missing") {
+  throw new Error("SDK facade missing artifact did not fail closed");
+}
+try {
+  connectCornerStore({config: {...config, venues: {amm: false, rfq: false, orderBook: false}}});
+  throw new Error("SDK facade accepted invalid config");
+} catch (error: any) {
+  if (!(error instanceof CornerStoreSDKError) || !error.toJSON().remediation) throw error;
+}
 if (preflightConfig({...config, asset: {profile: "reg-d"}}, artifact).ready) throw new Error("profile mismatch passed preflight");
 if (enabledEngineSpec(config) !== "amm,rfq") throw new Error("engine selection regression");
 const checkpointPath = join(dir, "deployment.json");
@@ -861,16 +929,19 @@ validateIntegrationManifest(JSON.parse(readFileSync(join(referenceTarget, "corne
 
 const libraryTarget = join(dir, "library-only");
 const library = scaffoldRFQIntegration(libraryTarget, {
-  mode: "library-only",
+  template: "dex-integration",
   standalone: true,
   sdkDependency: "file:../corner-store-rfq-service.tgz",
   cliDependency: "file:../corner-store-cli.tgz",
+  toolkitDependency: "file:../corner-store-toolkit.tgz",
   scenario: `${JSON.stringify({schemaVersion: 2, deployment: {accounts: {}}}, null, 2)}\n`
 });
 if (
   library.files.includes("compose.yaml") ||
   !library.files.includes("corner-store.config.json") ||
+  !library.files.includes("corner-store.project.json") ||
   !library.files.includes("corner-store.scenario.json") ||
+  !library.files.includes("src/policy.ts") ||
   !readFileSync(join(libraryTarget, "src/index.ts"), "utf8").includes('export * from "@corner-store/rfq-service"')
 ) {
   throw new Error("standalone library-only scaffold regression");
@@ -879,7 +950,14 @@ const libraryPackage = JSON.parse(readFileSync(join(libraryTarget, "package.json
 if (!libraryPackage.scripts.doctor || libraryPackage.scripts.start || !libraryPackage.scripts["test:module"]) {
   throw new Error("standalone package scripts regression");
 }
+if (
+  !libraryPackage.scripts["policy:explain"] ||
+  libraryPackage.dependencies["@corner-store/toolkit"] !== "file:../corner-store-toolkit.tgz"
+) {
+  throw new Error("purpose scaffold Toolkit facade regression");
+}
 validateIntegrationManifest(JSON.parse(readFileSync(join(libraryTarget, "corner-store.integration.json"), "utf8")));
+validateProjectDescriptor(JSON.parse(readFileSync(join(libraryTarget, "corner-store.project.json"), "utf8")));
 
 const existingTarget = join(dir, "existing-backend");
 const existing = scaffoldRFQIntegration(existingTarget, {mode: "existing-backend"});

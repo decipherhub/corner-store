@@ -34,6 +34,8 @@ import {
   validateProductionConfig
 } from "../../toolkit/src/production";
 import {scaffoldRFQIntegration} from "../../toolkit/src/scaffold";
+import {ProjectTemplateId} from "../../toolkit/src/project-templates";
+import {RFQIntegrationMode} from "../../toolkit/src/integration";
 import {
   LocalPolicyAuditStore,
   buildPolicyAuditArtifact,
@@ -981,7 +983,7 @@ export function cmdToolkitScaffoldRFQ(
   try {
     const repoRoot = findRepoRoot(process.cwd()) ?? findRepoRoot(__dirname);
     const result = scaffoldRFQIntegration(target, {
-      mode: opts.mode,
+      mode: opts.mode as RFQIntegrationMode | undefined,
       dockerCompose: opts.docker === true,
       sdkDependency: opts.sdk,
       cliDependency: opts.cli,
@@ -995,13 +997,11 @@ export function cmdToolkitScaffoldRFQ(
 
 export function cmdCreate(
   target: string,
-  opts: {mode: string; docker?: boolean; sdk?: string; cli?: string}
+  opts: {template?: string; mode?: string; docker?: boolean; sdk?: string; toolkit?: string; cli?: string}
 ): void {
-  if (opts.mode !== "library-only" && opts.mode !== "reference-service" && opts.mode !== "existing-backend") {
-    throw new CliError('--mode must be "library-only", "reference-service", or "existing-backend"');
-  }
   const repoRoot = findRepoRoot(process.cwd()) ?? findRepoRoot(__dirname);
   const localCliPackage = !opts.cli && repoRoot ? packLocalCli(repoRoot) : undefined;
+  const localToolkitPackage = !opts.toolkit && repoRoot ? packLocalToolkit(repoRoot) : undefined;
   try {
     const contractSource = resolveContractSource(repoRoot);
     if (!contractSource) throw new Error("contract bundle not found");
@@ -1009,9 +1009,11 @@ export function cmdCreate(
       ? resolve(repoRoot, "services/rfq-demo-backend/config/demo-scenario.json")
       : resolve(contractSource, "deployments/anvil-e2e-scenario.json");
     const result = scaffoldRFQIntegration(target, {
-      mode: opts.mode,
+      template: opts.template as ProjectTemplateId | undefined,
+      mode: opts.mode as RFQIntegrationMode | undefined,
       dockerCompose: opts.docker === true,
       sdkDependency: opts.sdk,
+      toolkitDependency: opts.toolkit ?? localToolkitPackage?.dependency,
       cliDependency: opts.cli ?? localCliPackage?.dependency,
       sdkSourceRoot: opts.sdk ? undefined : repoRoot ? resolve(repoRoot, "services/rfq") : undefined,
       standalone: true,
@@ -1022,22 +1024,42 @@ export function cmdCreate(
       mkdirSync(vendorDirectory, {recursive: true});
       copyFileSync(localCliPackage.tarball, resolve(vendorDirectory, "corner-store-cli.tgz"));
       result.files.push("vendor/corner-store-cli.tgz");
-      result.files.sort();
     }
+    if (localToolkitPackage) {
+      const vendorDirectory = resolve(result.root, "vendor");
+      mkdirSync(vendorDirectory, {recursive: true});
+      copyFileSync(localToolkitPackage.tarball, resolve(vendorDirectory, "corner-store-toolkit.tgz"));
+      result.files.push("vendor/corner-store-toolkit.tgz");
+    }
+    result.files.sort();
     console.log(JSON.stringify({...result, dockerRequired: false}, null, 2));
   } catch (err: any) {
     throw new CliError(`cannot create Corner Store project: ${err.message}`);
   } finally {
     if (localCliPackage) rmSync(localCliPackage.directory, {recursive: true, force: true});
+    if (localToolkitPackage) rmSync(localToolkitPackage.directory, {recursive: true, force: true});
   }
 }
 
 function packLocalCli(repoRoot: string): {directory: string; tarball: string; dependency: string} {
-  const directory = mkdtempSync(resolve(tmpdir(), "corner-store-cli-package-"));
+  return packLocalPackage(repoRoot, "services/cli", "corner-store-cli-package-", "corner-store-cli.tgz");
+}
+
+function packLocalToolkit(repoRoot: string): {directory: string; tarball: string; dependency: string} {
+  return packLocalPackage(repoRoot, "services/toolkit", "corner-store-toolkit-package-", "corner-store-toolkit.tgz");
+}
+
+function packLocalPackage(
+  repoRoot: string,
+  packagePath: string,
+  temporaryPrefix: string,
+  vendorFilename: string
+): {directory: string; tarball: string; dependency: string} {
+  const directory = mkdtempSync(resolve(tmpdir(), temporaryPrefix));
   try {
     execFileSync(
       "npm",
-      ["pack", resolve(repoRoot, "services/cli"), "--pack-destination", directory, "--silent"],
+      ["pack", resolve(repoRoot, packagePath), "--pack-destination", directory, "--silent"],
       {
         env: {
           ...process.env,
@@ -1051,7 +1073,7 @@ function packLocalCli(repoRoot: string): {directory: string; tarball: string; de
     return {
       directory,
       tarball: resolve(directory, name),
-      dependency: "file:vendor/corner-store-cli.tgz"
+      dependency: `file:vendor/${vendorFilename}`
     };
   } catch (error) {
     rmSync(directory, {recursive: true, force: true});

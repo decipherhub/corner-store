@@ -179,24 +179,23 @@ for the complete local flow and production replacement boundaries.
 ### Standalone SDK Integration
 
 The CLI exposes a unified external workflow for clean consumer projects:
-`create`, `init`, `doctor`, `deploy`, `verify` and `test-module`. A consumer can
-start with only the RFQ library, a minimal reference RFQ service, or a wrapper
-for an existing backend. Docker is optional and is generated only for the
-reference-service mode.
+`create`, `init`, `doctor`, `deploy`, `verify` and `test-module`. Start with a
+user goal; the older RFQ modes remain compatibility aliases.
 
 ```shell
 cd services/cli
 npm test
 
 node dist/cli/src/index.js create ../../my-corner-store \
-  --mode library-only
+  --template dex-integration
 node dist/cli/src/index.js create ../../my-rfq-service \
-  --mode reference-service --docker
-node dist/cli/src/index.js create ../../my-existing-backend \
-  --mode existing-backend
+  --template rfq-service --docker
+node dist/cli/src/index.js create ../../my-onboarding \
+  --template asset-onboarding
 
 cd ../../my-corner-store
 npm install
+npm run policy:explain     # values first; 4-layer internals are advanced detail
 npm run doctor
 npm run deploy              # dry-run; add -- --broadcast only for local/demo submission
 npm run verify              # after a deployment artifact exists
@@ -211,9 +210,9 @@ Git URL or explicit local package with `--sdk <specifier>` and
 Packaged CLI deployments use the bundled contract source, or an explicit
 `--contracts <path>` / `CORNER_STORE_CONTRACTS_ROOT` override.
 
-See [`docs/sdk-integration.md`](./docs/sdk-integration.md) for package
-boundaries, the three integration modes, generated files, deployment checks and
-the common conformance suite.
+See [`docs/sdk-integration.md`](./docs/sdk-integration.md) for purpose templates,
+legacy mode mappings, the `connectCornerStore()` facade, generated files,
+deployment checks and the common conformance suite.
 
 ### Local Deployment Studio
 
