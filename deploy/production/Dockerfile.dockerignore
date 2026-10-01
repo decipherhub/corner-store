@@ -1,0 +1,14 @@
+**
+!services/
+!services/rfq/
+!services/rfq/**
+!services/rfq-host/
+!services/rfq-host/**
+!services/toolkit/
+!services/toolkit/**
+!services/operator-api/
+!services/operator-api/**
+services/**/node_modules
+services/**/dist
+services/**/.env
+services/**/*.log

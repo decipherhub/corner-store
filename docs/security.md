@@ -178,6 +178,12 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   필요하다.
 - partial fill은 새 quote/adapter version과 별도 accounting/replay 검증 전까지
   활성화하지 않는다.
+- production RFQ/Operator API image는 non-root/read-only process boundary일 뿐
+  production-ready 시스템 자체가 아니다. RFQ는 versioned bootstrap으로 외부
+  durable coordinator, shared limiter, pricing/risk, signer, policy resolver와 WORM
+  audit가 모두 준비됐을 때만 quote를 허용하고, Operator API credential은 mounted
+  secret file로만 주입한다. 배포 계약은
+  [`production-containers.md`](./production-containers.md)를 따른다.
 
 ## Policy Execution Binding Safety
 

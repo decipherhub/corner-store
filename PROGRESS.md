@@ -11,9 +11,23 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음.
+없음. 다음 feature는 새 issue/우선순위 확인 후 하나만 active로 전환한다.
 
 ## Completed
+
+- `DEPLOY-002 — Production Service Container Contract`: issue #115 범위로 demo
+  sandbox와 분리된 pinned multi-stage RFQ host/Operator API OCI target을 추가했다.
+  RFQ production entrypoint는 versioned bootstrap을 통해 durable coordinator,
+  production authentication, shared limiter, fresh pricing/risk, external signer,
+  live policy resolver, strict WORM audit와 incident monitoring을 전부 주입받아야
+  하며, readiness가 unavailable/stale이면 policy lookup과 signing 전에 quote를
+  fail-closed한다. Operator API는 mounted token과 immutable JSON evidence만 읽고,
+  변경/누락/손상 시 readiness를 내린다. 두 image는 non-root/read-only, dropped
+  capabilities, bounded resource/timeout와 SIGTERM shutdown contract를 가지며
+  secret/error text를 로그에 남기지 않는다. 검증: service runtime smoke,
+  production OCI build/read-only runtime/auth/readiness/graceful shutdown smoke,
+  Compose config, full `scripts/check.sh`(Foundry 950/950), BUIDL-like RFQ E2E,
+  `git diff --check` 통과.
 
 - `SDK-006 — Reference DEX Sandbox`: issue #114를 구현해 packed CLI의
   `create --template sandbox`가 repository checkout 없이 Anvil, one-shot deployment,

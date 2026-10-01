@@ -36,6 +36,7 @@ reference execution adapters including AMM and RFQ settlement paths.
 - [`QUALITY.md`](./QUALITY.md): 모듈별 품질 상태
 - [`docs/testing.md`](./docs/testing.md): 테스트와 완료 기준
 - [`docs/security.md`](./docs/security.md): 보안 규칙
+- [`docs/production-containers.md`](./docs/production-containers.md): production RFQ/Operator API OCI contract
 
 ## Product Documentation
 
