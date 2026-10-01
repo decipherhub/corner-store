@@ -20,7 +20,18 @@ const DEFAULT_FUTURE_SKEW_SECONDS = 5;
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_RATE_LIMIT_MAX = 60;
 const DEFAULT_RATE_LIMIT_MAX_BUCKETS = 10_000;
+const DEFAULT_READINESS_TIMEOUT_MS = 3_000;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+const READINESS_COMPONENTS = new Set([
+  "audit",
+  "authentication",
+  "coordinator",
+  "policy",
+  "pricing",
+  "rate_limit",
+  "risk",
+  "signer"
+]);
 
 type JsonRecord = Record<string, unknown>;
 type NormalizedHostQuoteIntent = QuoteCoordinatorIntent & {amountIn: string; ttlSeconds: number};
@@ -71,6 +82,30 @@ export interface IncidentSink {
   notify(incident: IncidentEvent): Promise<void> | void;
 }
 
+export type RFQReadinessComponent =
+  | "audit"
+  | "authentication"
+  | "coordinator"
+  | "policy"
+  | "pricing"
+  | "rate_limit"
+  | "risk"
+  | "signer";
+
+export interface RFQReadinessStatus {
+  component: RFQReadinessComponent;
+  ready: boolean;
+}
+
+export interface RFQReadinessReport {
+  ready: boolean;
+  components: RFQReadinessStatus[];
+}
+
+export interface RFQReadinessProbe {
+  check(): Promise<RFQReadinessReport> | RFQReadinessReport;
+}
+
 export interface ProductionRFQHostConfig {
   host?: string;
   port?: number;
@@ -85,6 +120,8 @@ export interface ProductionRFQHostConfig {
   strictAudit?: boolean;
   now?: () => number;
   futureSkewSeconds?: number;
+  readiness?: RFQReadinessProbe;
+  readinessTimeoutMs?: number;
   requestTimeoutMs?: number;
   headersTimeoutMs?: number;
   publicBindAcknowledged?: boolean;
@@ -246,8 +283,9 @@ export async function startProductionRFQHost(config: ProductionRFQHostConfig): P
   const strictAudit = config.strictAudit ?? true;
   const now = config.now ?? (() => Math.floor(Date.now() / 1000));
   const rateLimiter = config.rateLimiter ?? new InMemoryRateLimiter();
+  const readinessTimeoutMs = normalizePositiveInteger(config.readinessTimeoutMs ?? DEFAULT_READINESS_TIMEOUT_MS, "readinessTimeoutMs");
   const server = createServer((req, res) => {
-    void handleRequest(req, res, {...config, host, maxBodyBytes, strictAudit, now, rateLimiter});
+    void handleRequest(req, res, {...config, host, maxBodyBytes, strictAudit, now, rateLimiter, readinessTimeoutMs});
   });
   server.requestTimeout = normalizePositiveInteger(config.requestTimeoutMs ?? 30_000, "requestTimeoutMs");
   server.headersTimeout = normalizePositiveInteger(config.headersTimeoutMs ?? 15_000, "headersTimeoutMs");
@@ -271,7 +309,13 @@ export async function startProductionRFQHost(config: ProductionRFQHostConfig): P
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  config: ProductionRFQHostConfig & {maxBodyBytes: number; strictAudit: boolean; now: () => number; rateLimiter: RateLimiter}
+  config: ProductionRFQHostConfig & {
+    maxBodyBytes: number;
+    strictAudit: boolean;
+    now: () => number;
+    rateLimiter: RateLimiter;
+    readinessTimeoutMs: number;
+  }
 ): Promise<void> {
   const started = Date.now();
   let principalHash: string | undefined;
@@ -285,6 +329,14 @@ async function handleRequest(
     if (req.method === "GET" && req.url === "/health") {
       sendJson(res, 200, {status: "ok", service: "corner-store-rfq-host"});
       metric(config, "rfq_host_http_requests_total", {route: "health", outcome: "success"});
+      return;
+    }
+    if (req.method === "GET" && req.url === "/ready") {
+      const report = config.readiness
+        ? await readReadiness(config.readiness, config.readinessTimeoutMs)
+        : {ready: false, components: []};
+      sendJson(res, report.ready ? 200 : 503, report);
+      metric(config, "rfq_host_http_requests_total", {route: "ready", outcome: report.ready ? "success" : "unavailable"});
       return;
     }
     if (req.method !== "POST" || req.url !== "/rfq/quote") {
@@ -307,11 +359,12 @@ async function handleRequest(
 
     const principal = await config.authenticator.authenticate({headers: req.headers, method: req.method ?? "", url: req.url ?? ""});
     const principalTaker = normalizeAddress(principal.taker, "authenticated taker");
-    principalHash = hashCanonical({principalId: principal.principalId});
+    const authenticatedPrincipalHash = hashCanonical({principalId: principal.principalId});
+    principalHash = authenticatedPrincipalHash;
     if (principalTaker !== normalizedBody.taker) throw new ForbiddenError("authenticated taker does not match request taker");
 
     const rate = await config.rateLimiter.check({
-      principalHash,
+      principalHash: authenticatedPrincipalHash,
       route: "/rfq/quote",
       nowMs: Date.now()
     });
@@ -322,6 +375,16 @@ async function handleRequest(
       sendJson(res, 429, {error: "rate_limited"});
       metric(config, "rfq_host_http_requests_total", {route: "quote", outcome: "rate_limited"});
       return;
+    }
+
+    if (config.readiness) {
+      const report = await readReadiness(config.readiness, config.readinessTimeoutMs);
+      if (!report.ready) {
+        throw Object.assign(new Error("required production dependency unavailable"), {
+          dependencyModule: "readiness",
+          dependencyReason: "unavailable"
+        });
+      }
     }
 
     let policyId: Hex;
@@ -594,4 +657,47 @@ function isRecord(value: unknown): value is JsonRecord {
 function normalizePositiveInteger(value: number, field: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${field} must be a positive safe integer`);
   return value;
+}
+
+async function readReadiness(probe: RFQReadinessProbe, timeoutMs: number): Promise<RFQReadinessReport> {
+  try {
+    const report = await withTimeout(Promise.resolve(probe.check()), timeoutMs);
+    if (!report || typeof report !== "object" || typeof report.ready !== "boolean" || !Array.isArray(report.components)) {
+      return {ready: false, components: []};
+    }
+    const components: RFQReadinessStatus[] = [];
+    const seen = new Set<string>();
+    for (const status of report.components) {
+      if (
+        !status ||
+        typeof status !== "object" ||
+        typeof status.component !== "string" ||
+        !READINESS_COMPONENTS.has(status.component) ||
+        typeof status.ready !== "boolean" ||
+        seen.has(status.component)
+      ) {
+        return {ready: false, components: []};
+      }
+      seen.add(status.component);
+      components.push({component: status.component as RFQReadinessComponent, ready: status.ready});
+    }
+    const allReady = components.length > 0 && components.every((status) => status.ready);
+    return {ready: report.ready && allReady, components};
+  } catch {
+    return {ready: false, components: []};
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("operation timed out")), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

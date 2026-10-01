@@ -39,3 +39,6 @@ jobs:
 
       - name: Run repository-wide checks
         run: scripts/check.sh
+
+      - name: Build and smoke production service images
+        run: scripts/production-container-smoke.sh

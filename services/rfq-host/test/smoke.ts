@@ -1,4 +1,4 @@
-import {request as httpRequest} from "http";
+import {createServer, request as httpRequest} from "http";
 import {mkdtempSync, readFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
@@ -12,6 +12,12 @@ import {
   MemoryIncidentSink,
   MemoryMetricsSink,
   ProductionRFQHostConfig,
+  PRODUCTION_RFQ_BOOTSTRAP_CONTRACT_VERSION,
+  PRODUCTION_RFQ_RUNTIME_CONFIG_VERSION,
+  ProductionRFQRuntimeError,
+  loadProductionRFQRuntimeConfig,
+  runtimeErrorCode,
+  startProductionRFQRuntime,
   startProductionRFQHost,
   StaticBearerAuthenticator
 } from "../src";
@@ -33,6 +39,7 @@ async function main(): Promise<void> {
   await rejectsMalformedOversizeAndRateLimit();
   await policyResolverRunsOnlyAfterAuthAndRateLimit();
   await rejectsUnavailableOrZeroPolicyBeforeSigning();
+  await readinessFailsClosedBeforePolicyAndSigning();
   await limiterCapacityPreventsPrincipalSpray();
   await rejectsStaleMissingFutureFreshnessBeforeSigning();
   await rejectsFreshRiskDecisionWith422();
@@ -42,6 +49,7 @@ async function main(): Promise<void> {
   await strictAuditRetryReturnsSameQuoteWithoutResign();
   await incidentHookFailureDoesNotRecurseOrLeak();
   await issuesQuoteAndReplaysIdempotentlyWithRedactedAuditAndBoundedMetrics();
+  await validatesProductionRuntimeContractAndGracefulShutdown();
   console.log("corner-store RFQ production host smoke ok");
 }
 
@@ -128,6 +136,32 @@ async function rejectsUnavailableOrZeroPolicyBeforeSigning(): Promise<void> {
     } finally {
       await ctx.close();
     }
+  }
+}
+
+async function readinessFailsClosedBeforePolicyAndSigning(): Promise<void> {
+  let policyCalls = 0;
+  const config = baseConfig({
+    readiness: readiness({signer: false}),
+    resolvePolicyId: () => {
+      policyCalls += 1;
+      return POLICY_ID;
+    }
+  });
+  const ctx = await start(config);
+  try {
+    const ready = await get(`${ctx.baseUrl}/ready`);
+    assert.equal(ready.status, 503);
+    assert.equal(ready.body.ready, false);
+    assert.deepEqual(ready.body.components.find((value: any) => value.component === "signer"), {component: "signer", ready: false});
+    const response = await post(ctx.baseUrl, quoteBody("readiness-a"), GOOD_TOKEN);
+    assert.equal(response.status, 503);
+    assert.equal(response.body.error, "dependency_unavailable");
+    assert.equal(policyCalls, 0);
+    assert.equal(config.signer.signCount, 0);
+    assert.deepEqual(readRecords(config.storePath), []);
+  } finally {
+    await ctx.close();
   }
 }
 
@@ -290,6 +324,73 @@ async function issuesQuoteAndReplaysIdempotentlyWithRedactedAuditAndBoundedMetri
   }
 }
 
+async function validatesProductionRuntimeContractAndGracefulShutdown(): Promise<void> {
+  const baseEnv = {
+    CORNER_STORE_RFQ_CONFIG_VERSION: PRODUCTION_RFQ_RUNTIME_CONFIG_VERSION,
+    CORNER_STORE_RFQ_BOOTSTRAP_MODULE: "/run/corner-store/bootstrap.cjs",
+    CORNER_STORE_RFQ_HOST: "127.0.0.1"
+  };
+  assert.throws(
+    () => loadProductionRFQRuntimeConfig({...baseEnv, CORNER_STORE_RFQ_SIGNER_PRIVATE_KEY: GOOD_TOKEN}),
+    (error: any) => error instanceof ProductionRFQRuntimeError && error.code === "RUNTIME_CONFIG_INVALID" && !JSON.stringify(error).includes(GOOD_TOKEN)
+  );
+  assert.throws(
+    () => loadProductionRFQRuntimeConfig({...baseEnv, CORNER_STORE_RFQ_PORT: "not-a-number"}),
+    (error: any) => error instanceof ProductionRFQRuntimeError && error.code === "RUNTIME_CONFIG_INVALID"
+  );
+  assert.throws(
+    () => loadProductionRFQRuntimeConfig({...baseEnv, CORNER_STORE_RFQ_MAX_BODY_BYTES: "1048577"}),
+    (error: any) => error instanceof ProductionRFQRuntimeError && error.code === "RUNTIME_CONFIG_INVALID"
+  );
+
+  const failed = await startProductionRFQRuntime({
+    env: baseEnv,
+    loadBootstrap: async () => { throw new Error(`bootstrap leaked ${GOOD_TOKEN}`); }
+  }).then(() => undefined, (error) => error);
+  assert.equal(runtimeErrorCode(failed), "BOOTSTRAP_LOAD_FAILED");
+  assert(!JSON.stringify(failed).includes(GOOD_TOKEN));
+
+  const fixture = baseConfig();
+  let closeCalls = 0;
+  const port = await freePort();
+  const logs: unknown[] = [];
+  const runtime = await startProductionRFQRuntime({
+    env: {...baseEnv, CORNER_STORE_RFQ_PORT: String(port)},
+    logger: {info: (event) => logs.push(event), error: (event) => logs.push(event)},
+    loadBootstrap: async () => ({
+      contractVersion: PRODUCTION_RFQ_BOOTSTRAP_CONTRACT_VERSION,
+      capabilities: {
+        durable_coordinator: true,
+        external_signer: true,
+        fresh_pricing_risk: true,
+        incident_monitoring: true,
+        live_policy_resolver: true,
+        production_authentication: true,
+        shared_rate_limit: true,
+        strict_audit: true
+      },
+      createProductionRFQDependencies: () => ({
+        coordinator: fixture.coordinator,
+        authenticator: fixture.authenticator,
+        resolvePolicyId: fixture.resolvePolicyId,
+        rateLimiter: fixture.rateLimiter ?? new InMemoryRateLimiter(),
+        audit: fixture.audit,
+        metrics: fixture.metrics,
+        incident: fixture.incident,
+        readiness: readiness(),
+        close: () => { closeCalls += 1; }
+      })
+    })
+  });
+  assert.equal((await get(`${runtime.host.baseUrl}/health`)).status, 200);
+  assert.equal((await get(`${runtime.host.baseUrl}/ready`)).status, 200);
+  await Promise.all([runtime.shutdown("SIGTERM"), runtime.shutdown("SIGTERM")]);
+  assert.equal(closeCalls, 1);
+  assert(logs.some((entry: any) => entry.event === "rfq_host_started"));
+  assert(logs.some((entry: any) => entry.event === "rfq_host_stopped"));
+  await assert.rejects(() => get(`${runtime.host.baseUrl}/health`));
+}
+
 function baseConfig(overrides: Partial<ProductionRFQHostConfig> & {
   verifySignature?: ProductionRFQHostConfig["coordinator"] extends never ? never : (data: unknown, signature: unknown, maker: unknown) => void;
   pricingResult?: RFQPrice;
@@ -331,9 +432,33 @@ function baseConfig(overrides: Partial<ProductionRFQHostConfig> & {
     maxBodyBytes: overrides.maxBodyBytes,
     now: () => 1_000,
     strictAudit: overrides.strictAudit,
+    readiness: overrides.readiness,
+    readinessTimeoutMs: overrides.readinessTimeoutMs,
     storePath,
     signer: signer as CountingSigner
   };
+}
+
+function readiness(overrides: Partial<Record<string, boolean>> = {}) {
+  const names = ["audit", "authentication", "coordinator", "policy", "pricing", "rate_limit", "risk", "signer"] as const;
+  return {
+    check: () => {
+      const components = names.map((component) => ({component, ready: overrides[component] ?? true}));
+      return {ready: components.every((status) => status.ready), components};
+    }
+  };
+}
+
+async function freePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("failed to reserve test port");
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  return address.port;
 }
 
 async function start(config: ReturnType<typeof baseConfig>) {
