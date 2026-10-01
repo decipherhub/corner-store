@@ -15,6 +15,18 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `SDK-006 — Reference DEX Sandbox`: issue #114를 구현해 packed CLI의
+  `create --template sandbox`가 repository checkout 없이 Anvil, one-shot deployment,
+  artifact-bound RFQ backend, read-only Operator API/dashboard와 Deployment Studio를
+  포함하는 self-contained Compose project를 생성한다. pinned Node/Foundry multi-stage
+  image와 non-root runtime을 사용하고, health/dependency gate로 현재 chain deployment가
+  성공하기 전에는 service가 시작되지 않는다. 기본 BUIDL-like와 opt-in Reg D fixture는
+  동일 이미지와 실행 계약을 공유하며 external provider/production credential은 포함하지
+  않는다. 검증: packed clean-project 생성·build·conformance, BUIDL-like/Reg D live
+  Docker deployment와 6-service health/artifact binding, Toolkit·CLI·Deployment Studio
+  smoke, full Foundry 950/950, 전체 `scripts/check.sh`, deploy-v3 10/10,
+  `git diff --check` 통과.
+
 - `SDK-005 — External DEX Adapter Starter and Conformance`: 이슈 #116을 구현해
   `dex-integration` template이 Router-only Solidity Adapter, TypeScript request
   builder, versioned venue descriptor와 실제 ExecutionRouter conformance를 생성한다.

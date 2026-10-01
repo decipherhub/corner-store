@@ -34,6 +34,7 @@ All environment-specific locations and endpoints are runtime configuration:
 | `CORNER_STORE_RFQ_BACKEND_PORT` | `8787` | integrated RFQ backend port |
 | `CORNER_STORE_OPERATOR_API_PORT` | `8788` | integrated Operator API port |
 | `CORNER_STORE_DASHBOARD_PORT` | `8790` | integrated Dashboard port |
+| `CORNER_STORE_STUDIO_MANAGED_DEX_RUNTIME` | enabled | set to `0` when an external supervisor, such as the generated Compose sandbox, already owns the DEX services |
 | `CORNER_STORE_DEX_CHAIN_ID` | `31337` | local EIP-712 chain ID |
 
 Defaults are local examples, not product constants. Production operators should

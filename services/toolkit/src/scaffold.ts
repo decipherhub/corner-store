@@ -26,6 +26,7 @@ export interface ScaffoldOptions {
   toolkitDependency?: string;
   standalone?: boolean;
   scenario?: string;
+  sandboxSourceRoot?: string;
 }
 
 export interface ScaffoldResult {
@@ -58,7 +59,8 @@ export function scaffoldRFQIntegration(target: string, options: ScaffoldOptions)
     options.sdkSourceRoot !== undefined,
     options.standalone === true,
     project,
-    options.scenario
+    options.scenario,
+    options.sandboxSourceRoot
   );
   if (options.sdkSourceRoot) {
     Object.assign(files, vendoredSdkFiles(options.sdkSourceRoot));
@@ -86,7 +88,8 @@ function generatedFiles(
   vendoredSdk: boolean,
   standalone: boolean,
   project: ProjectDescriptor,
-  scenario?: string
+  scenario?: string,
+  sandboxSourceRoot?: string
 ): Record<string, string> {
   const files: Record<string, string> = {
     "corner-store.integration.json": json(manifest),
@@ -115,6 +118,16 @@ function generatedFiles(
     files["corner-store.config.json"] = json(defaultConfig());
     files["corner-store.scenario.json"] = scenario ?? json(defaultScenario());
   }
+  if (project.template === "sandbox") {
+    if (!sandboxSourceRoot) throw new Error("sandbox template requires the bundled reference runtime source");
+    files["corner-store.reg-d.config.json"] = json(regDConfig());
+    files["Dockerfile"] = sandboxDockerfile();
+    files["compose.yaml"] = sandboxCompose();
+    files[".dockerignore"] = sandboxDockerignore();
+    files["sandbox/scripts/deploy.sh"] = sandboxDeployScript();
+    files["sandbox/scripts/operator-api.sh"] = sandboxOperatorApiScript();
+    Object.assign(files, vendoredSandboxFiles(sandboxSourceRoot));
+  }
   if (project.template === "dex-integration") {
     files["corner-store.venue.json"] = json(venueDescriptor());
     files["foundry.toml"] = dexFoundryConfig();
@@ -122,7 +135,7 @@ function generatedFiles(
     files["test/CornerStoreVenueAdapter.t.sol"] = venueAdapterTestSource();
     files["src/venue-client.ts"] = venueClientSource();
   }
-  if (manifest.deployment.dockerCompose) {
+  if (manifest.deployment.dockerCompose && project.template !== "sandbox") {
     files["Dockerfile"] = dockerfile(vendoredSdk);
     files["compose.yaml"] = compose();
   }
@@ -394,7 +407,33 @@ production and run the SDK conformance suite against the resulting module set.
 4. Submit the signed quote through Corner Store's Router; backend prechecks never
    replace fill-time compliance.
 ${manifest.deployment.dockerCompose ? "\n`docker compose up --build` is an optional reference deployment path.\n" : ""}
+${project.template === "sandbox" ? `
+## One-command local sandbox
+
+This template is a demo-only reference environment. It uses the public Anvil
+development mnemonic inside the runtime and must never be exposed to a public
+network or reused for real assets.
+
+\`\`\`sh
+docker compose up --build
+\`\`\`
+
+Open the demo portal at <http://127.0.0.1:8790> and Deployment Studio at
+<http://127.0.0.1:8791>. The RPC is available at <http://127.0.0.1:8545>.
+Select the alternative fixture with
+\`CORNER_STORE_PROFILE=reg-d docker compose up --build\`.
+
+If a previous chain or artifact is still present, run
+\`docker compose down --volumes --remove-orphans\` and start again. Compose
+does not start the RFQ/API/UI services until the current deployment finishes,
+and the RFQ backend independently rejects artifact, scenario or chain drift.
+` : ""}
 `;
+}
+
+function regDConfig(): unknown {
+  const config = defaultConfig();
+  return {...config, asset: {...config.asset, profile: "reg-d"}};
 }
 
 function defaultScenario(): unknown {
@@ -704,6 +743,283 @@ function compose(): string {
       - "\${PORT:-8787}:\${PORT:-8787}"
     restart: unless-stopped
 `;
+}
+
+function sandboxDockerfile(): string {
+  return `FROM ghcr.io/foundry-rs/foundry:v1.7.1 AS foundry
+
+FROM foundry AS contract-toolchain
+WORKDIR /home/foundry/contracts
+COPY --chown=foundry:foundry sandbox/contracts ./
+RUN forge build --jobs 1 script/DeployStack.s.sol
+
+FROM node:22.14.0-bookworm-slim AS build
+WORKDIR /workspace
+COPY sandbox ./sandbox
+RUN npm ci --prefix sandbox/services/toolkit --ignore-scripts \\
+ && npm run build --prefix sandbox/services/toolkit \\
+ && npm ci --prefix sandbox/services/rfq --ignore-scripts \\
+ && npm run build --prefix sandbox/services/rfq \\
+ && npm ci --prefix sandbox/services/cli --ignore-scripts \\
+ && npm run build --prefix sandbox/services/cli \\
+ && npm ci --prefix sandbox/services/rfq-demo-backend --ignore-scripts \\
+ && npm run build --prefix sandbox/services/rfq-demo-backend \\
+ && npm ci --prefix sandbox/services/operator-api --ignore-scripts \\
+ && npm run build --prefix sandbox/services/operator-api \\
+ && npm ci --prefix sandbox/services/deployment-studio --ignore-scripts \\
+ && npm run build --prefix sandbox/services/deployment-studio
+
+FROM node:22.14.0-bookworm-slim AS runtime
+RUN apt-get update \\
+ && apt-get install -y --no-install-recommends ca-certificates \\
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=foundry /usr/local/bin/anvil /usr/local/bin/anvil
+COPY --from=foundry /usr/local/bin/cast /usr/local/bin/cast
+COPY --from=foundry /usr/local/bin/forge /usr/local/bin/forge
+COPY --from=contract-toolchain --chown=node:node /home/foundry/.svm /home/node/.svm
+WORKDIR /workspace
+COPY --from=build --chown=node:node /workspace/sandbox ./sandbox
+COPY --chown=node:node corner-store.config.json corner-store.reg-d.config.json corner-store.scenario.json ./project/
+RUN mkdir -p /workspace/project/deployments /workspace/project/.corner-store /workspace/studio-projects \\
+ && chown -R node:node /workspace/project /workspace/studio-projects \\
+ && chmod 0755 /workspace/sandbox/scripts/*.sh
+ENV CORNER_STORE_CONTRACTS_ROOT=/workspace/sandbox/contracts
+USER node
+`;
+}
+
+function sandboxCompose(): string {
+  return `name: corner-store-sandbox
+
+x-runtime: &runtime
+  build:
+    context: .
+    target: runtime
+  image: corner-store-sandbox:local
+  init: true
+  stop_grace_period: 10s
+
+services:
+  anvil:
+    <<: *runtime
+    command: ["anvil", "--host", "0.0.0.0", "--chain-id", "31337"]
+    ports:
+      - "\${CORNER_STORE_RPC_PORT:-8545}:8545"
+    healthcheck:
+      test: ["CMD-SHELL", "cast chain-id --rpc-url http://127.0.0.1:8545 >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  deployer:
+    <<: *runtime
+    command: ["/workspace/sandbox/scripts/deploy.sh"]
+    environment:
+      CORNER_STORE_PROFILE: "\${CORNER_STORE_PROFILE:-buidl-like}"
+      CORNER_STORE_RPC_URL: http://anvil:8545
+    volumes:
+      - deployment-artifacts:/workspace/project/deployments
+    depends_on:
+      anvil:
+        condition: service_healthy
+    restart: "no"
+
+  rfq:
+    <<: *runtime
+    command: ["node", "/workspace/sandbox/services/rfq-demo-backend/dist/rfq-demo-backend/src/index.js"]
+    environment:
+      RFQ_DEMO_HOST: 0.0.0.0
+      RFQ_DEMO_PORT: "8787"
+      RFQ_DEMO_CHAIN_ID: "31337"
+      RFQ_DEMO_RPC_URL: http://anvil:8545
+      RFQ_DEMO_ARTIFACT: /workspace/project/deployments/anvil-e2e.json
+      RFQ_DEMO_SCENARIO: /workspace/project/corner-store.scenario.json
+      RFQ_DEMO_ENABLE_SETTLEMENT: "1"
+      CORNER_STORE_EVENTS: /workspace/project/deployments/dex-events.json
+    volumes:
+      - deployment-artifacts:/workspace/project/deployments
+    depends_on:
+      deployer:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  operator-api:
+    <<: *runtime
+    command: ["/workspace/sandbox/scripts/operator-api.sh"]
+    environment:
+      CORNER_STORE_PROFILE: "\${CORNER_STORE_PROFILE:-buidl-like}"
+      HOST: 0.0.0.0
+      PORT: "8788"
+      CORNER_STORE_ARTIFACT: /workspace/project/deployments/anvil-e2e.json
+      CORNER_STORE_EVENTS: /workspace/project/deployments/dex-events.json
+    volumes:
+      - deployment-artifacts:/workspace/project/deployments
+    depends_on:
+      deployer:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8788/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  portal:
+    <<: *runtime
+    command: ["node", "/workspace/sandbox/services/operator-dashboard/server.js"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8790"
+      CORNER_STORE_OPERATOR_API: http://operator-api:8788
+      CORNER_STORE_RFQ_BACKEND: http://rfq:8787
+    ports:
+      - "\${CORNER_STORE_PORTAL_PORT:-8790}:8790"
+    depends_on:
+      rfq:
+        condition: service_healthy
+      operator-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8790/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  studio:
+    <<: *runtime
+    command: ["node", "/workspace/sandbox/services/deployment-studio/dist/src/index.js"]
+    environment:
+      CORNER_STORE_STUDIO_HOST: 0.0.0.0
+      CORNER_STORE_STUDIO_PORT: "8791"
+      CORNER_STORE_STUDIO_ROOT: /workspace/studio-projects
+      CORNER_STORE_CLI_ENTRY: /workspace/sandbox/services/cli/dist/cli/src/index.js
+      CORNER_STORE_OPERATIONS_URL: http://127.0.0.1:\${CORNER_STORE_PORTAL_PORT:-8790}
+      CORNER_STORE_DEFAULT_RPC: http://anvil:8545
+      CORNER_STORE_ALLOWED_RPC_HOSTS: anvil,127.0.0.1,localhost,::1
+      CORNER_STORE_STUDIO_MANAGED_DEX_RUNTIME: "0"
+    ports:
+      - "\${CORNER_STORE_STUDIO_PORT:-8791}:8791"
+    volumes:
+      - studio-projects:/workspace/studio-projects
+    depends_on:
+      portal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8791/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  deployment-artifacts:
+  studio-projects:
+`;
+}
+
+function sandboxDockerignore(): string {
+  return `.git
+.env
+.env.*
+node_modules
+dist
+.corner-store
+deployments
+vendor
+*.log
+`;
+}
+
+function sandboxDeployScript(): string {
+  return `#!/bin/sh
+set -eu
+
+cd /workspace/project
+
+profile="\${CORNER_STORE_PROFILE:-buidl-like}"
+case "$profile" in
+  buidl-like) config=corner-store.config.json ;;
+  reg-d) config=corner-store.reg-d.config.json ;;
+  *) echo "unsupported CORNER_STORE_PROFILE: $profile (expected buidl-like or reg-d)" >&2; exit 64 ;;
+esac
+
+cli=/workspace/sandbox/services/cli/dist/cli/src/index.js
+artifact=deployments/anvil-e2e.json
+rpc="\${CORNER_STORE_RPC_URL:-http://anvil:8545}"
+node "$cli" --rpc "$rpc" --artifact "$artifact" deploy "$config" --broadcast
+node "$cli" --rpc "$rpc" --artifact "$artifact" verify "$config"
+`;
+}
+
+function sandboxOperatorApiScript(): string {
+  return `#!/bin/sh
+set -eu
+
+case "\${CORNER_STORE_PROFILE:-buidl-like}" in
+  buidl-like) export CORNER_STORE_CONFIG=/workspace/project/corner-store.config.json ;;
+  reg-d) export CORNER_STORE_CONFIG=/workspace/project/corner-store.reg-d.config.json ;;
+  *) echo "unsupported CORNER_STORE_PROFILE" >&2; exit 64 ;;
+esac
+exec node /workspace/sandbox/services/operator-api/dist/src/index.js
+`;
+}
+
+function vendoredSandboxFiles(sourceRoot: string): Record<string, string> {
+  const root = resolve(sourceRoot);
+  const contractsRoot = existsSync(resolve(root, "contracts/foundry.toml")) ? resolve(root, "contracts") : root;
+  const servicesRoot = resolve(root, "services");
+  const files: Record<string, string> = {};
+  const serviceInputs: Record<string, string[]> = {
+    toolkit: ["package.json", "package-lock.json", "tsconfig.json", "src"],
+    rfq: ["package.json", "package-lock.json", "tsconfig.json", "src"],
+    cli: ["package.json", "package-lock.json", "tsconfig.json", "src"],
+    "rfq-demo-backend": ["package.json", "package-lock.json", "tsconfig.json", "src"],
+    "operator-api": ["package.json", "package-lock.json", "tsconfig.json", "src"],
+    "operator-dashboard": ["package.json", "server.js", "index.html", "styles.css", "app.js"],
+    "deployment-studio": ["package.json", "package-lock.json", "tsconfig.json", "src", "web"]
+  };
+  for (const [service, inputs] of Object.entries(serviceInputs)) {
+    for (const input of inputs) {
+      collectTextPath(
+        resolve(servicesRoot, service, input),
+        `sandbox/services/${service}/${input}`,
+        files
+      );
+    }
+  }
+  for (const input of [
+    "src",
+    "script",
+    "test/fixtures",
+    "test/mocks",
+    "lib/openzeppelin-contracts/contracts",
+    "lib/openzeppelin-contracts-upgradeable/contracts",
+    "lib/solidity/contracts",
+    "lib/ERC-3643/contracts",
+    "lib/forge-std/src",
+    "foundry.toml",
+    "remappings.txt"
+  ]) {
+    collectTextPath(resolve(contractsRoot, input), `sandbox/contracts/${input}`, files);
+  }
+  return files;
+}
+
+function collectTextPath(source: string, output: string, files: Record<string, string>): void {
+  if (!existsSync(source)) throw new Error(`sandbox runtime source missing: ${source}`);
+  if (statSync(source).isDirectory()) {
+    for (const name of readdirSync(source).sort()) {
+      collectTextPath(resolve(source, name), `${output}/${name}`, files);
+    }
+    return;
+  }
+  files[output] = readFileSync(source, "utf8");
 }
 
 function json(value: unknown): string {

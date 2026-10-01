@@ -39,7 +39,7 @@ const DEFINITIONS: Record<ProjectTemplateId, ProjectTemplateDefinition> = {
     summary: "Evaluate the reference policy and RFQ service without claiming production readiness.",
     maturity: "demo",
     capabilities: ["policy-preview", "reference-rfq", "local-deployment"],
-    nextSteps: ["npm test", "npm run doctor", "npm run deploy"],
+    nextSteps: ["docker compose up --build", "open http://127.0.0.1:8790", "docker compose down --volumes"],
     dockerEligible: true
   },
   "dex-integration": {

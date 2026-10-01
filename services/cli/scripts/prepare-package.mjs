@@ -51,3 +51,24 @@ cpSync(
   resolve(repoRoot, "services/rfq-demo-backend/config/demo-scenario.json"),
   resolve(target, "deployments/anvil-e2e-scenario.json")
 );
+
+const sandboxServices = {
+  toolkit: ["package.json", "package-lock.json", "tsconfig.json", "src"],
+  rfq: ["package.json", "package-lock.json", "tsconfig.json", "src"],
+  cli: ["package.json", "package-lock.json", "tsconfig.json", "src"],
+  "rfq-demo-backend": ["package.json", "package-lock.json", "tsconfig.json", "src"],
+  "operator-api": ["package.json", "package-lock.json", "tsconfig.json", "src"],
+  "operator-dashboard": ["package.json", "server.js", "index.html", "styles.css", "app.js"],
+  "deployment-studio": ["package.json", "package-lock.json", "tsconfig.json", "src", "web"]
+};
+for (const [service, paths] of Object.entries(sandboxServices)) {
+  for (const path of paths) {
+    const destination = resolve(cliRoot, "bundle/services", service, path);
+    mkdirSync(dirname(destination), {recursive: true});
+    cpSync(
+      resolve(repoRoot, "services", service, path),
+      destination,
+      {recursive: true}
+    );
+  }
+}

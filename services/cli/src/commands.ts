@@ -1000,6 +1000,7 @@ export function cmdCreate(
   opts: {template?: string; mode?: string; docker?: boolean; sdk?: string; toolkit?: string; cli?: string}
 ): void {
   const repoRoot = findRepoRoot(process.cwd()) ?? findRepoRoot(__dirname);
+  const sandboxSourceRoot = repoRoot ?? resolve(__dirname, "../../../bundle");
   const localCliPackage = !opts.cli && repoRoot ? packLocalCli(repoRoot) : undefined;
   const localToolkitPackage = !opts.toolkit && repoRoot ? packLocalToolkit(repoRoot) : undefined;
   try {
@@ -1011,13 +1012,14 @@ export function cmdCreate(
     const result = scaffoldRFQIntegration(target, {
       template: opts.template as ProjectTemplateId | undefined,
       mode: opts.mode as RFQIntegrationMode | undefined,
-      dockerCompose: opts.docker === true,
+      dockerCompose: opts.template === "sandbox" || opts.docker === true,
       sdkDependency: opts.sdk,
       toolkitDependency: opts.toolkit ?? localToolkitPackage?.dependency,
       cliDependency: opts.cli ?? localCliPackage?.dependency,
       sdkSourceRoot: opts.sdk ? undefined : repoRoot ? resolve(repoRoot, "services/rfq") : undefined,
       standalone: true,
-      scenario: readScenario(scenarioPath)
+      scenario: readScenario(scenarioPath),
+      sandboxSourceRoot: opts.template === "sandbox" ? sandboxSourceRoot : undefined
     });
     if (localCliPackage) {
       const vendorDirectory = resolve(result.root, "vendor");

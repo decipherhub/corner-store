@@ -63,9 +63,29 @@ internal RFQ integration shape:
 | `asset-onboarding` | prepare dry-run and unsigned onboarding work | `library-only` |
 | `rfq-service` | connect replaceable RFQ modules | `reference-service` |
 
-The `sandbox` template is the entry point for #114; until that issue is complete,
-optional Compose contains only the reference RFQ service and is not a full DEX or
-production environment.
+The `sandbox` template generates the complete local reference environment by
+default. It bundles only the allowlisted Corner Store sources needed to build the
+Anvil deployment, RFQ backend, Operator API/dashboard and Deployment Studio; a
+repository checkout is not required.
+
+```sh
+corner-store create ./corner-store-sandbox --template sandbox
+cd ./corner-store-sandbox
+docker compose up --build
+```
+
+The default `buidl-like` fixture is available at `http://127.0.0.1:8790`, with
+Deployment Studio at `http://127.0.0.1:8791`. Use
+`CORNER_STORE_PROFILE=reg-d docker compose up --build` for the Reg D fixture.
+Anvil readiness and the one-shot deployment gate all dependent services, and the
+RFQ backend fails closed when the chain, deployment artifact or scenario do not
+match. Run `docker compose down --volumes --remove-orphans` to discard a previous
+demo chain and artifact together.
+
+The sandbox uses public Anvil development identities, reference pricing/risk and
+mock qualification data. It is never a production deployment, never accepts
+production credentials, and does not replace the existing non-Docker Anvil or
+GIWA testnet flows.
 
 The `dex-integration` template additionally generates:
 
@@ -105,8 +125,10 @@ Docker Compose is optional and only valid with `reference-service`:
 corner-store create ./my-rfq-service --template rfq-service --docker
 ```
 
-Docker output contains `Dockerfile` and `compose.yaml`. It reads `.env`; it does
-not embed signer keys, RPC credentials or production secrets.
+The `rfq-service --docker` output contains the smaller RFQ-only `Dockerfile` and
+`compose.yaml`. It reads `.env`; it does not embed signer keys, RPC credentials
+or production secrets. The `sandbox` template instead includes its full Compose
+environment automatically and uses only documented demo identities.
 
 ## RFQ Module Contract
 

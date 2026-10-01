@@ -192,6 +192,11 @@ node dist/cli/src/index.js create ../../my-rfq-service \
   --template rfq-service --docker
 node dist/cli/src/index.js create ../../my-onboarding \
   --template asset-onboarding
+node dist/cli/src/index.js create ../../my-sandbox \
+  --template sandbox
+
+cd ../../my-sandbox
+docker compose up --build  # portal :8790, Deployment Studio :8791, Anvil :8545
 
 cd ../../my-corner-store
 npm install
@@ -210,6 +215,10 @@ Git URL or explicit local package with `--sdk <specifier>` and
 `--cli <specifier>`.
 Packaged CLI deployments use the bundled contract source, or an explicit
 `--contracts <path>` / `CORNER_STORE_CONTRACTS_ROOT` override.
+The sandbox also carries an allowlisted reference runtime bundle, uses a pinned
+non-root Node/Foundry image, and gates RFQ/API/UI startup on the current Anvil
+deployment artifact. It remains demo-only and contains no production credential
+or external provider connection.
 
 See [`docs/sdk-integration.md`](./docs/sdk-integration.md) for purpose templates,
 legacy mode mappings, the `connectCornerStore()` facade, generated files,

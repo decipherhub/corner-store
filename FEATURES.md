@@ -9,6 +9,34 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## SDK-006 — Reference DEX Sandbox
+
+### Behavior
+
+- `corner-store create <target> --template sandbox`는 저장소 checkout 없이 사용할 수
+  있는 self-contained local reference DEX scaffold를 생성한다.
+- 생성된 Compose stack은 Anvil readiness와 one-shot deployment 성공 뒤에만 RFQ,
+  Operator API/dashboard와 Deployment Studio를 시작한다.
+- deployment artifact, scenario와 chain binding이 맞지 않으면 reference service가
+  fail-closed하며, image에는 private key, RPC credential 또는 PII를 포함하지 않는다.
+- `buidl-like`는 기본 fixture이고 `CORNER_STORE_PROFILE=reg-d`로 동일한 실행 계약에서
+  Reg D fixture를 선택할 수 있다.
+- Docker sandbox는 demo/reference 전용이며 기존 non-Docker local Anvil과 GIWA
+  testnet 흐름을 대체하지 않는다.
+
+### Verification
+
+- Toolkit/CLI/Deployment Studio scaffold smoke pass
+- packed CLI clean-project 생성·build·conformance pass
+- generated Compose config validation pass
+- BUIDL-like/Reg D live Docker deployment와 전체 service health pass
+- full `scripts/check.sh`: Foundry 950/950, package/service smoke와 deploy-v3 10/10
+- `git diff --check` pass
+
+### State
+
+passing
+
 
 ## SDK-005 — External DEX Adapter Starter and Conformance
 
