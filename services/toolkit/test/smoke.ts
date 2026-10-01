@@ -966,6 +966,51 @@ if (
 validateIntegrationManifest(JSON.parse(readFileSync(join(libraryTarget, "corner-store.integration.json"), "utf8")));
 validateProjectDescriptor(JSON.parse(readFileSync(join(libraryTarget, "corner-store.project.json"), "utf8")));
 
+const sandboxTarget = join(dir, "reference-sandbox");
+const sandbox = scaffoldRFQIntegration(sandboxTarget, {
+  template: "sandbox",
+  dockerCompose: true,
+  standalone: true,
+  sdkSourceRoot: join(process.cwd(), "../rfq"),
+  toolkitDependency: "file:../corner-store-toolkit.tgz",
+  cliDependency: "file:../corner-store-cli.tgz",
+  scenario: `${JSON.stringify({schemaVersion: 2, deployment: {accounts: {}}}, null, 2)}\n`,
+  sandboxSourceRoot: join(process.cwd(), "../..")
+});
+const sandboxCompose = readFileSync(join(sandboxTarget, "compose.yaml"), "utf8");
+const sandboxDockerfile = readFileSync(join(sandboxTarget, "Dockerfile"), "utf8");
+const sandboxReadme = readFileSync(join(sandboxTarget, "README.md"), "utf8");
+if (
+  !sandbox.files.includes("sandbox/contracts/script/DeployStack.s.sol") ||
+  !sandbox.files.includes("sandbox/services/rfq-demo-backend/src/index.ts") ||
+  !sandbox.files.includes("sandbox/services/deployment-studio/web/index.html") ||
+  !sandbox.files.includes("corner-store.reg-d.config.json") ||
+  !sandboxCompose.includes("condition: service_completed_successfully") ||
+  !sandboxCompose.includes("condition: service_healthy") ||
+  !sandboxCompose.includes('CORNER_STORE_STUDIO_MANAGED_DEX_RUNTIME: "0"') ||
+  !sandboxDockerfile.includes("USER node") ||
+  !sandboxDockerfile.includes("ca-certificates") ||
+  !sandboxDockerfile.includes("/home/node/.svm") ||
+  !sandboxDockerfile.includes("npm ci --prefix") ||
+  !sandboxReadme.includes("docker compose up --build -d") ||
+  !sandboxReadme.includes("docker compose logs deployer rfq operator-api") ||
+  sandboxReadme.includes("Install dependencies and run `npm test`") ||
+  sandboxReadme.includes("minimal reference HTTP service with `npm start`") ||
+  sandboxReadme.includes("Run `npm run policy:explain`")
+) {
+  throw new Error("full reference sandbox scaffold regression");
+}
+if (
+  /0x[0-9a-f]{64}/i.test(sandboxCompose) ||
+  sandboxCompose.includes("RFQ_SIGNER_PRIVATE_KEY") ||
+  readFileSync(join(sandboxTarget, ".dockerignore"), "utf8").includes("!.env")
+) {
+  throw new Error("reference sandbox embedded a credential or secret input");
+}
+if (JSON.parse(readFileSync(join(sandboxTarget, "corner-store.reg-d.config.json"), "utf8")).asset.profile !== "reg-d") {
+  throw new Error("reference sandbox Reg D fixture regression");
+}
+
 const existingTarget = join(dir, "existing-backend");
 const existing = scaffoldRFQIntegration(existingTarget, {mode: "existing-backend"});
 if (existing.files.includes("compose.yaml") || !readFileSync(join(existingTarget, "src/index.ts"), "utf8").includes("createCornerStoreRFQ")) {

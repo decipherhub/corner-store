@@ -8,6 +8,7 @@ PACK_DIR="$WORK_DIR/packages"
 BOOT_DIR="$WORK_DIR/bootstrap"
 TARGET_DIR="$WORK_DIR/consumer"
 LOCAL_TARGET_DIR="$WORK_DIR/local-consumer"
+SANDBOX_DIR="$WORK_DIR/reference-sandbox"
 
 cleanup() {
   rm -rf "$WORK_DIR"
@@ -52,7 +53,16 @@ node "$ROOT_DIR/services/cli/dist/cli/src/index.js" create "$LOCAL_TARGET_DIR" \
     --sdk "file:$RFQ_TARBALL" \
     --toolkit "file:$TOOLKIT_TARBALL" \
     --cli "file:$CLI_TARBALL" >/dev/null
+  ./node_modules/.bin/corner-store create "$SANDBOX_DIR" --template sandbox >/dev/null
 )
+
+test -f "$SANDBOX_DIR/sandbox/contracts/script/DeployStack.s.sol"
+test -f "$SANDBOX_DIR/sandbox/services/deployment-studio/web/index.html"
+grep -q "condition: service_completed_successfully" "$SANDBOX_DIR/compose.yaml"
+grep -q "USER node" "$SANDBOX_DIR/Dockerfile"
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  (cd "$SANDBOX_DIR" && docker compose config >/dev/null)
+fi
 
 (
   cd "$TARGET_DIR"

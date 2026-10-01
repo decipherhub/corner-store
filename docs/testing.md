@@ -119,6 +119,11 @@ build를 검증한다.
 `dex-integration` clean project는 추가로 generated Solidity Adapter를 build하고
 real Router 기반 allow/reject/direct-call/atomic rollback 4-scenario conformance를
 실행한다.
+동일 smoke는 packed CLI만 설치한 clean bootstrap project에서 `sandbox` template도
+생성해 bundled contract/service source, non-root multi-stage image, deployment
+readiness dependency와 `docker compose config`를 검증한다. Docker daemon이 있는
+release 환경에서는 생성 directory에서 실제 `docker compose up --build` runtime
+smoke를 추가로 실행한다.
 
 Policy audit smoke는 canonical/domain-separated hash 결정성, bytes32 commitment,
 unknown/PII-shaped field와 parameter hash 변조 거부, immutable store put/get/exists와

@@ -24,7 +24,7 @@ program
   .argument("<target>", "new output directory")
   .option("--template <template>", "sandbox | dex-integration | asset-onboarding | rfq-service")
   .option("--mode <mode>", "legacy compatibility alias: library-only | reference-service | existing-backend")
-  .option("--docker", "include optional Dockerfile and Compose reference deployment")
+  .option("--docker", "include optional Dockerfile and Compose reference deployment (always included by sandbox)")
   .option("--sdk <specifier>", "npm dependency specifier for @corner-store/rfq-service")
   .option("--toolkit <specifier>", "npm dependency specifier for @corner-store/toolkit")
   .option("--cli <specifier>", "npm dependency specifier for @corner-store/cli")
