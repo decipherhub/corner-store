@@ -64,6 +64,8 @@ Required tools:
 - Node.js and npm for the TypeScript services under `services/`, including RFQ,
   CLI, Toolkit, Operator API and Compliance Data SDK
 - Yarn for `tools/deploy-v3`
+- Docker Engine/Desktop with Docker Compose v2 for the optional generated
+  Reference DEX sandbox
 
 Foundry 버전을 바꾼 뒤 script broadcast에서 constructor decoding 오류가 나면
 서로 다른 버전의 build artifact가 섞이지 않도록 `forge clean` 후 재실행한다.
@@ -196,7 +198,10 @@ node dist/cli/src/index.js create ../../my-sandbox \
   --template sandbox
 
 cd ../../my-sandbox
-docker compose up --build  # portal :8790, Deployment Studio :8791, Anvil :8545
+docker compose up --build -d
+docker compose ps -a       # portal :8790, Deployment Studio :8791, Anvil :8545
+# when finished:
+docker compose down --volumes --remove-orphans
 
 cd ../../my-corner-store
 npm install
@@ -218,7 +223,9 @@ Packaged CLI deployments use the bundled contract source, or an explicit
 The sandbox also carries an allowlisted reference runtime bundle, uses a pinned
 non-root Node/Foundry image, and gates RFQ/API/UI startup on the current Anvil
 deployment artifact. It remains demo-only and contains no production credential
-or external provider connection.
+or external provider connection. To switch fixtures, stop and discard the demo
+chain first, then run
+`CORNER_STORE_PROFILE=reg-d docker compose up --build -d`.
 
 See [`docs/sdk-integration.md`](./docs/sdk-integration.md) for purpose templates,
 legacy mode mappings, the `connectCornerStore()` facade, generated files,

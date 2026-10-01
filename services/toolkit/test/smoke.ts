@@ -979,6 +979,7 @@ const sandbox = scaffoldRFQIntegration(sandboxTarget, {
 });
 const sandboxCompose = readFileSync(join(sandboxTarget, "compose.yaml"), "utf8");
 const sandboxDockerfile = readFileSync(join(sandboxTarget, "Dockerfile"), "utf8");
+const sandboxReadme = readFileSync(join(sandboxTarget, "README.md"), "utf8");
 if (
   !sandbox.files.includes("sandbox/contracts/script/DeployStack.s.sol") ||
   !sandbox.files.includes("sandbox/services/rfq-demo-backend/src/index.ts") ||
@@ -990,7 +991,12 @@ if (
   !sandboxDockerfile.includes("USER node") ||
   !sandboxDockerfile.includes("ca-certificates") ||
   !sandboxDockerfile.includes("/home/node/.svm") ||
-  !sandboxDockerfile.includes("npm ci --prefix")
+  !sandboxDockerfile.includes("npm ci --prefix") ||
+  !sandboxReadme.includes("docker compose up --build -d") ||
+  !sandboxReadme.includes("docker compose logs deployer rfq operator-api") ||
+  sandboxReadme.includes("Install dependencies and run `npm test`") ||
+  sandboxReadme.includes("minimal reference HTTP service with `npm start`") ||
+  sandboxReadme.includes("Run `npm run policy:explain`")
 ) {
   throw new Error("full reference sandbox scaffold regression");
 }

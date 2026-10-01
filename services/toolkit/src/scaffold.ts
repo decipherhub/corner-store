@@ -379,6 +379,21 @@ console.log(JSON.stringify({
 
 function readme(manifest: RFQIntegrationManifest, project: ProjectDescriptor, hasPolicyFacade: boolean): string {
   const purpose = projectTemplate(project.template);
+  const setup = project.template === "sandbox"
+    ? `The sandbox requires Docker Engine/Desktop with Docker Compose v2. It does
+not require a separate \`npm install\`, \`.env\` file or production credential.`
+    : `1. Copy \`.env.example\` to a local secret-managed environment. Never commit it.
+2. Install dependencies and run \`npm test\`.
+3. ${manifest.mode === "reference-service"
+  ? "Start the minimal reference HTTP service with `npm start`."
+  : manifest.mode === "existing-backend"
+    ? "Import `createCornerStoreRFQ` into the existing backend request handler."
+    : "Import the RFQ SDK exports from `src/index.ts` in your application."}
+4. Submit the signed quote through Corner Store's Router; backend prechecks never
+   replace fill-time compliance.`;
+  const optionalDocker = manifest.deployment.dockerCompose && project.template !== "sandbox"
+    ? "\n`docker compose up --build` is an optional reference deployment path.\n"
+    : "";
   return `# Corner Store ${project.template}
 
 Purpose: ${purpose.summary}
@@ -389,24 +404,18 @@ The user-facing policy values live in \`corner-store.config.json\`. The generate
 \`corner-store.project.json\` binds this template, config and deployment artifact;
 do not copy contract addresses into source files.
 
-${hasPolicyFacade
-  ? "Run `npm run policy:explain` to see profile and venue values first. The Element/Recipe/Manifest/Operator model remains available as advanced detail."
-  : "Install `@corner-store/toolkit` to use the optional `connectCornerStore()` policy facade."}
+${project.template === "sandbox"
+  ? "The Compose runtime uses this config for deployment and exposes the resulting live state through the portal."
+  : hasPolicyFacade
+    ? "Run `npm run policy:explain` to see profile and venue values first. The Element/Recipe/Manifest/Operator model remains available as advanced detail."
+    : "Install `@corner-store/toolkit` to use the optional `connectCornerStore()` policy facade."}
 
 This scaffold is an integration starting point, not a hosted dealer or production
 pricing/risk/custody system. Replace every module marked \`reference\` before
 production and run the SDK conformance suite against the resulting module set.
 
-1. Copy \`.env.example\` to a local secret-managed environment. Never commit it.
-2. Install dependencies and run \`npm test\`.
-3. ${manifest.mode === "reference-service"
-  ? "Start the minimal reference HTTP service with `npm start`."
-  : manifest.mode === "existing-backend"
-    ? "Import `createCornerStoreRFQ` into the existing backend request handler."
-    : "Import the RFQ SDK exports from `src/index.ts` in your application."}
-4. Submit the signed quote through Corner Store's Router; backend prechecks never
-   replace fill-time compliance.
-${manifest.deployment.dockerCompose ? "\n`docker compose up --build` is an optional reference deployment path.\n" : ""}
+${setup}
+${optionalDocker}
 ${project.template === "sandbox" ? `
 ## One-command local sandbox
 
@@ -415,18 +424,22 @@ development mnemonic inside the runtime and must never be exposed to a public
 network or reused for real assets.
 
 \`\`\`sh
-docker compose up --build
+docker compose up --build -d
+docker compose ps -a
 \`\`\`
 
 Open the demo portal at <http://127.0.0.1:8790> and Deployment Studio at
 <http://127.0.0.1:8791>. The RPC is available at <http://127.0.0.1:8545>.
 Select the alternative fixture with
-\`CORNER_STORE_PROFILE=reg-d docker compose up --build\`.
+\`CORNER_STORE_PROFILE=reg-d docker compose up --build -d\` after removing the
+previous demo chain and artifact.
 
 If a previous chain or artifact is still present, run
 \`docker compose down --volumes --remove-orphans\` and start again. Compose
 does not start the RFQ/API/UI services until the current deployment finishes,
 and the RFQ backend independently rejects artifact, scenario or chain drift.
+For startup failures, inspect \`docker compose ps -a\` and
+\`docker compose logs deployer rfq operator-api\`.
 ` : ""}
 `;
 }

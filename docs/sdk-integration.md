@@ -71,16 +71,19 @@ repository checkout is not required.
 ```sh
 corner-store create ./corner-store-sandbox --template sandbox
 cd ./corner-store-sandbox
-docker compose up --build
+docker compose up --build -d
+docker compose ps -a
 ```
 
 The default `buidl-like` fixture is available at `http://127.0.0.1:8790`, with
 Deployment Studio at `http://127.0.0.1:8791`. Use
-`CORNER_STORE_PROFILE=reg-d docker compose up --build` for the Reg D fixture.
+`CORNER_STORE_PROFILE=reg-d docker compose up --build -d` for the Reg D fixture.
 Anvil readiness and the one-shot deployment gate all dependent services, and the
 RFQ backend fails closed when the chain, deployment artifact or scenario do not
 match. Run `docker compose down --volumes --remove-orphans` to discard a previous
-demo chain and artifact together.
+demo chain and artifact together before switching profiles. For startup failures,
+inspect `docker compose ps -a` and
+`docker compose logs deployer rfq operator-api`.
 
 The sandbox uses public Anvil development identities, reference pricing/risk and
 mock qualification data. It is never a production deployment, never accepts

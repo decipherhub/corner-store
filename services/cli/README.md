@@ -47,7 +47,7 @@ For an unpublished source checkout, `create` also writes
 `vendor/corner-store-cli.tgz` and `vendor/corner-store-toolkit.tgz`, so the
 generated project does not depend on registry-published CLI or Toolkit packages.
 
-Inside a generated project:
+Inside a generated non-sandbox integration project:
 
 ```sh
 npm install
@@ -72,9 +72,32 @@ submission. `npm run verify` requires the configured deployment artifact.
 | `asset-onboarding` | preparing dry-run/unsigned onboarding inputs | `library-only` |
 | `rfq-service` | connecting pricing/risk/signer/nonce modules | `reference-service` |
 
-The full multi-service Compose sandbox is tracked separately in #114; this
-template does not claim that the current RFQ-only Compose file is production or
-the complete reference DEX.
+The `sandbox` template generates the full local reference stack and always
+includes Compose; `--docker` is not needed. It requires Docker Compose v2, but it
+does not require a Corner Store source checkout or a separate `npm install`:
+
+```sh
+corner-store create ./my-sandbox --template sandbox
+cd ./my-sandbox
+docker compose up --build -d
+docker compose ps -a
+```
+
+Open the portal at `http://127.0.0.1:8790` or Deployment Studio at
+`http://127.0.0.1:8791`. The default fixture is BUIDL-like. To use Reg D, discard
+the previous demo chain and start the same image contract with a different
+profile:
+
+```sh
+docker compose down --volumes --remove-orphans
+CORNER_STORE_PROFILE=reg-d docker compose up --build -d
+```
+
+If startup fails, use `docker compose ps -a` and
+`docker compose logs deployer rfq operator-api`. Stop the sandbox with
+`docker compose down --volumes --remove-orphans`. The sandbox uses public Anvil
+development identities and mock/reference providers; it is not a production
+runtime.
 
 ### Legacy integration modes
 
@@ -84,8 +107,10 @@ the complete reference DEX.
 | `reference-service` | run a minimal local `POST /rfq/quote` service | fixed-rate pricing, noop risk and in-memory nonce are reference modules |
 | `existing-backend` | add Corner Store RFQ quote creation to an existing backend | exposes `createCornerStoreRFQ(...)` for caller-owned HTTP/RPC/queue handling |
 
-Docker Compose is optional and only valid for `reference-service`. Compose reads
-`.env`; generated files include empty secret slots only.
+For the smaller `rfq-service` template, Docker Compose remains optional through
+`--docker` and reads `.env`; generated files include empty secret slots only.
+The full `sandbox` Compose environment is mandatory for that template and does
+not accept production credentials.
 
 ### Unified commands
 
