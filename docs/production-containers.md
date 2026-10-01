@@ -97,7 +97,9 @@ The token is read from a file so that Compose/Kubernetes secrets need not be
 copied into environment metadata. It must be 32–512 characters. The image does
 not include a default token. Mounted files are hashed at startup; any later
 replacement makes readiness fail until an explicit process restart reloads the
-reviewed snapshot and token.
+reviewed snapshot and token. The platform must make the mounted file readable by
+UID/GID `10001:10001`; do not make the filesystem writable to solve an ownership
+or mode mismatch.
 
 ### Exact Operator API environment schema
 

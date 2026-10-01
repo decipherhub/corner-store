@@ -110,7 +110,7 @@ EOF
 cp "$ROOT_DIR/services/toolkit/examples/corner-store.config.json" "$TMP_DIR/config.json"
 printf '%s\n' '{"schemaVersion":1,"network":"container-smoke"}' >"$TMP_DIR/deployment.json"
 printf '%s\n' 'container-smoke-token-that-is-long-enough' >"$TMP_DIR/operator-token"
-chmod 0400 "$TMP_DIR/operator-token"
+chmod 0444 "$TMP_DIR/operator-token"
 
 cd "$ROOT_DIR"
 CORNER_STORE_RFQ_IMAGE_REPOSITORY=example.invalid/corner-store/rfq-host \
