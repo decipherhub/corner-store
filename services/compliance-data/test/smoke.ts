@@ -176,7 +176,7 @@ async function main(): Promise<void> {
       async assess(_request: any, context?: {signal: AbortSignal}) {
         if (options.captureSignal) options.captureSignal(context?.signal);
         if (assessmentOrError instanceof Error) throw assessmentOrError;
-        return typeof assessmentOrError === "function" ? assessmentOrError(context) : assessmentOrError;
+        return typeof assessmentOrError === "function" ? assessmentOrError(context, _request) : assessmentOrError;
       }
     };
     const coordinator = new KycEvidenceCoordinator(provider, store, {
@@ -293,6 +293,123 @@ async function main(): Promise<void> {
   const outageAfterSuccess = await refreshWith(new Error("provider down"), {store: noCacheStore});
   if (!cachedSuccess.result.eligible || outageAfterSuccess.result.eligible || outageAfterSuccess.result.reason !== "PROVIDER_UNAVAILABLE") {
     throw new Error("cached last-good evidence hid provider outage");
+  }
+
+  const hostileProxyRequest: any = new Proxy({}, {
+    get() { throw new Error(`proxy trap ${piiSentinel}`); }
+  });
+  const hostileProxy = await refreshWith(baseAssessment, {request: hostileProxyRequest});
+  const hostileProxySerialized = JSON.stringify({result: hostileProxy.result, audit: hostileProxy.auditRecords, incidents: hostileProxy.incidentRecords});
+  if (hostileProxy.result.eligible || hostileProxy.result.reason !== "MALFORMED_PROVIDER_RESULT" || hostileProxy.auditRecords.length !== 1 || hostileProxy.incidentRecords.length !== 1 || hostileProxySerialized.includes(piiSentinel)) {
+    throw new Error("hostile proxy request did not fail closed safely");
+  }
+
+  const hostileGetterRequest: any = {
+    identity,
+    asset,
+    requestRefHash,
+    get subject() { throw new Error(`getter throws ${piiSentinel}`); }
+  };
+  const hostileGetter = await refreshWith(baseAssessment, {request: hostileGetterRequest});
+  const hostileGetterSerialized = JSON.stringify({result: hostileGetter.result, audit: hostileGetter.auditRecords, incidents: hostileGetter.incidentRecords});
+  if (hostileGetter.result.eligible || hostileGetter.result.reason !== "MALFORMED_PROVIDER_RESULT" || hostileGetter.auditRecords.length !== 1 || hostileGetter.incidentRecords.length !== 1 || hostileGetterSerialized.includes(piiSentinel)) {
+    throw new Error("hostile getter request did not fail closed safely");
+  }
+
+  function makeToctouStore(): any {
+    return {
+      async replaceCurrent(snapshot: any) {
+        let ownKeysCalls = 0;
+        const real: any = {...snapshot};
+        const proxy: any = new Proxy(real, {
+          ownKeys(target) {
+            ownKeysCalls += 1;
+            const keys = Reflect.ownKeys(target);
+            return ownKeysCalls > 2 ? [...keys, "email"] : keys;
+          },
+          getOwnPropertyDescriptor(target, prop) {
+            if (prop === "email" && ownKeysCalls > 2) return {value: piiSentinel, enumerable: true, configurable: true, writable: true};
+            return Reflect.getOwnPropertyDescriptor(target, prop);
+          },
+          get(target, prop, receiver) {
+            if (prop === "subject" && ownKeysCalls > 2) return other;
+            if (prop === "email" && ownKeysCalls > 2) return piiSentinel;
+            return Reflect.get(target, prop, receiver);
+          }
+        });
+        return {stored: proxy, applied: true};
+      },
+      async current() { return undefined; }
+    };
+  }
+  const toctouResult = await refreshWith(baseAssessment, {store: makeToctouStore()});
+  const toctouSerialized = JSON.stringify({result: toctouResult.result, audit: toctouResult.auditRecords, incidents: toctouResult.incidentRecords});
+  const toctouSafe = (!toctouResult.result.eligible && toctouResult.result.reason === "STORE_CONFLICT") ||
+    (toctouResult.result.eligible && toctouResult.result.materialization.subject === holder && !("email" in toctouResult.result.materialization));
+  if (!toctouSafe || toctouSerialized.includes(piiSentinel) || toctouSerialized.includes("email")) {
+    throw new Error("hostile store TOCTOU proxy was not validated against the exact materialized snapshot");
+  }
+
+  const throwingStore = {
+    async replaceCurrent(_snapshot: any) {
+      const thrower = new Proxy({}, {get() { throw new Error(`store read ${piiSentinel}`); }});
+      return {stored: thrower, applied: true};
+    },
+    async current() { return undefined; }
+  };
+  const throwingStoreResult = await refreshWith(baseAssessment, {store: throwingStore});
+  if (throwingStoreResult.result.eligible || throwingStoreResult.result.reason !== "STORE_CONFLICT") {
+    throw new Error("throwing store return did not fail closed to STORE_CONFLICT");
+  }
+
+  const toJsonStore = {
+    async replaceCurrent(snapshot: any) {
+      const stored = Object.assign(Object.create({toJSON() { return {...snapshot, subject: other}; }}), snapshot);
+      return {stored, applied: true};
+    },
+    async current() { return undefined; }
+  };
+  const toJsonResult = await refreshWith(baseAssessment, {store: toJsonStore});
+  if (toJsonResult.result.eligible && toJsonResult.result.materialization.subject !== holder) throw new Error("prototype toJSON store return bypassed validation");
+  if (!toJsonResult.result.eligible && toJsonResult.result.reason !== "STORE_CONFLICT") throw new Error("prototype toJSON store return did not fail closed to STORE_CONFLICT");
+
+  const snapshotGetterStore = {
+    async replaceCurrent(snapshot: any) {
+      Object.defineProperty(snapshot, "evidenceHash", {get() { throw new Error(`snapshot read ${piiSentinel}`); }});
+      return {stored: {...baseAssessment}, applied: true};
+    },
+    async current() { return undefined; }
+  };
+  const snapshotGetter = await refreshWith(baseAssessment, {store: snapshotGetterStore});
+  const snapshotGetterSerialized = JSON.stringify({result: snapshotGetter.result, audit: snapshotGetter.auditRecords, incidents: snapshotGetter.incidentRecords});
+  if (snapshotGetter.result.eligible || snapshotGetter.result.reason !== "STORE_CONFLICT" || snapshotGetterSerialized.includes(piiSentinel)) {
+    throw new Error("store mutating the coordinator snapshot leaked or escaped fail-closed handling");
+  }
+
+  const snapshotRewriteStore = {
+    async replaceCurrent(snapshot: any) {
+      snapshot.providerSchemaVersion = "v2";
+      snapshot.facts = {...snapshot.facts, jurisdiction: "KY"};
+      const {evidenceHash: _hash, materializedAt: _at, eligible: _eligible, ...assessment} = snapshot;
+      snapshot.evidenceHash = kycEvidenceHash(assessment);
+      return {stored: {...snapshot}, applied: true};
+    },
+    async current() { return undefined; }
+  };
+  const snapshotRewrite = await refreshWith(baseAssessment, {store: snapshotRewriteStore});
+  if (snapshotRewrite.result.eligible || snapshotRewrite.result.reason !== "STORE_CONFLICT") throw new Error("store rewriting the coordinator snapshot produced eligible evidence");
+
+  const requestRebinding = await refreshWith((_context: any, providerRequest: any) => {
+    providerRequest.subject = other;
+    return {...baseAssessment, subject: other};
+  });
+  if (requestRebinding.result.eligible || requestRebinding.result.reason !== "BINDING_MISMATCH") throw new Error("provider rebinding its request bypassed the binding check");
+  const requestGetter = await refreshWith((_context: any, providerRequest: any) => {
+    Object.defineProperty(providerRequest, "subject", {get() { throw new Error(`request read ${piiSentinel}`); }});
+    return baseAssessment;
+  });
+  if (!requestGetter.result.eligible || requestGetter.result.materialization.subject !== holder || JSON.stringify(requestGetter).includes(piiSentinel)) {
+    throw new Error("provider mutating its request changed the coordinator binding");
   }
 
   console.log("corner-store compliance data smoke ok");
