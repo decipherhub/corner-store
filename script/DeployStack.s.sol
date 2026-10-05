@@ -33,6 +33,7 @@ import {
     QualifiedPurchaserMinimumAmountRecipe
 } from "../src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol";
 import {BuidlLikeDemoAsset} from "../src/demo/BuidlLikeDemoAsset.sol";
+import {DemoAmmReferenceRecipe} from "../src/demo/DemoAmmReferenceRecipe.sol";
 
 import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
 import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
@@ -180,7 +181,10 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         recipeReg.registerRecipe(1, 3, address(new RegD506cRecipeV3()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
         recipeReg.registerRecipe(3, 2, address(new QualifiedPurchaserMinimumAmountRecipe()));
-        recipeReg.registerRecipe(SURVEIL_RECIPE_ID, 2, address(new DemoSurveillanceRecipe()));
+        recipeReg.registerRecipe(
+            AMM_REFERENCE_RECIPE_ID, AMM_REFERENCE_RECIPE_VERSION, address(new DemoAmmReferenceRecipe())
+        );
+        recipeReg.registerRecipe(SURVEIL_RECIPE_ID, SURVEIL_RECIPE_VERSION, address(new DemoSurveillanceRecipe()));
 
         // 5. Demo-only onboarding helper. The core registries, engine, router
         //    and adapters above came from DeployProductionCore.
@@ -473,17 +477,15 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
     }
 }
 
-/// @dev Always-applicable recipe requiring the full Reg D 506(c) 9-element set
-///      PLUS conduct surveillance (F-02, STATEFUL). Registered as recipe id 7 and
-///      used by scenario 6 to drive the post-trade `onTransfer` surveillance flag
-///      without changing the compliance posture of the base policy.
+/// @dev Demo surveillance recipe: the current Reg D recipe plus conduct
+///      surveillance (F-02, STATEFUL). It is exercised only through RFQ.
 contract DemoSurveillanceRecipe {
     function recipeId() external pure returns (uint16) {
         return 7;
     }
 
     function version() external pure returns (uint16) {
-        return 2;
+        return 3;
     }
 
     function isApplicable(bytes calldata) external pure returns (bool) {

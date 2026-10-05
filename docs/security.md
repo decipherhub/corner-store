@@ -138,6 +138,14 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 
 ## Venue Integration Security
 
+- `C-01-*` holding-period family와 AMM의 조합은 경고가 아니라 hard rejection이다.
+  SDK profile validation, production onboarding/Safe export, CLI onboarding,
+  `CornerStoreFactory`와 on-chain Engine이 같은 규칙을 적용한다. Factory는 등록 venue뿐
+  아니라 Manifest의 AMM engine bit도 검사한다. schema v1처럼 Recipe element 구성을
+  증명할 수 없는 production onboarding input은 AMM 요청 시 fail-closed한다.
+- 테스트·데모에서 AMM이 필요하면 명시적인 C-01-free demo Recipe를 사용한다. 이를
+  Reg D/BUIDL 법률 정책으로 표시하거나 production activation에 재사용하지 않는다.
+
 - Uniswap-style callback은 등록되었거나 계산으로 검증한 pool에서만 수락한다.
   callback `data`가 payer/token을 포함하더라도 callback origin 검증 없이 신뢰하지
   않는다. positive delta, pool의 canonical token0/token1과 요청 token 방향도 서로

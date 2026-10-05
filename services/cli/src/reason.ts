@@ -48,7 +48,8 @@ export const ELEMENT_LABELS: Record<string, string> = {
 export const RECIPE_LABELS: Record<number, string> = {
   1: "Reg D 506(c)",
   2: "3(c)(7) Fund",
-  7: "Reg D + Surveillance"
+  7: "Demo AMM + Surveillance",
+  8: "Demo AMM Reference"
 };
 
 // PolicyStatus enum (src/types/ComplianceTypes.sol). STORAGE ORDER, not lifecycle.
@@ -265,6 +266,7 @@ export const ELEMENT_CODE_NAMES: Record<string, Record<number, string>> = {
 
 const coder = AbiCoder.defaultAbiCoder();
 export const INVALID_ELEMENT_PARAMETERS = 0xffffffff;
+export const UNSUPPORTED_VENUE = 0xfffffffe;
 
 // ComplianceEngine._runChecks / ReasonCodes.encode:
 //   reasonCode = keccak256(abi.encode(uint16 recipeId, bytes32 elementId, uint32 code))
@@ -348,6 +350,15 @@ function buildTable(): Map<string, TableEntry> {
     const code = encodeReason(0, "POLICY", status);
     table.set(code, {
       label: `policy status / POLICY / ${status} -> manifest not tradable (${POLICY_STATUS[status]})`
+    });
+  }
+
+  // 5. The runtime backstop rejects AMM whenever a bound recipe contains a
+  // C-01 family element. Known deployed versions remain human-decodable; a
+  // future version still fails closed even before the CLI catalog is updated.
+  for (const elementId of ["C-01-v1", "C-01-v2"]) {
+    table.set(encodeReason(1, elementId, UNSUPPORTED_VENUE), {
+      label: `recipe 1 (Reg D 506(c)) / ${elementId} -> unsupported venue (C-01 policies cannot use AMM)`
     });
   }
   return table;

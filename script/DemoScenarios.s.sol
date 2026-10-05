@@ -12,7 +12,6 @@ import {TokenPolicyRegistry} from "../src/registry/TokenPolicyRegistry.sol";
 import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
 import {SurveillanceFlagV2} from "../src/compliance/elements/SurveillanceFlagV2.sol";
 import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
-import {UniswapV3Adapter} from "../src/execution/adapters/amm/UniswapV3Adapter.sol";
 import {RFQAdapter} from "../src/execution/adapters/rfq/RFQAdapter.sol";
 import {RFQQuote} from "../src/execution/adapters/rfq/RFQTypes.sol";
 
@@ -62,14 +61,12 @@ contract DemoScenarios is Script, DemoConstants {
 
     IERC20 internal rwa;
     IERC20 internal quote;
-    address internal pool;
 
     CornerStoreFactory internal factory;
     TokenPolicyRegistry internal policyReg;
     Jurisdiction internal jurisdiction;
     SurveillanceFlagV2 internal surveillance;
     ExecutionRouter internal router;
-    UniswapV3Adapter internal ammAdapter;
     RFQAdapter internal rfqAdapter;
     bool internal useBuidlLikeProfile;
     uint256 internal tradeAmount;
@@ -110,35 +107,36 @@ contract DemoScenarios is Script, DemoConstants {
         _title(
             1,
             useBuidlLikeProfile
-                ? "Onboarding: factory one-call onboards the BUIDL-like ERC-3643 asset"
-                : "Onboarding: factory one-call onboards the Reg D ERC-3643 asset"
+                ? "Onboarding: BUIDL-like demo token uses its selected policy through RFQ"
+                : "Onboarding: Reg D demo token uses its selected policy through RFQ"
         );
 
         ManifestCore memory m = _baseManifest();
         RecipeBinding[] memory bindings = _baseBindings();
 
-        VenueConfig memory ammCfg = VenueConfig({
-            venueType: VenueType.AMM,
-            adapter: address(ammAdapter),
-            target: pool,
+        VenueConfig memory rfqCfg = VenueConfig({
+            venueType: VenueType.RFQ,
+            adapter: address(rfqAdapter),
+            target: address(0),
             operator: address(0),
-            custody: CustodyModel.POOL,
+            custody: CustodyModel.NONE,
             active: true
         });
 
         vm.broadcast(deployerPk);
         if (useBuidlLikeProfile) {
             factory.registerRWATokenWithConfig(
-                address(rwa), m, bindings, BuidlLikeDemoAsset.demoPolicyConfig(), pool, ammCfg
+                address(rwa), m, bindings, BuidlLikeDemoAsset.demoPolicyConfig(), RFQ_VENUE, rfqCfg
             );
         } else {
-            factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
+            factory.registerRWAToken(address(rwa), m, bindings, RFQ_VENUE, rfqCfg);
         }
 
         ManifestCore memory stored = policyReg.manifestOf(address(rwa));
         ManifestCore memory expected = _baseManifest();
         RecipeBinding[] memory storedBindings = policyReg.recipeBindingsOf(address(rwa));
-        bool profileOk = keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
+        bool profileOk =
+            keccak256(abi.encode(storedBindings)) == keccak256(abi.encode(bindings))
             && stored.factsPacked == expected.factsPacked && stored.fullManifestHash == expected.fullManifestHash;
         bool configOk = true;
         if (useBuidlLikeProfile) {
@@ -146,7 +144,8 @@ contract DemoScenarios is Script, DemoConstants {
             configOk = fundParameters.length == 2
                 && keccak256(fundParameters[1]) == keccak256(abi.encode(BuidlLikeDemoAsset.DEMO_MINIMUM_TRADE_AMOUNT));
         }
-        bool ok = stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
+        bool ok =
+            stored.status == PolicyStatus.ACTIVE && stored.declaredBy == address(factory)
             && stored.approvedBy == address(factory) && profileOk && configOk;
         _writeManifestSnapshot(stored, storedBindings);
         console2.log("    evidence: ACTIVE selected asset profile, approved by factory");
@@ -173,19 +172,19 @@ contract DemoScenarios is Script, DemoConstants {
         _title(
             2,
             useBuidlLikeProfile
-                ? "Compliant trade: qualified purchaser buys BUIDL-like RWA via router -> AMM"
-                : "Compliant trade: accredited investor buys Reg D RWA via router -> AMM"
+                ? "RFQ settlement: qualified purchaser trades under the selected BUIDL-like policy"
+                : "RFQ settlement: accredited investor trades under the selected Reg D policy"
         );
 
         uint256 before = rwa.balanceOf(investor);
-        ExecutionRequest memory req = _buyRequest(tradeAmount);
+        (, ExecutionRequest memory req) = _rfqRequest(maker, makerPk, 10);
 
         vm.broadcast(investorPk);
         router.execute(req);
 
         uint256 delta = rwa.balanceOf(investor) - before;
         console2.log("    evidence: Executed; investor RWA balance delta (wei):", delta);
-        _record(2, delta == tradeAmount);
+        _record(2, delta == rfqBuyAmountOut);
     }
 
     // ---------------------------------------------------------------------
@@ -198,7 +197,7 @@ contract DemoScenarios is Script, DemoConstants {
         vm.broadcast(deployerPk);
         jurisdiction.setJurisdiction(investor, bytes32("ZZ"));
 
-        ExecutionRequest memory req = _buyRequest(tradeAmount);
+        (, ExecutionRequest memory req) = _rfqRequest(maker, makerPk, 11);
         bytes32 expected = ReasonCodes.encode(0, bytes32("A-02-v1"), uint32(1));
 
         (bool reverted, bytes32 reason) = _tryExecuteExpectComplianceReject(req);
@@ -222,7 +221,7 @@ contract DemoScenarios is Script, DemoConstants {
         vm.broadcast(deployerPk);
         policyReg.suspendManifest(address(rwa), bytes32("DEMO-SUSPEND"));
 
-        ExecutionRequest memory blockedReq = _buyRequest(tradeAmount);
+        (, ExecutionRequest memory blockedReq) = _rfqRequest(maker, makerPk, 12);
         // the helper decodes `reason` ONLY for ComplianceRejected, so a nonzero
         // reason proves the block came from the compliance gate specifically,
         // not from an unrelated revert.
@@ -286,28 +285,27 @@ contract DemoScenarios is Script, DemoConstants {
     function _scenario6_surveillance() internal {
         _title(6, "Surveillance: repeated trades past the threshold emit a SurveillanceFlag");
 
-        // Re-onboard the RWA under a surveillance-enabled recipe (id 7 = RegD +
-        // F-02). retire (operator) -> factory re-register+approve (owner).
+        // Re-onboard the selected profile under RFQ with its full policy plus F-02.
         vm.broadcast(deployerPk);
         policyReg.retireManifest(address(rwa), bytes32("ADD-SURVEILLANCE"));
 
         ManifestCore memory m = _baseManifest();
         RecipeBinding[] memory bindings = _surveillanceBindings();
-        VenueConfig memory ammCfg = VenueConfig({
-            venueType: VenueType.AMM,
-            adapter: address(ammAdapter),
-            target: pool,
+        VenueConfig memory rfqCfg = VenueConfig({
+            venueType: VenueType.RFQ,
+            adapter: address(rfqAdapter),
+            target: address(0),
             operator: address(0),
-            custody: CustodyModel.POOL,
+            custody: CustodyModel.NONE,
             active: true
         });
         vm.broadcast(deployerPk);
         if (useBuidlLikeProfile) {
             factory.registerRWATokenWithConfig(
-                address(rwa), m, bindings, BuidlLikeDemoAsset.demoPolicyConfig(), pool, ammCfg
+                address(rwa), m, bindings, BuidlLikeDemoAsset.demoPolicyConfig(), RFQ_VENUE, rfqCfg
             );
         } else {
-            factory.registerRWAToken(address(rwa), m, bindings, pool, ammCfg);
+            factory.registerRWAToken(address(rwa), m, bindings, RFQ_VENUE, rfqCfg);
         }
 
         uint256 threshold = 2;
@@ -318,7 +316,7 @@ contract DemoScenarios is Script, DemoConstants {
 
         vm.recordLogs();
         for (uint256 i = 0; i < 3; i++) {
-            ExecutionRequest memory req = _buyRequest(tradeAmount);
+            (, ExecutionRequest memory req) = _rfqRequest(maker, makerPk, 30 + i);
             vm.broadcast(investorPk);
             router.execute(req);
         }
@@ -337,14 +335,14 @@ contract DemoScenarios is Script, DemoConstants {
     // Scenario 7 — Bypass attempt
     // ---------------------------------------------------------------------
     function _scenario7_bypass() internal {
-        _title(7, "Bypass attempt: direct adapter.execute (around the router) reverts NotAuthorized");
+        _title(7, "Bypass attempt: direct RFQ adapter.execute (around the router) reverts NotAuthorized");
 
-        ExecutionRequest memory req = _buyRequest(tradeAmount);
+        (, ExecutionRequest memory req) = _rfqRequest(maker, makerPk, 40);
         ComplianceDecision memory d; // unused: onlyRouter reverts first
 
         bool reverted;
         bytes4 sel;
-        try ammAdapter.execute(req, d) {
+        try rfqAdapter.execute(req, d) {
             reverted = false;
         } catch (bytes memory err) {
             reverted = true;
@@ -358,26 +356,6 @@ contract DemoScenarios is Script, DemoConstants {
     // ---------------------------------------------------------------------
     // Request builders
     // ---------------------------------------------------------------------
-    function _buyRequest(uint256 amount) internal returns (ExecutionRequest memory req) {
-        ComplianceContext memory ctx;
-        ctx.initiator = investor;
-        ctx.buyer = investor;
-        ctx.seller = pool;
-        ctx.tokenIn = address(quote);
-        ctx.tokenOut = address(rwa);
-        ctx.amountIn = amount;
-        ctx.amountOut = amount; // 1:1 MockPool
-        ctx.venueType = VenueType.AMM;
-        ctx.venue = pool;
-        ctx.flowType = FlowType.SECONDARY_TRADE;
-
-        req.context = ctx;
-        req.amountOutMin = 0;
-        req.deadline = uint64(block.timestamp + 1 hours);
-        req.nonce = nonceSeq++;
-        req.venueData = ""; // default zeroForOne=true: token0(QUOTE) in, token1(RWA) out
-    }
-
     function _rfqRequest(address mk, uint256 mkPk, uint256 quoteNonce)
         internal
         returns (RFQQuote memory q, ExecutionRequest memory req)
@@ -603,32 +581,31 @@ contract DemoScenarios is Script, DemoConstants {
 
         rwa = IERC20(vm.parseJsonAddress(json, ".rwaToken"));
         quote = IERC20(vm.parseJsonAddress(json, ".quote"));
-        pool = vm.parseJsonAddress(json, ".pool");
-
         factory = CornerStoreFactory(vm.parseJsonAddress(json, ".factory"));
         policyReg = TokenPolicyRegistry(vm.parseJsonAddress(json, ".policyReg"));
         jurisdiction = Jurisdiction(vm.parseJsonAddress(json, ".jurisdiction"));
         surveillance = SurveillanceFlagV2(vm.parseJsonAddress(json, ".surveillance"));
         router = ExecutionRouter(vm.parseJsonAddress(json, ".router"));
-        ammAdapter = UniswapV3Adapter(vm.parseJsonAddress(json, ".ammAdapter"));
         rfqAdapter = RFQAdapter(vm.parseJsonAddress(json, ".rfqAdapter"));
     }
 
     function _baseManifest() internal view returns (ManifestCore memory m) {
-        if (useBuidlLikeProfile) return BuidlLikeDemoAsset.manifest(ENGINES_AMM | ENGINES_RFQ);
-        m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
+        if (useBuidlLikeProfile) return BuidlLikeDemoAsset.manifest(ENGINES_RFQ);
+        m.supportedEngines = ENGINES_RFQ;
     }
 
     function _baseBindings() internal view returns (RecipeBinding[] memory bindings) {
-        if (useBuidlLikeProfile) return BuidlLikeDemoAsset.recipeBindings();
-        bindings = new RecipeBinding[](1);
-        bindings[0] = RecipeBinding(1, 3, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings = useBuidlLikeProfile ? BuidlLikeDemoAsset.recipeBindings() : new RecipeBinding[](1);
+        if (!useBuidlLikeProfile) {
+            bindings[0] = RecipeBinding(1, 3, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        }
     }
 
     function _surveillanceBindings() internal view returns (RecipeBinding[] memory bindings) {
         uint256 count = useBuidlLikeProfile ? 2 : 1;
         bindings = new RecipeBinding[](count);
-        bindings[0] = RecipeBinding(SURVEIL_RECIPE_ID, 2, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[0] =
+            RecipeBinding(SURVEIL_RECIPE_ID, SURVEIL_RECIPE_VERSION, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         if (useBuidlLikeProfile) {
             bindings[1] = RecipeBinding(
                 BuidlLikeDemoAsset.FUND_RECIPE_ID,

@@ -24,7 +24,7 @@ scripts/e2e-anvil.sh --keep     # leave Anvil running afterwards (attach a UI / 
   with the printed `kill <pid>` commands.
 - With `--keep`, the runner restores the maker after proving the revoked-maker
   rejection, so the next RFQ quote can be settled interactively without reset.
-- `--mode rfq` skips the AMM, lifecycle and surveillance walkthrough. It keeps
+- `--mode rfq` skips the extended lifecycle and surveillance walkthrough. It keeps
   the MVP path focused on a mock-TA-seeded investor receiving a backend-signed
   RFQ quote, settling through `ExecutionRouter → RFQAdapter`, and rejecting the
   same flow after the maker is revoked.
@@ -52,11 +52,12 @@ account 0 = deployer/owner/operator, 1 = investor (buyer/taker),
 ## Scenario Narrative (in order)
 
 1. **Onboarding** — `CornerStoreFactory.registerRWAToken` onboards the RWA token
-   in one governed call: the manifest runs `propose -> approve` and the AMM venue
-   is registered. Evidence: `ManifestRegistered` / `ManifestStatusChanged` events,
+   in one governed call under the selected Reg D/BUIDL-like Recipe:
+   the manifest runs `propose -> approve` and the RFQ venue is registered. Evidence:
+   `ManifestRegistered` / `ManifestStatusChanged` events,
    manifest status `ACTIVE`, `declaredBy == approvedBy == factory`.
 2. **Compliant trade succeeds** — the fully-attested investor buys RWA through the
-   router → AMM path. Evidence: `Executed` event + investor RWA balance delta.
+   router → RFQ path. Evidence: `Executed` event + investor RWA balance delta.
 3. **Element rejection, live** — the operator flips ONE attestation (investor
    jurisdiction A-02 → a disallowed code). The same trade now reverts
    `ComplianceRejected`. The runner recomputes the expected reason code
@@ -68,9 +69,8 @@ account 0 = deployer/owner/operator, 1 = investor (buyer/taker),
    with a known key); the taker settles it through the router (`RFQFilled`, real
    ERC-3643 delivery leg). Then an UNAPPROVED maker's quote is rejected
    (`RFQMakerNotApproved`).
-6. **Surveillance (stateful layer)** — the operator re-onboards the RWA under a
-   surveillance-enabled recipe (id 7 = RegD 9-element set + F-02), then repeated
-   trades push the transfer counter past the threshold, emitting a
+6. **Surveillance (stateful layer)** — the operator re-onboards the RWA under the
+   selected RFQ policy plus F-02, then repeated trades push the transfer counter past the threshold, emitting a
    `SurveillanceFlag` event. Surveillance is flag-not-block: the trades still
    settle.
 7. **Bypass attempt** — a direct `adapter.execute` call (going around the router)
@@ -109,6 +109,9 @@ REAL, genuinely enforced on-chain:
 - The full compliance engine, recipes, elements, router, venue selector,
   manifest lifecycle, RFQ EIP-712 verification, and per-caller nonce replay guard
   are the production skeleton contracts, unmodified.
+- The seven local scenarios and the backend walkthrough settle against the
+  selected real `buidl-like`/`reg-d` Recipe binding through RFQ. AMM + any
+  `C-01-*` Recipe is rejected in both tooling and `ComplianceEngine`.
 
 MOCK / illustrative (documented seams):
 
@@ -117,6 +120,9 @@ MOCK / illustrative (documented seams):
   automated in `test/integration/RealUniswapV3.t.sol`, while the vendored
   `tools/deploy-v3` infrastructure remains isolated. A unified deployment command
   for both stacks is still a follow-up. See `tools/deploy-v3/CORNER_STORE_PROFILE.md`.
+- `DemoAmmReferenceRecipe` is a test-only policy composition that excludes C-01.
+  It preserves AMM adapter coverage without claiming that the Reg D/BUIDL
+  holding-period policy is AMM-compatible.
 - Element data sources (OFAC / ONCHAINID claims / ERC-165 / EDGAR) are
   operator-settable mocks, and the C-01 Rule 144 lockup reads an injected,
   expiring `AttestedAcquisitionSource` snapshot seeded from mock TA data. These
@@ -131,12 +137,12 @@ MOCK / illustrative (documented seams):
 위 7-scenario 스크립트는 자동 실행이지만, 같은 스택을 터미널에서 한 명령씩 직접
 구동하고 싶다면 `corner-store` 레퍼런스 CLI를 쓴다. `scripts/e2e-anvil.sh --keep`로
 노드를 띄운 뒤(또는 `DeployStack`만 배포한 뒤) `status` → `onboard` →
-`investor-setup` → `kyc` → `buy` → 실패 경로(jurisdiction flip / manifest suspend /
+`investor-setup` → `kyc` → RFQ quote → `buy --venue rfq` → 실패 경로(jurisdiction flip / manifest suspend /
 maker revoke, 각각 reason-code 디코딩) 순으로 직접 몰아볼 수 있다.
 
 CLI v2(CLI-002)는 preflight·거래·관측 명령을 더한다: 거래 없이 per-element
 컴플라이언스를 미리 확인하는 `check <buyer>`(엔진 verdict 포함, 거부 시 exit 1),
-AMM 매도 방향 `sell <amountIn>`, 잔고/allowance 표 `balances`, 이벤트 실시간
+demo-only AMM 매도 방향 `sell <amountIn>`, 잔고/allowance 표 `balances`, 이벤트 실시간
 tail `watch [--from <block>]`(Executed/RFQFilled/Manifest*/SurveillanceFlag 등
 reason-code 디코딩), demo용 QUOTE 민팅 `faucet`, anvil `snapshot`/`restore <id>`,
 서명 quote를 검증하는 `quote-inspect <file>`(서명자 복구·만료·on-chain nonce/승인

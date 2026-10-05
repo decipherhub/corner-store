@@ -9,6 +9,31 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## CORE-014 — C-01 Venue Compatibility Guard
+
+### Behavior
+
+- `C-01-*` holding-period family가 포함된 Recipe는 AMM에서 실행할 수 없으며 해당 조합은
+  SDK, CLI, production onboarding/Safe export, Factory와 on-chain Engine에서 동일하게 거절한다.
+- 검사는 특정 v1/v2 문자열이 아니라 `C-01-` family prefix를 사용해 이후 immutable
+  version도 fail-closed한다.
+- bundled `buidl-like`/`reg-d` config와 CLI onboarding default는 RFQ-only다.
+- AMM adapter/conformance coverage는 명시적인 C-01-free demo-only Recipe로 유지하며
+  이를 Reg D/BUIDL production policy로 표시하지 않는다.
+
+### Verification
+
+- Toolkit/CLI compatibility and onboarding smoke pass
+- Engine current/future C-01 rejection, AMM-compatible Recipe allow and RFQ C-01 allow pass
+- affected AMM/RFQ integration suites and live BUIDL-like/Reg-D Anvil E2E pass
+- full `scripts/check.sh`: Foundry 954/954, package/service/clean-project smoke,
+  canonical Uniswap v3 5/5 and deploy-v3 10/10 pass
+- `git diff --check` pass
+
+### State
+
+passing
+
 ## SDK-006 — Reference DEX Sandbox
 
 ### Behavior
@@ -1107,7 +1132,7 @@ passing
 - `forge test --offline`(전체 195/195, pre-task 189 + 신규 6).
 - Recipe unit test: `test_regd_ids_and_elements`(9 element, version 2, id 1,
   always-applicable).
-- 통합 test `test/integration/RegD506cElements.t.sol`:
+- 통합 test `test/integration/AmmReferenceElements.t.sol`:
   `test_happyPath_nineElements_buySucceeds`,
   `test_reject_jurisdictionDisallowed`, `test_reject_jurisdictionUnset`,
   `test_reject_identityUnbound`, `test_reject_usTaxResidentFlagged`,

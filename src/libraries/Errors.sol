@@ -10,6 +10,7 @@ library Errors {
     error TokenOutPaused();
     error VenueNotAllowed();
     error VenueTypeMismatch();
+    error UnsupportedVenuePolicy(bytes32 elementId);
     error VenueSuspended();
     error AdapterNotRegistered();
     error DeadlineExpired();

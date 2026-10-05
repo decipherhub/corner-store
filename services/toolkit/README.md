@@ -10,6 +10,11 @@ const config = validateConfig(defaultConfig());
 const simulation = simulateConfig(config);
 ```
 
+Bundled `buidl-like` and `reg-d` profiles contain the `C-01-*` holding-period
+family and therefore default to RFQ-only. `validateConfig()` rejects AMM for
+those profiles. Production onboarding schema v2+ checks the exact bound Recipe
+elements; schema v1 AMM input fails closed because it cannot prove composition.
+
 For the purpose-driven facade, keep one config and optionally attach the
 deployment artifact used by every policy operation:
 

@@ -11,8 +11,9 @@ import {RecipeBinding} from "../../src/types/ComplianceTypes.sol";
 /// This is intentionally NOT real BlackRock BUIDL integration. The test deploys
 /// the project ERC-3643/T-REX fixture with BUIDL-like metadata, routes investor
 /// setup through a mock Securitize/TA-style fact source, and binds a Manifest
-/// that models the minimum current demo facts: Reg D 506(c) issuance + ICA
-/// 3(c)(7) fund status. In this skeleton, `factsPacked bit0` activates the
+/// that models the minimum current demo facts. AMM settlement is exercised with
+/// the test-only C-01-free reference recipe; the production Reg D recipe stays
+/// RFQ-only. `factsPacked bit0` activates the
 /// generic recipe family 3 version 2, which adds A-13 Qualified Purchaser plus
 /// Manifest-parameterized MIN-AMOUNT-v1.
 contract BUIDLLikeFlowTest is IntegrationBase {
@@ -26,7 +27,7 @@ contract BUIDLLikeFlowTest is IntegrationBase {
         assertEq(uint8(policyReg.statusOf(address(rwaToken))), 2, "manifest active");
         RecipeBinding[] memory bindings = policyReg.recipeBindingsOf(address(rwaToken));
         assertEq(bindings.length, 2, "two recipe bindings");
-        assertEq(bindings[0].recipeId, BuidlLikeDemoAsset.ISSUANCE_RECIPE_ID, "RegD 506c recipe");
+        assertEq(bindings[0].recipeId, AMM_REFERENCE_RECIPE_ID, "C-01-free AMM reference recipe");
         assertEq(bindings[1].recipeId, BuidlLikeDemoAsset.FUND_RECIPE_ID, "BUIDL-like fund recipe");
         assertEq(bindings[1].recipeVersion, 2, "generic QP/minimum recipe v2");
         assertEq(elementReg.elementOf(bytes32("BUIDL-MIN-v1")), address(0), "legacy BUIDL element inactive");

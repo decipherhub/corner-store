@@ -261,7 +261,7 @@ program
 program
   .command("onboard")
   .description("factory one-call onboarding of the RWA token (retires+re-onboards if ACTIVE)")
-  .option("--engines <list>", "supported engines, comma-separated (amm,rfq)", "amm,rfq")
+  .option("--engines <list>", "supported engines, comma-separated (bundled profiles require rfq)", "rfq")
   .option("--profile <profile>", "asset profile: buidl-like or reg-d (must match deployment artifact)")
   .action(run((opts, command) => cmd.cmdOnboard(command.optsWithGlobals())));
 

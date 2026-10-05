@@ -567,7 +567,7 @@ criteria remain approval-gated").
   `src/compliance/elements/FormDFiling.sol`,
   `src/compliance/elements/Lockup.sol`
 - `test/integration/IntegrationBase.sol`,
-  `test/integration/RegD506cElements.t.sol`
+  `test/integration/AmmReferenceElements.t.sol`
 - `test/unit/compliance/Recipes.t.sol`, `test/unit/compliance/Engine.t.sol`
 - `docs/ROADMAP.md`
 
@@ -1113,3 +1113,60 @@ quote의 의미가 소급 변경된다. 반대로 교체와 재개를 모두 즉
 - `src/factory/CornerStoreFactory.sol`
 - `test/integration/ElementEmergencyReplacement.t.sol`
 - `test/integration/RFQFlow.t.sol`
+
+## D020 — C-01 holding-period recipes cannot use AMM
+
+Date: 2026-10-05
+
+### Context
+
+AMM은 pool이 거래 상대방이 되는 지속적 자동 체결 구조라 실제 취득자·처분자와
+lot별 보유기간 증빙을 quote 단위로 고정하기 어렵다. 반면 C-01 family는 실제 RWA
+sender의 acquisition evidence와 거래 시점의 holding period 판단을 요구한다. 환경별
+경고나 demo 예외를 허용하면 같은 Recipe가 local/testnet/production에서 서로 다른
+의미를 갖고, Safe export가 기술적으로 가능한 조합을 법적으로 허용된 것으로 오해할
+수 있다.
+
+### Decision
+
+1. element ID가 `C-01-` prefix인 규칙을 하나라도 포함한 bound Recipe는 AMM과
+   결합할 수 없다. 현재 v1/v2뿐 아니라 이후 immutable version에도 적용한다.
+2. bundled `buidl-like`와 `reg-d` profile은 RFQ-only를 기본값으로 사용한다.
+3. Toolkit profile validation, CLI onboarding, production onboarding validation,
+   calldata/Safe export가 하나의 compatibility helper를 공유한다. exact Recipe
+   composition을 제공하지 않는 legacy schema v1 AMM input은 fail-closed한다.
+4. `CornerStoreFactory`는 compiled rule set을 검사해 AMM onboarding transaction을
+   원자적으로 되돌리고, `ComplianceEngine`은 tooling이나 Factory를 우회한 raw
+   Registry 등록도 settlement 전에 거절한다.
+5. AMM adapter와 settlement plumbing 테스트는 `DemoAmmReferenceRecipe`처럼 C-01을
+   명시적으로 제외한 demo/test-only policy를 사용한다. 이 Recipe는 Reg D/BUIDL
+   법률 정책으로 명명하거나 production activation에 사용하지 않는다.
+
+### Alternatives Considered
+
+- 경고만 표시하고 실행 허용: 환경별 의미가 갈리고 실제 거래가 진행되므로 거절했다.
+- current `C-01-v2`만 차단: 새 version이 자동으로 우회 경로가 되므로 거절했다.
+- Toolkit에서만 차단: raw calldata나 오래된 client가 우회할 수 있어 on-chain
+  backstop을 함께 둔다.
+- AMM 자체를 제거: C-01 없는 정책의 reference/conformance 가치까지 잃으므로
+  adapter는 유지하고 policy compatibility를 분리했다.
+
+### Consequences
+
+- 기존 Reg D/BUIDL AMM 예시는 RFQ로 이동한다.
+- local full demo는 실제 selected profile을 RFQ로 실행한다. AMM execution
+  plumbing은 C-01-free reference Recipe를 사용하는 별도 integration test로 유지한다.
+- 새로운 Recipe/Element version은 별도 allowlist 갱신 없이 C-01 family 규칙을
+  상속한다.
+- future venue compatibility matrix가 필요해지면 이 hard invariant 위에 확장하되,
+  C-01 AMM 허용으로 완화하지 않는다.
+
+### Related Files
+
+- `services/toolkit/src/policy-compatibility.ts`
+- `services/toolkit/src/config.ts`
+- `services/toolkit/src/production-onboarding.ts`
+- `services/cli/src/commands.ts`
+- `src/factory/CornerStoreFactory.sol`
+- `src/compliance/ComplianceEngine.sol`
+- `src/demo/DemoAmmReferenceRecipe.sol`

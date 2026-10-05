@@ -129,6 +129,14 @@ ExecutionRouter
 전역적으로 통제한다고 주장하지 않고, router-mediated trade에 대해 DEX-level
 compliance를 강제한다고 설명한다.
 
+`C-01-*` 보유기간 Element를 포함한 Recipe는 AMM에서 실행하지 않는다. 현재 bundled
+profile과 reference deployment는 RFQ를 사용한다. Toolkit/CLI와
+production onboarding export가 AMM binding을 사전에 거절하고, `ComplianceEngine`도
+element family prefix를 검사해 런타임에서 fail-closed한다. `CornerStoreFactory`도
+on-chain onboarding을 원자적으로 거절한다. AMM adapter 자체는
+지원하지만 C-01 없는 별도 Recipe만 사용한다. `src/demo/DemoAmmReferenceRecipe.sol`은
+AMM plumbing 검증 전용이며 Reg D/BUIDL 정책이 아니다.
+
 ## External Dependencies
 
 - Foundry / forge-std

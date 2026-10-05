@@ -23,10 +23,12 @@ abstract contract DemoConstants {
     uint8 internal constant ENGINES_AMM = uint8(1 << 0); // VenueType.AMM
     uint8 internal constant ENGINES_RFQ = uint8(1 << 2); // VenueType.RFQ
 
-    // Surveillance-enabled RegD recipe id (deployed by DeployStack, used by
-    // scenario 6). Distinct from the base RegD 506(c) recipe (id 1) so the
-    // scenario-3 rejection reason code stays ReasonCodes.encode(1, "A-02-v1", 1).
+    // C-01-free AMM reference recipe used only by integration coverage.
+    uint16 internal constant AMM_REFERENCE_RECIPE_ID = 8;
+    uint16 internal constant AMM_REFERENCE_RECIPE_VERSION = 1;
+    // Full selected profile plus F-02 surveillance, exercised through RFQ.
     uint16 internal constant SURVEIL_RECIPE_ID = 7;
+    uint16 internal constant SURVEIL_RECIPE_VERSION = 3;
 
     // Deployment artifact shared between the two scripts.
     string internal constant ARTIFACT_PATH = "deployments/anvil-e2e.json";

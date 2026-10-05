@@ -16,7 +16,8 @@ import {
     EnforcementAction,
     RecipeBinding,
     RecipeBindingMode,
-    Statefulness
+    Statefulness,
+    VenueType
 } from "../types/ComplianceTypes.sol";
 import {DecisionHashLib} from "../libraries/DecisionHashLib.sol";
 import {PolicyHashLib} from "../libraries/PolicyHashLib.sol";
@@ -249,6 +250,9 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         uint256 bindingIndex,
         bytes memory recipeContext
     ) internal view returns (bool applicable, bool passed, bool flagged, bytes32 reasonCode) {
+        reasonCode = _unsupportedVenueReason(ctx.venueType, token, binding.recipeId, bindingIndex);
+        if (reasonCode != bytes32(0)) return (true, false, false, reasonCode);
+
         bytes32 recipeKey = recipeReg.recipeKeyOf(binding.recipeId);
         address recipeAddress = recipeReg.recipeOf(recipeKey, binding.recipeVersion);
         if (recipeAddress == address(0)) revert Errors.RecipeNotRegistered(binding.recipeId);
@@ -262,6 +266,21 @@ contract ComplianceEngine is IComplianceEngine, Governed {
 
         (passed, flagged, reasonCode) = _checkCompiledRules(ctx, token, binding.recipeId, bindingIndex);
         return (true, passed, flagged, reasonCode);
+    }
+
+    function _unsupportedVenueReason(VenueType venueType, address token, uint16 recipeId, uint256 bindingIndex)
+        private
+        view
+        returns (bytes32)
+    {
+        if (venueType != VenueType.AMM) return bytes32(0);
+        CompiledElementRule[] memory rules = policyReg.compiledRulesOf(token, bindingIndex);
+        for (uint256 i = 0; i < rules.length; i++) {
+            if (bytes5(rules[i].elementId) == bytes5("C-01-")) {
+                return ReasonCodes.unsupportedVenue(recipeId, rules[i].elementId);
+            }
+        }
+        return bytes32(0);
     }
 
     function _checkCompiledRules(ComplianceContext calldata ctx, address token, uint16 recipeId, uint256 bindingIndex)

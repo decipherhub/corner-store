@@ -6,18 +6,19 @@ import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
 import {Errors} from "../../src/libraries/Errors.sol";
 import {IComplianceElement} from "../../src/interfaces/compliance/IComplianceElement.sol";
 
-/// @notice Full router-path coverage of the 9-element Reg D 506(c) recipe
-///         (RegD506cRecipe v3) against the REAL ERC-3643 stack. A fully-attested
+/// @notice Full AMM router-path coverage of the eight C-01-independent gates
+///         in the demo-only AMM reference policy against the REAL ERC-3643 stack.
+///         C-01 itself is covered on RFQ paths because AMM+C-01 is invalid. A fully-attested
 ///         buyer + fully-attested asset settles; breaking exactly one element
 ///         family rejects with THAT element's reasonCode.
 ///
-/// Because {setupBuyer} + {deployStack} make every one of the nine elements pass,
+/// Because {setupBuyer} + {deployStack} make every one of the eight elements pass,
 /// disabling a single attestation makes it the FIRST (and only) failing check, so
 /// the engine's cumulative-AND returns that element's own nonzero reasonCode.
 /// Only zero element reasons fall back to the legacy encoded form.
-contract RegD506cElementsTest is IntegrationBase {
+contract AmmReferenceElementsTest is IntegrationBase {
     function setUp() public {
-        deployStack(); // RegD506c (9 elements), no fund recipe
+        deployStack(); // C-01-free AMM reference recipe, no fund recipe
         fundPoolRWA(1_000 ether);
     }
 
@@ -45,13 +46,13 @@ contract RegD506cElementsTest is IntegrationBase {
         return buildBuyRequest(buyer, 100 ether, 100 ether);
     }
 
-    // --- happy path: fully-attested buyer + asset settles through all 9 -----
+    // --- happy path: fully-attested buyer + asset settles through all 8 -----
 
-    function test_happyPath_nineElements_buySucceeds() public {
+    function test_happyPath_eightAmmCompatibleElements_buySucceeds() public {
         setupBuyer(alice);
         ExecutionRequest memory req = _buyReq(alice);
         doBuy(req);
-        assertEq(rwaToken.balanceOf(alice), 100 ether, "buyer received RWA through the 9-element recipe");
+        assertEq(rwaToken.balanceOf(alice), 100 ether, "buyer received RWA through the AMM reference recipe");
     }
 
     // --- A-02 jurisdiction: disallowed code → reject ------------------------

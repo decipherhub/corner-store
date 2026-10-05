@@ -30,7 +30,7 @@ cp services/toolkit/examples/corner-store.showcase.json corner-store.showcase.js
 | Field | Meaning |
 | --- | --- |
 | `profile` | `buidl-like` or `reg-d` policy presentation |
-| `mode` | `rfq` for the concise walkthrough; `full` also runs the AMM/lifecycle suite |
+| `mode` | `rfq` for the concise walkthrough; `full` also runs lifecycle/surveillance scenarios |
 | `scenario` | injected local account, balance, pricing, QP and expiry fixtures |
 | `runtime.bindHost` | local service bind address; the showcase accepts loopback only |
 | `runtime.publicHost` | host used by the browser and local service clients |

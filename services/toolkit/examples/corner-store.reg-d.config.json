@@ -8,7 +8,7 @@
     "profile": "reg-d"
   },
   "venues": {
-    "amm": true,
+    "amm": false,
     "rfq": true,
     "orderBook": false
   },

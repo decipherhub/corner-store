@@ -32,6 +32,7 @@ import {
     ManifestPolicyConfig
 } from "../../../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../../../src/types/VenueTypes.sol";
+import {Errors} from "../../../src/libraries/Errors.sol";
 
 contract FactoryElementMock is IComplianceElement {
     bytes32 internal immutable _id;
@@ -65,14 +66,16 @@ contract FactoryElementMock is IComplianceElement {
 }
 
 contract FactoryRecipeMock is IRecipe {
+    uint16 internal immutable _recipeId;
     bytes32 internal immutable _elementId;
 
-    constructor(bytes32 elementId_) {
+    constructor(uint16 recipeId_, bytes32 elementId_) {
+        _recipeId = recipeId_;
         _elementId = elementId_;
     }
 
-    function recipeId() external pure returns (uint16) {
-        return 506;
+    function recipeId() external view returns (uint16) {
+        return _recipeId;
     }
 
     function version() external pure returns (uint16) {
@@ -106,7 +109,7 @@ contract FactoryTest is Test {
         elementReg = new ElementRegistry();
         recipeReg = new RecipeRegistry();
         elementReg.registerElement(ELEMENT_ID, address(new FactoryElementMock(ELEMENT_ID)));
-        recipeReg.registerRecipe(506, 1, address(new FactoryRecipeMock(ELEMENT_ID)));
+        recipeReg.registerRecipe(506, 1, address(new FactoryRecipeMock(506, ELEMENT_ID)));
         tpr = new TokenPolicyRegistry(recipeReg, elementReg);
         vr = new VenueRegistry();
         factory = new CornerStoreFactory(ITokenPolicyRegistry(address(tpr)), IVenueRegistry(address(vr)));
@@ -153,6 +156,33 @@ contract FactoryTest is Test {
         assertEq(stored.adapter, adapter);
         assertTrue(stored.active);
         assertEq(uint8(stored.custody), uint8(CustodyModel.POOL));
+    }
+
+    function test_registerRWAToken_rejectsAmmVenueOrManifestMaskForAnyC01FamilyVersion_butAllowsRfq() public {
+        bytes32 futureLockupId = bytes32("C-01-v99");
+        elementReg.registerElement(futureLockupId, address(new FactoryElementMock(futureLockupId)));
+        recipeReg.registerRecipe(507, 1, address(new FactoryRecipeMock(507, futureLockupId)));
+
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(507, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnsupportedVenuePolicy.selector, futureLockupId));
+        factory.registerRWAToken(rwa, _manifest(), bindings, venue, _venueCfg());
+        assertEq(uint8(tpr.statusOf(rwa)), uint8(PolicyStatus.UNKNOWN), "failed onboarding rolls back manifest");
+
+        VenueConfig memory rfqCfg;
+        rfqCfg.venueType = VenueType.RFQ;
+        rfqCfg.adapter = adapter;
+        rfqCfg.active = true;
+
+        ManifestCore memory ammAdvertised = _manifest();
+        ammAdvertised.supportedEngines = uint8(1 << uint8(VenueType.AMM));
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnsupportedVenuePolicy.selector, futureLockupId));
+        factory.registerRWAToken(rwa, ammAdvertised, bindings, venue, rfqCfg);
+        assertEq(uint8(tpr.statusOf(rwa)), uint8(PolicyStatus.UNKNOWN), "AMM mask rollback preserves unknown state");
+
+        factory.registerRWAToken(rwa, _manifest(), bindings, venue, rfqCfg);
+        assertEq(uint8(tpr.statusOf(rwa)), uint8(PolicyStatus.ACTIVE), "RFQ plus C-01 remains valid");
     }
 
     function test_registerRWATokenWithConfig_preservesManifestOwnedParameters() public {

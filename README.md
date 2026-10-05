@@ -135,11 +135,17 @@ RFQ operator service.
 scripts/e2e-anvil.sh --profile buidl-like --keep
 ```
 
-For the short RFQ-first stakeholder walkthrough, omit the AMM scenario suite:
+For the short RFQ-first stakeholder walkthrough, omit the extended scenario suite:
 
 ```shell
 scripts/e2e-anvil.sh --profile buidl-like --mode rfq
 ```
+
+The full live suite runs the selected `buidl-like` or `reg-d` profile through
+RFQ, including lifecycle and surveillance behavior. Separate Foundry integration
+tests keep AMM adapter/plumbing coverage through an explicit demo-only Recipe
+that excludes `C-01-*`; SDK/CLI/on-chain checks reject AMM with any C-01 family
+Recipe.
 
 Use another versioned local fixture without editing application code. Schema v2
 can replace account bindings, initial balances, fixed mock pricing, default

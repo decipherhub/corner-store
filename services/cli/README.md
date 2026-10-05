@@ -216,7 +216,7 @@ artifact, so a BUIDL-like token cannot be rebound to a weaker Reg D manifest.
 
 ```
 corner-store status [address] [--json]           # addresses, manifest, venues, per-element attestation state
-corner-store onboard [--profile buidl-like|reg-d] [--engines amm,rfq] # profile must match deployment artifact
+corner-store onboard [--profile buidl-like|reg-d] [--engines rfq] # bundled C-01 profiles are RFQ-only
 corner-store manifest <status|suspend|resume|retire> [--reason <str>]
 corner-store attest <element> <subject> [value...]   # element in: sanctions,jurisdiction,accredited,identity,us-tax,qp,asset-class,erc3643,form-d
 corner-store investor-setup <addr> [--profile buidl-like|reg-d] [--fund <ether>] # profile attestations + funding
@@ -273,23 +273,25 @@ CS="node services/cli/dist/cli/src/index.js"
 ACCT4=0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
 
 $CS status $ACCT4                                  # manifest UNKNOWN, account 4 unattested
-$CS onboard                                        # factory: propose -> approve + AMM venue (manifest ACTIVE)
+$CS onboard                                        # factory: propose -> approve + RFQ venue (manifest ACTIVE)
 $CS investor-setup $ACCT4                          # artifact profile: Reg D + QP for BUIDL-like + C-01 + QUOTE
 $CS kyc $ACCT4                                     # ERC-3643 identity + KYC claim (forge script)
-$CS --account 4 buy 5000000                        # AMM buy -> PASS (BUIDL-like minimum)
+$CS rfq-quote --backend http://127.0.0.1:8787 --amount-in 5000000 --taker $ACCT4 --out quote.json
+$CS --account 4 buy 0 --venue rfq --quote quote.json # RFQ buy -> PASS
 
 # element rejection (auto-decoded)
 $CS attest jurisdiction $ACCT4 ZZ                  # flip to a disallowed jurisdiction
-$CS --account 4 buy 5000000                        # FAIL: recipe 1 / A-02-v1 / Jurisdiction
+$CS --account 4 buy 0 --venue rfq --quote quote.json # FAIL: A-02-v1 / Jurisdiction
 $CS attest jurisdiction $ACCT4 US                  # restore
 
 # manifest lifecycle
 $CS manifest suspend --reason DEMO-SUSPEND
-$CS --account 4 buy 5000000                        # FAIL: POLICY / SUSPENDED
+$CS check $ACCT4 --venue rfq --amount 5000000      # FAIL: POLICY / SUSPENDED
 $CS manifest resume                               # first call schedules timelocked resume
 # after the reported delay:
 $CS manifest resume                               # second call executes resume
-$CS --account 4 buy 5000000                        # PASS again
+$CS rfq-quote --backend http://127.0.0.1:8787 --amount-in 5000000 --taker $ACCT4 --out resumed-quote.json
+$CS --account 4 buy 0 --venue rfq --quote resumed-quote.json # PASS again
 
 # RFQ venue
 $CS rfq-quote --backend http://127.0.0.1:8787 --amount-in 5000000 --taker $ACCT4 --out quote.json
