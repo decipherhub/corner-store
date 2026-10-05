@@ -39,6 +39,7 @@ import {
   cmdProductionOnboardingVerify,
   cmdProductionPlan
 } from "../src/commands";
+import {createProjectDescriptor, resolveProjectTemplate} from "../../toolkit/src/project-templates";
 
 const CHAIN_ID = 31337;
 const RFQ_VERIFYING_CONTRACT = "0x7969c5eD335650692Bc04293B07F5BF2e7A673C0";
@@ -131,15 +132,35 @@ async function main() {
   const doctorCwd = process.cwd();
   process.chdir(consumerRoot);
   try {
-    writeFileSync(join(consumerRoot, "corner-store.project.json"), '{"schemaVersion":1,"template":"sandbox"}\n');
+    writeFileSync(
+      join(consumerRoot, "corner-store.project.json"),
+      `${JSON.stringify(createProjectDescriptor(resolveProjectTemplate({template: "sandbox"}), true), null, 2)}\n`
+    );
     const sandboxDoctor = doctor("corner-store.config.json", undefined, contractSource, undefined, commandProbe);
     const sandboxDocker = sandboxDoctor.checks.find((check) => check.name === "docker");
+    const sandboxDaemon = sandboxDoctor.checks.find((check) => check.name === "docker-daemon");
     assert(!sandboxDoctor.ready && sandboxDocker?.required === true, "sandbox doctor requires Docker");
     assert(
-      Boolean(sandboxDocker?.remediation.includes("Docker Compose v2")),
-      "sandbox doctor explains how to restore Docker readiness"
+      sandboxDoctor.checks.find((check) => check.name === "npm")?.required === false &&
+      sandboxDoctor.checks.find((check) => check.name === "forge")?.required === false,
+      "Docker sandbox does not require host npm or Foundry"
     );
-    writeFileSync(join(consumerRoot, "corner-store.project.json"), '{"schemaVersion":1,"template":"dex-integration"}\n');
+    assert(
+      Boolean(sandboxDocker?.remediation.includes("Docker Compose v2")) &&
+      Boolean(sandboxDaemon?.remediation.includes("Start Docker")),
+      "sandbox doctor explains how to restore Compose and daemon readiness"
+    );
+    writeFileSync(join(consumerRoot, "corner-store.project.json"), '{"schemaVersion":1,"template":"sandbox"}\n');
+    const invalidProjectDoctor = doctor("corner-store.config.json", undefined, contractSource, undefined, commandProbe);
+    assert(
+      invalidProjectDoctor.checks.some((check) => check.name === "project" && check.required && !check.pass) &&
+      invalidProjectDoctor.checks.some((check) => check.name === "docker" && check.required),
+      "invalid project descriptor fails closed without masking the Docker requirement"
+    );
+    writeFileSync(
+      join(consumerRoot, "corner-store.project.json"),
+      `${JSON.stringify(createProjectDescriptor(resolveProjectTemplate({template: "dex-integration"}), false), null, 2)}\n`
+    );
     const libraryDoctor = doctor("corner-store.config.json", undefined, contractSource, undefined, commandProbe);
     assert(libraryDoctor.ready, "library doctor keeps Docker optional");
   } finally {
@@ -255,7 +276,7 @@ async function main() {
       req.on("end", () => {
         const parsed = JSON.parse(body || "{}");
         const method = parsed.method;
-        const result = method === "eth_chainId" ? "0x1" : method === "eth_getCode" ? "0x" : "0x";
+        const result = method === "eth_chainId" ? "0x2" : method === "eth_getCode" ? "0x" : "0x";
         res.writeHead(200, {"content-type": "application/json"});
         res.end(JSON.stringify({jsonrpc: "2.0", id: parsed.id, result}));
       });
@@ -274,7 +295,14 @@ async function main() {
       await new Promise<void>((resolve, reject) => rpc.close((err) => (err ? reject(err) : resolve())));
     }
     assert(process.exitCode === 1, "production-onboarding-verify sets nonzero on fail-closed mismatch");
-    assert(JSON.parse(verifyLog.slice(verifyLog.indexOf("{"))).ready === false, "production-onboarding-verify prints not-ready result");
+    const failedVerification = JSON.parse(verifyLog.slice(verifyLog.indexOf("{")));
+    assert(failedVerification.ready === false, "production-onboarding-verify prints not-ready result");
+    for (const name of ["chain-id", "code-token", "erc3643-identity-registry"]) {
+      assert(
+        failedVerification.checks.some((check: any) => check.name === name && !check.pass && check.remediation),
+        `production-onboarding-verify reports actionable ${name} failure`
+      );
+    }
     process.exitCode = oldExitCode;
     await assertRejects(
       () => cmdProductionDeploy("corner-store.production.json", {ledger: true, confirm: "wrong"}),

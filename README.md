@@ -205,14 +205,10 @@ node dist/cli/src/index.js create ../../my-sandbox \
   --template sandbox
 
 cd ../../my-sandbox
-npm install
-npm run validate
-npm run simulate
-npm run doctor             # Docker/Compose v2 is required for this template
-npm run dev
-npm run status             # portal :8790, Deployment Studio :8791, Anvil :8545
+docker compose up --build -d # third command after create + cd; no host npm/Forge
+docker compose ps -a        # portal :8790, Deployment Studio :8791, Anvil :8545
 # when finished:
-npm run clean
+docker compose down --volumes --remove-orphans
 
 cd ../../my-corner-store
 npm install
@@ -238,9 +234,11 @@ non-root Node/Foundry image, and gates RFQ/API/UI startup on the current Anvil
 deployment artifact. It remains demo-only and contains no production credential
 or external provider connection. To switch fixtures, stop and discard the demo
 chain first, then run
-`CORNER_STORE_PROFILE=reg-d npm run dev`.
+`CORNER_STORE_PROFILE=reg-d docker compose up --build -d`.
 
-If `doctor` or `verify` fails, follow the emitted `remediation` field and rerun
+After optional `npm install`, the generated sandbox also exposes `npm run doctor`,
+`npm run dev`, `npm run status` and `npm run clean` aliases. If `doctor` or
+`verify` fails, follow the emitted `remediation` field and rerun
 the same command. The generated project keeps these recovery steps local: install
 Docker Compose v2 only for `sandbox`, run `npm run clean` before changing sandbox
 profiles, and regenerate or correct a stale deployment artifact before `npm run verify`.

@@ -75,22 +75,17 @@ repository checkout is not required.
 ```sh
 corner-store create ./corner-store-sandbox --template sandbox
 cd ./corner-store-sandbox
-npm install
-npm run validate
-npm run simulate
-npm run doctor
-npm run dev
-npm run status
+docker compose up --build -d
 ```
 
 The default `buidl-like` fixture is available at `http://127.0.0.1:8790`, with
 Deployment Studio at `http://127.0.0.1:8791`. Use
-`CORNER_STORE_PROFILE=reg-d npm run dev` for the Reg D fixture.
+`CORNER_STORE_PROFILE=reg-d docker compose up --build -d` for the Reg D fixture.
 Anvil readiness and the one-shot deployment gate all dependent services, and the
 RFQ backend fails closed when the chain, deployment artifact or scenario do not
 match. Run `docker compose down --volumes --remove-orphans` to discard a previous
 demo chain and artifact together before switching profiles. For startup failures,
-inspect `npm run status` and `docker compose logs deployer rfq operator-api`.
+inspect `docker compose ps -a` and `docker compose logs deployer rfq operator-api`.
 
 The sandbox uses public Anvil development identities, reference pricing/risk and
 mock qualification data. It is never a production deployment, never accepts
@@ -226,13 +221,18 @@ secret.
 
 `doctor` emits a remediation for every failed check. Docker and Compose v2 are
 required only by the `sandbox` template; library-oriented templates report them
-as optional. A sandbox profile change must start from `npm run clean`, followed
-by `npm run dev` with the new `CORNER_STORE_PROFILE`.
+as optional. The direct sandbox quickstart is three commands (`create`, `cd`,
+`docker compose up`) and does not require host npm or Foundry. Users who run an
+optional `npm install` also get `npm run doctor/dev/status/clean` aliases. A
+sandbox profile change must discard the old volumes before starting with the new
+`CORNER_STORE_PROFILE`.
 
-`verify` fails closed when the deployment artifact is missing or bound to a
-different profile/network/config. Correct or regenerate that artifact, then rerun
-the same `npm run verify` command. The output includes `expected`, `actual` and
-`remediation`, so recovery does not require copying contract addresses by hand.
+`verify` fails closed when the local/reference deployment artifact is missing,
+bound to a different profile or lacks required venue addresses. Correct or
+regenerate that artifact, then rerun the same `npm run verify` command. The output
+includes `expected`, `actual` and `remediation`, so recovery does not require
+copying contract addresses by hand. Production chain, address, live bytecode and
+code-hash bindings remain the stricter `production-onboarding-verify` contract.
 
 ## Contract Bundle Resolution
 

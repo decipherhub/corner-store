@@ -4,6 +4,7 @@ import {dirname, resolve} from "path";
 
 import {assertRFQModuleConformance} from "../../rfq/src";
 import {loadConfig} from "../../toolkit/src/config";
+import {ProjectTemplateId, validateProjectDescriptor} from "../../toolkit/src/project-templates";
 
 export interface DoctorCheck {
   name: string;
@@ -79,6 +80,12 @@ export function doctor(
 ): DoctorResult {
   const checks: DoctorCheck[] = [];
   let effectiveArtifactPath = artifactPath;
+  const configFile = resolve(process.cwd(), configPath);
+  const projectRoot = dirname(configFile);
+  const project = readProjectContext(configPath);
+  if (project.check) checks.push(project.check);
+  const sandbox = project.template === "sandbox";
+  const dockerRequired = sandbox || project.invalid;
   const nodeVersion = process.versions.node;
   checks.push({
     name: "node",
@@ -104,11 +111,11 @@ export function doctor(
       remediation: result.status === 0 ? "No action required." : remediation
     });
   };
-  executable("npm", true, "Install npm with a supported Node.js release, then rerun corner-store doctor.");
-  executable("forge", true, "Install the pinned Foundry toolchain from the Corner Store setup guide, then rerun corner-store doctor.");
+  executable("npm", !sandbox, "Install npm with a supported Node.js release, then rerun corner-store doctor.");
+  executable("forge", !sandbox, "Install the pinned Foundry toolchain from the Corner Store setup guide, then rerun corner-store doctor.");
 
   try {
-    const config = loadConfig(resolve(process.cwd(), configPath));
+    const config = loadConfig(configFile);
     effectiveArtifactPath ??= config.deployment.artifact;
     checks.push({
       name: "config",
@@ -139,7 +146,7 @@ export function doctor(
   });
 
   if (effectiveArtifactPath) {
-    const artifactExists = existsSync(resolve(process.cwd(), effectiveArtifactPath));
+    const artifactExists = existsSync(resolve(projectRoot, effectiveArtifactPath));
     checks.push({
       name: "artifact",
       required: false,
@@ -147,11 +154,10 @@ export function doctor(
       detail: artifactExists ? effectiveArtifactPath : `${effectiveArtifactPath} not created yet`,
       remediation: artifactExists
         ? "No action required."
-        : "Run npm run deploy for a dry-run or reviewed deployment, then rerun npm run verify."
+        : "Run corner-store deploy (or npm run deploy) for a dry-run or reviewed deployment, then rerun verify."
     });
   }
 
-  const dockerRequired = currentProjectTemplate() === "sandbox";
   const docker = probe("docker", ["compose", "version"]);
   checks.push({
     name: "docker",
@@ -166,6 +172,22 @@ export function doctor(
         ? "Install Docker Engine/Desktop with Docker Compose v2, start the daemon, then rerun npm run doctor."
         : "Docker is optional for this template; install Docker Compose v2 only if you choose a container workflow."
   });
+  if (dockerRequired || docker.status === 0) {
+    const daemon = probe("docker", ["info", "--format", "{{json .ServerVersion}}"]);
+    checks.push({
+      name: "docker-daemon",
+      required: dockerRequired,
+      pass: daemon.status === 0,
+      detail: daemon.status === 0
+        ? `Docker daemon ${String(daemon.stdout || daemon.stderr).trim()}`
+        : dockerRequired ? "required by the sandbox template; daemon is unavailable" : "optional; daemon is unavailable",
+      remediation: daemon.status === 0
+        ? "No action required."
+        : dockerRequired
+          ? "Start Docker Engine/Desktop, wait until the daemon is ready, then rerun npm run doctor."
+          : "Start the Docker daemon only if you choose a container workflow."
+    });
+  }
   return {ready: checks.every((check) => !check.required || check.pass), checks};
 }
 
@@ -173,14 +195,37 @@ function systemCommandProbe(name: string, args: string[]) {
   return spawnSync(name, args, {encoding: "utf8"});
 }
 
-function currentProjectTemplate(): string | undefined {
-  const path = resolve(process.cwd(), "corner-store.project.json");
-  if (!existsSync(path)) return undefined;
+function readProjectContext(configPath: string): {
+  template?: ProjectTemplateId;
+  invalid: boolean;
+  check?: DoctorCheck;
+} {
+  const path = resolve(dirname(resolve(process.cwd(), configPath)), "corner-store.project.json");
+  if (!existsSync(path)) return {invalid: false};
   try {
-    const value = JSON.parse(readFileSync(path, "utf8"));
-    return typeof value?.template === "string" ? value.template : undefined;
-  } catch {
-    return undefined;
+    const descriptor = validateProjectDescriptor(JSON.parse(readFileSync(path, "utf8")));
+    return {
+      template: descriptor.template,
+      invalid: false,
+      check: {
+        name: "project",
+        required: true,
+        pass: true,
+        detail: `template=${descriptor.template}, schema v${descriptor.schemaVersion}`,
+        remediation: "No action required."
+      }
+    };
+  } catch (error: any) {
+    return {
+      invalid: true,
+      check: {
+        name: "project",
+        required: true,
+        pass: false,
+        detail: `invalid ${path}: ${String(error?.message ?? error)}`,
+        remediation: "Restore corner-store.project.json from the selected template or regenerate the project in a new directory."
+      }
+    };
   }
 }
 

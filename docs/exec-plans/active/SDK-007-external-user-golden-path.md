@@ -10,9 +10,10 @@
 
 - `sandbox`와 `dex-integration` clean-project package install/build/conformance
 - 생성 프로젝트의 `validate`, `simulate`, `doctor`, `deploy`, `verify` 명령 계약
-- sandbox Docker 필수 진단과 library-only Docker 선택 진단
+- sandbox Compose/daemon 필수 진단과 library-only Docker 선택 진단
 - stale/wrong-profile artifact의 actionable failure와 repair 후 verification
-- 정책 값 변경이 compiled commitment와 사용자 설명에 반영되는 acceptance gate
+- venue 정책 값 변경이 compiled commitment와 allow/reject 설명에 반영되는 acceptance gate
+- 기존 production verifier의 chain/address/runtime code-hash mismatch remediation 회귀
 - quickstart, recovery와 testing 문서
 
 ## Out of Scope

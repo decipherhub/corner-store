@@ -74,12 +74,20 @@ fi
   npm test
   npm run validate >/dev/null
   npm run simulate >/dev/null
-  npm run --silent doctor >"$WORK_DIR/sandbox-doctor.json"
+  if npm run --silent doctor >"$WORK_DIR/sandbox-doctor.json"; then
+    : # A host with Compose v2 and a running daemon is sandbox-ready.
+  else
+    : # Missing Docker is an expected, actionable external-user state.
+  fi
 )
 node -e '
 const result = require(process.argv[1]);
 const docker = result.checks.find((check) => check.name === "docker");
+const daemon = result.checks.find((check) => check.name === "docker-daemon");
+const unexpected = result.checks.filter((check) => check.required && !check.pass && !["docker", "docker-daemon"].includes(check.name));
 if (!docker || docker.required !== true || !docker.remediation) process.exit(1);
+if (!daemon || daemon.required !== true || !daemon.remediation) process.exit(1);
+if (unexpected.length > 0) process.exit(1);
 ' "$WORK_DIR/sandbox-doctor.json"
 
 (
@@ -126,7 +134,8 @@ NODE
 const fs = require("fs");
 const path = "corner-store.config.json";
 const config = JSON.parse(fs.readFileSync(path, "utf8"));
-config.governance.requiredApprovals += 1;
+  config.venues.rfq = false;
+  config.venues.orderBook = true;
 fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
 NODE
   npm run --silent policy:explain >"$WORK_DIR/policy-after.json"
@@ -137,7 +146,9 @@ const fs = require("fs");
 const before = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const after = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
 if (before.compiled.configHash === after.compiled.configHash) process.exit(1);
-if (after.explanation.values.governanceApprovals !== before.explanation.values.governanceApprovals + 1) process.exit(1);
+if (before.explanation.decisions.rfq.allowed !== true) process.exit(1);
+if (after.explanation.decisions.rfq.allowed !== false) process.exit(1);
+if (after.explanation.decisions.rfq.reasonCode !== "VENUE_DISABLED") process.exit(1);
 NODE
 
 CLI_PACKAGE="$BOOT_DIR/node_modules/@corner-store/cli"

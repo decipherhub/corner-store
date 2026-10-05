@@ -388,7 +388,8 @@ function readme(manifest: RFQIntegrationManifest, project: ProjectDescriptor, ha
   const purpose = projectTemplate(project.template);
   const setup = project.template === "sandbox"
     ? `The sandbox requires Docker Engine/Desktop with Docker Compose v2. It does
-not require a separate \`npm install\`, \`.env\` file or production credential.`
+not require an \`.env\` file or production credential. The direct Compose quickstart
+does not require a host npm or Foundry installation.`
     : `1. Copy \`.env.example\` to a local secret-managed environment. Never commit it.
 2. Install dependencies and run \`npm test\`.
 3. ${manifest.mode === "reference-service"
@@ -431,18 +432,17 @@ development mnemonic inside the runtime and must never be exposed to a public
 network or reused for real assets.
 
 \`\`\`sh
-npm run doctor
-npm run dev
-npm run status
+docker compose up --build -d
 \`\`\`
 
-The npm commands are stable aliases for the Docker Compose lifecycle. Running
-\`docker compose up --build -d\` directly remains supported.
+This is the third command after \`corner-store create ...\` and \`cd ...\`.
+For the diagnostic and lifecycle aliases, run \`npm install\` once, then use
+\`npm run doctor\`, \`npm run dev\`, \`npm run status\` and \`npm run clean\`.
 
 Open the demo portal at <http://127.0.0.1:8790> and Deployment Studio at
 <http://127.0.0.1:8791>. The RPC is available at <http://127.0.0.1:8545>.
 Select the alternative fixture with
-\`CORNER_STORE_PROFILE=reg-d npm run dev\` after removing the
+\`CORNER_STORE_PROFILE=reg-d docker compose up --build -d\` after removing the
 previous demo chain and artifact.
 
 ## Recovery
