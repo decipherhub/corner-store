@@ -241,6 +241,11 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 
 이 러너가 커버하는 최소 E2E는 다음을 포함한다.
 
+- local 7-scenario suite는 실제 `buidl-like`/`reg-d` C-01 profile을 RFQ로 실행한다.
+  별도 Foundry integration이 C-01-free demo-only Recipe로 AMM plumbing을 검증한다.
+- AMM + C-01-v2와 future `C-01-*` version은 Engine에서 거절되고, AMM + C-01 없는
+  Recipe 및 RFQ + C-01 Recipe는 허용된다.
+
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패
 - canonical `recipeKey + exact version` 조회와 새 catalog version 등록 후에도 기존

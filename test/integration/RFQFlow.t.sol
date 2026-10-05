@@ -62,7 +62,7 @@ contract RFQFlowTest is IntegrationBase {
     MakerAuthorizer internal makerAuthorizer;
 
     function setUp() public {
-        deployStack(); // full stack; RWA manifest lands AMM-only.
+        deployRegDStack(); // full Reg D stack; C-01 policy is RFQ-only.
         _admitRFQVenueType(); // re-declare the RWA manifest so the mask admits RFQ.
 
         maker = vm.addr(MAKER_PK);
@@ -100,17 +100,17 @@ contract RFQFlowTest is IntegrationBase {
         rwaToken.approve(address(rfqAdapter), type(uint256).max);
     }
 
-    /// @dev Re-declare the RWA manifest so its `supportedEngines` advertises RFQ
-    ///      (in addition to AMM). Uses only existing product surfaces: the
+    /// @dev Re-declare the RWA manifest so its `supportedEngines` advertises RFQ.
+    ///      Uses only existing product surfaces: the
     ///      TokenPolicyRegistry lifecycle (retire -> re-register -> approve) and
     ///      the manifest `supportedEngines` bitfield. The engine maps that field
     ///      1:1 into `ComplianceDecision.allowedVenueTypes`, which is what
     ///      `VenueSelector.validate` checks against `VenueType.RFQ`.
     function _admitRFQVenueType() internal {
         ManifestCore memory m = _activeManifest(0, 0);
-        m.supportedEngines = ENGINES_AMM | ENGINES_RFQ;
+        m.supportedEngines = ENGINES_RFQ;
         policyReg.retireManifest(address(rwaToken), bytes32("re-engine-rfq"));
-        policyReg.registerManifest(address(rwaToken), m, _bindings(0));
+        policyReg.registerManifest(address(rwaToken), m, _regDBindings(0));
         policyReg.approveManifest(address(rwaToken));
     }
 

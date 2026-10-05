@@ -1,4 +1,5 @@
 import {readFileSync, writeFileSync} from "fs";
+import {assertProfileVenueCompatibility} from "./policy-compatibility";
 
 export const TOOLKIT_SCHEMA_VERSION = 1;
 export type AssetProfile = "buidl-like" | "reg-d";
@@ -24,7 +25,7 @@ export function defaultConfig(): ToolkitConfig {
     schemaVersion: TOOLKIT_SCHEMA_VERSION,
     deployment: {artifact: "deployments/anvil-e2e.json", network: "anvil"},
     asset: {profile: "buidl-like"},
-    venues: {amm: true, rfq: true, orderBook: false},
+    venues: {amm: false, rfq: true, orderBook: false},
     accounts: {operator: "operator", investor: "investor", maker: "maker"},
     governance: {multisig: "governance-multisig", requiredApprovals: 2}
   };
@@ -44,6 +45,7 @@ export function validateConfig(value: unknown): ToolkitConfig {
     throw new Error("venues.amm, venues.rfq, and venues.orderBook must be booleans");
   }
   if (!c.venues.amm && !c.venues.rfq && !c.venues.orderBook) throw new Error("at least one venue must be enabled");
+  assertProfileVenueCompatibility(c.asset.profile, c.venues.amm);
   if (!c.accounts || ![c.accounts.operator, c.accounts.investor, c.accounts.maker].every((x) => typeof x === "string" && x.length > 0)) {
     throw new Error("accounts.operator, accounts.investor, and accounts.maker are required");
   }

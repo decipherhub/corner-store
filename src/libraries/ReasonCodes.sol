@@ -7,6 +7,7 @@ pragma solidity 0.8.17;
 // 조합을 재계산해 매칭한다(M4 propagation).
 library ReasonCodes {
     bytes32 internal constant OK = bytes32(0);
+    uint32 internal constant UNSUPPORTED_VENUE = type(uint32).max - 1;
     uint32 internal constant INVALID_ELEMENT_PARAMETERS = type(uint32).max;
 
     function encode(uint16 recipeId, bytes32 elementId, uint32 code) internal pure returns (bytes32) {
@@ -15,5 +16,9 @@ library ReasonCodes {
 
     function invalidElementParameters(bytes32 elementId) internal pure returns (bytes32) {
         return encode(0, elementId, INVALID_ELEMENT_PARAMETERS);
+    }
+
+    function unsupportedVenue(uint16 recipeId, bytes32 elementId) internal pure returns (bytes32) {
+        return encode(recipeId, elementId, UNSUPPORTED_VENUE);
     }
 }

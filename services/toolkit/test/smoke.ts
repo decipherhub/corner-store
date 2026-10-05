@@ -1,6 +1,6 @@
 import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
 
-import {keccak256} from "ethers";
+import {encodeBytes32String, keccak256} from "ethers";
 import {
   compilePlanCommitment,
   createProductionOnboardingPlan,
@@ -53,6 +53,7 @@ import {
   validatePolicyAuditArtifact,
   validatePolicyAuditArtifactFile
 } from "../src/policy-audit";
+import {assertRecipeVenueCompatibility} from "../src/policy-compatibility";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -74,8 +75,31 @@ const config = loadConfig(path);
 if (config.asset.profile !== "buidl-like" || !config.venues.rfq) throw new Error("default config regression");
 if (JSON.parse(readFileSync(path, "utf8")).schemaVersion !== 1) throw new Error("version missing");
 validateConfig({...defaultConfig(), asset: {profile: "reg-d"}});
+assertThrows(
+  () => validateConfig({...defaultConfig(), venues: {amm: true, rfq: true, orderBook: false}}),
+  "lockup-restricted profile accepted AMM"
+);
+assertRecipeVenueCompatibility(
+  true,
+  1,
+  [{recipeId: 3, recipeVersion: 2}],
+  [{recipeId: 3, version: 2, requiredElements: []}]
+);
+assertThrows(
+  () => assertRecipeVenueCompatibility(true, 1, [{recipeId: 3, recipeVersion: 2}], [{recipeId: 3, version: 2}]),
+  "legacy AMM recipe without exact composition accepted"
+);
+assertThrows(
+  () => assertRecipeVenueCompatibility(
+    true,
+    1,
+    [{recipeId: 1, recipeVersion: 3}],
+    [{recipeId: 1, version: 3, requiredElements: [encodeBytes32String("C-01-v2")]}]
+  ),
+  "known legacy C-01 recipe accepted AMM"
+);
 const simulation = simulateConfig(config, "buidl-like");
-if (simulation.profile !== "buidl-like" || simulation.venues.join(",") !== "amm,rfq") throw new Error("simulation regression");
+if (simulation.profile !== "buidl-like" || simulation.venues.join(",") !== "rfq") throw new Error("simulation regression");
 try {
   simulateConfig(config, "reg-d");
   throw new Error("profile mismatch accepted");
@@ -133,7 +157,7 @@ assertThrows(() => resolveProjectTemplate({template: "toString"}), "prototype-sh
 const sdk = connectCornerStore({config, artifact});
 if (sdk.policy.validate().asset.profile !== "buidl-like") throw new Error("SDK facade validation regression");
 const compiled = sdk.policy.compile();
-if (!compiled.configHash.startsWith("0x") || compiled.venues.join(",") !== "amm,rfq") {
+if (!compiled.configHash.startsWith("0x") || compiled.venues.join(",") !== "rfq") {
   throw new Error("SDK facade compile regression");
 }
 const returnedConfig = sdk.policy.validate();
@@ -161,7 +185,7 @@ try {
   if (!(error instanceof CornerStoreSDKError) || !error.toJSON().remediation) throw error;
 }
 if (preflightConfig({...config, asset: {profile: "reg-d"}}, artifact).ready) throw new Error("profile mismatch passed preflight");
-if (enabledEngineSpec(config) !== "amm,rfq") throw new Error("engine selection regression");
+if (enabledEngineSpec(config) !== "rfq") throw new Error("engine selection regression");
 const checkpointPath = join(dir, "deployment.json");
 writeCheckpoint(checkpointPath, createCheckpoint(config, artifact, "anvil-demo-1"));
 if (loadCheckpoint(checkpointPath).state !== "preflighted") throw new Error("checkpoint regression");
@@ -399,7 +423,7 @@ const onboardingConfig = validateProductionOnboardingConfig({
     issuanceRecipeVersion: 2,
     fundRecipeId: 0,
     enabledResalePaths: 1,
-    supportedEngines: 5,
+    supportedEngines: 4,
     stateScopeId: 7,
     factsPacked: "1",
     coverageScope: "3",
@@ -498,6 +522,41 @@ const onboardingConfigV3 = validateProductionOnboardingConfig({
   }],
   enforcementOverrides: [{bindingIndex: 0, elementId: `0x${"06".repeat(32)}`, mode: "ESCALATE_TO_BLOCK"}]
 });
+const lockupElementId = encodeBytes32String("C-01-v2");
+const ammLockupElements = onboardingConfigV3.elements.map((element, index) =>
+  index === 0 ? {...element, elementId: lockupElementId} : element
+);
+const ammLockupRecipes = onboardingConfigV3.recipes.map((recipe) => ({
+  ...recipe,
+  requiredElements: recipe.requiredElements!.map((elementId, index) => index === 0 ? lockupElementId : elementId)
+}));
+assertThrows(
+  () => validateProductionOnboardingConfig({
+    ...onboardingConfigV3,
+    elements: ammLockupElements,
+    recipes: ammLockupRecipes,
+    venues: [{
+      ...onboardingConfigV3.venues[0],
+      venueType: "AMM",
+      adapter: "0x5000000000000000000000000000000000000001"
+    }],
+    rfq: undefined
+  }),
+  "AMM venue accepted a C-01 recipe"
+);
+assertThrows(
+  () => validateProductionOnboardingConfig({
+    ...onboardingConfigV3,
+    recipeBindings: onboardingConfigV3.recipeBindings.map((binding) => ({...binding, recipeVersion: 99})),
+    venues: [{
+      ...onboardingConfigV3.venues[0],
+      venueType: "AMM",
+      adapter: "0x5000000000000000000000000000000000000001"
+    }],
+    rfq: undefined
+  }),
+  "AMM venue accepted an unverified recipe version"
+);
 const onboardingPlanV3 = createProductionOnboardingPlan(onboardingConfigV3, "2026-08-23T00:00:00.000Z");
 const onboardingConfigV2Compat = validateProductionOnboardingConfig({
   ...onboardingConfigV3,
@@ -719,11 +778,12 @@ assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, en
 assertThrows(() => validateProductionOnboardingConfig({...onboardingConfigV3, enforcementOverrides: Array.from({length: MAX_ENFORCEMENT_OVERRIDES + 1}, () => ({bindingIndex: 0, elementId: onboardingConfigV3.elements[1].elementId, mode: "ESCALATE_TO_BLOCK"}))}), "257 overrides rejected locally");
 
 const ammOnlyConfig = validateProductionOnboardingConfig({
-  ...onboardingConfig,
-  venues: [{...onboardingConfig.venues[0], venueType: "AMM", adapter: "0x5000000000000000000000000000000000000001"}],
+  ...onboardingConfigV3,
+  manifest: {...onboardingConfigV3.manifest, supportedEngines: 1},
+  venues: [{...onboardingConfigV3.venues[0], venueType: "AMM", adapter: "0x5000000000000000000000000000000000000001"}],
   rfq: undefined,
-  inventory: [{...onboardingConfig.inventory[0], holder: "0x5000000000000000000000000000000000000002", spender: "0x5000000000000000000000000000000000000001"}],
-  addresses: {...onboardingConfig.addresses, rfqAdapter: undefined, makerAuthorizer: undefined}
+  inventory: [{...onboardingConfigV3.inventory[0], holder: "0x5000000000000000000000000000000000000002", spender: "0x5000000000000000000000000000000000000001"}],
+  addresses: {...onboardingConfigV3.addresses, rfqAdapter: undefined, makerAuthorizer: undefined}
 });
 assert(createProductionOnboardingPlan(ammOnlyConfig).transactions.some((tx) => tx.id === "inventory-1-verify"), "AMM-only coherent mode still requires read-only inventory verification");
 const calls: string[] = [];
@@ -747,7 +807,7 @@ const okReader = {
     if (fn === "recipeKeyOf") return recipeKey;
     if (fn === "latestRegisteredVersionOf") return 2;
     if (fn === "statusOf") return 2;
-    if (fn === "manifestOf") return [2, 1, 2, 0, 1, 5, 7, 1n, 3n, onboardingConfig.manifest.fullManifestHash, "0x8888888888888888888888888888888888888888", "0x5555555555555555555555555555555555555555"];
+    if (fn === "manifestOf") return [2, 1, 2, 0, 1, onboardingConfig.manifest.supportedEngines, 7, 1n, 3n, onboardingConfig.manifest.fullManifestHash, "0x8888888888888888888888888888888888888888", "0x5555555555555555555555555555555555555555"];
     if (fn === "recipeBindingsOf") return [[1, 2, 0, 0, 100]];
     if (fn === "venueOf") return [2, onboardingConfig.venues![0].adapter, onboardingConfig.venues![0].target, onboardingConfig.venues![0].operator, 0, true];
     if (fn === "approvedMaker") return true;

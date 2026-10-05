@@ -19,6 +19,7 @@ import {formatEther, JsonRpcProvider, keccak256, NonceManager, parseEther, Contr
 
 import {dirname, relative, resolve} from "path";
 import {enabledEngineSpec, loadConfig, simulateConfig, writeDefaultConfig} from "../../toolkit/src/config";
+import {assertProfileVenueCompatibility} from "../../toolkit/src/policy-compatibility";
 import {preflightConfig} from "../../toolkit/src/preflight";
 import {createCheckpoint, writeCheckpoint} from "../../toolkit/src/checkpoint";
 import {createGovernanceProposal} from "../../toolkit/src/proposal";
@@ -1237,7 +1238,7 @@ export async function cmdStatus(positional: string | undefined, opts: GlobalOpts
 // onboard
 // ---------------------------------------------------------------------------
 function enginesMask(spec: string | undefined): number {
-  if (!spec) return 1 | 4; // amm | rfq (default)
+  if (!spec) return 4; // RFQ is the safe default for the bundled C-01 profiles.
   let mask = 0;
   for (const part of spec.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)) {
     if (part === "amm") mask |= 1;
@@ -1256,6 +1257,10 @@ export async function cmdOnboard(opts: GlobalOpts & {engines?: string; profile?:
   // Validate the requested profile before any lifecycle transaction. The
   // deployment artifact is authoritative for this token instance.
   const binding = assetProfileBinding(resolveAssetProfileForArtifact(opts.profile, a.assetProfile));
+  assertProfileVenueCompatibility(binding.profile, (mask & 1) !== 0);
+  if ((mask & 4) === 0) {
+    throw new CliError(`${binding.profile} onboarding requires the RFQ engine`);
+  }
 
   const policy = policyRegistry(a, signer);
   const current = Number(await policy.statusOf(a.rwaToken));
@@ -1286,16 +1291,18 @@ export async function cmdOnboard(opts: GlobalOpts & {engines?: string; profile?:
     ZERO_ADDR,
     ZERO_ADDR
   ];
-  const venueCfg = [0, a.ammAdapter, a.pool, ZERO_ADDR, 1, true]; // AMM, custody POOL
+  const venueCfg = [2, a.rfqAdapter, ZERO_ADDR, ZERO_ADDR, 0, true]; // RFQ, custody NONE
   const nextNonce = await provider.getTransactionCount(await signer.getAddress(), "latest");
   const onboardingFactory = factory(a, walletForAccount(0).connect(provider));
   const tx = binding.policyConfig
     ? await onboardingFactory.registerRWATokenWithConfig(
-        a.rwaToken, m, binding.bindings, binding.policyConfig, a.pool, venueCfg, {nonce: nextNonce}
+        a.rwaToken, m, binding.bindings, binding.policyConfig, a.rfqVenue, venueCfg, {nonce: nextNonce}
       )
-    : await onboardingFactory.registerRWAToken(a.rwaToken, m, binding.bindings, a.pool, venueCfg, {nonce: nextNonce});
+    : await onboardingFactory.registerRWAToken(
+        a.rwaToken, m, binding.bindings, a.rfqVenue, venueCfg, {nonce: nextNonce}
+      );
   await logTx(tx, binding.policyConfig ? "registerRWATokenWithConfig" : "registerRWAToken");
-  console.log(`Onboarded ${binding.profile} RWA ${a.rwaToken} with supportedEngines 0b${mask.toString(2).padStart(3, "0")} + AMM venue ${a.pool}`);
+  console.log(`Onboarded ${binding.profile} RWA ${a.rwaToken} with supportedEngines 0b${mask.toString(2).padStart(3, "0")} + RFQ venue ${a.rfqVenue}`);
 }
 
 // ---------------------------------------------------------------------------

@@ -177,7 +177,9 @@ SCENARIO_BUY_AMOUNT=$(node -e 'const v=require("./"+process.argv[1]); process.st
 SCENARIO_SELL_AMOUNT=$(node -e 'const v=require("./"+process.argv[1]); process.stdout.write(v.execution.defaultSellAmountBaseUnits);' "$RUNTIME_SCENARIO")
 SCENARIO_TTL=$(node -e 'const v=require("./"+process.argv[1]); process.stdout.write(String(v.execution.defaultQuoteTtlSeconds));' "$RUNTIME_SCENARIO")
 SCENARIO_INVESTOR_ACCOUNT=$(node -e 'const v=require("./"+process.argv[1]); process.stdout.write(String(v.deployment.accounts.investor));' "$RUNTIME_SCENARIO")
+SCENARIO_MAKER_ACCOUNT=$(node -e 'const v=require("./"+process.argv[1]); process.stdout.write(String(v.deployment.accounts.maker));' "$RUNTIME_SCENARIO")
 SCENARIO_BUY_DISPLAY=$(node -e 'const v=require("./"+process.argv[1]); const a=BigInt(v.execution.defaultBuyAmountBaseUnits), d=BigInt(v.quoteAsset.decimals), s=10n**d; process.stdout.write(`${a/s}${a%s ? `.${(a%s).toString().padStart(Number(d),"0").replace(/0+$/,"")}` : ""}`);' "$RUNTIME_SCENARIO")
+SCENARIO_BUY_OUT_DISPLAY=$(node -e 'const v=require("./"+process.argv[1]); const a=BigInt(v.execution.defaultBuyAmountBaseUnits), n=BigInt(v.execution.pricing.numerator), den=BigInt(v.execution.pricing.denominator), ad=BigInt(v.asset.decimals), qd=BigInt(v.quoteAsset.decimals); const out=a*den*(10n**ad)/(n*(10n**qd)), s=10n**18n; process.stdout.write(`${out/s}${out%s ? `.${(out%s).toString().padStart(18,"0").replace(/0+$/,"")}` : ""}`);' "$RUNTIME_SCENARIO")
 
 echo "==> Starting Anvil on ${RPC} (offline, deterministic mnemonic)"
 if [ "$KEEP" -eq 1 ]; then
@@ -215,7 +217,7 @@ if [ "$DEMO_MODE" = "full" ]; then
   forge script script/DemoScenarios.s.sol:DemoScenarios \
     --rpc-url "$RPC" --broadcast --offline
 else
-  echo "==> RFQ mode: skipping AMM/lifecycle/surveillance scenarios"
+  echo "==> RFQ mode: skipping the extended lifecycle and surveillance scenarios"
 fi
 
 echo ""
@@ -229,8 +231,10 @@ if [ "$DEMO_MODE" = "full" ]; then
   cast rpc --rpc-url "$RPC" evm_increaseTime 86400 >/dev/null
   cast rpc --rpc-url "$RPC" evm_mine >/dev/null
   "${CLI[@]}" manifest resume
-  "${CLI[@]}" --account "$SCENARIO_INVESTOR_ACCOUNT" buy "$SCENARIO_BUY_DISPLAY" --venue amm
-  echo "    PASS: delayed manifest recovery restored AMM settlement"
+  "${CLI[@]}" rfq-quote --maker-account "$SCENARIO_MAKER_ACCOUNT" --amount-in "$SCENARIO_BUY_DISPLAY" \
+    --amount-out "$SCENARIO_BUY_OUT_DISPLAY" --expiry "$SCENARIO_TTL" --out "$QUOTE_FILE"
+  "${CLI[@]}" --account "$SCENARIO_INVESTOR_ACCOUNT" buy 0 --venue rfq --quote "$QUOTE_FILE"
+  echo "    PASS: delayed manifest recovery restored RFQ settlement"
 fi
 
 echo "==> Running Toolkit artifact preflight and immutable checkpoint"

@@ -200,7 +200,7 @@ async function main() {
       },
       elements: [{elementId: "0x" + "01".repeat(32), implementation: "0x2000000000000000000000000000000000000001"}],
       recipes: [{recipeId: 1, version: 2, implementation: "0x2000000000000000000000000000000000000002"}],
-      manifest: {issuanceRecipeId: 1, issuanceRecipeVersion: 2, fundRecipeId: 0, enabledResalePaths: 1, supportedEngines: 5, stateScopeId: 7, factsPacked: "1", coverageScope: "3", fullManifestHash: "0x" + "02".repeat(32)},
+      manifest: {issuanceRecipeId: 1, issuanceRecipeVersion: 2, fundRecipeId: 0, enabledResalePaths: 1, supportedEngines: 4, stateScopeId: 7, factsPacked: "1", coverageScope: "3", fullManifestHash: "0x" + "02".repeat(32)},
       recipeBindings: [{recipeId: 1, recipeVersion: 2, mode: "REQUIRED_BLOCKING", pathGroupId: 0, priority: 100}],
       venues: [{venue: "0x3000000000000000000000000000000000000001", venueType: "RFQ", adapter: "0x1000000000000000000000000000000000000012", target: "0x3000000000000000000000000000000000000002", operator: "0x5555555555555555555555555555555555555555", custody: "NONE", active: true}],
       rfq: {makers: [{maker: "0x4000000000000000000000000000000000000001", approved: true}], signerDelegates: [{maker: "0x4000000000000000000000000000000000000001", delegate: "0x4000000000000000000000000000000000000002", reasonHash: "0x" + "03".repeat(32)}]},
@@ -323,7 +323,7 @@ async function main() {
   // generic MIN-AMOUNT-v1 adds one named threshold code.
   const CODES_PER_ELEMENT =
     10 + 1 + 9 + 9 + 1 + 6 + 6 + 6 + 1 + 1 + 1 + 9 + 1 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 1 + 1; // = 129
-  assert(tableSize() === 4 * CODES_PER_ELEMENT + 28 + 6, "reason table size");
+  assert(tableSize() === 4 * CODES_PER_ELEMENT + 28 + 6 + 2, "reason table size");
 
   const jur = decodeReason(A02_RECIPE1);
   assert(jur.label.includes("Jurisdiction") && jur.label.includes("A-02-v1"), "decodes A-02 to Jurisdiction");

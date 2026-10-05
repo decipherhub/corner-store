@@ -15,6 +15,16 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `CORE-014 — C-01 Venue Compatibility Guard`: issue #132의 후속 합의대로
+  `AMM + C-01-*`를 warning이 아닌 공통 hard rejection으로 구현했다. Toolkit profile,
+  CLI onboarding, production onboarding/Safe export와 `ComplianceEngine`이 같은
+  family-level 규칙을 적용하고, bundled `buidl-like`/`reg-d` demo는 RFQ-only로
+  실행한다. AMM adapter coverage는 C-01을 제외한 명시적 demo-only Recipe로
+  분리해 Reg D/BUIDL 정책으로 오인되지 않게 했다. 검증: Engine 48/48, affected
+  integration 44/44, Toolkit/CLI smoke, BUIDL-like/Reg-D full Anvil E2E 각각 7/7와
+  RFQ buy/sell, full Foundry 954/954, 전체 `scripts/check.sh`, canonical Uniswap v3
+  5/5, deploy-v3 10/10, clean SDK consumer와 `git diff --check` 통과.
+
 - `DEPLOY-002 — Production Service Container Contract`: issue #115 범위로 demo
   sandbox와 분리된 pinned multi-stage RFQ host/Operator API OCI target을 추가했다.
   RFQ production entrypoint는 versioned bootstrap을 통해 durable coordinator,
@@ -25,9 +35,9 @@ source of truth로 사용한다.
   변경/누락/손상 시 readiness를 내린다. 두 image는 non-root/read-only, dropped
   capabilities, bounded resource/timeout와 SIGTERM shutdown contract를 가지며
   secret/error text를 로그에 남기지 않는다. 검증: service runtime smoke,
-  production OCI build/read-only runtime/auth/readiness/graceful shutdown smoke,
-  Compose config, full `scripts/check.sh`(Foundry 950/950), BUIDL-like RFQ E2E,
-  `git diff --check` 통과.
+   production OCI build/read-only runtime/auth/readiness/graceful shutdown smoke,
+   Compose config, full `scripts/check.sh`(Foundry 950/950), BUIDL-like RFQ E2E,
+   `git diff --check` 통과.
 
 - `SDK-006 — Reference DEX Sandbox`: issue #114를 구현해 packed CLI의
   `create --template sandbox`가 repository checkout 없이 Anvil, one-shot deployment,

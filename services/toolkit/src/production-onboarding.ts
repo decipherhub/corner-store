@@ -10,6 +10,7 @@ import {
   normalizeArtifactHash,
   validatePolicyAuditArtifactFile
 } from "./policy-audit";
+import {assertRecipeVenueCompatibility} from "./policy-compatibility";
 
 export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 5;
 export const MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION = 1;
@@ -477,6 +478,10 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   const venueSeen = new Set<string>();
   for (const [index, venue] of c.venues.entries()) validateVenue(venue, index, venueSeen);
   if (!c.venues.some((venue) => venue.active)) throw new Error("venues must contain at least one active venue");
+  const ammEnabled = (c.manifest!.supportedEngines & (1 << VENUE_TYPE.AMM)) !== 0 || c.venues.some(
+    (venue) => venue.active && enumValue(venue.venueType, VENUE_TYPE, "venueType") === VENUE_TYPE.AMM
+  );
+  assertRecipeVenueCompatibility(ammEnabled, schemaVersion, c.recipeBindings!, c.recipes!);
   const activeRfqVenues = c.venues.filter((venue) => enumValue(venue.venueType, VENUE_TYPE, "venueType") === VENUE_TYPE.RFQ && venue.active);
   if (c.rfq && activeRfqVenues.length === 0) throw new Error("rfq config requires an active RFQ venue");
   const approvedMakers = new Set<string>();

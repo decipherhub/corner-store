@@ -8,7 +8,7 @@
     "profile": "buidl-like"
   },
   "venues": {
-    "amm": true,
+    "amm": false,
     "rfq": true,
     "orderBook": false
   },

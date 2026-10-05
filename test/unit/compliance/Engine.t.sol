@@ -162,7 +162,7 @@ contract EngineTest is Test {
 
     function _activeManifest(uint16 fundRecipeId, uint256 factsPacked) internal pure returns (ManifestCore memory m) {
         m.status = PolicyStatus.ACTIVE;
-        m.supportedEngines = 0x01; // AMM bit
+        m.supportedEngines = 0x04; // RFQ bit
         m.factsPacked = factsPacked;
     }
 
@@ -216,7 +216,7 @@ contract EngineTest is Test {
         c.tokenOut = RWA;
         c.amountIn = 1000;
         c.amountOut = 50;
-        c.venueType = VenueType.AMM;
+        c.venueType = VenueType.RFQ;
         c.venue = address(0x7E47);
         c.flowType = FlowType.SECONDARY_TRADE;
         c.sellerIsAffiliate = false;
@@ -232,7 +232,7 @@ contract EngineTest is Test {
         c.tokenOut = RWA2;
         c.amountIn = 10;
         c.amountOut = 20;
-        c.venueType = VenueType.AMM;
+        c.venueType = VenueType.RFQ;
         c.venue = address(0x7E47);
         c.flowType = FlowType.SECONDARY_TRADE;
     }
@@ -250,6 +250,48 @@ contract EngineTest is Test {
         assertTrue(d.policyId != bytes32(0));
         assertEq(d.policyVersion, 1);
         assertEq(d.maxAmountToken, RWA, "single regulated output binds the cap axis");
+    }
+
+    function test_amm_rejects_recipe_containing_lockup_element() public {
+        _registerRWA(0, 0);
+        _makeBuyerCompliant();
+
+        ComplianceContext memory amm = _ctxBuy();
+        amm.venueType = VenueType.AMM;
+        ComplianceDecision memory d = engine.evaluate(amm);
+        assertFalse(d.allowed, "AMM must reject every recipe containing C-01");
+        assertEq(d.reasonCode, ReasonCodes.unsupportedVenue(1, bytes32("C-01-v2")));
+    }
+
+    function test_amm_allows_recipe_without_lockup_element() public {
+        _registerSingleElementRecipe(20, bytes32("A-01-v1"));
+        ManifestCore memory manifest = _activeManifest(0, 0);
+        manifest.supportedEngines = 0x01;
+        policyReg.registerManifest(RWA, manifest, _singleBinding(20, 1));
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+
+        ComplianceContext memory amm = _ctxBuy();
+        amm.venueType = VenueType.AMM;
+        ComplianceDecision memory d = engine.evaluate(amm);
+        assertTrue(d.allowed, "AMM remains valid for recipes without C-01");
+    }
+
+    function test_amm_rejects_future_lockup_element_version() public {
+        bytes32 futureLockupId = bytes32("C-01-v99");
+        elementReg.registerElement(futureLockupId, address(new FailingElement(futureLockupId, bytes32("UNREACHED"))));
+        _registerSingleElementRecipe(21, futureLockupId);
+        ManifestCore memory manifest = _activeManifest(0, 0);
+        manifest.supportedEngines = 0x01;
+        policyReg.registerManifest(RWA, manifest, _singleBinding(21, 1));
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+
+        ComplianceContext memory amm = _ctxBuy();
+        amm.venueType = VenueType.AMM;
+        ComplianceDecision memory d = engine.evaluate(amm);
+        assertFalse(d.allowed, "AMM must reject future C-01 family versions");
+        assertEq(d.reasonCode, ReasonCodes.unsupportedVenue(21, futureLockupId));
     }
 
     function test_registeringNewRecipeVersion_doesNotChangeActiveManifestPolicy() public {

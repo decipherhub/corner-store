@@ -12,13 +12,13 @@ import {ModularCompliance} from "@erc3643/compliance/modular/ModularCompliance.s
 /// Every BUY pushes a genuine T-REX transfer (pool → buyer) with full
 /// isVerified + canTransfer enforcement (gas in the millions). See the
 /// direction note in {IntegrationBase}: investor qualification remains bound to
-/// `ctx.buyer`, while B-02-v2 and C-01-v2 derive the actual RWA direction from
-/// tokenIn/tokenOut.
+/// `ctx.buyer`, while B-02-v2 derives the actual RWA direction from
+/// tokenIn/tokenOut. C-01 is intentionally absent because this suite exercises AMM.
 contract SwapFlowTest is IntegrationBase {
     address internal bob = address(0xB0B);
 
     function setUp() public {
-        deployStack(); // RegD506c, no fund recipe
+        deployStack(); // C-01-free AMM reference recipe
     }
 
     // --- BUY success: real RWA transfer, balances move -------------------

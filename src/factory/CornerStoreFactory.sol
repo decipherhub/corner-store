@@ -5,12 +5,15 @@ import {Governed} from "../auth/Governed.sol";
 import {ITokenPolicyRegistry} from "../interfaces/compliance/ITokenPolicyRegistry.sol";
 import {IVenueRegistry} from "../interfaces/execution/IVenueRegistry.sol";
 import {
+    CompiledElementRule,
     ElementEnforcementOverride,
     ManifestCore,
     ManifestPolicyConfig,
-    RecipeBinding
+    RecipeBinding,
+    VenueType
 } from "../types/ComplianceTypes.sol";
 import {VenueConfig} from "../types/VenueTypes.sol";
+import {Errors} from "../libraries/Errors.sol";
 
 /// @title CornerStoreFactory
 /// @notice Skeleton orchestration entry point for onboarding an RWA token:
@@ -59,6 +62,7 @@ contract CornerStoreFactory is Governed {
         VenueConfig calldata venueCfg
     ) external onlyOperator {
         tokenPolicyRegistry.registerManifest(token, manifest, bindings);
+        _assertVenuePolicyCompatibility(token, venueCfg.venueType, manifest.supportedEngines);
         tokenPolicyRegistry.approveManifest(token);
         venueRegistry.registerVenue(venue, venueCfg);
         emit RWATokenRegistered(token, venue);
@@ -78,9 +82,25 @@ contract CornerStoreFactory is Governed {
     ) external onlyOperator {
         ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
         tokenPolicyRegistry.registerManifest(token, manifest, bindings, overrides_, config);
+        _assertVenuePolicyCompatibility(token, venueCfg.venueType, manifest.supportedEngines);
         tokenPolicyRegistry.approveManifest(token);
         venueRegistry.registerVenue(venue, venueCfg);
         emit RWATokenRegistered(token, venue);
+    }
+
+    function _assertVenuePolicyCompatibility(address token, VenueType venueType, uint8 supportedEngines) private view {
+        uint8 ammMask = 0x01; // VenueType.AMM is mask bit 0.
+        if (venueType != VenueType.AMM && (supportedEngines & ammMask) == 0) return;
+
+        uint256 bindingCount = tokenPolicyRegistry.compiledBindingCountOf(token);
+        for (uint256 bindingIndex = 0; bindingIndex < bindingCount; bindingIndex++) {
+            CompiledElementRule[] memory rules = tokenPolicyRegistry.compiledRulesOf(token, bindingIndex);
+            for (uint256 ruleIndex = 0; ruleIndex < rules.length; ruleIndex++) {
+                if (bytes5(rules[ruleIndex].elementId) == bytes5("C-01-")) {
+                    revert Errors.UnsupportedVenuePolicy(rules[ruleIndex].elementId);
+                }
+            }
+        }
     }
 
     /// @notice Schedule a delayed manifest reopening through the registry owner.

@@ -40,6 +40,7 @@ import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockPool} from "../mocks/MockPool.sol";
 
 import {BuidlLikeDemoAsset} from "../../src/demo/BuidlLikeDemoAsset.sol";
+import {DemoAmmReferenceRecipe} from "../../src/demo/DemoAmmReferenceRecipe.sol";
 import {
     ManifestCore,
     ElementEnforcementOverride,
@@ -59,7 +60,7 @@ import {VenueConfig, CustodyModel} from "../../src/types/VenueTypes.sol";
 ///         token (via {TREXSuite}) so each scenario file is short.
 ///
 /// Topology of a BUY:
-///   - RWA  = the real T-REX `token()` (manifest ACTIVE → RegD506c).
+///   - RWA  = the real T-REX `token()` (manifest ACTIVE → AMM reference policy).
 ///   - QUOTE = a plain {MockERC20} (manifest UNREGULATED).
 ///   - {MockPool} is constructed token0=QUOTE, token1=RWA. With the adapter's
 ///     default `zeroForOne=true`, tokenIn=token0=QUOTE and tokenOut=token1=RWA.
@@ -86,7 +87,7 @@ abstract contract IntegrationBase is TREXSuite {
     QualifiedPurchaser internal qp;
     MinimumTradeAmount internal minimumTradeAmount;
     SurveillanceFlagV2 internal surveillance;
-    // 9-element Reg D 506(c) reference set (A-01/A-03 above + these):
+    // Elements shared by the legal profiles and the C-01-free AMM reference policy:
     Jurisdiction internal jurisdiction; // A-02-v1
     IdentityUniqueness internal identity; // A-04-v1
     UsTaxResident internal usTax; // A-05-v1
@@ -111,6 +112,8 @@ abstract contract IntegrationBase is TREXSuite {
 
     // RWA-side bit in supportedEngines / allowedVenueTypes (AMM = bit 0).
     uint8 internal constant ENGINES_AMM = 0x01;
+    uint8 internal constant ENGINE_MASK_RFQ = 0x04;
+    uint16 internal constant AMM_REFERENCE_RECIPE_ID = 8;
 
     // 9-element Reg D 506(c) fixture constants.
     bytes32 internal constant ALLOWED_JURISDICTION = bytes32("US");
@@ -188,7 +191,7 @@ abstract contract IntegrationBase is TREXSuite {
         elementReg.registerElement(bytes32("MIN-AMOUNT-v1"), address(minimumTradeAmount));
         elementReg.registerElement(bytes32("F-02-v2"), address(surveillance));
 
-        // 2b. remaining 9-element Reg D 506(c) reference set. AssetClassification
+        // 2b. Remaining shared elements used by the legal profiles and AMM reference policy.
         //     requires REG_D; Lockup reads acquisition time via an injected mock.
         jurisdiction = new Jurisdiction();
         identity = new IdentityUniqueness();
@@ -210,6 +213,7 @@ abstract contract IntegrationBase is TREXSuite {
         recipeReg.registerRecipe(1, 3, address(new RegD506cRecipeV3()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
         recipeReg.registerRecipe(3, 2, address(new QualifiedPurchaserMinimumAmountRecipe()));
+        recipeReg.registerRecipe(AMM_REFERENCE_RECIPE_ID, 1, address(new DemoAmmReferenceRecipe()));
 
         // 4. engine
         engine = new ComplianceEngine(policyReg, elementReg, recipeReg);
@@ -255,7 +259,7 @@ abstract contract IntegrationBase is TREXSuite {
         );
         adapter.setPool(address(pool), true);
 
-        // 9. Asset-side attestations for the 9-element Reg D 506(c) recipe: the RWA
+        // 9. Asset-side attestations shared by the legal profiles and AMM reference policy: the RWA
         //    is classified REG_D, attested ERC-3643-native, and has Form D on file.
         //    Allow the ALLOWED_JURISDICTION code for the investor-side screen.
         assetClass.setClassification(address(rwaToken), REG_D_CLASS);
@@ -274,32 +278,51 @@ abstract contract IntegrationBase is TREXSuite {
         acqSource.setAcquiredAt(address(pool), address(rwaToken), uint64(1));
     }
 
-    /// @dev Convenience overload: plain RegD506c, no fund recipe.
+    /// @dev Convenience overload: C-01-free AMM reference policy, no fund recipe.
     function deployStack() internal {
         deployStack(0, 0);
+    }
+
+    /// @dev Real Reg D recipe, including C-01, for RFQ integration coverage.
+    ///      The AMM venue may still be deployed as infrastructure, but the
+    ///      manifest does not admit it and the engine rejects AMM evaluation.
+    function deployRegDStack() internal {
+        ManifestCore memory manifest = _activeManifest(0, 0);
+        manifest.supportedEngines = ENGINE_MASK_RFQ;
+        deployStackWithManifest("Corner Store RWA", "csRWA", manifest, _regDBindings(0));
     }
 
     /// @dev BUIDL-like demo fixture: Reg D 506(c) + ICA 3(c)(7) fund fact.
     ///      This is a local demo asset, not integration with real BlackRock BUIDL.
     function deployBuidlLikeStack() internal {
+        RecipeBinding[] memory bindings = BuidlLikeDemoAsset.recipeBindings();
+        bindings[0] = RecipeBinding(AMM_REFERENCE_RECIPE_ID, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         deployStackWithManifestAndConfig(
             BuidlLikeDemoAsset.TOKEN_NAME,
             BuidlLikeDemoAsset.TOKEN_SYMBOL,
             BuidlLikeDemoAsset.manifest(ENGINES_AMM),
-            BuidlLikeDemoAsset.recipeBindings(),
+            bindings,
             BuidlLikeDemoAsset.demoPolicyConfig()
         );
     }
 
     // --- manifest helper --------------------------------------------------
 
-    function _activeManifest(uint16 fundRecipeId, uint256 factsPacked) internal pure returns (ManifestCore memory m) {
+    function _activeManifest(uint16, uint256 factsPacked) internal pure returns (ManifestCore memory m) {
         m.status = PolicyStatus.ACTIVE;
         m.supportedEngines = ENGINES_AMM; // AMM bit → selector.validate passes for AMM
         m.factsPacked = factsPacked;
     }
 
     function _bindings(uint16 fundRecipeId) internal pure returns (RecipeBinding[] memory bindings) {
+        bindings = new RecipeBinding[](fundRecipeId == 0 ? 1 : 2);
+        bindings[0] = RecipeBinding(AMM_REFERENCE_RECIPE_ID, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        if (fundRecipeId != 0) {
+            bindings[1] = RecipeBinding(fundRecipeId, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
+        }
+    }
+
+    function _regDBindings(uint16 fundRecipeId) internal pure returns (RecipeBinding[] memory bindings) {
         bindings = new RecipeBinding[](fundRecipeId == 0 ? 1 : 2);
         bindings[0] = RecipeBinding(1, 3, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         if (fundRecipeId != 0) {
