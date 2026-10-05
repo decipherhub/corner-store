@@ -116,7 +116,8 @@ Toolkit smoke는 unified `create`의 네 purpose template과 legacy
 versioned project descriptor, policy facade의 immutable config commitment,
 actionable verification, `.env.example`,
 vendored `vendor/rfq-service`, optional Docker files, overwrite refusal과
-standalone package scripts(`doctor`, `deploy`, `verify`, `policy:explain`, `test:module`)를
+standalone package scripts(`validate`, `simulate`, `doctor`, `deploy`, `verify`,
+`policy:explain`, `test:module`)를
 검증한다. Production onboarding smoke는 exact schema/unknown-field rejection,
 PII/secret rejection, deterministic Element/Recipe/Manifest/Venue/RFQ calldata,
 Safe/operator draft governance/proposal metadata, authority partition, explicit
@@ -128,7 +129,14 @@ dry-run `deploy`, `verify`/preflight와 `test-module` command path도 별도로
 확인한다. `scripts/sdk-product-smoke.sh`는 CLI, Toolkit과 RFQ package를 모두
 tarball로 pack한 뒤 clean temporary project에 설치해야 하며 Toolkit public export,
 generated policy facade, RFQ conformance, CLI doctor/deploy와 packaged contract
-build를 검증한다.
+build를 검증한다. 또한 sandbox와 DEX project 양쪽에서 validate/simulate/doctor를
+실행하고, sandbox만 Compose v2와 running daemon을 required로 진단하는지 확인한다.
+Docker가 없는 기본 CI에서는 그 실패와 remediation 자체가 기대 결과이며 Docker
+runtime smoke는 daemon이 있는 release 환경에서만 실행한다. stale/wrong-profile
+reference artifact가 remediation과 함께 실패한 뒤 수정 시 통과하는지, venue 정책 값
+변경이 compiled hash와 allow/reject 설명에 함께 반영되는지도 검증한다. Production
+chain/address/runtime code-hash mismatch는 Toolkit/CLI의
+`production-onboarding-verify` regression으로 별도 고정한다.
 `dex-integration` clean project는 추가로 generated Solidity Adapter를 build하고
 real Router 기반 allow/reject/direct-call/atomic rollback 4-scenario conformance를
 실행한다.

@@ -29,12 +29,19 @@ export interface PolicyExplanation {
     network: string;
     governanceApprovals: number;
   };
+  decisions: Record<PolicyVenue, {
+    allowed: boolean;
+    reasonCode: "VENUE_ENABLED" | "VENUE_DISABLED";
+    reason: string;
+  }>;
   advanced: {
     model: ["Element", "Recipe", "Manifest", "Operator"];
     deploymentArtifact: string;
     boundary: string;
   };
 }
+
+export type PolicyVenue = "amm" | "rfq" | "order-book";
 
 export interface ActionableCheck extends PreflightCheck {}
 
@@ -122,6 +129,16 @@ export function connectCornerStore(options: CornerStoreConnectionOptions): Corne
 
   const explain = (): PolicyExplanation => {
     const venues = enabledVenues(config);
+    const decisions = Object.fromEntries(
+      (["amm", "rfq", "order-book"] as PolicyVenue[]).map((venue) => {
+        const allowed = venues.includes(venue);
+        return [venue, {
+          allowed,
+          reasonCode: allowed ? "VENUE_ENABLED" : "VENUE_DISABLED",
+          reason: `${venue} is ${allowed ? "enabled" : "disabled"} by corner-store.config.json`
+        }];
+      })
+    ) as PolicyExplanation["decisions"];
     return {
       summary: `${config.asset.profile} policy across ${venues.join(", ")}`,
       values: {
@@ -130,10 +147,11 @@ export function connectCornerStore(options: CornerStoreConnectionOptions): Corne
         network: config.deployment.network,
         governanceApprovals: config.governance.requiredApprovals
       },
+      decisions,
       advanced: {
         model: ["Element", "Recipe", "Manifest", "Operator"],
         deploymentArtifact: config.deployment.artifact,
-        boundary: "Router-mediated settlement only; token and identity systems remain external trust boundaries."
+        boundary: "Venue decisions explain configured availability only; fill-time compliance remains Router-mediated and token/identity systems remain external trust boundaries."
       }
     };
   };

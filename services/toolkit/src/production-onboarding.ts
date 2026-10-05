@@ -230,7 +230,12 @@ export interface OperatorOnboardingTransaction extends OnboardingTx {
   operatorTxLabel: string;
 }
 
-export interface ProductionOnboardingCheck {name: string; pass: boolean; detail: string}
+export interface ProductionOnboardingCheck {
+  name: string;
+  pass: boolean;
+  detail: string;
+  remediation: string;
+}
 export interface ProductionOnboardingVerification {ready: boolean; checks: ProductionOnboardingCheck[]}
 
 export interface ProductionOnboardingAuditEvidence {
@@ -691,7 +696,12 @@ export function createProductionOnboardingPlan(
 export async function verifyProductionOnboarding(config: ProductionOnboardingConfig, reader: OnboardingReader): Promise<ProductionOnboardingVerification> {
   const selected = validateProductionOnboardingConfig(config);
   const checks: ProductionOnboardingCheck[] = [];
-  const check = (name: string, pass: boolean, detail: string) => checks.push({name, pass, detail});
+  const check = (name: string, pass: boolean, detail: string) => checks.push({
+    name,
+    pass,
+    detail,
+    remediation: pass ? "No action required." : productionVerificationRemediation(name)
+  });
   try {
     const chain = await reader.chainId();
     check("chain-id", chain === selected.chainId, `expected=${selected.chainId}; actual=${chain}`);
@@ -852,7 +862,12 @@ export async function verifyProductionPolicyUpdatePreActivation(
   const selected = validateProductionOnboardingConfig(config);
   if (!isV5Onboarding(selected) || selected.lifecycle!.action !== "UPDATE") throw new Error("pre-activation verification requires a schemaVersion 5 UPDATE config");
   const checks: ProductionOnboardingCheck[] = [];
-  const check = (name: string, pass: boolean, detail: string) => checks.push({name, pass, detail});
+  const check = (name: string, pass: boolean, detail: string) => checks.push({
+    name,
+    pass,
+    detail,
+    remediation: pass ? "No action required." : productionVerificationRemediation(name)
+  });
   try {
     const chain = await reader.chainId();
     check("chain-id", chain === selected.chainId, `expected=${selected.chainId}; actual=${chain}`);
@@ -1328,6 +1343,19 @@ function canonicalJson(value: unknown): string {
     return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+function productionVerificationRemediation(name: string): string {
+  if (name === "chain-id") {
+    return "Connect to the configured chain RPC or correct the reviewed chainId, then rerun production verification.";
+  }
+  if (name.startsWith("code-")) {
+    return "Restore the reviewed contract address and runtime bytecode/code-hash binding; never approve an unreviewed hash, then rerun verification.";
+  }
+  if (name.includes("inventory")) {
+    return "Restore the configured inventory balance/allowance using the authorized operator workflow, then rerun verification.";
+  }
+  return "Reconcile the reviewed onboarding config or live on-chain binding through the authorized governance/operator workflow, then rerun verification.";
 }
 
 async function verifyCode(reader: OnboardingReader, address: string, name: string, check: (name: string, pass: boolean, detail: string) => void, expected?: string): Promise<void> {

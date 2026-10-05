@@ -168,9 +168,16 @@ function packageManifest(
       "test:module": "corner-store test-module dist/module-conformance.js",
       ...(project.template === "dex-integration" ? {"test:adapter": "forge test --offline"} : {}),
       ...(standalone ? {
+        validate: "corner-store toolkit-validate",
+        simulate: "corner-store toolkit-simulate",
         doctor: "corner-store doctor",
         deploy: "corner-store deploy",
         verify: "corner-store verify",
+        ...(project.template === "sandbox" ? {
+          dev: "docker compose up --build -d",
+          status: "docker compose ps -a",
+          clean: "docker compose down --volumes --remove-orphans"
+        } : {}),
         ...(toolkitDependency ? {"policy:explain": "node dist/policy.js"} : {})
       } : {})
     },
@@ -381,7 +388,8 @@ function readme(manifest: RFQIntegrationManifest, project: ProjectDescriptor, ha
   const purpose = projectTemplate(project.template);
   const setup = project.template === "sandbox"
     ? `The sandbox requires Docker Engine/Desktop with Docker Compose v2. It does
-not require a separate \`npm install\`, \`.env\` file or production credential.`
+not require an \`.env\` file or production credential. The direct Compose quickstart
+does not require a host npm or Foundry installation.`
     : `1. Copy \`.env.example\` to a local secret-managed environment. Never commit it.
 2. Install dependencies and run \`npm test\`.
 3. ${manifest.mode === "reference-service"
@@ -425,8 +433,11 @@ network or reused for real assets.
 
 \`\`\`sh
 docker compose up --build -d
-docker compose ps -a
 \`\`\`
+
+This is the third command after \`corner-store create ...\` and \`cd ...\`.
+For the diagnostic and lifecycle aliases, run \`npm install\` once, then use
+\`npm run doctor\`, \`npm run dev\`, \`npm run status\` and \`npm run clean\`.
 
 Open the demo portal at <http://127.0.0.1:8790> and Deployment Studio at
 <http://127.0.0.1:8791>. The RPC is available at <http://127.0.0.1:8545>.
@@ -434,8 +445,10 @@ Select the alternative fixture with
 \`CORNER_STORE_PROFILE=reg-d docker compose up --build -d\` after removing the
 previous demo chain and artifact.
 
-If a previous chain or artifact is still present, run
-\`docker compose down --volumes --remove-orphans\` and start again. Compose
+## Recovery
+
+If a previous chain or artifact is still present, run \`npm run clean\` (or
+\`docker compose down --volumes --remove-orphans\`) and start again. Compose
 does not start the RFQ/API/UI services until the current deployment finishes,
 and the RFQ backend independently rejects artifact, scenario or chain drift.
 For startup failures, inspect \`docker compose ps -a\` and

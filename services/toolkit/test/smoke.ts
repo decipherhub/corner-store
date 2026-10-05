@@ -170,6 +170,18 @@ if (changedConfigHash === compiled.configHash) throw new Error("SDK facade confi
 if (sdk.policy.simulate().profile !== "buidl-like" || !sdk.policy.explain().advanced.model.includes("Manifest")) {
   throw new Error("SDK facade simulation/explanation regression");
 }
+const initialExplanation = sdk.policy.explain();
+const changedVenueClient = connectCornerStore({
+  config: {...config, venues: {amm: false, rfq: false, orderBook: true}}
+});
+if (
+  !initialExplanation.decisions.rfq.allowed ||
+  changedVenueClient.policy.explain().decisions.rfq.allowed ||
+  changedVenueClient.policy.explain().decisions.rfq.reasonCode !== "VENUE_DISABLED" ||
+  changedVenueClient.policy.compile().configHash === compiled.configHash
+) {
+  throw new Error("SDK facade policy value did not change compiled commitment and allow/reject explanation");
+}
 const verified = sdk.policy.verify();
 if (!verified.ready || verified.checks.some((check) => !check.expected || !check.actual || !check.remediation)) {
   throw new Error("SDK facade actionable verification regression");
@@ -904,7 +916,29 @@ const baseOnboardingVerificationPromise = verifyProductionOnboarding(onboardingC
   const badReader = {...okReader, async call(address: string, abi: string[], fn: string, args: unknown[] = []) { if (fn === "identityRegistry") throw new Error("rpc unavailable"); return okReader.call(address, abi, fn, args); }};
   return verifyProductionOnboarding(onboardingConfig, badReader);
 }).then((badVerify) => {
-  assert(!badVerify.ready && badVerify.checks.some((check) => check.name === "erc3643-identity-registry" && !check.pass), "onboarding verifier fails closed on unavailable reads");
+  assert(
+    !badVerify.ready &&
+    badVerify.checks.some((check) => check.name === "erc3643-identity-registry" && !check.pass && check.remediation.length > 0),
+    "onboarding verifier fails closed with remediation on unavailable reads"
+  );
+});
+
+const productionBindingFailurePromise = verifyProductionOnboarding(onboardingConfigV4, {
+  ...okReader,
+  async chainId() { return 2; },
+  async getCode() { return "0x6000"; },
+  async call(address: string, abi: string[], fn: string, args: unknown[] = []) {
+    if (fn === "identityRegistry") return "0x9999999999999999999999999999999999999999";
+    return okReader.call(address, abi, fn, args);
+  }
+}).then((result) => {
+  assert(!result.ready, "production verifier rejects wrong chain/address/code hash bindings");
+  for (const name of ["chain-id", "code-complianceEngine", "erc3643-identity-registry"]) {
+    assert(
+      result.checks.some((check) => check.name === name && !check.pass && check.remediation.length > 0),
+      `production verifier emits actionable remediation for ${name}`
+    );
+  }
 });
 
 const v5Reader = {
@@ -960,7 +994,12 @@ const v5PreVerificationPromise = verifyProductionPolicyUpdatePreActivation(updat
 }).then((result) => {
   assert(!result.ready && result.checks.some((check) => check.name === "pending-compiled-plan-hash" && !check.pass), "v5 pre-activation verifier fails closed on pending plan mismatch");
 });
-const onboardingVerificationPromise = Promise.all([baseOnboardingVerificationPromise, v5PostVerificationPromise, v5PreVerificationPromise]);
+const onboardingVerificationPromise = Promise.all([
+  baseOnboardingVerificationPromise,
+  productionBindingFailurePromise,
+  v5PostVerificationPromise,
+  v5PreVerificationPromise
+]);
 
 
 const referenceTarget = join(dir, "reference-rfq");
@@ -1013,6 +1052,8 @@ if (
 const libraryPackage = JSON.parse(readFileSync(join(libraryTarget, "package.json"), "utf8"));
 if (
   !libraryPackage.scripts.doctor || libraryPackage.scripts.start ||
+  !libraryPackage.scripts.validate || !libraryPackage.scripts.simulate ||
+  !libraryPackage.scripts.deploy || !libraryPackage.scripts.verify ||
   !libraryPackage.scripts["test:module"] || !libraryPackage.scripts["test:adapter"]
 ) {
   throw new Error("standalone package scripts regression");
@@ -1039,6 +1080,7 @@ const sandbox = scaffoldRFQIntegration(sandboxTarget, {
 });
 const sandboxCompose = readFileSync(join(sandboxTarget, "compose.yaml"), "utf8");
 const sandboxDockerfile = readFileSync(join(sandboxTarget, "Dockerfile"), "utf8");
+const sandboxPackage = JSON.parse(readFileSync(join(sandboxTarget, "package.json"), "utf8"));
 const sandboxReadme = readFileSync(join(sandboxTarget, "README.md"), "utf8");
 if (
   !sandbox.files.includes("sandbox/contracts/script/DeployStack.s.sol") ||
@@ -1052,6 +1094,18 @@ if (
   !sandboxDockerfile.includes("ca-certificates") ||
   !sandboxDockerfile.includes("/home/node/.svm") ||
   !sandboxDockerfile.includes("npm ci --prefix") ||
+  !sandboxPackage.scripts.validate ||
+  !sandboxPackage.scripts.simulate ||
+  !sandboxPackage.scripts.doctor ||
+  !sandboxPackage.scripts.dev ||
+  !sandboxPackage.scripts.status ||
+  !sandboxPackage.scripts.clean ||
+  !sandboxPackage.scripts.test ||
+  !sandboxReadme.includes("npm run doctor") ||
+  !sandboxReadme.includes("npm run dev") ||
+  !sandboxReadme.includes("does not require a host npm or Foundry installation") ||
+  !sandboxReadme.includes("This is the third command") ||
+  !sandboxReadme.includes("## Recovery") ||
   !sandboxReadme.includes("docker compose up --build -d") ||
   !sandboxReadme.includes("docker compose logs deployer rfq operator-api") ||
   sandboxReadme.includes("Install dependencies and run `npm test`") ||

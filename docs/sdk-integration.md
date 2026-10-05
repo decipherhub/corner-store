@@ -17,6 +17,8 @@ The external CLI workflow is:
 corner-store create ./my-corner-store --template dex-integration
 cd my-corner-store
 npm install
+npm run validate
+npm run simulate
 npm test
 npm run doctor
 npm run deploy
@@ -41,7 +43,9 @@ The generated `package.json` scripts map to the same CLI commands:
 | --- | --- |
 | `corner-store create <target>` | create a clean integration project |
 | `corner-store init [path]` | create a versioned Toolkit config in an existing project |
-| `corner-store doctor [path]` | check Node, npm, Foundry, config, contract bundle, optional artifact and optional Docker |
+| `corner-store doctor [path]` | check Node, npm, Foundry, config, contract bundle, optional artifact and template-aware Docker readiness |
+| `npm run validate` | validate the versioned project config without deployment side effects |
+| `npm run simulate` | compile and simulate the policy values used by the generated project |
 | `corner-store deploy [path]` | print the deployment plan by default; `--broadcast` submits the local/demo Foundry deployment |
 | `corner-store verify [path]` | preflight config and deployment artifact bindings after an artifact exists |
 | `corner-store test-module <path>` | run the public RFQ module conformance suite against a built CommonJS module |
@@ -72,7 +76,6 @@ repository checkout is not required.
 corner-store create ./corner-store-sandbox --template sandbox
 cd ./corner-store-sandbox
 docker compose up --build -d
-docker compose ps -a
 ```
 
 The default `buidl-like` fixture is available at `http://127.0.0.1:8790`, with
@@ -82,8 +85,7 @@ Anvil readiness and the one-shot deployment gate all dependent services, and the
 RFQ backend fails closed when the chain, deployment artifact or scenario do not
 match. Run `docker compose down --volumes --remove-orphans` to discard a previous
 demo chain and artifact together before switching profiles. For startup failures,
-inspect `docker compose ps -a` and
-`docker compose logs deployer rfq operator-api`.
+inspect `docker compose ps -a` and `docker compose logs deployer rfq operator-api`.
 
 The sandbox uses public Anvil development identities, reference pricing/risk and
 mock qualification data. It is never a production deployment, never accepts
@@ -214,6 +216,23 @@ Every scaffold includes:
 Docker is an export choice, not a required Corner Store runtime. Generated
 Compose reads `.env`; it does not embed a signer key, RPC credential or production
 secret.
+
+## Recovery Contract
+
+`doctor` emits a remediation for every failed check. Docker and Compose v2 are
+required only by the `sandbox` template; library-oriented templates report them
+as optional. The direct sandbox quickstart is three commands (`create`, `cd`,
+`docker compose up`) and does not require host npm or Foundry. Users who run an
+optional `npm install` also get `npm run doctor/dev/status/clean` aliases. A
+sandbox profile change must discard the old volumes before starting with the new
+`CORNER_STORE_PROFILE`.
+
+`verify` fails closed when the local/reference deployment artifact is missing,
+bound to a different profile or lacks required venue addresses. Correct or
+regenerate that artifact, then rerun the same `npm run verify` command. The output
+includes `expected`, `actual` and `remediation`, so recovery does not require
+copying contract addresses by hand. Production chain, address, live bytecode and
+code-hash bindings remain the stricter `production-onboarding-verify` contract.
 
 ## Contract Bundle Resolution
 
