@@ -95,12 +95,10 @@ contract DeployProductionCore is Script, ProductionCoreDeployer {
         vm.writeJson(json, artifactPath);
     }
 
-    function _printSummary(
-        Deployment memory deployed,
-        address governance,
-        address operator,
-        string memory artifactPath
-    ) internal view {
+    function _printSummary(Deployment memory deployed, address governance, address operator, string memory artifactPath)
+        internal
+        view
+    {
         console2.log("Corner Store production core deployed");
         console2.log("chain id       :", block.chainid);
         console2.log("governance Safe:", governance);
