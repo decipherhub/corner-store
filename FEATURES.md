@@ -34,7 +34,7 @@
 
 ### State
 
-active
+passing
 
 ## CORE-014 — C-01 Venue Compatibility Guard
 

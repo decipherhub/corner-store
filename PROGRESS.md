@@ -11,11 +11,21 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-`SDK-007 — External User Golden Path Acceptance`: issue #117의 외부 사용자 기준을
-packed clean-project acceptance로 고정하고, 목적별 생성 프로젝트의 공통 명령,
-actionable doctor와 stale artifact 복구 흐름을 검증한다.
+없음. 다음 feature는 새 issue/우선순위 확인 후 하나만 active로 전환한다.
 
 ## Completed
+
+- `SDK-007 — External User Golden Path Acceptance`: issue #117의 외부 사용자 기준을
+  packed clean-project acceptance로 고정했다. 목적별 생성 프로젝트는 공통
+  validate/simulate/doctor/deploy/verify 계약을 제공하고, direct Compose sandbox는
+  create→cd→up 세 명령으로 host npm/Foundry 없이 시작한다. Doctor는 project
+  descriptor를 fail-closed 검증하고 sandbox에서 Compose v2와 daemon만 필수로,
+  library path에서는 Docker를 선택 사항으로 진단한다. stale/wrong-profile
+  reference artifact는 remediation 후 같은 verify로 복구되며, venue 정책 값 변경은
+  compiled commitment와 allow/reject 설명을 함께 변경한다. Production verifier는
+  chain/address/runtime code-hash mismatch에 remediation을 반환한다. 검증: Toolkit·CLI
+  smoke, packed clean-project sandbox/DEX acceptance, full Foundry 954/954, 전체
+  `scripts/check.sh`, deploy-v3 10/10, `git diff --check` 통과.
 
 - `CORE-014 — C-01 Venue Compatibility Guard`: issue #132의 후속 합의대로
   `AMM + C-01-*`를 warning이 아닌 공통 hard rejection으로 구현했다. Toolkit profile,
