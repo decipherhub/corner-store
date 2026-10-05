@@ -81,6 +81,19 @@ idempotent replay를 검증한다.
 server-owned resolver가 반환한 canonical `policyId`만 coordinator와 signature에
 전달되는지 검증한다.
 
+Production service container smoke:
+
+```sh
+scripts/production-container-smoke.sh
+```
+
+Docker daemon이 필요한 별도 gate다. pinned RFQ host/Operator API targets를 새로
+build하고 compiled runtime-only layout, non-root user, healthcheck, read-only root,
+dropped capabilities, dependency failure redaction, liveness/readiness, mounted-token
+authentication, Compose schema와 SIGTERM graceful shutdown을 검증한다. 일반
+`scripts/check.sh`와 별개로 CI에서 실행하며 release image 변경은 이 gate를 생략할
+수 없다.
+
 
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
 API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount

@@ -11,6 +11,11 @@ configuration, run dry-run and fork checks, submit external multisig payloads,
 verify on-chain state, then activate venues, makers, signers and inventory in
 staged steps.
 
+Production RFQ host and read-only Operator API packaging, dependency injection,
+health/readiness and OCI release gates are defined separately in
+[`production-containers.md`](./production-containers.md). Deploying those images
+does not replace the activation evidence in this runbook.
+
 ## Scope
 
 In scope:

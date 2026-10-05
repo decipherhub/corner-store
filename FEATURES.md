@@ -34,6 +34,38 @@
 
 passing
 
+
+## DEPLOY-002 — Production Service Container Contract
+
+### Behavior
+
+- RFQ host와 read-only Operator API는 demo Compose와 분리된 pinned OCI build
+  target으로 제공되며 non-root/read-only runtime 계약을 가진다.
+- RFQ container는 operator-owned durable coordinator, authentication, shared rate
+  limit, pricing/risk, external signer, policy resolver와 WORM audit를 하나의
+  versioned bootstrap contract로만 주입받고 reference/in-memory 기본값으로
+  production 기동하지 않는다.
+- liveness와 dependency readiness를 분리하고 dependency unavailable/stale 상태에서
+  quote issuance를 fail-closed한다.
+- 환경 변수는 versioned exact schema로 검증하고 secret-shaped 값이나 bootstrap
+  예외를 일반 로그·health·readiness에 노출하지 않는다.
+- example deployment는 immutable image reference, read-only filesystem,
+  dropped capabilities, resource/shutdown contract와 external secret/config mount를
+  명시하며 demo key 또는 production credential을 포함하지 않는다.
+
+### Verification
+
+- RFQ runtime/bootstrap, readiness와 graceful shutdown smoke
+- Operator API production runtime and secret-file smoke
+- pinned OCI image build/runtime smoke with non-root/read-only filesystem and Compose validation
+- missing dependency and secret-redaction regressions
+- BUIDL-like local RFQ E2E and full `scripts/check.sh` (Foundry 950/950)
+- `git diff --check`
+
+### State
+
+passing
+
 ## SDK-006 — Reference DEX Sandbox
 
 ### Behavior
