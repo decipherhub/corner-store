@@ -38,7 +38,7 @@ program
 
 program
   .command("doctor")
-  .description("diagnose Node, Foundry, config, contract bundle, artifact, and optional Docker")
+  .description("diagnose Node, Foundry, config, contract bundle, artifact, and template-aware Docker readiness")
   .argument("[path]", "config JSON path", "corner-store.config.json")
   .action(run((path, _opts, command) => cmd.cmdDoctor(path, command.optsWithGlobals())));
 

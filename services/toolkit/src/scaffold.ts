@@ -168,9 +168,16 @@ function packageManifest(
       "test:module": "corner-store test-module dist/module-conformance.js",
       ...(project.template === "dex-integration" ? {"test:adapter": "forge test --offline"} : {}),
       ...(standalone ? {
+        validate: "corner-store toolkit-validate",
+        simulate: "corner-store toolkit-simulate",
         doctor: "corner-store doctor",
         deploy: "corner-store deploy",
         verify: "corner-store verify",
+        ...(project.template === "sandbox" ? {
+          dev: "docker compose up --build -d",
+          status: "docker compose ps -a",
+          clean: "docker compose down --volumes --remove-orphans"
+        } : {}),
         ...(toolkitDependency ? {"policy:explain": "node dist/policy.js"} : {})
       } : {})
     },
@@ -424,18 +431,24 @@ development mnemonic inside the runtime and must never be exposed to a public
 network or reused for real assets.
 
 \`\`\`sh
-docker compose up --build -d
-docker compose ps -a
+npm run doctor
+npm run dev
+npm run status
 \`\`\`
+
+The npm commands are stable aliases for the Docker Compose lifecycle. Running
+\`docker compose up --build -d\` directly remains supported.
 
 Open the demo portal at <http://127.0.0.1:8790> and Deployment Studio at
 <http://127.0.0.1:8791>. The RPC is available at <http://127.0.0.1:8545>.
 Select the alternative fixture with
-\`CORNER_STORE_PROFILE=reg-d docker compose up --build -d\` after removing the
+\`CORNER_STORE_PROFILE=reg-d npm run dev\` after removing the
 previous demo chain and artifact.
 
-If a previous chain or artifact is still present, run
-\`docker compose down --volumes --remove-orphans\` and start again. Compose
+## Recovery
+
+If a previous chain or artifact is still present, run \`npm run clean\` (or
+\`docker compose down --volumes --remove-orphans\`) and start again. Compose
 does not start the RFQ/API/UI services until the current deployment finishes,
 and the RFQ backend independently rejects artifact, scenario or chain drift.
 For startup failures, inspect \`docker compose ps -a\` and

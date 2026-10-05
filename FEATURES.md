@@ -9,6 +9,31 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## SDK-007 — External User Golden Path Acceptance
+
+### Behavior
+
+- packed CLI/Toolkit/RFQ package만 설치한 clean project에서 `sandbox`와
+  `dex-integration`을 source checkout 없이 생성·설치·검증한다.
+- 생성 프로젝트는 `validate`, `simulate`, `doctor`, `deploy`, `verify`의 공통
+  명령 계약을 제공하고 sandbox만 Docker를 필수 dependency로 진단한다.
+- stale/wrong-profile deployment artifact는 actionable remediation과 함께
+  fail-closed하며 수정 뒤 같은 `verify` 명령으로 복구를 확인한다.
+- 정책 입력 값 변경은 compiled config commitment와 사용자 중심 설명 양쪽에
+  결정적으로 반영된다.
+
+### Verification
+
+- Toolkit/CLI scaffold and doctor smoke
+- packed clean-project sandbox/DEX install, build and conformance
+- sandbox Docker-required and library Docker-optional diagnosis
+- stale artifact fail/repair/pass and policy-value propagation acceptance
+- full `scripts/check.sh` and `git diff --check`
+
+### State
+
+active
+
 ## CORE-014 — C-01 Venue Compatibility Guard
 
 ### Behavior

@@ -117,6 +117,34 @@ async function main() {
       invalidDoctor.checks.some((check) => check.name === "config" && !check.pass),
     "doctor reports all prerequisites alongside config failure"
   );
+  writeFileSync(join(consumerRoot, "corner-store.config.json"), `${JSON.stringify({
+    schemaVersion: 1,
+    deployment: {artifact: "deployments/anvil-e2e.json", network: "anvil"},
+    asset: {profile: "buidl-like"},
+    venues: {amm: false, rfq: true, orderBook: false},
+    accounts: {operator: "operator", investor: "investor", maker: "maker"},
+    governance: {multisig: "governance-multisig", requiredApprovals: 2}
+  }, null, 2)}\n`);
+  const commandProbe = (name: string, args: string[]) => name === "docker"
+    ? {status: 127, stdout: "", stderr: "not found"}
+    : {status: 0, stdout: `${name} ${args.join(" ")} test-version`, stderr: ""};
+  const doctorCwd = process.cwd();
+  process.chdir(consumerRoot);
+  try {
+    writeFileSync(join(consumerRoot, "corner-store.project.json"), '{"schemaVersion":1,"template":"sandbox"}\n');
+    const sandboxDoctor = doctor("corner-store.config.json", undefined, contractSource, undefined, commandProbe);
+    const sandboxDocker = sandboxDoctor.checks.find((check) => check.name === "docker");
+    assert(!sandboxDoctor.ready && sandboxDocker?.required === true, "sandbox doctor requires Docker");
+    assert(
+      Boolean(sandboxDocker?.remediation.includes("Docker Compose v2")),
+      "sandbox doctor explains how to restore Docker readiness"
+    );
+    writeFileSync(join(consumerRoot, "corner-store.project.json"), '{"schemaVersion":1,"template":"dex-integration"}\n');
+    const libraryDoctor = doctor("corner-store.config.json", undefined, contractSource, undefined, commandProbe);
+    assert(libraryDoctor.ready, "library doctor keeps Docker optional");
+  } finally {
+    process.chdir(doctorCwd);
+  }
   const runtime = prepareDeploymentRuntime(consumerRoot, contractSource);
   assert(existsSync(join(runtime, "src/.fixture")), "runtime copies required product sources");
   assert(!existsSync(join(runtime, "secret.txt")), "runtime excludes unrelated source-root files");

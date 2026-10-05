@@ -1013,6 +1013,8 @@ if (
 const libraryPackage = JSON.parse(readFileSync(join(libraryTarget, "package.json"), "utf8"));
 if (
   !libraryPackage.scripts.doctor || libraryPackage.scripts.start ||
+  !libraryPackage.scripts.validate || !libraryPackage.scripts.simulate ||
+  !libraryPackage.scripts.deploy || !libraryPackage.scripts.verify ||
   !libraryPackage.scripts["test:module"] || !libraryPackage.scripts["test:adapter"]
 ) {
   throw new Error("standalone package scripts regression");
@@ -1039,6 +1041,7 @@ const sandbox = scaffoldRFQIntegration(sandboxTarget, {
 });
 const sandboxCompose = readFileSync(join(sandboxTarget, "compose.yaml"), "utf8");
 const sandboxDockerfile = readFileSync(join(sandboxTarget, "Dockerfile"), "utf8");
+const sandboxPackage = JSON.parse(readFileSync(join(sandboxTarget, "package.json"), "utf8"));
 const sandboxReadme = readFileSync(join(sandboxTarget, "README.md"), "utf8");
 if (
   !sandbox.files.includes("sandbox/contracts/script/DeployStack.s.sol") ||
@@ -1052,6 +1055,16 @@ if (
   !sandboxDockerfile.includes("ca-certificates") ||
   !sandboxDockerfile.includes("/home/node/.svm") ||
   !sandboxDockerfile.includes("npm ci --prefix") ||
+  !sandboxPackage.scripts.validate ||
+  !sandboxPackage.scripts.simulate ||
+  !sandboxPackage.scripts.doctor ||
+  !sandboxPackage.scripts.dev ||
+  !sandboxPackage.scripts.status ||
+  !sandboxPackage.scripts.clean ||
+  !sandboxPackage.scripts.test ||
+  !sandboxReadme.includes("npm run doctor") ||
+  !sandboxReadme.includes("npm run dev") ||
+  !sandboxReadme.includes("## Recovery") ||
   !sandboxReadme.includes("docker compose up --build -d") ||
   !sandboxReadme.includes("docker compose logs deployer rfq operator-api") ||
   sandboxReadme.includes("Install dependencies and run `npm test`") ||

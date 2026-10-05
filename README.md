@@ -205,16 +205,22 @@ node dist/cli/src/index.js create ../../my-sandbox \
   --template sandbox
 
 cd ../../my-sandbox
-docker compose up --build -d
-docker compose ps -a       # portal :8790, Deployment Studio :8791, Anvil :8545
+npm install
+npm run validate
+npm run simulate
+npm run doctor             # Docker/Compose v2 is required for this template
+npm run dev
+npm run status             # portal :8790, Deployment Studio :8791, Anvil :8545
 # when finished:
-docker compose down --volumes --remove-orphans
+npm run clean
 
 cd ../../my-corner-store
 npm install
+npm run validate
+npm run simulate
 npm run policy:explain     # values first; 4-layer internals are advanced detail
 npm run test:adapter       # dex-integration: Router/Adapter conformance
-npm run doctor
+npm run doctor             # Docker is optional for library integrations
 npm run deploy              # dry-run; add -- --broadcast only for local/demo submission
 npm run verify              # after a deployment artifact exists
 npm test                         # builds, then runs corner-store test-module
@@ -232,7 +238,12 @@ non-root Node/Foundry image, and gates RFQ/API/UI startup on the current Anvil
 deployment artifact. It remains demo-only and contains no production credential
 or external provider connection. To switch fixtures, stop and discard the demo
 chain first, then run
-`CORNER_STORE_PROFILE=reg-d docker compose up --build -d`.
+`CORNER_STORE_PROFILE=reg-d npm run dev`.
+
+If `doctor` or `verify` fails, follow the emitted `remediation` field and rerun
+the same command. The generated project keeps these recovery steps local: install
+Docker Compose v2 only for `sandbox`, run `npm run clean` before changing sandbox
+profiles, and regenerate or correct a stale deployment artifact before `npm run verify`.
 
 See [`docs/sdk-integration.md`](./docs/sdk-integration.md) for purpose templates,
 legacy mode mappings, the `connectCornerStore()` facade, generated files,

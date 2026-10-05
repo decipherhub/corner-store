@@ -11,7 +11,9 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. 다음 feature는 새 issue/우선순위 확인 후 하나만 active로 전환한다.
+`SDK-007 — External User Golden Path Acceptance`: issue #117의 외부 사용자 기준을
+packed clean-project acceptance로 고정하고, 목적별 생성 프로젝트의 공통 명령,
+actionable doctor와 stale artifact 복구 흐름을 검증한다.
 
 ## Completed
 

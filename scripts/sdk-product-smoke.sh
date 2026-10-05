@@ -53,7 +53,11 @@ node "$ROOT_DIR/services/cli/dist/cli/src/index.js" create "$LOCAL_TARGET_DIR" \
     --sdk "file:$RFQ_TARBALL" \
     --toolkit "file:$TOOLKIT_TARBALL" \
     --cli "file:$CLI_TARBALL" >/dev/null
-  ./node_modules/.bin/corner-store create "$SANDBOX_DIR" --template sandbox >/dev/null
+  ./node_modules/.bin/corner-store create "$SANDBOX_DIR" \
+    --template sandbox \
+    --sdk "file:$RFQ_TARBALL" \
+    --toolkit "file:$TOOLKIT_TARBALL" \
+    --cli "file:$CLI_TARBALL" >/dev/null
 )
 
 test -f "$SANDBOX_DIR/sandbox/contracts/script/DeployStack.s.sol"
@@ -65,13 +69,76 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
 fi
 
 (
+  cd "$SANDBOX_DIR"
+  npm install --prefer-offline --silent
+  npm test
+  npm run validate >/dev/null
+  npm run simulate >/dev/null
+  npm run --silent doctor >"$WORK_DIR/sandbox-doctor.json"
+)
+node -e '
+const result = require(process.argv[1]);
+const docker = result.checks.find((check) => check.name === "docker");
+if (!docker || docker.required !== true || !docker.remediation) process.exit(1);
+' "$WORK_DIR/sandbox-doctor.json"
+
+(
   cd "$TARGET_DIR"
   npm install --prefer-offline --silent
   npm test
+  npm run validate >/dev/null
+  npm run simulate >/dev/null
   npm run policy:explain >/dev/null
   npm run doctor
   npm run deploy
+
+  mkdir -p deployments
+  node - <<'NODE'
+const fs = require("fs");
+fs.writeFileSync("deployments/anvil-e2e.json", JSON.stringify({
+  assetProfile: "reg-d",
+  rwaToken: "0x1111111111111111111111111111111111111111",
+  router: "0x2222222222222222222222222222222222222222",
+  rfqAdapter: "0x3333333333333333333333333333333333333333",
+  makerAuthorizer: "0x4444444444444444444444444444444444444444",
+  rfqVenue: "0x5555555555555555555555555555555555555555"
+}, null, 2));
+NODE
+  if npm run --silent verify >"$WORK_DIR/stale-artifact.log" 2>&1; then
+    echo "stale artifact unexpectedly passed verification" >&2
+    exit 1
+  fi
+  grep -q '"remediation"' "$WORK_DIR/stale-artifact.log"
+  grep -q 'same asset profile' "$WORK_DIR/stale-artifact.log"
+
+  node - <<'NODE'
+const fs = require("fs");
+const path = "deployments/anvil-e2e.json";
+const artifact = JSON.parse(fs.readFileSync(path, "utf8"));
+artifact.assetProfile = "buidl-like";
+fs.writeFileSync(path, `${JSON.stringify(artifact, null, 2)}\n`);
+NODE
+  npm run --silent verify >"$WORK_DIR/recovered-artifact.log"
+  grep -q '"ready": true' "$WORK_DIR/recovered-artifact.log"
+
+  npm run --silent policy:explain >"$WORK_DIR/policy-before.json"
+  node - <<'NODE'
+const fs = require("fs");
+const path = "corner-store.config.json";
+const config = JSON.parse(fs.readFileSync(path, "utf8"));
+config.governance.requiredApprovals += 1;
+fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+NODE
+  npm run --silent policy:explain >"$WORK_DIR/policy-after.json"
 )
+
+node - <<'NODE' "$WORK_DIR/policy-before.json" "$WORK_DIR/policy-after.json"
+const fs = require("fs");
+const before = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const after = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+if (before.compiled.configHash === after.compiled.configHash) process.exit(1);
+if (after.explanation.values.governanceApprovals !== before.explanation.values.governanceApprovals + 1) process.exit(1);
+NODE
 
 CLI_PACKAGE="$BOOT_DIR/node_modules/@corner-store/cli"
 if ! forge build --offline --root "$CLI_PACKAGE/bundle/contracts" >"$WORK_DIR/forge-build.log" 2>&1; then
