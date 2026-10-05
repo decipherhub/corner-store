@@ -40,6 +40,16 @@ TLS termination is an operator boundary. The server refuses non-loopback bind
 unless `publicBindAcknowledged: true` is set after the operator has configured a
 trusted TLS/proxy boundary.
 
+## Production entrypoint and image
+
+`npm run start:production` uses the exact, versioned runtime and bootstrap
+contract. It does not select the reference implementations in this README as
+defaults: all durable/auth/signer/pricing/risk/policy/audit dependencies must be
+provided by an operator bundle, and readiness gates quote issuance. See
+[`../../docs/production-containers.md`](../../docs/production-containers.md) for
+the complete environment schema, OCI build target, read-only deployment example
+and release evidence requirements.
+
 ## Test
 
 ```sh
@@ -47,7 +57,8 @@ cd services/rfq-host
 npm test
 ```
 
-The smoke test covers 401/403 auth, malformed and oversized bodies including
+The smoke test covers liveness/readiness and dependency fail-closed behavior,
+versioned bootstrap validation, graceful shutdown, 401/403 auth, malformed and oversized bodies including
 `Content-Length` caps, 429 with `Retry-After`, limiter capacity under principal
 spray, stale/missing/future actual coordinator evidence, fresh risk `decision: rejected` as 422 without raw
 reason disclosure, signer call and verification failure, strict audit fail-closed

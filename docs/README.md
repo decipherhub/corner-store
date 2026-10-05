@@ -21,6 +21,7 @@
 | [`sdk-versioning.md`](./sdk-versioning.md)           | package semver·release·migration policy | Current |
 | [`deployment-studio.md`](./deployment-studio.md)     | local reference execution + production preflight/plan Studio | Current |
 | [`deployment-production.md`](./deployment-production.md) | production deployment runbook | Current |
+| [`production-containers.md`](./production-containers.md) | production RFQ/Operator API OCI runtime contract | Current |
 | [`policy-audit.md`](./policy-audit.md)                   | PII-free canonical policy artifact와 on-chain checkpoint | Current |
 | [`performance/manifest-policy-config-calldata.md`](./performance/manifest-policy-config-calldata.md) | bounded policy config calldata 측정 | Current |
 | [`testnet-deployment.md`](./testnet-deployment.md)       | public testnet RFQ reference deployment | Current |

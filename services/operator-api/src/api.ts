@@ -58,6 +58,7 @@ export interface OperatorApiOptions {
   eventsPath?: string;
   index?: EventStore;
   authToken?: string;
+  readiness?: () => Promise<boolean> | boolean;
 }
 
 export function createOperatorApi(options: OperatorApiOptions): Server {
@@ -75,6 +76,12 @@ export function createOperatorApi(options: OperatorApiOptions): Server {
     if (req.method !== "GET") return send(res, 405, {error: "read-only operator API"});
     const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
     if (path === "/api/v1/health") return send(res, 200, {ok: true, readOnly: true});
+    if (path === "/api/v1/ready") {
+      void Promise.resolve(options.readiness?.() ?? true)
+        .then((ready) => send(res, ready ? 200 : 503, {ok: ready, readOnly: true}))
+        .catch(() => send(res, 503, {ok: false, readOnly: true}));
+      return;
+    }
     if (options.authToken && !authorized(req, options.authToken)) {
       metrics.unauthorized += 1;
       return send(res, 401, {error: "unauthorized"});

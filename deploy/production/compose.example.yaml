@@ -1,0 +1,64 @@
+name: corner-store-production-services
+
+x-security: &security
+  init: true
+  read_only: true
+  user: "10001:10001"
+  cap_drop: ["ALL"]
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=16m
+  pids_limit: 128
+  stop_signal: SIGTERM
+  stop_grace_period: 15s
+  restart: unless-stopped
+  deploy:
+    resources:
+      limits:
+        cpus: "1.0"
+        memory: 512M
+        pids: 128
+
+services:
+  rfq-host:
+    <<: *security
+    image: "${CORNER_STORE_RFQ_IMAGE_REPOSITORY:?set the RFQ image repository}@sha256:${CORNER_STORE_RFQ_IMAGE_DIGEST:?set the RFQ image digest}"
+    environment:
+      CORNER_STORE_RFQ_CONFIG_VERSION: "1"
+      CORNER_STORE_RFQ_BOOTSTRAP_MODULE: /run/corner-store/bootstrap/index.cjs
+      CORNER_STORE_RFQ_HOST: 0.0.0.0
+      CORNER_STORE_RFQ_PORT: "8787"
+      CORNER_STORE_RFQ_PUBLIC_BIND_ACKNOWLEDGED: "1"
+      CORNER_STORE_RFQ_MAX_BODY_BYTES: "16384"
+      CORNER_STORE_RFQ_READINESS_TIMEOUT_MS: "3000"
+      CORNER_STORE_RFQ_REQUEST_TIMEOUT_MS: "30000"
+      CORNER_STORE_RFQ_HEADERS_TIMEOUT_MS: "15000"
+      CORNER_STORE_RFQ_SHUTDOWN_TIMEOUT_MS: "10000"
+    volumes:
+      - "${CORNER_STORE_RFQ_BOOTSTRAP_DIR:?mount the operator bootstrap bundle}:/run/corner-store/bootstrap:ro"
+    expose: ["8787"]
+
+  operator-api:
+    <<: *security
+    image: "${CORNER_STORE_OPERATOR_IMAGE_REPOSITORY:?set the Operator API image repository}@sha256:${CORNER_STORE_OPERATOR_IMAGE_DIGEST:?set the Operator API image digest}"
+    environment:
+      CORNER_STORE_OPERATOR_CONFIG_VERSION: "1"
+      CORNER_STORE_OPERATOR_HOST: 0.0.0.0
+      CORNER_STORE_OPERATOR_PORT: "8788"
+      CORNER_STORE_OPERATOR_PUBLIC_BIND_ACKNOWLEDGED: "1"
+      CORNER_STORE_OPERATOR_CONFIG_FILE: /run/corner-store/config/corner-store.config.json
+      CORNER_STORE_OPERATOR_ARTIFACT_FILE: /run/corner-store/config/deployment.json
+      CORNER_STORE_OPERATOR_AUTH_TOKEN_FILE: /run/secrets/operator_api_token
+      CORNER_STORE_OPERATOR_REQUEST_TIMEOUT_MS: "30000"
+      CORNER_STORE_OPERATOR_HEADERS_TIMEOUT_MS: "15000"
+      CORNER_STORE_OPERATOR_SHUTDOWN_TIMEOUT_MS: "10000"
+    volumes:
+      - "${CORNER_STORE_OPERATOR_CONFIG_DIR:?mount reviewed config and deployment evidence}:/run/corner-store/config:ro"
+    secrets:
+      - operator_api_token
+    expose: ["8788"]
+
+secrets:
+  operator_api_token:
+    file: "${CORNER_STORE_OPERATOR_API_TOKEN_FILE:?provide the Operator API token file}"
