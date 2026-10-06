@@ -15,6 +15,15 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `AMM-002 — Self-Directed Actor Consistency`: 현재 AMM 모델에서 initiator, payer와
+  output recipient가 하나의 authenticated buyer로 일치하도록 adapter 경계를
+  명확히 했다. 불일치 context는 pool 실행 전에 거부하고, 위임 실행은
+  principal/actor/asset/action/amount/expiry를 검증하는 별도 versioned component
+  전까지 지원하지 않는다. unit test와 real Router/ERC-3643 integration test가 actor
+  consistency와 balance 불변성을 고정한다. 검증: targeted AMM
+  unit 9/9, SwapFlow integration 8/8, stable Foundry 전체 956/956 및
+  `scripts/check.sh`, `git diff --check` 통과.
+
 - `SDK-007 — External User Golden Path Acceptance`: issue #117의 외부 사용자 기준을
   packed clean-project acceptance로 고정했다. 목적별 생성 프로젝트는 공통
   validate/simulate/doctor/deploy/verify 계약을 제공하고, direct Compose sandbox는

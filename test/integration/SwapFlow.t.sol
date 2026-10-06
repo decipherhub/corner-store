@@ -51,6 +51,25 @@ contract SwapFlowTest is IntegrationBase {
         assertEq(quote.balanceOf(address(adapter)), 0, "adapter holds no quote");
     }
 
+    function test_reject_initiatorBuyerMismatch() public {
+        setupBuyer(alice);
+        fundPoolRWA(1_000 ether);
+        fundBuyerQuote(alice, 1_000 ether);
+
+        ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 100 ether);
+        req.context.initiator = bob;
+
+        uint256 aliceQuoteBefore = quote.balanceOf(alice);
+        uint256 aliceRwaBefore = rwaToken.balanceOf(alice);
+
+        vm.prank(bob);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        router.execute(req);
+
+        assertEq(quote.balanceOf(alice), aliceQuoteBefore, "buyer input unchanged");
+        assertEq(rwaToken.balanceOf(alice), aliceRwaBefore, "buyer output unchanged");
+    }
+
     // --- SELL-shaped success ---------------------------------------------
     // Seller (ctx.buyer for engine purposes) sends RWA in, receives quote out.
     // tokenIn=RWA (ACTIVE regulated side), tokenOut=quote. The RWA transfer leg

@@ -9,6 +9,33 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## AMM-002 — Self-Directed Actor Consistency
+
+### Behavior
+
+- The current AMM request model uses one authenticated actor for initiation,
+  payment and output receipt.
+- The adapter rejects inconsistent initiator/buyer context before pool execution.
+- Delegated AMM execution remains unavailable until a separately versioned,
+  scope-bound delegation component is implemented and reviewed.
+- RFQ behavior is unchanged; RFQ already binds taker, initiator and buyer.
+
+### Verification
+
+- `forge test --offline --match-path test/unit/execution/AMMAdapter.t.sol`
+- `forge test --offline --match-path test/integration/SwapFlow.t.sol`
+- `forge test --offline`
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Regression coverage confirms that an actor mismatch leaves balances unchanged.
+
 ## SDK-007 — External User Golden Path Acceptance
 
 ### Behavior
