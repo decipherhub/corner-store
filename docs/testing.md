@@ -183,6 +183,18 @@ revoked/ineligible/sanctions handling, deterministic evidence hash, replay/confl
 recursive PII/unknown schema rejection, PII-free audit/error output, strict audit-before-publish fail-closed, production store return revalidation, bounded incident hook failure and
 "no cached success on outage" behavior를 포함한다.
 
+The KYC provider suite (`test/kyc-provider.ts`) covers SPI v1 metadata validation
+(exact fields, strict SemVer with the same major and no newer minor, bounded ids and schema versions, known
+capabilities), required coordinator `mode` with production refusal of demo adapters,
+frozen startup metadata that later adapter mutation cannot widen, typed provider errors
+(`PROVIDER_TIMEOUT`, `PROVIDER_INCOMPATIBLE`, structural cross-copy recognition,
+untyped errors staying `PROVIDER_UNAVAILABLE`), undeclared provider id, schema version or
+optional fact rejection without store publication, the deterministic demo adapter, the
+reusable provider conformance suite against the demo and HTTP example adapters including
+its abort-signal check and failing checks, HTTP status and body mapping without credential, vendor id or PII
+leakage, subpath export boundaries (`/spi`, `/demo`, `/conformance`, no deep `dist/`
+imports) and the `src` dependency direction with no runtime dependencies.
+
 Deployment Studio smoke test:
 
 ```sh
