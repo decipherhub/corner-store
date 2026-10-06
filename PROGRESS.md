@@ -45,6 +45,12 @@ source of truth로 사용한다.
   integration 44/44, Toolkit/CLI smoke, BUIDL-like/Reg-D full Anvil E2E 각각 7/7와
   RFQ buy/sell, full Foundry 954/954, 전체 `scripts/check.sh`, canonical Uniswap v3
   5/5, deploy-v3 10/10, clean SDK consumer와 `git diff --check` 통과.
+  PR #140 후속 리뷰를 반영해 venue incompatibility를 normal Recipe composition보다
+  먼저 처리하고 모든 지원 binding mode에서 동일한 결과를 보장한다.
+  Factory는 token의 primary venue를 기록하고 두 Manifest update overload가 pending
+  compiled plan을 검사한 뒤 호환되지 않는 update를 같은 transaction에서 되돌린다.
+  후속 검증: Engine 50/50, Factory 16/16, Registry 56/56, full Foundry 960/960,
+  pinned Foundry 1.7.1 `scripts/check.sh`와 `git diff --check` 통과.
 
 - `DEPLOY-002 — Production Service Container Contract`: issue #115 범위로 demo
   sandbox와 분리된 pinned multi-stage RFQ host/Operator API OCI target을 추가했다.

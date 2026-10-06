@@ -294,6 +294,38 @@ contract EngineTest is Test {
         assertEq(d.reasonCode, ReasonCodes.unsupportedVenue(21, futureLockupId));
     }
 
+    function test_amm_preservesVenueCompatibility_acrossBindingModes_case1() public {
+        _registerSingleElementRecipe(20, bytes32("A-01-v1"));
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = RecipeBinding(1, 3, RecipeBindingMode.PATH_OPTION, 7, 100);
+        bindings[1] = RecipeBinding(20, 1, RecipeBindingMode.PATH_OPTION, 7, 90);
+        _registerBindings(bindings);
+        _makeBuyerCompliant();
+
+        ComplianceContext memory amm = _ctxBuy();
+        amm.venueType = VenueType.AMM;
+        ComplianceDecision memory d = engine.evaluate(amm);
+
+        assertFalse(d.allowed, "AMM venue invariant preserved");
+        assertEq(d.reasonCode, ReasonCodes.unsupportedVenue(1, bytes32("C-01-v2")));
+    }
+
+    function test_amm_preservesVenueCompatibility_acrossBindingModes_case2() public {
+        _registerSingleElementRecipe(20, bytes32("A-01-v1"));
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = RecipeBinding(1, 3, RecipeBindingMode.FLAG_ONLY, 0, 100);
+        bindings[1] = RecipeBinding(20, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
+        _registerBindings(bindings);
+        _makeBuyerCompliant();
+
+        ComplianceContext memory amm = _ctxBuy();
+        amm.venueType = VenueType.AMM;
+        ComplianceDecision memory d = engine.evaluate(amm);
+
+        assertFalse(d.allowed, "AMM venue invariant preserved");
+        assertEq(d.reasonCode, ReasonCodes.unsupportedVenue(1, bytes32("C-01-v2")));
+    }
+
     function test_registeringNewRecipeVersion_doesNotChangeActiveManifestPolicy() public {
         _registerRWA(0, 0);
         _makeBuyerCompliant();

@@ -1135,9 +1135,9 @@ sender의 acquisition evidence와 거래 시점의 holding period 판단을 요�
 3. Toolkit profile validation, CLI onboarding, production onboarding validation,
    calldata/Safe export가 하나의 compatibility helper를 공유한다. exact Recipe
    composition을 제공하지 않는 legacy schema v1 AMM input은 fail-closed한다.
-4. `CornerStoreFactory`는 compiled rule set을 검사해 AMM onboarding transaction을
-   원자적으로 되돌리고, `ComplianceEngine`은 tooling이나 Factory를 우회한 raw
-   Registry 등록도 settlement 전에 거절한다.
+4. `CornerStoreFactory`는 active/pending compiled rule set을 검사해 onboarding과
+   delayed Manifest update가 같은 venue compatibility invariant를 따르게 한다.
+   `ComplianceEngine`도 normal Recipe composition보다 먼저 이 invariant를 적용한다.
 5. AMM adapter와 settlement plumbing 테스트는 `DemoAmmReferenceRecipe`처럼 C-01을
    명시적으로 제외한 demo/test-only policy를 사용한다. 이 Recipe는 Reg D/BUIDL
    법률 정책으로 명명하거나 production activation에 사용하지 않는다.
@@ -1158,6 +1158,8 @@ sender의 acquisition evidence와 거래 시점의 holding period 판단을 요�
   plumbing은 C-01-free reference Recipe를 사용하는 별도 integration test로 유지한다.
 - 새로운 Recipe/Element version은 별도 allowlist 갱신 없이 C-01 family 규칙을
   상속한다.
+- Factory는 token별 primary venue를 보존하고 pending compiled plan inspection
+  surface를 사용하므로 semantic update도 onboarding과 같은 invariant를 따른다.
 - future venue compatibility matrix가 필요해지면 이 hard invariant 위에 확장하되,
   C-01 AMM 허용으로 완화하지 않는다.
 

@@ -425,6 +425,18 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         return _pendingManifestUpdates[token].planHash;
     }
 
+    function pendingCompiledBindingCountOf(address token) external view returns (uint256) {
+        return _pendingCompiledPlans[token].length;
+    }
+
+    function pendingCompiledRulesOf(address token, uint256 bindingIndex)
+        external
+        view
+        returns (CompiledElementRule[] memory rules)
+    {
+        return _pendingCompiledPlans[token][bindingIndex].rules;
+    }
+
     function pendingManifestUpdateOf(address token)
         external
         view

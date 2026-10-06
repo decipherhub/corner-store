@@ -143,6 +143,8 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   `CornerStoreFactory`와 on-chain Engine이 같은 규칙을 적용한다. Factory는 등록 venue뿐
   아니라 Manifest의 AMM engine bit도 검사한다. schema v1처럼 Recipe element 구성을
   증명할 수 없는 production onboarding input은 AMM 요청 시 fail-closed한다.
+- 이 거절은 normal Recipe binding composition보다 먼저 적용한다. Factory를 통한
+  delayed Manifest update도 pending compiled plan을 검사해 같은 invariant를 유지한다.
 - 테스트·데모에서 AMM이 필요하면 명시적인 C-01-free demo Recipe를 사용한다. 이를
   Reg D/BUIDL 법률 정책으로 표시하거나 production activation에 재사용하지 않는다.
 

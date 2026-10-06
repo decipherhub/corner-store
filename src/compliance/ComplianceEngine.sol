@@ -212,6 +212,11 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         bytes memory recipeContext = abi.encode(manifest.factsPacked, ctx);
         for (uint256 i = 0; i < bindings.length; i++) {
             RecipeBinding memory binding = bindings[i];
+            bytes32 venueReason = _unsupportedVenueReason(ctx.venueType, token, binding.recipeId, i);
+            if (venueReason != bytes32(0)) {
+                _selectFailure(state, venueReason, type(uint8).max);
+                continue;
+            }
             (bool applicable, bool passed, bool flagged, bytes32 reasonCode) =
                 _evaluateRecipe(ctx, token, binding, i, recipeContext);
 
@@ -250,9 +255,6 @@ contract ComplianceEngine is IComplianceEngine, Governed {
         uint256 bindingIndex,
         bytes memory recipeContext
     ) internal view returns (bool applicable, bool passed, bool flagged, bytes32 reasonCode) {
-        reasonCode = _unsupportedVenueReason(ctx.venueType, token, binding.recipeId, bindingIndex);
-        if (reasonCode != bytes32(0)) return (true, false, false, reasonCode);
-
         bytes32 recipeKey = recipeReg.recipeKeyOf(binding.recipeId);
         address recipeAddress = recipeReg.recipeOf(recipeKey, binding.recipeVersion);
         if (recipeAddress == address(0)) revert Errors.RecipeNotRegistered(binding.recipeId);
