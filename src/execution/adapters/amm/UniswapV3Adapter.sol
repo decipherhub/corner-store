@@ -55,6 +55,13 @@ contract UniswapV3Adapter is IAMMAdapter, Governed {
         onlyRouter
         returns (ExecutionResult memory)
     {
+        // The current AMM flow is self-directed: initiator, payer and recipient
+        // resolve to one authenticated buyer. Delegated execution requires a
+        // separately versioned authorization component.
+        if (req.context.buyer == address(0) || req.context.initiator != req.context.buyer) {
+            revert Errors.NotAuthorized();
+        }
+
         address pool = req.context.venue;
         require(registeredPool[pool], "pool not registered");
 

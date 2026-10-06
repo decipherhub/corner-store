@@ -93,6 +93,15 @@ contract AMMAdapterTest is Test {
         adapter.execute(_req(""), _emptyDecision);
     }
 
+    function test_revert_initiatorBuyerMismatch() public {
+        ExecutionRequest memory req = _req("");
+        req.context.initiator = address(0xBAD);
+
+        vm.prank(ROUTER);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        adapter.execute(req, _emptyDecision);
+    }
+
     function test_revert_spoofedCallback() public {
         // calling the callback from a non-registered address must revert
         bytes memory data = abi.encode(BUYER, address(token0));

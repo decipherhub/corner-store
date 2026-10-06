@@ -66,6 +66,9 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
 - Adapter에 전달하는 decision은 actor, token, amount, venue, version, expiry와
   execution nonce에 바인딩한다.
 - 실행 caller는 `context.initiator`와 일치해야 한다.
+- 현재 self-directed AMM reference adapter는 initiator와 buyer가 같아야 한다.
+  위임 실행은 암묵적인 주소 불일치로 표현하지 않고 별도 authorization
+  component가 principal, actor, asset, action, amount와 expiry를 검증할 때만 추가한다.
 - nonce 재사용과 deadline 초과 요청을 거부한다.
 - Router는 matching 로직과 법률 규칙을 포함하지 않는다.
 - Router에 의도하지 않은 사용자 자산 잔액이 남지 않는다.

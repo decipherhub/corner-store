@@ -1170,3 +1170,52 @@ sender의 acquisition evidence와 거래 시점의 holding period 판단을 요�
 - `src/factory/CornerStoreFactory.sol`
 - `src/compliance/ComplianceEngine.sol`
 - `src/demo/DemoAmmReferenceRecipe.sol`
+
+## D021 — AMM execution uses one authenticated buyer role
+
+Date: 2026-10-06
+
+### Context
+
+The current AMM product model is self-directed, but its request context exposes
+separate initiator and buyer fields. Those roles should resolve to one
+authenticated actor rather than carrying ambiguous execution semantics.
+
+RFQ already requires `taker == initiator == buyer`. A future delegated-action
+component may legitimately separate actor and principal, but no such scope-bound
+authorization exists in the current AMM path.
+
+### Decision
+
+1. The AMM adapter requires a nonzero buyer and exact
+   `context.initiator == context.buyer` before it calls the pool.
+2. The verified buyer remains the AMM principal and swap recipient.
+3. Token approval remains a payment prerequisite and is not treated as an
+   independent delegation signal.
+4. Future delegated execution must use a separately versioned authorization
+   component that verifies principal, actor, asset, action, amount cap and expiry.
+   It must not weaken this check through an undocumented address convention.
+
+### Alternatives Considered
+
+- Rely only on `msg.sender == initiator`: rejected because it leaves the AMM
+  actor roles internally inconsistent.
+- Accept different initiator and buyer roles by convention: rejected because the
+  current interface has no explicit delegation scope or expiry contract.
+- Add demo-only delegation now: rejected because the base actor invariant must
+  be fixed before an experimental evidence/delegation seam is introduced.
+
+### Consequences
+
+- Existing self-initiated AMM buy and sell flows remain unchanged.
+- Relayers, agents and brokers cannot initiate AMM trades for a principal until
+  explicit delegation support is implemented.
+- RFQ behavior is unchanged because its adapter already enforces the stronger
+  taker/initiator/buyer equality.
+
+### Related Files
+
+- `src/execution/adapters/amm/UniswapV3Adapter.sol`
+- `test/unit/execution/AMMAdapter.t.sol`
+- `test/integration/SwapFlow.t.sol`
+- `docs/architecture/execution-routing.md`
