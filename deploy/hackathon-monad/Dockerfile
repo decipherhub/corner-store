@@ -4,10 +4,12 @@ ARG NODE_IMAGE=node:22.14.0-bookworm-slim@sha256:1c18d9ab3af4585870b92e4dbc5cac5
 FROM ${NODE_IMAGE} AS build
 WORKDIR /workspace
 COPY services/testnet-rfq-demo/package.json services/testnet-rfq-demo/package-lock.json services/testnet-rfq-demo/tsconfig.json ./services/testnet-rfq-demo/
+COPY services/rfq/package.json services/rfq/package-lock.json ./services/rfq/
 COPY services/testnet-rfq-demo/src ./services/testnet-rfq-demo/src
 COPY services/testnet-rfq-demo/public ./services/testnet-rfq-demo/public
 COPY services/rfq/src ./services/rfq/src
-RUN npm ci --ignore-scripts --prefix services/testnet-rfq-demo \
+RUN npm ci --ignore-scripts --prefix services/rfq \
+ && npm ci --ignore-scripts --prefix services/testnet-rfq-demo \
  && npm run build --prefix services/testnet-rfq-demo \
  && npm prune --omit=dev --prefix services/testnet-rfq-demo
 
