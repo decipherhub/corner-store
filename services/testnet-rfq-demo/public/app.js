@@ -37,6 +37,7 @@ async function load() {
   renderReadiness();
   renderContracts();
   renderScenarios();
+  $("add-network").disabled = !state.walletNetwork;
   updateSide();
   addTrace("Deployment artifact", "Verified addresses loaded");
 }
@@ -45,7 +46,15 @@ async function connect() {
   if (!window.ethereum) throw new Error("Browser wallet not found");
   provider = new ethers.BrowserProvider(window.ethereum);
   await provider.send("eth_requestAccounts", []);
-  signer = await provider.getSigner();
+  await syncConnectedWallet();
+}
+
+async function syncConnectedWallet(selectedAccount) {
+  if (!window.ethereum) throw new Error("Browser wallet not found");
+  provider = new ethers.BrowserProvider(window.ethereum);
+  signer = selectedAccount
+    ? await provider.getSigner(selectedAccount)
+    : await provider.getSigner();
   account = await signer.getAddress();
   const network = await provider.getNetwork();
   if (Number(network.chainId) !== state.deployment.chainId) {
@@ -56,6 +65,42 @@ async function connect() {
   await refreshWallet();
   $("precheck").disabled = false;
   addTrace("Wallet", `${short(account)} connected on chain ${network.chainId}`);
+}
+
+async function addOrSwitchNetwork() {
+  if (!window.ethereum) throw new Error("Browser wallet not found");
+  if (!state?.walletNetwork) throw new Error("This deployment does not publish wallet network settings");
+  const network = state.walletNetwork;
+  const chainId = ethers.toQuantity(network.chainId);
+  try {
+    await window.ethereum.request({method: "wallet_switchEthereumChain", params: [{chainId}]});
+  } catch (error) {
+    const code = Number(error?.code ?? error?.data?.originalError?.code);
+    if (code !== 4902) throw error;
+    await window.ethereum.request({
+      method: "wallet_addEthereumChain",
+      params: [{
+        chainId,
+        chainName: network.name,
+        nativeCurrency: {name: network.nativeCurrency, symbol: network.nativeCurrency, decimals: 18},
+        rpcUrls: [network.rpcUrl],
+        blockExplorerUrls: [network.explorerUrl]
+      }]
+    });
+    await window.ethereum.request({method: "wallet_switchEthereumChain", params: [{chainId}]});
+  }
+  addTrace("Wallet network", `${network.name} selected`);
+}
+
+function disconnectWallet(message) {
+  provider = undefined;
+  signer = undefined;
+  account = undefined;
+  updateSide();
+  $("wallet").textContent = "Not connected";
+  $("wallet-state").textContent = message;
+  $("connect").textContent = "Connect wallet";
+  $("precheck").disabled = true;
 }
 
 async function refreshWallet() {
@@ -317,7 +362,11 @@ function escapeHtml(value) {
   })[character]);
 }
 
-$("connect").addEventListener("click", () => connect().catch((error) => addTrace("Wallet", readableError(error), true)));
+$("connect").addEventListener("click", () => connect().catch((error) => {
+  disconnectWallet("Select the deployment network, then reconnect the wallet.");
+  addTrace("Wallet", readableError(error), true);
+}));
+$("add-network").addEventListener("click", () => addOrSwitchNetwork().catch((error) => addTrace("Wallet network", readableError(error), true)));
 $("precheck").addEventListener("click", () => runPrecheck().catch((error) => addTrace("Pre-check", readableError(error), true)));
 $("request").addEventListener("click", () => requestQuote().catch((error) => addTrace("Quote", readableError(error), true)));
 $("approve").addEventListener("click", () => approve().catch((error) => addTrace("Approval", readableError(error), true)));
@@ -339,5 +388,25 @@ $("amount").addEventListener("input", () => {
   $("execute").disabled = true;
   hideBlockPanel();
 });
+
+if (window.ethereum?.on) {
+  window.ethereum.on("accountsChanged", (accounts) => {
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      disconnectWallet("Wallet disconnected. Connect one of the deployed test participants.");
+      addTrace("Wallet", "Disconnected");
+      return;
+    }
+    updateSide();
+    $("precheck").disabled = true;
+    syncConnectedWallet(accounts[0]).catch((error) => {
+      disconnectWallet("Select the deployment network, then reconnect the wallet.");
+      addTrace("Wallet", readableError(error), true);
+    });
+  });
+  window.ethereum.on("chainChanged", () => {
+    disconnectWallet("Network changed. Reconnect the wallet to continue.");
+    addTrace("Wallet network", "Network changed; reconnect required");
+  });
+}
 
 load().catch((error) => addTrace("Startup", readableError(error), true));

@@ -59,8 +59,10 @@ input { flex: 1; min-width: 0; padding: 16px 0; border: 0; outline: 0; backgroun
   gap: 12px;
 }
 
-.network-setup { margin: 10px 0 16px; }
+.network-setup-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 10px 0 16px; }
+.network-setup { margin: 0; }
 .network-setup code { color: var(--green); }
+.network-setup-row button { flex: 0 0 auto; }
 
 .scenario-card {
   border: 1px solid var(--line);
@@ -101,6 +103,7 @@ summary { cursor: pointer; font-weight: 750; }
 @media (max-width: 850px) {
   .hero-grid, .trade-layout { grid-template-columns: 1fr; }
   .address-grid { grid-template-columns: 1fr; }
+  .network-setup-row { align-items: stretch; flex-direction: column; }
   .evidence .section-title { align-items: stretch; flex-direction: column; }
   .evidence-actions { justify-content: stretch; }
   .evidence-actions button { flex: 1; }

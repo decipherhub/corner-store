@@ -190,6 +190,7 @@ assert(html.includes('id="block-panel"'));
 assert(html.includes('id="block-time"'));
 assert(html.includes('id="scenarios"'));
 assert(html.includes('id="wallet-network"'));
+assert(html.includes('id="add-network"'));
 assert(html.includes('id="asset"'));
 assert(html.includes('id="download-evidence"'));
 const app = readFileSync(join(__dirname, "../../../public/app.js"), "utf8");
@@ -197,6 +198,10 @@ assert(app.includes('kind: "corner-store-public-testnet-rfq-settlement"'));
 assert(app.includes("confirmationMs"));
 assert(app.includes("currentChainTime()"));
 assert(app.includes("state.readiness.chainTimestamp"));
+assert(app.includes('wallet_switchEthereumChain'));
+assert(app.includes('wallet_addEthereumChain'));
+assert(app.includes('window.ethereum.on("accountsChanged"'));
+assert(app.includes('window.ethereum.on("chainChanged"'));
 
 const signed = {
   quote: {

@@ -344,7 +344,10 @@ It also renders the non-secret judge scenario addresses and measures wallet
 transaction confirmation time from submission to receipt. Test-wallet secrets
 must be delivered out of band and are never rendered by the service.
 For chain ID 10143 the page shows the official Monad testnet wallet settings;
-the backend's configured RPC URL remains private and is never returned.
+the backend's configured RPC URL remains private and is never returned. The
+quick-start action can add or switch the browser wallet using only those public
+network values. Changing the selected account or chain clears the previous
+pre-check, signed quote and signer state before another scenario can run.
 After a successful Router settlement, download the generated JSON evidence. It
 binds the deployment/source commit, chain, public wallet and contract addresses,
 amounts, transaction hash, block and measured submission-to-confirmation time.

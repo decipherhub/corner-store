@@ -52,6 +52,9 @@ source of truth로 사용한다.
   제한했다. API 내부 오류는 allowlist된 입력 오류 외에는 공개하지 않으며 quote TTL은
   운영자가 설정한 최대값을 넘길 수 없다. 보유기간 countdown은 browser 시간이 아닌
   관측 chain timestamp를 사용한다.
+- judge quick start에서 공개 Monad metadata를 이용해 wallet network를 추가·전환할 수
+  있다. account 또는 chain이 바뀌면 이전 account의 pre-check, quote와 signer 상태를
+  폐기하고 새 지갑을 다시 동기화하므로 여러 fixture 장면 사이에 상태가 섞이지 않는다.
 - 임시 Anvil 실제 배포에서 Solidity verifier와 Node startup attestation을 통과했고,
   wiring을 바꾼 artifact는 listen 전에 거절되며 `/health`·API 공통 budget이 429를
   반환함을 확인했다. pinned Foundry 1.7.1 전체 `scripts/check.sh`도 Foundry 960/960,
