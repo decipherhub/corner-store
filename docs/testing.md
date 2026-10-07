@@ -107,6 +107,11 @@ capability drop, loopback port, read-only artifact mount, Maker secret 및 globa
 API/quote budget 계약을 확인한다. 실제 chain-bound startup과 settlement는
 public-testnet 또는 임시 Anvil E2E에서 검증한다.
 
+`scripts/check.sh`는 CLI와 public-testnet demo build 뒤
+`scripts/check-testnet-reason-parity.mjs`를 실행한다. 해커톤 패널이 사용하는
+안정 reason subset(A-13, C-01-v2, minimum amount, B-02-v2, A-04와 suspended
+Manifest)이 CLI의 canonical decoder와 다른 이름으로 drift하면 전체 gate가 실패한다.
+
 
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
 API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount

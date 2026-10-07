@@ -315,8 +315,12 @@ function hideBlockPanel() {
 function timingText(timing) {
   if (!timing) return "No reliable availability time is available.";
   if (timing.availableAt) {
-    const remaining = Math.max(0, Number(timing.availableAt) - currentChainTime());
-    const suffix = remaining > 0 ? ` · about ${formatDuration(remaining)} remaining` : " · retry now";
+    const chainTime = currentChainTime();
+    const suffix = chainTime === undefined
+      ? " · refresh to load the chain countdown"
+      : Number(timing.availableAt) > chainTime
+        ? ` · about ${formatDuration(Number(timing.availableAt) - chainTime)} remaining`
+        : " · retry now";
     return `${new Date(Number(timing.availableAt) * 1000).toLocaleString()}${suffix}`;
   }
   if (timing.evidenceExpiredAt) {
@@ -326,7 +330,7 @@ function timingText(timing) {
 }
 
 function currentChainTime() {
-  if (!chainClock) return Math.floor(Date.now() / 1000);
+  if (!chainClock) return undefined;
   return chainClock.timestamp + Math.floor((performance.now() - chainClock.observedAt) / 1000);
 }
 

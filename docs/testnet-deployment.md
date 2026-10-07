@@ -390,8 +390,12 @@ request/header/keep-alive timeouts, a global budget for every chain-reading
 security headers and an explicit `hackathon-testnet-only` acknowledgement for
 non-loopback binding. Because the application deliberately does not trust
 forwarded client-IP headers, the HTTPS edge must add its own client-aware rate
-limit. These are demo safeguards, not a replacement for the production RFQ
-host.
+limit. Allowlisted input-validation failures return `400 invalid_request`;
+chain/runtime dependency failures return a sanitized `503 service_unavailable`,
+and unclassified internal failures return `500 internal_error`. Server failures
+emit a secret-free operator event with only the HTTP method, normalized API
+surface, status and observation time. These are demo safeguards, not a
+replacement for the production RFQ host.
 
 This is separate from the feature-rich local Anvil demo:
 

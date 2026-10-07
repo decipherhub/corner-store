@@ -7,6 +7,13 @@ import {TestnetRfqRuntime, TradeSide, buildRouterRequest} from "./runtime";
 
 const MAX_BODY = 16 * 1024;
 
+export class ServiceUnavailableError extends Error {
+  constructor(readonly cause?: unknown) {
+    super("service dependency is unavailable");
+    this.name = "ServiceUnavailableError";
+  }
+}
+
 export async function startServer(runtime: TestnetRfqRuntime) {
   const publicDir = resolve(__dirname, "../../../public");
   const ethersBundle = resolve(__dirname, "../../../node_modules/ethers/dist/ethers.umd.min.js");
@@ -50,40 +57,44 @@ async function handle(
       if (!rate.allowed) return rateLimited(res, rate.retryAfterSeconds);
     }
     if (req.method === "GET" && req.url === "/health") {
-      const blockNumber = await runtime.provider.getBlockNumber();
+      const blockNumber = await providerCall(() => runtime.provider.getBlockNumber());
       return json(res, 200, {service: "corner-store-testnet-rfq-demo", status: "ok", blockNumber});
     }
     if (req.method === "GET" && req.url === "/") return sendFile(res, resolve(publicDir, "index.html"), "text/html");
     if (req.method === "GET" && req.url === "/app.js") return sendFile(res, resolve(publicDir, "app.js"), "text/javascript");
     if (req.method === "GET" && req.url === "/styles.css") return sendFile(res, resolve(publicDir, "styles.css"), "text/css");
     if (req.method === "GET" && req.url === "/vendor/ethers.js") return sendFile(res, ethersBundle, "text/javascript");
-    if (req.method === "GET" && req.url === "/api/state") return json(res, 200, await runtime.publicState());
+    if (req.method === "GET" && req.url === "/api/state") {
+      return json(res, 200, await runtimeCall(() => runtime.publicState()));
+    }
 
     if (req.method === "GET" && req.url?.startsWith("/api/wallet/")) {
-      return json(res, 200, await runtime.walletState(getAddress(decodeURIComponent(req.url.slice(12)))));
+      const wallet = getAddress(decodeURIComponent(req.url.slice(12)));
+      return json(res, 200, await runtimeCall(() => runtime.walletState(wallet)));
     }
 
     if (req.method === "POST" && req.url === "/api/precheck") {
       const body = await bodyJson(req);
-      return json(res, 200, await runtime.precheck(
-        address(body.taker, "taker"),
-        uintString(body.amountIn, "amountIn"),
-        side(body.side)
-      ));
+      const taker = address(body.taker, "taker");
+      const amountIn = uintString(body.amountIn, "amountIn");
+      const tradeSide = side(body.side);
+      return json(res, 200, await runtimeCall(() => runtime.precheck(taker, amountIn, tradeSide)));
     }
 
     if (req.method === "POST" && req.url === "/api/quote") {
       const rate = quoteLimiter.check("global", Date.now());
       if (!rate.allowed) return rateLimited(res, rate.retryAfterSeconds);
       const body = await bodyJson(req);
-      const signed = await runtime.quoteFor(
-        address(body.taker, "taker"),
-        uintString(body.amountIn, "amountIn"),
-        side(body.side),
-        optionalPositiveInteger(body.ttlSeconds, "ttlSeconds", runtime.config.quoteTtlSeconds)
-      );
-      const latest = await runtime.provider.getBlock("latest");
-      if (!latest) throw new Error("latest block is unavailable");
+      const taker = address(body.taker, "taker");
+      const amountIn = uintString(body.amountIn, "amountIn");
+      const tradeSide = side(body.side);
+      const ttlSeconds = optionalPositiveInteger(body.ttlSeconds, "ttlSeconds", runtime.config.quoteTtlSeconds);
+      const signed = await runtimeCall(() => runtime.quoteFor(taker, amountIn, tradeSide, ttlSeconds));
+      const latest = await providerCall(async () => {
+        const block = await runtime.provider.getBlock("latest");
+        if (!block) throw new Error("latest block is unavailable");
+        return block;
+      });
       const routerNonce = BigInt(`0x${cryptoRandomHex(24)}`);
       const deadline = BigInt(latest.timestamp + 3600);
       return json(res, 200, {
@@ -99,10 +110,17 @@ async function handle(
 
     return json(res, 404, {error: "not_found"});
   } catch (error) {
-    return json(res, 400, {
-      error: "invalid_request",
-      message: publicErrorMessage(error)
-    });
+    const failure = classifyPublicError(error);
+    if (failure.status >= 500) {
+      console.error(JSON.stringify({
+        event: "testnet_demo_request_failed",
+        method: req.method ?? "UNKNOWN",
+        surface: requestSurface(req.url),
+        status: failure.status,
+        observedAt: new Date().toISOString()
+      }));
+    }
+    return json(res, failure.status, failure.body);
   }
 }
 
@@ -179,7 +197,12 @@ async function bodyJson(req: IncomingMessage): Promise<Record<string, unknown>> 
     if (size > MAX_BODY) throw new Error("request body exceeds 16 KiB");
     chunks.push(buffer);
   }
-  const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    throw new Error("request body must be valid JSON");
+  }
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("JSON object required");
   return value as Record<string, unknown>;
 }
@@ -212,7 +235,65 @@ function cryptoRandomHex(bytes: number): string {
   return require("crypto").randomBytes(bytes).toString("hex");
 }
 
-function publicErrorMessage(error: unknown): string {
+export function classifyPublicError(error: unknown): {
+  status: 400 | 500 | 503;
+  body: {error: "invalid_request" | "internal_error" | "service_unavailable"; message: string};
+} {
+  const message = safePublicInputMessage(error);
+  if (message) {
+    return {status: 400, body: {error: "invalid_request", message}};
+  }
+  if (error instanceof ServiceUnavailableError) {
+    return {
+      status: 503,
+      body: {error: "service_unavailable", message: "request could not be completed"}
+    };
+  }
+  return {status: 500, body: {error: "internal_error", message: "request could not be completed"}};
+}
+
+async function providerCall<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    throw new ServiceUnavailableError(error);
+  }
+}
+
+async function runtimeCall<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isDependencyFailure(error) || isOperatorReadinessFailure(error)) {
+      throw new ServiceUnavailableError(error);
+    }
+    throw error;
+  }
+}
+
+function isDependencyFailure(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as {code?: unknown}).code)
+    : "";
+  return new Set([
+    "NETWORK_ERROR",
+    "SERVER_ERROR",
+    "TIMEOUT",
+    "CALL_EXCEPTION",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "ETIMEDOUT"
+  ]).has(code);
+}
+
+function isOperatorReadinessFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return /^maker (inventory|allowance) is insufficient$/.test(message);
+}
+
+function safePublicInputMessage(error: unknown): string | undefined {
   const message = error instanceof Error ? error.message : "";
   const safePatterns = [
     /^(taker is required|invalid address)/,
@@ -221,11 +302,17 @@ function publicErrorMessage(error: unknown): string {
     /^ttlSeconds must be a positive integer$/,
     /^ttlSeconds must be at most \d+$/,
     /^request body exceeds 16 KiB$/,
-    /^JSON object required$/,
-    /^maker (inventory|allowance) is insufficient$/,
-    /^configured reference rate returns zero output$/
+    /^request body must be valid JSON$/,
+    /^JSON object required$/
   ];
-  return safePatterns.some((pattern) => pattern.test(message))
-    ? message
-    : "request could not be completed";
+  return safePatterns.some((pattern) => pattern.test(message)) ? message : undefined;
+}
+
+function requestSurface(url: string | undefined): string {
+  if (url === "/health") return "/health";
+  if (url === "/api/state") return "/api/state";
+  if (url === "/api/precheck") return "/api/precheck";
+  if (url === "/api/quote") return "/api/quote";
+  if (url?.startsWith("/api/wallet/")) return "/api/wallet/:address";
+  return "other";
 }

@@ -98,11 +98,24 @@ export function explainBlockedTrade(
 
   const name = reasonName(reasonCode);
   const explanation = explainPolicy(name);
+  const timing = {...explanation.timing, ...timingEvidence};
+  if (name === "HOLDING_PERIOD_NOT_ELAPSED" && timing.availableAt === undefined) {
+    return {
+      code: reasonCode,
+      technicalLabel: name,
+      ...explanation,
+      action: "Refresh to retrieve the onchain availability time, or ask the test operator to inspect the acquisition evidence.",
+      timing: {
+        kind: "unknown",
+        note: "No reliable availability time could be derived from the current chain evidence."
+      }
+    };
+  }
   return {
     code: reasonCode,
     technicalLabel: name ?? "UNKNOWN_POLICY_REASON",
     ...explanation,
-    timing: {...explanation.timing, ...timingEvidence}
+    timing
   };
 }
 

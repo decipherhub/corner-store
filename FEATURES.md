@@ -30,8 +30,13 @@
 - public runtime은 listen 전에 artifact schema, owner/operator, core/identity wiring,
   wallet identity binding, venue, maker와 inventory를 다시 검증한다. chain-reading endpoint와 quote issuance에는
   proxy header에 의존하지 않는 global budget과 bounded timeout을 적용한다.
+- 공개 API는 allowlist된 request validation 오류만 `400 invalid_request`로 반환하고,
+  RPC/runtime dependency 장애는 `503 service_unavailable`, 분류되지 않은 내부 오류는
+  `500 internal_error`로 원문을 숨긴다. 두 server failure는 PII/secret-free operator
+  event만 남긴다.
 - 보유기간 남은 시간은 browser wall clock이 아니라 관측한 chain timestamp를 기준으로
-  표시한다.
+  표시한다. 검증 가능한 availability evidence를 읽지 못하면 임의 시간을 표시하지
+  않고 재조회 또는 operator 확인이 필요하다고 안내한다.
 - judge quick start는 공개된 Monad network metadata로 browser wallet을 추가·전환하고,
   scenario account 또는 chain 변경 시 stale signer/quote 상태를 폐기한다.
 - 기존 Anvil showcase와 GIWA testnet 흐름은 변경하지 않는다.
@@ -45,6 +50,8 @@
 - dirty/source-mismatch broadcast rejection과 candidate-before-publish 검증
 - artifact/on-chain wiring mismatch startup rejection
 - global API/quote budget과 chain-time countdown regression
+- request-validation 400 / internal 500 / runtime-upstream 503 classification regression
+- public-testnet/CLI stable reason catalog parity
 - wallet network add/switch 및 account/chain change reset regression
 - clean-browser live URL rehearsal
 - `scripts/hackathon-monad-container-smoke.sh` OCI build/metadata/runtime-module/Compose contract
