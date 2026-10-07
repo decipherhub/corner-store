@@ -88,6 +88,7 @@ input { flex: 1; min-width: 0; padding: 16px 0; border: 0; outline: 0; backgroun
 dt { color: var(--muted); }
 dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 .evidence { margin-top: 14px; }
+.evidence-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 #trace { display: grid; gap: 1px; list-style: none; padding: 0; margin: 20px 0 0; }
 #trace li { display: flex; justify-content: space-between; gap: 18px; background: #0c100e; padding: 12px 14px; font-size: 13px; border-left: 2px solid var(--green); }
 #trace li.error { border-left-color: var(--red); }
@@ -100,4 +101,7 @@ summary { cursor: pointer; font-weight: 750; }
 @media (max-width: 850px) {
   .hero-grid, .trade-layout { grid-template-columns: 1fr; }
   .address-grid { grid-template-columns: 1fr; }
+  .evidence .section-title { align-items: stretch; flex-direction: column; }
+  .evidence-actions { justify-content: stretch; }
+  .evidence-actions button { flex: 1; }
 }

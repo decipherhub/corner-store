@@ -25,6 +25,9 @@ source of truth로 사용한다.
   심사 시나리오와 공개 주소만 표시하며, 지갑 비밀값은 별도 전달한다. 실제 임시
   Anvil 배포와 HTTP pre-check에서 `HOLDING_PERIOD_NOT_ELAPSED`의 onchain unlock
   time 및 `FAIL_NOT_QP`를 확인했다.
+- 성공 체결 후 deployment/source commit, chain, 공개 주소·금액, transaction/block와
+  submission-to-confirmation 시간을 묶은 PII/secret-free JSON 증거를 브라우저에서
+  다운로드할 수 있다. 실제 Monad 수치는 public-chain 체결 후 채운다.
 - 외부 judge URL용으로 non-root/read-only OCI target, read-only artifact mount,
   Docker secret Maker key, `/health`, 16 KiB body limit, quote rate limit과 browser
   security headers를 추가했다. Compose config는 검증했으며 로컬 Docker daemon이

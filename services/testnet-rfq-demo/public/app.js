@@ -15,6 +15,7 @@ let account;
 let side = "buy";
 let quoteEnvelope;
 let precheckPassed = false;
+let lastEvidence;
 
 async function api(path, options) {
   const response = await fetch(path, options);
@@ -143,9 +144,32 @@ async function execute() {
     const transaction = await router.execute(quoteEnvelope.execution.request);
     addTrace("Router settlement", `Submitted ${short(transaction.hash)}`);
     const confirmationStartedAt = performance.now();
+    const submittedAt = new Date().toISOString();
     const receipt = await transaction.wait();
-    const confirmationSeconds = (performance.now() - confirmationStartedAt) / 1000;
+    const confirmationMs = Math.round(performance.now() - confirmationStartedAt);
+    const confirmationSeconds = confirmationMs / 1000;
     addTrace("Asset movement", `Confirmed in block ${receipt.blockNumber} · ${confirmationSeconds.toFixed(2)}s after submission`);
+    lastEvidence = {
+      schemaVersion: 1,
+      kind: "corner-store-public-testnet-rfq-settlement",
+      deploymentId: state.deployment.deploymentId,
+      sourceCommit: state.deployment.sourceCommit,
+      chainId: state.deployment.chainId,
+      router: quoteEnvelope.execution.router,
+      rfqAdapter: quoteEnvelope.execution.spender,
+      wallet: account,
+      side,
+      tokenIn: quoteEnvelope.signed.quote.tokenIn,
+      tokenOut: quoteEnvelope.signed.quote.tokenOut,
+      amountIn: quoteEnvelope.signed.quote.amountIn,
+      amountOut: quoteEnvelope.signed.quote.amountOut,
+      transactionHash: transaction.hash,
+      blockNumber: Number(receipt.blockNumber),
+      submittedAt,
+      confirmedAt: new Date().toISOString(),
+      confirmationMs
+    };
+    $("download-evidence").disabled = false;
     $("quote-status").textContent = "Filled";
     await refreshWallet();
   } catch (error) {
@@ -206,6 +230,20 @@ function addTrace(label, detail, error = false) {
   if (error) item.className = "error";
   item.innerHTML = `<span>${escapeHtml(label)}</span><strong>${escapeHtml(detail)}</strong>`;
   $("trace").appendChild(item);
+}
+
+function downloadEvidence() {
+  if (!lastEvidence) throw new Error("Complete a settlement before downloading evidence");
+  const content = `${JSON.stringify(lastEvidence, null, 2)}\n`;
+  const url = URL.createObjectURL(new Blob([content], {type: "application/json"}));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${lastEvidence.deploymentId}-${lastEvidence.transactionHash.slice(2, 12)}-evidence.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  addTrace("Test evidence", "Downloaded non-secret settlement evidence");
 }
 
 function renderBlockPanel(explanation) {
@@ -274,6 +312,10 @@ $("request").addEventListener("click", () => requestQuote().catch((error) => add
 $("approve").addEventListener("click", () => approve().catch((error) => addTrace("Approval", readableError(error), true)));
 $("execute").addEventListener("click", execute);
 $("refresh").addEventListener("click", () => Promise.all([load(), refreshWallet()]).catch((error) => addTrace("Refresh", readableError(error), true)));
+$("download-evidence").addEventListener("click", () => {
+  try { downloadEvidence(); }
+  catch (error) { addTrace("Test evidence", readableError(error), true); }
+});
 document.querySelectorAll(".side").forEach((button) => button.addEventListener("click", () => {
   side = button.dataset.side;
   updateSide();

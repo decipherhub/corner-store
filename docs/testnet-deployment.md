@@ -320,6 +320,11 @@ transaction confirmation time from submission to receipt. Test-wallet secrets
 must be delivered out of band and are never rendered by the service.
 For chain ID 10143 the page shows the official Monad testnet wallet settings;
 the backend's configured RPC URL remains private and is never returned.
+After a successful Router settlement, download the generated JSON evidence. It
+binds the deployment/source commit, chain, public wallet and contract addresses,
+amounts, transaction hash, block and measured submission-to-confirmation time.
+Review the file before attaching it to the hackathon submission; it contains no
+private key, RPC URL or quote signature.
 When a pre-check is rejected, the page also presents a plain-language reason,
 the required user/operator action and an unlock or evidence-expiry time only
 when those values can be derived from current chain evidence.

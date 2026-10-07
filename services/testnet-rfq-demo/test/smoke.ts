@@ -139,6 +139,10 @@ assert(html.includes('id="block-panel"'));
 assert(html.includes('id="block-time"'));
 assert(html.includes('id="scenarios"'));
 assert(html.includes('id="wallet-network"'));
+assert(html.includes('id="download-evidence"'));
+const app = readFileSync(join(__dirname, "../../../public/app.js"), "utf8");
+assert(app.includes('kind: "corner-store-public-testnet-rfq-settlement"'));
+assert(app.includes("confirmationMs"));
 
 const signed = {
   quote: {
