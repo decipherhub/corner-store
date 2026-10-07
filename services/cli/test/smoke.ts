@@ -375,10 +375,11 @@ async function main() {
   // illustrative elements (A-06:4, A-12:8, E-03:9, F-01:3, F-03:4, F-04:5) are
   // also enumerated; the remaining 6 legacy single-code Elements (A-02, A-05,
   // C-01-v1, E-01, F-02-v1, BUIDL-MIN-v1) contribute 1 each. The versioned
-  // replacements add B-02-v2's 6-code taxonomy plus C-01-v2/F-02-v2, and
+  // replacements add B-02-v2's 6-code taxonomy, C-01-v2's 4-code acquisition
+  // taxonomy, F-02-v2, and
   // generic MIN-AMOUNT-v1 adds one named threshold code.
   const CODES_PER_ELEMENT =
-    10 + 1 + 9 + 9 + 1 + 6 + 6 + 6 + 1 + 1 + 1 + 9 + 1 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 1 + 1; // = 129
+    10 + 1 + 9 + 9 + 1 + 6 + 6 + 6 + 1 + 4 + 1 + 9 + 1 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 1 + 1; // = 132
   assert(tableSize() === 4 * CODES_PER_ELEMENT + 28 + 6 + 2, "reason table size");
 
   const jur = decodeReason(A02_RECIPE1);
@@ -399,6 +400,10 @@ async function main() {
   assert(A01_DIRECT_CODE4 !== encodeReason(1, "A-01-v1", 1), "direct element reason is not fabricated recipe-scoped code 1");
   const holderCap = decodeReason(D01_DIRECT_CODE3);
   assert(holderCap.label.includes("HOLDER_CAP_3C1_100"), "decodes D-01 direct code 3");
+  assert(
+    decodeReason(encodeReason(0, "C-01-v2", 4)).label.includes("HOLDING_PERIOD_NOT_ELAPSED"),
+    "decodes C-01-v2 holding-period reason"
+  );
   // Wave-3: a monitoring element's audit-surface code still decodes to its
   // doc-name even though F-03's `check()` never rejects — the code appears only
   // in operator views / FlagLifecycle events, never as a party-facing reject.

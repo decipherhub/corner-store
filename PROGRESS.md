@@ -11,7 +11,36 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. 다음 feature는 새 issue/우선순위 확인 후 하나만 active로 전환한다.
+`HACK-001 — Monad Onchain Finance RFQ Demo` (issue #145)
+
+- `hackathon/monad-onchain-finance`를 최신 `origin/main`의 별도 worktree에서
+  시작했다. 기존 root checkout과 미추적 개인 파일은 변경하지 않았다.
+- public-testnet browser runtime의 pre-check 결과에 차단 사유, 사용자/운영자
+  조치와 근거 있는 해제·증거 만료 시각을 반환하는 explanation 경계를 추가했다.
+  C-01-v2 보유기간은 acquisition snapshot과 immutable lockupSeconds로 실제
+  availability를 계산하며, QP claim expiry는 자동 해제가 아니라 재발급이 필요함을
+  구분한다.
+- Monad 전용 opt-in fixture가 investor B의 취득 시계를 배포 시점에서 시작해
+  Sell 보유기간 거부 장면을 재현한다. 화면에는 success/qualification/holding-period
+  심사 시나리오와 공개 주소만 표시하며, 지갑 비밀값은 별도 전달한다. 실제 임시
+  Anvil 배포와 HTTP pre-check에서 `HOLDING_PERIOD_NOT_ELAPSED`의 onchain unlock
+  time 및 `FAIL_NOT_QP`를 확인했다.
+- 외부 judge URL용으로 non-root/read-only OCI target, read-only artifact mount,
+  Docker secret Maker key, `/health`, 16 KiB body limit, quote rate limit과 browser
+  security headers를 추가했다. Compose config는 검증했으며 로컬 Docker daemon이
+  실행 중이 아니어서 image build는 아직 수행하지 못했다.
+- CLI reason catalog가 C-01-v2의 missing/broken/stale/not-matured 코드를 정확히
+  해석하도록 갱신했다. targeted testnet-demo/CLI smoke, 임시 Anvil 실제 배포와
+  HTTP explanation E2E, pinned Foundry 1.7.1 전체 `scripts/check.sh`(Foundry
+  960/960 포함), Compose config와 `git diff --check`가 통과했다. 시스템 PATH의
+  Foundry 1.4.0 nightly는 기존 main 파일 포맷을 다르게 판정하므로 전체 검증에는
+  저장소 기준 1.7.1을 사용했다.
+- Monad 공식 public RPC `https://testnet-rpc.monad.xyz`가 chain ID 10143과 현재
+  block을 반환하는 것을 새 preflight script로 확인했다. 기존 비공개 `.env.testnet`은
+  GIWA chain 91342 설정이므로 수정하지 않았지만, 포함된 공개 actor 주소의 Monad
+  형식·중복·deployer gas balance는 읽기 전용 preflight를 통과했다. 실제 broadcast는
+  로컬 keystore unlock과 Monad 전용 deployment id/config가, HTTPS hosting은 target이
+  준비되는 즉시 진행한다.
 
 ## Completed
 

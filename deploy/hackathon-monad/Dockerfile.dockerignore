@@ -1,0 +1,15 @@
+**
+!services/
+!services/testnet-rfq-demo/
+!services/testnet-rfq-demo/package.json
+!services/testnet-rfq-demo/package-lock.json
+!services/testnet-rfq-demo/tsconfig.json
+!services/testnet-rfq-demo/src/
+!services/testnet-rfq-demo/src/**
+!services/testnet-rfq-demo/public/
+!services/testnet-rfq-demo/public/**
+!services/rfq/
+!services/rfq/src/
+!services/rfq/src/**
+services/**/node_modules
+services/**/dist

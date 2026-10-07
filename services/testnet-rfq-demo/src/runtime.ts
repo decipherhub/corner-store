@@ -16,6 +16,7 @@ import {
   createRFQService
 } from "../../rfq/src";
 import {TestnetDemoConfig} from "./config";
+import {BlockTiming, explainBlockedTrade, reasonName} from "./explain";
 
 export const ROUTER_ABI = [
   "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req) returns (tuple(uint256 amountOut,bytes32 executionId))"
@@ -36,8 +37,14 @@ const RFQ_ADAPTER_ABI = [
 ];
 const POLICY_ABI = ["function statusOf(address token) view returns (uint8)"];
 const QP_ABI = [
-  "function check(address user,address counterparty,address asset,uint256 amount,bytes context,bytes parameters) view returns (bool passed,bytes32 reasonCode)"
+  "function check(address user,address counterparty,address asset,uint256 amount,bytes context,bytes parameters) view returns (bool passed,bytes32 reasonCode)",
+  "function claimOf(address user) view returns (uint8 basis,bool signatureValid,bool issuerTrusted,uint64 verifiedAt,uint8 ltStatus,bytes32 coveredCompany)",
+  "function freshnessCap() view returns (uint64)"
 ];
+const ACQUISITION_SOURCE_ABI = [
+  "function acquisitionOf(address holder,address asset) view returns (uint64 clockStart,uint64 observedAt,uint64 expiresAt,bytes32 sourceRef,uint8 status)"
+];
+const LOCKUP_ABI = ["function lockupSeconds() view returns (uint64)"];
 const QUOTE_TUPLE =
   "tuple(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,bytes32 policyId,uint256 nonce,uint64 expiry)";
 
@@ -134,7 +141,6 @@ export class TestnetRfqRuntime {
         chainId: artifact.chainId,
         createdAt: artifact.createdAt,
         transactionCount: artifact.transactionCount ?? null,
-        artifactPath: this.config.artifactPath,
         explorerUrl: this.config.explorerUrl ?? null
       },
       contracts: {
@@ -143,6 +149,8 @@ export class TestnetRfqRuntime {
         rfqAdapter: artifact.rfqAdapter,
         makerAuthorizer: artifact.makerAuthorizer,
         qualifiedPurchaser: artifact.qualifiedPurchaser,
+        acquisitionSource: artifact.acquisitionSource,
+        lockup: artifact.lockup,
         rwaToken: artifact.rwaToken,
         quoteToken: artifact.quote
       },
@@ -152,6 +160,29 @@ export class TestnetRfqRuntime {
         eligibleInvestorB: artifact.eligibleInvestorB,
         ineligibleInvestor: artifact.ineligibleInvestor
       },
+      scenarios: [
+        {
+          id: "success",
+          title: "Successful restricted-stock trade",
+          wallet: artifact.investor,
+          instruction: "Connect eligible investor A, choose Buy RWA and complete the RFQ settlement."
+        },
+        {
+          id: "qualification-required",
+          title: "Qualification required",
+          wallet: artifact.ineligibleInvestor,
+          instruction: "Connect the ineligible investor and run a Buy pre-check to see the policy explanation."
+        },
+        {
+          id: "holding-period",
+          title: "Holding period not elapsed",
+          wallet: artifact.eligibleInvestorB,
+          enabled: artifact.eligibleInvestorBScenario === "holding-period-pending",
+          instruction: artifact.eligibleInvestorBScenario === "holding-period-pending"
+            ? "Connect eligible investor B, choose Sell RWA and run the pre-check to see the onchain unlock time."
+            : "This deployment was not seeded with the optional holding-period scene."
+        }
+      ],
       tokens: {rwa: this.rwa, quote: this.quote},
       readiness: {
         makerApproved: Boolean(makerApproved),
@@ -218,15 +249,68 @@ export class TestnetRfqRuntime {
       {name: "maker inventory", pass: BigInt(makerBalance) >= BigInt(amountOut)},
       {name: "maker allowance", pass: BigInt(makerAllowance) >= BigInt(amountOut)}
     ];
+    const allowed = checks.every((check) => check.pass);
+    const reasonCode = String(decision.reasonCode);
     return {
-      allowed: checks.every((check) => check.pass),
-      reasonCode: String(decision.reasonCode),
+      allowed,
+      reasonCode,
+      policyValidUntil: Number(decision.validUntil),
+      explanation: allowed
+        ? null
+        : explainBlockedTrade(
+          reasonCode,
+          checks,
+          await this.timingEvidence(reasonName(reasonCode), taker, side)
+        ),
       checks,
       amountIn,
       amountOut,
       side,
       context
     };
+  }
+
+  private async timingEvidence(
+    name: string | undefined,
+    taker: string,
+    side: TradeSide
+  ): Promise<Partial<BlockTiming> | undefined> {
+    try {
+      if (name === "HOLDING_PERIOD_NOT_ELAPSED") {
+        const holder = side === "buy" ? this.config.artifact.maker : taker;
+        const source = new Contract(this.config.artifact.acquisitionSource, ACQUISITION_SOURCE_ABI, this.provider);
+        const lockup = new Contract(this.config.artifact.lockup, LOCKUP_ABI, this.provider);
+        const [snapshot, lockupSeconds] = await Promise.all([
+          source.acquisitionOf(holder, this.config.artifact.rwaToken),
+          lockup.lockupSeconds()
+        ]);
+        const clockStart = Number(snapshot.clockStart);
+        if (clockStart > 0) {
+          return {
+            kind: "automatic",
+            availableAt: clockStart + Number(lockupSeconds),
+            note: "This holding-period block clears automatically at the displayed chain time."
+          };
+        }
+      }
+
+      if (name === "FAIL_QP_CLAIM_EXPIRED") {
+        const qp = new Contract(this.config.artifact.qualifiedPurchaser, QP_ABI, this.provider);
+        const [claim, freshnessCap] = await Promise.all([qp.claimOf(taker), qp.freshnessCap()]);
+        const verifiedAt = Number(claim.verifiedAt);
+        if (verifiedAt > 0) {
+          return {
+            kind: "operator-action",
+            evidenceExpiredAt: verifiedAt + Number(freshnessCap),
+            note: "The displayed claim expiry is historical; a new operator attestation is required."
+          };
+        }
+      }
+    } catch {
+      // Explanation reads are optional observability. They never replace or
+      // weaken the Engine's authoritative allow/reject result.
+    }
+    return undefined;
   }
 
   async quoteFor(taker: string, amountIn: string, side: TradeSide, ttlSeconds?: number): Promise<SignedRFQQuote> {

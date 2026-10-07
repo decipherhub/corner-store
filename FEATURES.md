@@ -9,6 +9,43 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## HACK-001 — Monad Onchain Finance RFQ Demo
+
+### Behavior
+
+- 기존 public-testnet RFQ deployment와 artifact-bound browser runtime을 Monad
+  testnet(chain ID 10143)에서 재사용하며 Core/RFQ 계약을 해커톤 전용으로
+  fork하지 않는다.
+- browser pre-check 거부는 raw `reasonCode`만 노출하지 않고, 사람이 이해할 수
+  있는 차단 사유, 필요한 다음 조치와 증거로 확인 가능한 해제·만료 시각을 함께
+  표시한다. 시간 근거가 없으면 임의 ETA 대신 operator/user action 필요를 명시한다.
+- Monad 배포 artifact, 심사위원용 HTTPS live URL, fixture wallet 안내와 측정된
+  test transaction evidence를 제공하되 real asset, production issuer onboarding,
+  real TA/KYC 연결 또는 규제 준수를 주장하지 않는다.
+- 기존 Anvil showcase와 GIWA testnet 흐름은 변경하지 않는다.
+
+### Verification
+
+- `npm test --prefix services/testnet-rfq-demo`
+- `npm test --prefix services/cli`
+- Monad RPC chain-id/readiness preflight
+- verified deployment artifact와 browser-wallet RFQ settlement
+- clean-browser live URL rehearsal
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+active
+
+### Notes
+
+- Tracks issue #145. Decision Receipts r2/EAS/anchor/verifier work from #139 is
+  deferred to the November accelerator round and is not part of this feature.
+- 2026-10-07: official public RPC responded with chain ID 10143 and a current
+  block. Live deployment still requires funded disposable deployer/participant
+  wallets and must not commit their keys or credential-bearing RPC URLs.
+
 ## DATA-003: Isolated Demo and Production TA/KYC Provider Adapters
 
 ### Behavior

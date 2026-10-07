@@ -48,6 +48,47 @@ Obtain the official values from the hackathon or network operator:
 Do not infer these values from the network name. The deployment wrapper checks
 that the RPC-reported chain ID exactly matches `--chain-id`.
 
+### Monad Onchain Finance hackathon profile
+
+The current official Monad developer resources list the following public
+testnet values. Re-check them before broadcast because public endpoints can
+change:
+
+| Input | Value |
+| --- | --- |
+| network | Monad Testnet |
+| chain ID | `10143` |
+| public RPC | `https://testnet-rpc.monad.xyz` |
+| explorer | `https://testnet.monadexplorer.com` |
+| faucet | `https://faucet.monad.xyz` |
+
+The verified [`monad-developers`](https://github.com/monad-developers)
+organization links the canonical docs, testnet hub, faucet and explorer. Before
+loading any signer, run the read-only preflight:
+
+```sh
+scripts/preflight-monad-hackathon.sh
+```
+
+After loading the local deployment environment, add `--deployment-ready` to
+validate required inputs, distinct actor addresses and a non-zero deployer gas
+balance without printing any secret value.
+
+Use a unique append-only deployment id for the hackathon record:
+
+```sh
+export CORNER_STORE_DEPLOYMENT_ID=monad-onchain-finance-rfq-v1
+export CORNER_STORE_TESTNET_INVESTOR_B_HOLDING_PERIOD_PENDING=true
+```
+
+Do not put a faucet wallet key, Maker key or credential-bearing fallback RPC in
+the deployment artifact or repository config.
+
+The optional investor-B flag changes only that wallet's acquisition clock. It
+creates a deterministic Sell rejection with an onchain-derived availability
+time while leaving the existing GIWA and default public-testnet fixture
+behavior unchanged.
+
 ## 2. Prepare Wallets
 
 Prepare at least four externally controlled wallets:
@@ -57,7 +98,7 @@ Prepare at least four externally controlled wallets:
 | deployer | deploys and initializes the reference stack | yes, substantial |
 | maker | signs quotes, supplies RWA/quote inventory | yes |
 | eligible investor A | normal success scenario | yes |
-| eligible investor B | claim-expiry scenario | yes |
+| eligible investor B | holding-period scenario when the optional flag is enabled | yes |
 | ineligible investor | rejection scenario | yes |
 
 Governance and operator may equal the deployer for a short-lived hackathon
@@ -274,6 +315,42 @@ Maker quote using the existing RFQ SDK; it does **not** sign for the investor.
 The browser wallet submits its own token approval and final Router transaction.
 The page exposes the exact artifact addresses, current Manifest/Maker
 readiness, balances, QP pre-check, signed quote, transaction hash and block.
+It also renders the non-secret judge scenario addresses and measures wallet
+transaction confirmation time from submission to receipt. Test-wallet secrets
+must be delivered out of band and are never rendered by the service.
+When a pre-check is rejected, the page also presents a plain-language reason,
+the required user/operator action and an unlock or evidence-expiry time only
+when those values can be derived from current chain evidence.
+
+For an external judge URL, keep this Node service on a private application
+port behind an HTTPS reverse proxy. The public edge must enforce a bounded
+request rate and body size; the disposable Maker key remains available only to
+the server process. Do not expose the Maker environment, artifact filesystem or
+RPC credentials as static assets.
+
+`GET /health` verifies that the process can still read the configured chain and
+returns the latest observed block number; it does not expose local paths or
+credentials.
+
+The repository includes a portable non-root/read-only OCI target and Compose
+contract for this boundary. The container consumes the verified artifact and a
+Docker secret at runtime; neither is copied into the image:
+
+```sh
+export CORNER_STORE_TESTNET_ARTIFACT="$PWD/deployments/public/<deployment-id>-10143.json"
+export CORNER_STORE_TESTNET_RPC_URL=https://testnet-rpc.monad.xyz
+export CORNER_STORE_TESTNET_EXPLORER_URL=https://testnet.monadexplorer.com
+export CORNER_STORE_TESTNET_MAKER_KEY_FILE=/secure/path/disposable-maker-key
+
+docker compose -f deploy/hackathon-monad/compose.example.yaml up --build -d
+curl --fail http://127.0.0.1:8791/health
+```
+
+Terminate HTTPS at the selected hosting platform or reverse proxy and forward
+only to port 8791. The application also enforces a 16 KiB request limit,
+per-client quote rate limit, browser security headers and an explicit
+`hackathon-testnet-only` acknowledgement for non-loopback binding. These are
+demo safeguards, not a replacement for the production RFQ host.
 
 This is separate from the feature-rich local Anvil demo:
 

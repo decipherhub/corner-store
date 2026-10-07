@@ -10,7 +10,8 @@ const MAX_BODY = 16 * 1024;
 export async function startServer(runtime: TestnetRfqRuntime) {
   const publicDir = resolve(__dirname, "../../../public");
   const ethersBundle = resolve(__dirname, "../../../node_modules/ethers/dist/ethers.umd.min.js");
-  const server = createServer((req, res) => void handle(req, res, runtime, publicDir, ethersBundle));
+  const quoteLimiter = new InMemoryRateLimiter(runtime.config.quoteRequestsPerMinute);
+  const server = createServer((req, res) => void handle(req, res, runtime, publicDir, ethersBundle, quoteLimiter));
   await new Promise<void>((resolveListen, reject) => {
     server.once("error", reject);
     server.listen(runtime.config.port, runtime.config.host, () => {
@@ -26,9 +27,14 @@ async function handle(
   res: ServerResponse,
   runtime: TestnetRfqRuntime,
   publicDir: string,
-  ethersBundle: string
+  ethersBundle: string,
+  quoteLimiter: InMemoryRateLimiter
 ) {
   try {
+    if (req.method === "GET" && req.url === "/health") {
+      const blockNumber = await runtime.provider.getBlockNumber();
+      return json(res, 200, {service: "corner-store-testnet-rfq-demo", status: "ok", blockNumber});
+    }
     if (req.method === "GET" && req.url === "/") return sendFile(res, resolve(publicDir, "index.html"), "text/html");
     if (req.method === "GET" && req.url === "/app.js") return sendFile(res, resolve(publicDir, "app.js"), "text/javascript");
     if (req.method === "GET" && req.url === "/styles.css") return sendFile(res, resolve(publicDir, "styles.css"), "text/css");
@@ -49,6 +55,11 @@ async function handle(
     }
 
     if (req.method === "POST" && req.url === "/api/quote") {
+      const rate = quoteLimiter.check(req.socket.remoteAddress ?? "unknown", Date.now());
+      if (!rate.allowed) {
+        res.setHeader("Retry-After", String(rate.retryAfterSeconds));
+        return json(res, 429, {error: "rate_limited"});
+      }
       const body = await bodyJson(req);
       const signed = await runtime.quoteFor(
         address(body.taker, "taker"),
@@ -82,6 +93,7 @@ async function handle(
 
 function sendFile(res: ServerResponse, path: string, type: string) {
   const content = readFileSync(path);
+  securityHeaders(res);
   res.writeHead(200, {
     "content-type": `${type}; charset=utf-8`,
     "content-length": content.length,
@@ -92,12 +104,50 @@ function sendFile(res: ServerResponse, path: string, type: string) {
 
 function json(res: ServerResponse, status: number, value: unknown) {
   const content = Buffer.from(`${JSON.stringify(value)}\n`);
+  securityHeaders(res);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": content.length,
     "cache-control": "no-store"
   });
   res.end(content);
+}
+
+function securityHeaders(res: ServerResponse) {
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+}
+
+export class InMemoryRateLimiter {
+  private readonly entries = new Map<string, {windowStartMs: number; count: number}>();
+
+  constructor(private readonly maximum: number, private readonly windowMs = 60_000) {}
+
+  check(key: string, nowMs: number): {allowed: boolean; retryAfterSeconds: number} {
+    const current = this.entries.get(key);
+    if (!current || nowMs - current.windowStartMs >= this.windowMs) {
+      this.entries.set(key, {windowStartMs: nowMs, count: 1});
+      this.prune(nowMs);
+      return {allowed: true, retryAfterSeconds: 0};
+    }
+    if (current.count >= this.maximum) {
+      return {
+        allowed: false,
+        retryAfterSeconds: Math.max(1, Math.ceil((this.windowMs - (nowMs - current.windowStartMs)) / 1000))
+      };
+    }
+    current.count += 1;
+    return {allowed: true, retryAfterSeconds: 0};
+  }
+
+  private prune(nowMs: number) {
+    if (this.entries.size <= 1_024) return;
+    for (const [key, value] of this.entries) {
+      if (nowMs - value.windowStartMs >= this.windowMs) this.entries.delete(key);
+    }
+  }
 }
 
 async function bodyJson(req: IncomingMessage): Promise<Record<string, unknown>> {

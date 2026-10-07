@@ -1,11 +1,13 @@
 import {strict as assert} from "assert";
-import {mkdtempSync, writeFileSync} from "fs";
+import {mkdtempSync, readFileSync, writeFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
 import {Wallet} from "ethers";
 
 import {loadConfig} from "../src/config";
+import {encodeReasonCode, explainBlockedTrade} from "../src/explain";
 import {buildRouterRequest} from "../src/runtime";
+import {InMemoryRateLimiter} from "../src/server";
 
 const maker = Wallet.createRandom();
 const artifact = {
@@ -18,6 +20,7 @@ const artifact = {
   activationMode: "public-testnet-reference-fixture",
   productionDeployment: false,
   participantApprovalsRequired: true,
+  eligibleInvestorBScenario: "holding-period-pending",
   governance: "0x0000000000000000000000000000000000000010",
   operator: "0x0000000000000000000000000000000000000011",
   maker: maker.address,
@@ -32,11 +35,15 @@ const artifact = {
   policyReg: "0x0000000000000000000000000000000000000032",
   rfqAdapter: "0x0000000000000000000000000000000000000033",
   makerAuthorizer: "0x0000000000000000000000000000000000000034",
-  qualifiedPurchaser: "0x0000000000000000000000000000000000000035"
+  qualifiedPurchaser: "0x0000000000000000000000000000000000000035",
+  acquisitionSource: "0x0000000000000000000000000000000000000036",
+  lockup: "0x0000000000000000000000000000000000000037"
 };
 const dir = mkdtempSync(join(tmpdir(), "corner-store-testnet-demo-"));
 const path = join(dir, "artifact.json");
+const makerKeyPath = join(dir, "maker-key");
 writeFileSync(path, JSON.stringify(artifact));
+writeFileSync(makerKeyPath, `${maker.privateKey}\n`);
 const config = loadConfig({
   CORNER_STORE_TESTNET_ARTIFACT: path,
   CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
@@ -44,6 +51,93 @@ const config = loadConfig({
 });
 assert.equal(config.artifact.deploymentId, "smoke");
 assert.equal(config.makerWallet.address, maker.address);
+assert.equal(config.quoteRequestsPerMinute, 20);
+const fileSecretConfig = loadConfig({
+  CORNER_STORE_TESTNET_ARTIFACT: path,
+  CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
+  CORNER_STORE_TESTNET_MAKER_KEY_FILE: makerKeyPath
+});
+assert.equal(fileSecretConfig.makerWallet.address, maker.address);
+assert.throws(
+  () => loadConfig({
+    CORNER_STORE_TESTNET_ARTIFACT: path,
+    CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
+    CORNER_STORE_TESTNET_MAKER_KEY: maker.privateKey,
+    CORNER_STORE_TESTNET_MAKER_KEY_FILE: makerKeyPath
+  }),
+  /set only one/
+);
+
+assert.throws(
+  () => loadConfig({
+    CORNER_STORE_TESTNET_ARTIFACT: path,
+    CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
+    CORNER_STORE_TESTNET_MAKER_KEY: maker.privateKey,
+    CORNER_STORE_TESTNET_DEMO_HOST: "0.0.0.0"
+  }),
+  /hackathon-testnet-only/
+);
+const publicConfig = loadConfig({
+  CORNER_STORE_TESTNET_ARTIFACT: path,
+  CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
+  CORNER_STORE_TESTNET_MAKER_KEY: maker.privateKey,
+  CORNER_STORE_TESTNET_DEMO_HOST: "0.0.0.0",
+  CORNER_STORE_TESTNET_PUBLIC_ACKNOWLEDGEMENT: "hackathon-testnet-only",
+  CORNER_STORE_TESTNET_QUOTE_REQUESTS_PER_MINUTE: "3"
+});
+assert.equal(publicConfig.host, "0.0.0.0");
+assert.equal(publicConfig.quoteRequestsPerMinute, 3);
+assert.throws(
+  () => loadConfig({
+    CORNER_STORE_TESTNET_ARTIFACT: path,
+    CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
+    CORNER_STORE_TESTNET_MAKER_KEY: maker.privateKey,
+    CORNER_STORE_TESTNET_QUOTE_REQUESTS_PER_MINUTE: "1001"
+  }),
+  /at most 1000/
+);
+
+const limiter = new InMemoryRateLimiter(2, 1_000);
+assert.equal(limiter.check("judge", 10_000).allowed, true);
+assert.equal(limiter.check("judge", 10_100).allowed, true);
+const limited = limiter.check("judge", 10_200);
+assert.equal(limited.allowed, false);
+assert.equal(limited.retryAfterSeconds, 1);
+assert.equal(limiter.check("judge", 11_000).allowed, true);
+
+const holdingReason = encodeReasonCode(0, "C-01-v2", 4);
+const holding = explainBlockedTrade(
+  holdingReason,
+  [{name: "latest compliance policy", pass: false, reasonCode: holdingReason}],
+  {kind: "automatic", availableAt: 2_000_000_000, note: "fixture"}
+);
+assert.equal(holding.technicalLabel, "HOLDING_PERIOD_NOT_ELAPSED");
+assert.equal(holding.timing.availableAt, 2_000_000_000);
+assert.match(holding.action, /displayed availability time/);
+
+const policyBeforeInventory = explainBlockedTrade(
+  holdingReason,
+  [
+    {name: "latest compliance policy", pass: false, reasonCode: holdingReason},
+    {name: "maker inventory", pass: false}
+  ]
+);
+assert.equal(policyBeforeInventory.technicalLabel, "HOLDING_PERIOD_NOT_ELAPSED");
+
+const inventory = explainBlockedTrade(
+  `0x${"00".repeat(32)}`,
+  [
+    {name: "latest compliance policy", pass: true},
+    {name: "maker inventory", pass: false}
+  ]
+);
+assert.equal(inventory.technicalLabel, "MAKER_INVENTORY");
+assert.equal(inventory.timing.kind, "operator-action");
+
+const html = readFileSync(join(__dirname, "../../../public/index.html"), "utf8");
+assert(html.includes('id="block-panel"'));
+assert(html.includes('id="block-time"'));
+assert(html.includes('id="scenarios"'));
 
 const signed = {
   quote: {

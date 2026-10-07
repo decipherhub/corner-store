@@ -107,6 +107,7 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
     address internal investorIdentity;
     address internal eligibleInvestorBIdentity;
     address internal ineligibleInvestorIdentity;
+    bool internal investorBHoldingPeriodPending;
 
     function run() external returns (Deployment memory core) {
         Actors memory actors = _loadActors();
@@ -117,6 +118,7 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         string memory artifactPath = vm.envOr("CORNER_STORE_ARTIFACT", string(DEFAULT_ARTIFACT));
         string memory deploymentId = vm.envOr("CORNER_STORE_DEPLOYMENT_ID", string("hackathon-testnet-rfq"));
         string memory sourceCommit = vm.envOr("CORNER_STORE_SOURCE_COMMIT", string("unknown"));
+        investorBHoldingPeriodPending = vm.envOr("CORNER_STORE_TESTNET_INVESTOR_B_HOLDING_PERIOD_PENDING", false);
 
         vm.startBroadcast();
 
@@ -243,11 +245,11 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         jurisdiction.setJurisdictionAllowed(ALLOWED_JURISDICTION, true);
         policyReg.setUnregulated(address(quoteToken));
 
-        investorIdentity = _verifyAndAttest(actors.investor, true);
-        eligibleInvestorBIdentity = _verifyAndAttest(actors.eligibleInvestorB, true);
-        ineligibleInvestorIdentity = _verifyAndAttest(actors.ineligibleInvestor, false);
+        investorIdentity = _verifyAndAttest(actors.investor, true, false);
+        eligibleInvestorBIdentity = _verifyAndAttest(actors.eligibleInvestorB, true, investorBHoldingPeriodPending);
+        ineligibleInvestorIdentity = _verifyAndAttest(actors.ineligibleInvestor, false, false);
         makerIdentity = address(verifyInvestor(actors.maker));
-        _attestRwaSource(actors.maker);
+        _attestRwaSource(actors.maker, false);
 
         quoteToken.mint(actors.investor, balances.investorQuote);
         quoteToken.mint(actors.eligibleInvestorB, balances.investorQuote);
@@ -260,20 +262,23 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         mint(actors.maker, balances.makerRwa);
     }
 
-    function _verifyAndAttest(address investor, bool isQp) internal returns (address identity) {
+    function _verifyAndAttest(address investor, bool isQp, bool holdingPeriodPending)
+        internal
+        returns (address identity)
+    {
         identity = address(verifyInvestor(investor));
         jurisdiction.setJurisdiction(investor, ALLOWED_JURISDICTION);
         identityUniqueness.bindIdentity(investor, keccak256(abi.encode("TESTNET_IDENTITY", investor)));
         accreditedInvestor.setAccredited(investor, true);
         qualifiedPurchaser.setQp(investor, isQp);
-        _attestRwaSource(investor);
+        _attestRwaSource(investor, holdingPeriodPending);
     }
 
-    function _attestRwaSource(address holder) internal {
+    function _attestRwaSource(address holder, bool holdingPeriodPending) internal {
         acquisitionSource.setSnapshot(
             holder,
             address(rwaToken),
-            uint64(1),
+            holdingPeriodPending ? uint64(block.timestamp) : uint64(1),
             uint64(block.timestamp + 30 days),
             keccak256(abi.encode("HACKATHON_TESTNET_TA_FIXTURE", holder)),
             IAcquisitionSource.AcquisitionStatus.VALID
@@ -362,6 +367,9 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         vm.serializeString(key, "activationMode", "public-testnet-reference-fixture");
         vm.serializeBool(key, "productionDeployment", false);
         vm.serializeBool(key, "participantApprovalsRequired", true);
+        vm.serializeString(
+            key, "eligibleInvestorBScenario", investorBHoldingPeriodPending ? "holding-period-pending" : "eligible"
+        );
         vm.serializeAddress(key, "deployer", actors.deployer);
         vm.serializeAddress(key, "governance", actors.governance);
         vm.serializeAddress(key, "operator", actors.operator);

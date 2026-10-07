@@ -285,6 +285,8 @@ participant approval and read-only verification scripts.
 
 ```shell
 cp .env.testnet.example .env.testnet
+# Monad hackathon: verify the public endpoint before loading any signer.
+scripts/preflight-monad-hackathon.sh
 # Fill and source the local file, then simulate first.
 scripts/deploy-testnet-rfq.sh \
   --rpc-url "$RPC_URL" \
@@ -305,6 +307,10 @@ wallet-signed browser demo consumes the committed artifact without redeploying:
 ```shell
 scripts/run-testnet-rfq-demo.sh
 ```
+
+For the Monad hackathon, `deploy/hackathon-monad/` packages the same
+artifact-bound service as a non-root/read-only container for an HTTPS judge
+URL; it does not package wallet keys or deployment artifacts into the image.
 
 The local Anvil showcase remains unchanged and does not share its deterministic
 account facilitator with this public-network runtime.

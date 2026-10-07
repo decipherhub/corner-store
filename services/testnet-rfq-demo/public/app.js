@@ -30,6 +30,7 @@ async function load() {
   $("rate").textContent = state.pricing.display;
   renderReadiness();
   renderContracts();
+  renderScenarios();
   updateSide();
   addTrace("Deployment artifact", "Verified addresses loaded");
 }
@@ -71,6 +72,7 @@ function updateSide() {
   $("execute").disabled = true;
   $("quote-status").textContent = "None";
   $("estimated").textContent = "—";
+  hideBlockPanel();
 }
 
 async function runPrecheck() {
@@ -87,7 +89,8 @@ async function runPrecheck() {
   $("precheck-result").className = `result ${result.allowed ? "pass" : "fail"}`;
   $("precheck-result").textContent = result.allowed
     ? "Pre-check passed. The Router will evaluate current policy again at settlement."
-    : `Blocked · ${result.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")} · ${result.reasonCode}`;
+    : `Blocked · ${result.explanation?.title || result.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`;
+  renderBlockPanel(result.explanation);
   $("request").disabled = !result.allowed;
   addTrace("Compliance pre-check", result.allowed ? "Allowed" : `Rejected ${result.reasonCode}`, !result.allowed);
 }
@@ -139,8 +142,10 @@ async function execute() {
     addTrace("Final Router preflight", "Current compliance accepted");
     const transaction = await router.execute(quoteEnvelope.execution.request);
     addTrace("Router settlement", `Submitted ${short(transaction.hash)}`);
+    const confirmationStartedAt = performance.now();
     const receipt = await transaction.wait();
-    addTrace("Asset movement", `Confirmed in block ${receipt.blockNumber}`);
+    const confirmationSeconds = (performance.now() - confirmationStartedAt) / 1000;
+    addTrace("Asset movement", `Confirmed in block ${receipt.blockNumber} · ${confirmationSeconds.toFixed(2)}s after submission`);
     $("quote-status").textContent = "Filled";
     await refreshWallet();
   } catch (error) {
@@ -182,11 +187,58 @@ function renderContracts() {
   }).join("");
 }
 
+function renderScenarios() {
+  $("scenarios").innerHTML = state.scenarios.map((scenario) => `
+    <article class="scenario-card ${scenario.enabled === false ? "disabled" : ""}">
+      <strong>${escapeHtml(scenario.title)}</strong>
+      <code>${escapeHtml(scenario.wallet)}</code>
+      <span>${escapeHtml(scenario.instruction)}</span>
+    </article>
+  `).join("");
+}
+
 function addTrace(label, detail, error = false) {
   const item = document.createElement("li");
   if (error) item.className = "error";
   item.innerHTML = `<span>${escapeHtml(label)}</span><strong>${escapeHtml(detail)}</strong>`;
   $("trace").appendChild(item);
+}
+
+function renderBlockPanel(explanation) {
+  if (!explanation) return hideBlockPanel();
+  $("block-title").textContent = explanation.title;
+  $("block-detail").textContent = explanation.detail;
+  $("block-action").textContent = explanation.action;
+  $("block-time").textContent = timingText(explanation.timing);
+  $("block-code").textContent = explanation.code;
+  $("block-label").textContent = explanation.technicalLabel;
+  $("block-panel").classList.remove("hidden");
+}
+
+function hideBlockPanel() {
+  $("block-panel").classList.add("hidden");
+}
+
+function timingText(timing) {
+  if (!timing) return "No reliable availability time is available.";
+  if (timing.availableAt) {
+    const remaining = Math.max(0, Number(timing.availableAt) - Math.floor(Date.now() / 1000));
+    const suffix = remaining > 0 ? ` · about ${formatDuration(remaining)} remaining` : " · retry now";
+    return `${new Date(Number(timing.availableAt) * 1000).toLocaleString()}${suffix}`;
+  }
+  if (timing.evidenceExpiredAt) {
+    return `Evidence expired ${new Date(Number(timing.evidenceExpiredAt) * 1000).toLocaleString()} · operator refresh required`;
+  }
+  return timing.note;
+}
+
+function formatDuration(seconds) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.ceil((seconds % 3600) / 60);
+  return [days ? `${days}d` : "", hours ? `${hours}h` : "", !days && minutes ? `${minutes}m` : ""]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function requireWallet() {
@@ -228,6 +280,7 @@ $("amount").addEventListener("input", () => {
   $("request").disabled = true;
   $("approve").disabled = true;
   $("execute").disabled = true;
+  hideBlockPanel();
 });
 
 load().catch((error) => addTrace("Startup", readableError(error), true));

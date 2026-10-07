@@ -63,6 +63,20 @@
 
           <button id="precheck" class="secondary" disabled>Run compliance pre-check</button>
           <div id="precheck-result" class="result neutral">Connect wallet to begin.</div>
+          <aside id="block-panel" class="block-panel hidden" aria-live="polite">
+            <span class="eyebrow">WHY THIS TRADE IS BLOCKED</span>
+            <h3 id="block-title">Policy check required</h3>
+            <p id="block-detail"></p>
+            <div class="block-guidance">
+              <div><span>What to do</span><strong id="block-action">—</strong></div>
+              <div><span>When available</span><strong id="block-time">—</strong></div>
+            </div>
+            <details class="technical-reason">
+              <summary>Technical evidence</summary>
+              <code id="block-code">—</code>
+              <div id="block-label" class="muted"></div>
+            </details>
+          </aside>
           <button id="request" disabled>Request signed quote</button>
         </article>
 
@@ -98,6 +112,17 @@
         <ol id="trace">
           <li><span>Deployment artifact</span><strong>Loading</strong></li>
         </ol>
+      </section>
+
+      <section class="evidence judge-guide">
+        <div class="section-title">
+          <div>
+            <span class="eyebrow">JUDGE QUICK START</span>
+            <h2>Test the policy outcomes</h2>
+          </div>
+        </div>
+        <p class="muted">Import the disposable test wallet credentials supplied separately. Private keys are never embedded in this site or deployment artifact.</p>
+        <div id="scenarios" class="scenario-grid"></div>
       </section>
 
       <details>
