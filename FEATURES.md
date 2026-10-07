@@ -19,6 +19,9 @@
 - browser pre-check 거부는 raw `reasonCode`만 노출하지 않고, 사람이 이해할 수
   있는 차단 사유, 필요한 다음 조치와 증거로 확인 가능한 해제·만료 시각을 함께
   표시한다. 시간 근거가 없으면 임의 ETA 대신 operator/user action 필요를 명시한다.
+- 선택형 해커톤 fixture는 다른 투자자의 freshness를 약화하지 않고 별도 지갑에
+  만료된 QP 증빙을 주입해 success, qualification-required, holding-period와
+  claim-expiry 네 장면을 같은 배포에서 재현한다.
 - Monad 배포 artifact, 심사위원용 HTTPS live URL, fixture wallet 안내와 측정된
   test transaction evidence를 제공하되 real asset, production issuer onboarding,
   real TA/KYC 연결 또는 규제 준수를 주장하지 않는다.

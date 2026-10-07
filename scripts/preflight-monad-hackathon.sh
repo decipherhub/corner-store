@@ -61,6 +61,7 @@ const names = [
   "CORNER_STORE_TESTNET_INVESTOR_B",
   "CORNER_STORE_TESTNET_INELIGIBLE_INVESTOR"
 ];
+if (process.env.CORNER_STORE_TESTNET_EXPIRED_INVESTOR) names.push("CORNER_STORE_TESTNET_EXPIRED_INVESTOR");
 const addresses = names.map((name) => {
   try { return getAddress(process.env[name]); }
   catch { throw new Error(`${name} is not a valid address`); }

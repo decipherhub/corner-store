@@ -22,6 +22,7 @@ export const ROUTER_ABI = [
   "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req) returns (tuple(uint256 amountOut,bytes32 executionId))"
 ];
 export const ERC20_ABI = [
+  "function name() view returns (string)",
   "function symbol() view returns (string)",
   "function decimals() view returns (uint8)",
   "function balanceOf(address account) view returns (uint256)",
@@ -52,6 +53,7 @@ export type TradeSide = "buy" | "sell";
 
 export interface TokenMetadata {
   address: string;
+  name: string;
   symbol: string;
   decimals: number;
 }
@@ -167,7 +169,10 @@ export class TestnetRfqRuntime {
         maker: artifact.maker,
         eligibleInvestorA: artifact.investor,
         eligibleInvestorB: artifact.eligibleInvestorB,
-        ineligibleInvestor: artifact.ineligibleInvestor
+        ineligibleInvestor: artifact.ineligibleInvestor,
+        ...(artifact.expiredInvestor && artifact.expiredInvestor !== "0x0000000000000000000000000000000000000000"
+          ? {expiredInvestor: artifact.expiredInvestor}
+          : {})
       },
       scenarios: [
         {
@@ -190,6 +195,19 @@ export class TestnetRfqRuntime {
           instruction: artifact.eligibleInvestorBScenario === "holding-period-pending"
             ? "Connect eligible investor B, choose Sell RWA, enter 5,000,000 and run the pre-check to see the unlock time."
             : "This deployment was not seeded with the optional holding-period scene."
+        },
+        {
+          id: "claim-expiry",
+          title: "Qualification evidence expired",
+          wallet: artifact.expiredInvestor ?? "0x0000000000000000000000000000000000000000",
+          enabled: Boolean(
+            artifact.expiredInvestor
+              && artifact.expiredInvestor !== "0x0000000000000000000000000000000000000000"
+          ),
+          instruction: artifact.expiredInvestor
+            && artifact.expiredInvestor !== "0x0000000000000000000000000000000000000000"
+            ? "Connect the expired-claim investor, choose Buy RWA, enter 5,000,000 and run the pre-check."
+            : "This deployment was not seeded with the optional expired-claim wallet."
         }
       ],
       tokens: {rwa: this.rwa, quote: this.quote},
@@ -429,6 +447,6 @@ class MakerInventoryRisk implements InventoryRiskCheck {
 
 async function tokenMetadata(provider: JsonRpcProvider, address: string): Promise<TokenMetadata> {
   const token = new Contract(address, ERC20_ABI, provider);
-  const [symbol, decimals] = await Promise.all([token.symbol(), token.decimals()]);
-  return {address, symbol: String(symbol), decimals: Number(decimals)};
+  const [name, symbol, decimals] = await Promise.all([token.name(), token.symbol(), token.decimals()]);
+  return {address, name: String(name), symbol: String(symbol), decimals: Number(decimals)};
 }

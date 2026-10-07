@@ -79,6 +79,10 @@ Use a unique append-only deployment id for the hackathon record:
 ```sh
 export CORNER_STORE_DEPLOYMENT_ID=monad-onchain-finance-rfq-v1
 export CORNER_STORE_TESTNET_INVESTOR_B_HOLDING_PERIOD_PENDING=true
+export CORNER_STORE_TESTNET_TOKEN_NAME="Mock Restricted Stock"
+export CORNER_STORE_TESTNET_TOKEN_SYMBOL=mRSTK
+# Optional fourth scene:
+export CORNER_STORE_TESTNET_EXPIRED_INVESTOR=0x...
 ```
 
 Do not put a faucet wallet key, Maker key or credential-bearing fallback RPC in
@@ -89,9 +93,17 @@ creates a deterministic Sell rejection with an onchain-derived availability
 time while leaving the existing GIWA and default public-testnet fixture
 behavior unchanged.
 
+When `CORNER_STORE_TESTNET_EXPIRED_INVESTOR` is present, the fixture registers
+that separate wallet with valid mock identity wiring and a QP claim whose
+`verifiedAt` is 366 days before deployment. The default one-year freshness cap
+therefore produces `FAIL_QP_CLAIM_EXPIRED` without changing the cap for other
+wallets. The wallet must be unique; omitting it preserves older deployment
+inputs and disables only the fourth judge scene.
+
 ## 2. Prepare Wallets
 
-Prepare at least four externally controlled wallets:
+Prepare five required externally controlled wallets and one optional scenario
+wallet:
 
 | Wallet | Purpose | Needs native test gas |
 | --- | --- | --- |
@@ -100,6 +112,7 @@ Prepare at least four externally controlled wallets:
 | eligible investor A | normal success scenario | yes |
 | eligible investor B | holding-period scenario when the optional flag is enabled | yes |
 | ineligible investor | rejection scenario | yes |
+| expired-claim investor | optional claim-expiry pre-check | no transaction required |
 
 Governance and operator may equal the deployer for a short-lived hackathon
 fixture. They should be separate controlled addresses for longer-lived

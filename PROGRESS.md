@@ -28,13 +28,20 @@ source of truth로 사용한다.
 - 성공 체결 후 deployment/source commit, chain, 공개 주소·금액, transaction/block와
   submission-to-confirmation 시간을 묶은 PII/secret-free JSON 증거를 브라우저에서
   다운로드할 수 있다. 실제 Monad 수치는 public-chain 체결 후 채운다.
+- Monad 배포에서는 정책 profile을 fork하지 않고 ERC-3643 token 표시 이름만
+  `Mock Restricted Stock (mRSTK)`로 주입할 수 있다. 기본값은 기존 BUIDL-like 이름을
+  유지하므로 GIWA/기존 testnet 입력에는 영향이 없다.
+- 선택형 expired-claim 지갑은 다른 투자자의 QP freshness cap을 바꾸지 않고
+  366일 전 mock 증빙을 받아 네 번째 거부 장면을 만든다. 임시 Anvil 실제 배포와
+  HTTP API에서 `Mock Restricted Stock (mRSTK)` 표시, 활성화된 네 번째 scenario와
+  `FAIL_QP_CLAIM_EXPIRED`/과거 expiry 근거를 함께 확인했다.
 - 외부 judge URL용으로 non-root/read-only OCI target, read-only artifact mount,
   Docker secret Maker key, `/health`, 16 KiB body limit, quote rate limit과 browser
   security headers를 추가했다. Compose config는 검증했으며 로컬 Docker daemon이
   실행 중이 아니어서 image build는 아직 수행하지 못했다.
 - CLI reason catalog가 C-01-v2의 missing/broken/stale/not-matured 코드를 정확히
   해석하도록 갱신했다. targeted testnet-demo/CLI smoke, 임시 Anvil 실제 배포와
-  HTTP explanation E2E, pinned Foundry 1.7.1 전체 `scripts/check.sh`(Foundry
+  HTTP explanation/display/expiry E2E, pinned Foundry 1.7.1 전체 `scripts/check.sh`(Foundry
   960/960 포함), Compose config와 `git diff --check`가 통과했다. 시스템 PATH의
   Foundry 1.4.0 nightly는 기존 main 파일 포맷을 다르게 판정하므로 전체 검증에는
   저장소 기준 1.7.1을 사용했다.

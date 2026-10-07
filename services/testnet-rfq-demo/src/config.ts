@@ -19,6 +19,7 @@ export interface PublicDeploymentArtifact {
   investor: string;
   eligibleInvestorB: string;
   ineligibleInvestor: string;
+  expiredInvestor?: string;
   rwaToken: string;
   quote: string;
   rfqVenue: string;
@@ -120,6 +121,10 @@ function validateArtifact(value: unknown): PublicDeploymentArtifact {
   for (const field of addressFields) {
     if (typeof value[field] !== "string") throw new Error(`artifact ${field} is required`);
     normalized[field] = getAddress(value[field]);
+  }
+  if (value.expiredInvestor !== undefined) {
+    if (typeof value.expiredInvestor !== "string") throw new Error("artifact expiredInvestor is invalid");
+    normalized.expiredInvestor = getAddress(value.expiredInvestor);
   }
   return normalized as unknown as PublicDeploymentArtifact;
 }

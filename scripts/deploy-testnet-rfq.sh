@@ -38,6 +38,8 @@ Optional environment:
   CORNER_STORE_ARTIFACT               optional explicit artifact path
   CORNER_STORE_DEPLOYMENT_ID
   CORNER_STORE_TESTNET_INVESTOR_B_HOLDING_PERIOD_PENDING
+  CORNER_STORE_TESTNET_EXPIRED_INVESTOR   optional stale-QP judge wallet
+  CORNER_STORE_TESTNET_TOKEN_NAME/SYMBOL  optional mock-asset display identity
   CORNER_STORE_TESTNET_*_QUOTE/RWA    initial balance overrides
 
 The command is a simulation unless --broadcast is explicitly supplied.

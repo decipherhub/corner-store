@@ -28,6 +28,7 @@ async function load() {
   state = await api("/api/state");
   $("deployment").textContent = state.deployment.deploymentId;
   $("network").textContent = `Chain ${state.deployment.chainId} · source ${short(state.deployment.sourceCommit)} · ${state.deployment.transactionCount ?? "—"} transactions`;
+  $("asset").textContent = `${state.tokens.rwa.name} (${state.tokens.rwa.symbol}) · mock testnet asset`;
   $("rate").textContent = state.pricing.display;
   renderReadiness();
   renderContracts();
@@ -63,6 +64,7 @@ async function refreshWallet() {
 function updateSide() {
   document.querySelectorAll(".side").forEach((button) => {
     button.classList.toggle("active", button.dataset.side === side);
+    button.textContent = `${button.dataset.side === "buy" ? "Buy" : "Sell"} ${state?.tokens.rwa.symbol ?? "RWA"}`;
   });
   const input = side === "buy" ? state?.tokens.quote : state?.tokens.rwa;
   $("input-symbol").textContent = input?.symbol ?? "—";

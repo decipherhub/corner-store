@@ -27,6 +27,7 @@ const artifact = {
   investor: "0x0000000000000000000000000000000000000012",
   eligibleInvestorB: "0x0000000000000000000000000000000000000013",
   ineligibleInvestor: "0x0000000000000000000000000000000000000014",
+  expiredInvestor: "0x0000000000000000000000000000000000000015",
   rwaToken: "0x0000000000000000000000000000000000000020",
   quote: "0x0000000000000000000000000000000000000021",
   rfqVenue: "0x000000000000000000000000000000000000F00D",
@@ -139,6 +140,7 @@ assert(html.includes('id="block-panel"'));
 assert(html.includes('id="block-time"'));
 assert(html.includes('id="scenarios"'));
 assert(html.includes('id="wallet-network"'));
+assert(html.includes('id="asset"'));
 assert(html.includes('id="download-evidence"'));
 const app = readFileSync(join(__dirname, "../../../public/app.js"), "utf8");
 assert(app.includes('kind: "corner-store-public-testnet-rfq-settlement"'));
