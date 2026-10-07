@@ -94,6 +94,18 @@ authentication, Compose schema와 SIGTERM graceful shutdown을 검증한다. 일
 `scripts/check.sh`와 별개로 CI에서 실행하며 release image 변경은 이 gate를 생략할
 수 없다.
 
+Monad hackathon judge image smoke:
+
+```sh
+scripts/hackathon-monad-container-smoke.sh
+```
+
+이 검사도 Docker daemon이 필요한 별도 CI gate다. pinned image build 뒤 non-root
+image user와 healthcheck, read-only Compose root filesystem, capability drop,
+loopback port, read-only artifact mount, Maker secret 및 global API/quote budget
+계약을 확인한다. 실제 chain-bound startup과 settlement는 public-testnet 또는 임시
+Anvil E2E에서 검증한다.
+
 
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
 API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount

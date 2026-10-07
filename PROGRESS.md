@@ -56,6 +56,10 @@ source of truth로 사용한다.
   wiring을 바꾼 artifact는 listen 전에 거절되며 `/health`·API 공통 budget이 429를
   반환함을 확인했다. pinned Foundry 1.7.1 전체 `scripts/check.sh`도 Foundry 960/960,
   모든 service/clean-project/deploy-v3 검사와 함께 통과했다.
+- 로컬 Docker daemon이 꺼진 환경에서도 image build 회귀를 놓치지 않도록 CI에
+  `scripts/hackathon-monad-container-smoke.sh`를 추가했다. pinned image build 뒤
+  non-root user/healthcheck와 Compose의 read-only filesystem, capability drop,
+  loopback port, artifact/secret mount 및 API budget 계약을 검증한다.
 - CLI reason catalog가 C-01-v2의 missing/broken/stale/not-matured 코드를 정확히
   해석하도록 갱신했다. targeted testnet-demo/CLI smoke, 임시 Anvil 실제 배포와
   HTTP explanation/display/expiry E2E, pinned Foundry 1.7.1 전체 `scripts/check.sh`(Foundry

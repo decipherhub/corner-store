@@ -44,6 +44,7 @@
 - artifact/on-chain wiring mismatch startup rejection
 - global API/quote budget과 chain-time countdown regression
 - clean-browser live URL rehearsal
+- `scripts/hackathon-monad-container-smoke.sh` OCI build/metadata/Compose contract
 - `scripts/check.sh`
 - `git diff --check`
 
