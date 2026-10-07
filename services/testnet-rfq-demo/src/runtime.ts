@@ -143,6 +143,15 @@ export class TestnetRfqRuntime {
         transactionCount: artifact.transactionCount ?? null,
         explorerUrl: this.config.explorerUrl ?? null
       },
+      walletNetwork: artifact.chainId === 10143
+        ? {
+            name: "Monad Testnet",
+            chainId: 10143,
+            rpcUrl: "https://testnet-rpc.monad.xyz",
+            nativeCurrency: "MON",
+            explorerUrl: "https://testnet.monadexplorer.com"
+          }
+        : null,
       contracts: {
         router: artifact.router,
         engine: artifact.engine,
@@ -165,13 +174,13 @@ export class TestnetRfqRuntime {
           id: "success",
           title: "Successful restricted-stock trade",
           wallet: artifact.investor,
-          instruction: "Connect eligible investor A, choose Buy RWA and complete the RFQ settlement."
+          instruction: "Connect eligible investor A, choose Buy RWA, enter at least 5,000,000 and complete settlement."
         },
         {
           id: "qualification-required",
           title: "Qualification required",
           wallet: artifact.ineligibleInvestor,
-          instruction: "Connect the ineligible investor and run a Buy pre-check to see the policy explanation."
+          instruction: "Connect the ineligible investor, choose Buy RWA, enter 5,000,000 and run the pre-check."
         },
         {
           id: "holding-period",
@@ -179,7 +188,7 @@ export class TestnetRfqRuntime {
           wallet: artifact.eligibleInvestorB,
           enabled: artifact.eligibleInvestorBScenario === "holding-period-pending",
           instruction: artifact.eligibleInvestorBScenario === "holding-period-pending"
-            ? "Connect eligible investor B, choose Sell RWA and run the pre-check to see the onchain unlock time."
+            ? "Connect eligible investor B, choose Sell RWA, enter 5,000,000 and run the pre-check to see the unlock time."
             : "This deployment was not seeded with the optional holding-period scene."
         }
       ],

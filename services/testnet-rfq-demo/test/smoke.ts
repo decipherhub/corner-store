@@ -138,6 +138,7 @@ const html = readFileSync(join(__dirname, "../../../public/index.html"), "utf8")
 assert(html.includes('id="block-panel"'));
 assert(html.includes('id="block-time"'));
 assert(html.includes('id="scenarios"'));
+assert(html.includes('id="wallet-network"'));
 
 const signed = {
   quote: {

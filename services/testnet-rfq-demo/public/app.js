@@ -188,6 +188,10 @@ function renderContracts() {
 }
 
 function renderScenarios() {
+  const network = state.walletNetwork;
+  $("wallet-network").innerHTML = network
+    ? `Wallet network · <strong>${escapeHtml(network.name)}</strong> · Chain ID <code>${network.chainId}</code> · RPC <code>${escapeHtml(network.rpcUrl)}</code> · Currency <code>${escapeHtml(network.nativeCurrency)}</code>`
+    : `Use the network details supplied with deployment chain <code>${state.deployment.chainId}</code>.`;
   $("scenarios").innerHTML = state.scenarios.map((scenario) => `
     <article class="scenario-card ${scenario.enabled === false ? "disabled" : ""}">
       <strong>${escapeHtml(scenario.title)}</strong>

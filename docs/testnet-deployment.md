@@ -318,6 +318,8 @@ readiness, balances, QP pre-check, signed quote, transaction hash and block.
 It also renders the non-secret judge scenario addresses and measures wallet
 transaction confirmation time from submission to receipt. Test-wallet secrets
 must be delivered out of band and are never rendered by the service.
+For chain ID 10143 the page shows the official Monad testnet wallet settings;
+the backend's configured RPC URL remains private and is never returned.
 When a pre-check is rejected, the page also presents a plain-language reason,
 the required user/operator action and an unlock or evidence-expiry time only
 when those values can be derived from current chain evidence.
