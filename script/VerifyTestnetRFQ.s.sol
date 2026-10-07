@@ -10,10 +10,13 @@ import {TokenPolicyRegistry} from "../src/registry/TokenPolicyRegistry.sol";
 import {OperatorRegistry} from "../src/registry/OperatorRegistry.sol";
 import {MakerAuthorizer} from "../src/registry/MakerAuthorizer.sol";
 import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
+import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
+import {ComplianceEngine} from "../src/compliance/ComplianceEngine.sol";
 import {RFQAdapter} from "../src/execution/adapters/rfq/RFQAdapter.sol";
 import {QualifiedPurchaser} from "../src/compliance/elements/QualifiedPurchaser.sol";
 import {ReasonCodes} from "../src/libraries/ReasonCodes.sol";
-import {PolicyStatus} from "../src/types/ComplianceTypes.sol";
+import {PolicyStatus, VenueType} from "../src/types/ComplianceTypes.sol";
+import {VenueConfig} from "../src/types/VenueTypes.sol";
 
 /// @title VerifyTestnetRFQ
 /// @notice Read-only validation for a deployed public-testnet RFQ fixture.
@@ -31,6 +34,7 @@ contract VerifyTestnetRFQ is Script {
         address operatorRegistry;
         address engine;
         address venueRegistry;
+        address selector;
         address router;
         address makerAuthorizer;
         address rfqAdapter;
@@ -106,6 +110,7 @@ contract VerifyTestnetRFQ is Script {
         a.operatorRegistry = vm.parseJsonAddress(json, ".operatorReg");
         a.engine = vm.parseJsonAddress(json, ".engine");
         a.venueRegistry = vm.parseJsonAddress(json, ".venueReg");
+        a.selector = vm.parseJsonAddress(json, ".selector");
         a.router = vm.parseJsonAddress(json, ".router");
         a.makerAuthorizer = vm.parseJsonAddress(json, ".makerAuthorizer");
         a.rfqAdapter = vm.parseJsonAddress(json, ".rfqAdapter");
@@ -139,6 +144,7 @@ contract VerifyTestnetRFQ is Script {
         _requireCode(a.operatorRegistry, "operator registry");
         _requireCode(a.engine, "compliance engine");
         _requireCode(a.venueRegistry, "venue registry");
+        _requireCode(a.selector, "venue selector");
         _requireCode(a.router, "router");
         _requireCode(a.makerAuthorizer, "maker authorizer");
         _requireCode(a.rfqAdapter, "RFQ adapter");
@@ -169,6 +175,30 @@ contract VerifyTestnetRFQ is Script {
         require(OperatorRegistry(a.operatorRegistry).isOperator(a.operator), "execution operator is not authorized");
         require(MakerAuthorizer(a.makerAuthorizer).isOperator(a.operator), "maker operator is not authorized");
         require(RFQAdapter(a.rfqAdapter).isOperator(a.operator), "RFQ operator is not authorized");
+        _verifyWiring(a);
+    }
+
+    function _verifyWiring(Addresses memory a) private view {
+        ComplianceEngine engine = ComplianceEngine(a.engine);
+        ExecutionRouter router = ExecutionRouter(a.router);
+        RFQAdapter adapter = RFQAdapter(a.rfqAdapter);
+
+        require(engine.router() == a.router, "engine router mismatch");
+        require(address(engine.policyReg()) == a.policyRegistry, "engine policy registry mismatch");
+        require(address(engine.elementReg()) == a.elementRegistry, "engine element registry mismatch");
+        require(address(engine.recipeReg()) == a.recipeRegistry, "engine recipe registry mismatch");
+        require(
+            address(TokenPolicyRegistry(a.policyRegistry).recipeReg()) == a.recipeRegistry, "policy recipe mismatch"
+        );
+        require(
+            address(TokenPolicyRegistry(a.policyRegistry).elementReg()) == a.elementRegistry, "policy element mismatch"
+        );
+        require(address(router.engine()) == a.engine, "router engine mismatch");
+        require(address(router.venueReg()) == a.venueRegistry, "router venue registry mismatch");
+        require(address(router.selector()) == a.selector, "router selector mismatch");
+        require(address(router.operatorReg()) == a.operatorRegistry, "router operator registry mismatch");
+        require(adapter.router() == a.router, "RFQ adapter router mismatch");
+        require(address(adapter.makerAuthorizer()) == a.makerAuthorizer, "RFQ adapter authorizer mismatch");
     }
 
     function _verifyActivationAndInventory(Addresses memory a) private view {
@@ -176,7 +206,10 @@ contract VerifyTestnetRFQ is Script {
             TokenPolicyRegistry(a.policyRegistry).statusOf(a.rwaToken) == PolicyStatus.ACTIVE,
             "RWA manifest is not active"
         );
-        require(VenueRegistry(a.venueRegistry).venueOf(a.rfqVenue).active, "RFQ venue is not active");
+        VenueConfig memory venue = VenueRegistry(a.venueRegistry).venueOf(a.rfqVenue);
+        require(venue.active, "RFQ venue is not active");
+        require(venue.venueType == VenueType.RFQ, "RFQ venue type mismatch");
+        require(venue.adapter == a.rfqAdapter, "RFQ venue adapter mismatch");
         require(RFQAdapter(a.rfqAdapter).approvedMaker(a.maker), "maker is not approved");
         require(IERC20(a.rwaToken).balanceOf(a.maker) > 0, "maker has no RWA inventory");
         require(IERC20(a.quoteToken).balanceOf(a.maker) > 0, "maker has no quote inventory");

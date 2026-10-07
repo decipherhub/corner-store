@@ -16,7 +16,7 @@ import {
   createRFQService
 } from "../../rfq/src";
 import {TestnetDemoConfig} from "./config";
-import {BlockTiming, explainBlockedTrade, reasonName} from "./explain";
+import {BlockTiming, encodeReasonCode, explainBlockedTrade, reasonName} from "./explain";
 
 export const ROUTER_ABI = [
   "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req) returns (tuple(uint256 amountOut,bytes32 executionId))"
@@ -31,12 +31,39 @@ export const ERC20_ABI = [
 ];
 const ENGINE_ABI = [
   "function evaluate(tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) ctx) view returns (tuple(bool allowed,bytes32 policyId,uint64 policyVersion,uint64 validUntil,uint256 maxAmount,address maxAmountToken,uint256 allowedVenueTypes,bytes32 allowedVenuesHash,bytes32 reasonCode,bytes32 reliedClaims,uint256 flagsBitmap,bytes32 decisionHash))",
-  "function policyHashesOf(address token) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)"
+  "function policyHashesOf(address token) view returns (bytes32 logicalPolicyHash,bytes32 executionBindingHash,bytes32 policyId)",
+  "function router() view returns (address)",
+  "function policyReg() view returns (address)",
+  "function elementReg() view returns (address)",
+  "function recipeReg() view returns (address)"
 ];
 const RFQ_ADAPTER_ABI = [
-  "function approvedMaker(address maker) view returns (bool)"
+  "function approvedMaker(address maker) view returns (bool)",
+  "function router() view returns (address)",
+  "function makerAuthorizer() view returns (address)",
+  "function owner() view returns (address)",
+  "function isOperator(address account) view returns (bool)"
 ];
-const POLICY_ABI = ["function statusOf(address token) view returns (uint8)"];
+const POLICY_ABI = [
+  "function statusOf(address token) view returns (uint8)",
+  "function recipeReg() view returns (address)",
+  "function elementReg() view returns (address)",
+  "function owner() view returns (address)",
+  "function isOperator(address account) view returns (bool)"
+];
+const GOVERNED_ABI = [
+  "function owner() view returns (address)",
+  "function isOperator(address account) view returns (bool)"
+];
+const ROUTER_WIRING_ABI = [
+  "function engine() view returns (address)",
+  "function venueReg() view returns (address)",
+  "function selector() view returns (address)",
+  "function operatorReg() view returns (address)"
+];
+const VENUE_REGISTRY_ABI = [
+  "function venueOf(address venue) view returns (tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active))"
+];
 const QP_ABI = [
   "function check(address user,address counterparty,address asset,uint256 amount,bytes context,bytes parameters) view returns (bool passed,bytes32 reasonCode)",
   "function claimOf(address user) view returns (uint8 basis,bool signatureValid,bool issuerTrusted,uint64 verifiedAt,uint8 ltStatus,bytes32 coveredCompany)",
@@ -104,14 +131,38 @@ export class TestnetRfqRuntime {
       throw new Error(`RPC chain ${network.chainId} does not match artifact chain ${config.artifact.chainId}`);
     }
     for (const [label, address] of Object.entries({
+      elementReg: config.artifact.elementReg,
+      recipeReg: config.artifact.recipeReg,
+      policyReg: config.artifact.policyReg,
+      operatorReg: config.artifact.operatorReg,
       router: config.artifact.router,
       engine: config.artifact.engine,
+      venueReg: config.artifact.venueReg,
+      selector: config.artifact.selector,
       rfqAdapter: config.artifact.rfqAdapter,
+      makerAuthorizer: config.artifact.makerAuthorizer,
       rwaToken: config.artifact.rwaToken,
-      quote: config.artifact.quote
+      quote: config.artifact.quote,
+      qualifiedPurchaser: config.artifact.qualifiedPurchaser,
+      acquisitionSource: config.artifact.acquisitionSource,
+      lockup: config.artifact.lockup,
+      identityRegistry: config.artifact.identityRegistry,
+      identityRegistryStorage: config.artifact.identityRegistryStorage,
+      trustedIssuersRegistry: config.artifact.trustedIssuersRegistry,
+      claimTopicsRegistry: config.artifact.claimTopicsRegistry,
+      claimIssuer: config.artifact.claimIssuer,
+      makerIdentity: config.artifact.makerIdentity,
+      investorIdentity: config.artifact.investorIdentity,
+      eligibleInvestorBIdentity: config.artifact.eligibleInvestorBIdentity,
+      ineligibleInvestorIdentity: config.artifact.ineligibleInvestorIdentity,
+      ...(config.artifact.expiredInvestor
+          && config.artifact.expiredInvestor !== "0x0000000000000000000000000000000000000000"
+        ? {expiredInvestorIdentity: config.artifact.expiredInvestorIdentity!}
+        : {})
     })) {
       if ((await provider.getCode(address)) === "0x") throw new Error(`${label} has no runtime code`);
     }
+    await verifyDeployment(config, provider);
     const maker = config.makerWallet.connect(provider);
     const [rwa, quote] = await Promise.all([
       tokenMetadata(provider, config.artifact.rwaToken),
@@ -143,7 +194,8 @@ export class TestnetRfqRuntime {
         chainId: artifact.chainId,
         createdAt: artifact.createdAt,
         transactionCount: artifact.transactionCount ?? null,
-        explorerUrl: this.config.explorerUrl ?? null
+        explorerUrl: this.config.explorerUrl ?? null,
+        verifiedAtStartup: true
       },
       walletNetwork: artifact.chainId === 10143
         ? {
@@ -360,6 +412,138 @@ export class TestnetRfqRuntime {
       this.rwa.decimals,
       this.quote.decimals
     ).calculate(BigInt(amountIn), side).toString();
+  }
+}
+
+async function verifyDeployment(config: TestnetDemoConfig, provider: JsonRpcProvider): Promise<void> {
+  const a = config.artifact;
+  const governed = {
+    elementReg: a.elementReg,
+    recipeReg: a.recipeReg,
+    policyReg: a.policyReg,
+    operatorReg: a.operatorReg,
+    engine: a.engine,
+    venueReg: a.venueReg,
+    router: a.router,
+    makerAuthorizer: a.makerAuthorizer,
+    rfqAdapter: a.rfqAdapter
+  };
+  const owners = await Promise.all(
+    Object.entries(governed).map(async ([label, address]) => [
+      label,
+      String(await new Contract(address, GOVERNED_ABI, provider).owner())
+    ] as const)
+  );
+  for (const [label, owner] of owners) expectAddress(owner, a.governance, `${label} owner`);
+
+  const policy = new Contract(a.policyReg, POLICY_ABI, provider);
+  const operatorRegistry = new Contract(a.operatorReg, GOVERNED_ABI, provider);
+  const makerAuthorizer = new Contract(a.makerAuthorizer, GOVERNED_ABI, provider);
+  const adapter = new Contract(a.rfqAdapter, RFQ_ADAPTER_ABI, provider);
+  const engine = new Contract(a.engine, ENGINE_ABI, provider);
+  const router = new Contract(a.router, ROUTER_WIRING_ABI, provider);
+  const venueRegistry = new Contract(a.venueReg, VENUE_REGISTRY_ABI, provider);
+  const rwa = new Contract(a.rwaToken, ERC20_ABI, provider);
+  const quote = new Contract(a.quote, ERC20_ABI, provider);
+
+  const [
+    policyOperator,
+    executionOperator,
+    makerOperator,
+    adapterOperator,
+    policyStatus,
+    makerApproved,
+    venue,
+    engineRouter,
+    enginePolicy,
+    engineElements,
+    engineRecipes,
+    policyRecipes,
+    policyElements,
+    routerEngine,
+    routerVenues,
+    routerSelector,
+    routerOperators,
+    adapterRouter,
+    adapterAuthorizer
+  ] = await Promise.all([
+    policy.isOperator(a.operator),
+    operatorRegistry.isOperator(a.operator),
+    makerAuthorizer.isOperator(a.operator),
+    adapter.isOperator(a.operator),
+    policy.statusOf(a.rwaToken),
+    adapter.approvedMaker(a.maker),
+    venueRegistry.venueOf(a.rfqVenue),
+    engine.router(),
+    engine.policyReg(),
+    engine.elementReg(),
+    engine.recipeReg(),
+    policy.recipeReg(),
+    policy.elementReg(),
+    router.engine(),
+    router.venueReg(),
+    router.selector(),
+    router.operatorReg(),
+    adapter.router(),
+    adapter.makerAuthorizer()
+  ]);
+
+  for (const [label, enabled] of [
+    ["policy operator", policyOperator],
+    ["execution operator", executionOperator],
+    ["maker operator", makerOperator],
+    ["RFQ operator", adapterOperator]
+  ] as const) {
+    if (!enabled) throw new Error(`${label} is not authorized`);
+  }
+  if (Number(policyStatus) !== 2) throw new Error("RWA manifest is not active");
+  if (!venue.active || Number(venue.venueType) !== 2) throw new Error("RFQ venue is not active and typed as RFQ");
+  expectAddress(String(venue.adapter), a.rfqAdapter, "RFQ venue adapter");
+  if (!makerApproved) throw new Error("maker is not approved");
+
+  expectAddress(String(engineRouter), a.router, "engine router");
+  expectAddress(String(enginePolicy), a.policyReg, "engine policy registry");
+  expectAddress(String(engineElements), a.elementReg, "engine element registry");
+  expectAddress(String(engineRecipes), a.recipeReg, "engine recipe registry");
+  expectAddress(String(policyRecipes), a.recipeReg, "policy recipe registry");
+  expectAddress(String(policyElements), a.elementReg, "policy element registry");
+  expectAddress(String(routerEngine), a.engine, "router engine");
+  expectAddress(String(routerVenues), a.venueReg, "router venue registry");
+  expectAddress(String(routerSelector), a.selector, "router selector");
+  expectAddress(String(routerOperators), a.operatorReg, "router operator registry");
+  expectAddress(String(adapterRouter), a.router, "RFQ adapter router");
+  expectAddress(String(adapterAuthorizer), a.makerAuthorizer, "RFQ adapter authorizer");
+
+  for (const [label, token, holder] of [
+    ["maker RWA", rwa, a.maker],
+    ["maker quote", quote, a.maker],
+    ["investor RWA", rwa, a.investor],
+    ["investor quote", quote, a.investor],
+    ["investor B RWA", rwa, a.eligibleInvestorB],
+    ["investor B quote", quote, a.eligibleInvestorB],
+    ["ineligible investor RWA", rwa, a.ineligibleInvestor],
+    ["ineligible investor quote", quote, a.ineligibleInvestor]
+  ] as const) {
+    if (BigInt(await token.balanceOf(holder)) <= 0n) throw new Error(`${label} inventory is missing`);
+  }
+
+  if (a.expiredInvestor && a.expiredInvestor !== "0x0000000000000000000000000000000000000000") {
+    if (BigInt(await rwa.balanceOf(a.expiredInvestor)) <= 0n) throw new Error("expired investor RWA inventory is missing");
+    if (BigInt(await quote.balanceOf(a.expiredInvestor)) <= 0n) {
+      throw new Error("expired investor quote inventory is missing");
+    }
+    const qp = new Contract(a.qualifiedPurchaser, QP_ABI, provider);
+    const result = await qp.check(a.expiredInvestor, "0x0000000000000000000000000000000000000000", a.rwaToken, 0, "0x", "0x");
+    if (Boolean(result[0])) throw new Error("expired investor QP claim unexpectedly passes");
+    if (String(result[1]).toLowerCase() !== encodeReasonCode(0, "A-13-v1", 2).toLowerCase()) {
+      throw new Error("expired investor QP reason mismatch");
+    }
+  }
+}
+
+function expectAddress(actual: string, expected: string, label: string): void {
+  if (actual.toLowerCase() !== expected.toLowerCase()) {
+    throw new Error(`${label} mismatch`);
   }
 }
 

@@ -16,6 +16,7 @@ let side = "buy";
 let quoteEnvelope;
 let precheckPassed = false;
 let lastEvidence;
+let chainClock;
 
 async function api(path, options) {
   const response = await fetch(path, options);
@@ -26,6 +27,9 @@ async function api(path, options) {
 
 async function load() {
   state = await api("/api/state");
+  chainClock = Number.isSafeInteger(state.readiness.chainTimestamp)
+    ? {timestamp: state.readiness.chainTimestamp, observedAt: performance.now()}
+    : undefined;
   $("deployment").textContent = state.deployment.deploymentId;
   $("network").textContent = `Chain ${state.deployment.chainId} · source ${short(state.deployment.sourceCommit)} · ${state.deployment.transactionCount ?? "—"} transactions`;
   $("asset").textContent = `${state.tokens.rwa.name} (${state.tokens.rwa.symbol}) · mock testnet asset`;
@@ -266,7 +270,7 @@ function hideBlockPanel() {
 function timingText(timing) {
   if (!timing) return "No reliable availability time is available.";
   if (timing.availableAt) {
-    const remaining = Math.max(0, Number(timing.availableAt) - Math.floor(Date.now() / 1000));
+    const remaining = Math.max(0, Number(timing.availableAt) - currentChainTime());
     const suffix = remaining > 0 ? ` · about ${formatDuration(remaining)} remaining` : " · retry now";
     return `${new Date(Number(timing.availableAt) * 1000).toLocaleString()}${suffix}`;
   }
@@ -274,6 +278,11 @@ function timingText(timing) {
     return `Evidence expired ${new Date(Number(timing.evidenceExpiredAt) * 1000).toLocaleString()} · operator refresh required`;
   }
   return timing.note;
+}
+
+function currentChainTime() {
+  if (!chainClock) return Math.floor(Date.now() / 1000);
+  return chainClock.timestamp + Math.floor((performance.now() - chainClock.observedAt) / 1000);
 }
 
 function formatDuration(seconds) {

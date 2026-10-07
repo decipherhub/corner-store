@@ -23,14 +23,29 @@ export interface PublicDeploymentArtifact {
   rwaToken: string;
   quote: string;
   rfqVenue: string;
+  elementReg: string;
+  recipeReg: string;
   router: string;
   engine: string;
   policyReg: string;
+  operatorReg: string;
+  venueReg: string;
+  selector: string;
   rfqAdapter: string;
   makerAuthorizer: string;
   qualifiedPurchaser: string;
   acquisitionSource: string;
   lockup: string;
+  identityRegistry: string;
+  identityRegistryStorage: string;
+  trustedIssuersRegistry: string;
+  claimTopicsRegistry: string;
+  claimIssuer: string;
+  makerIdentity: string;
+  investorIdentity: string;
+  eligibleInvestorBIdentity: string;
+  ineligibleInvestorIdentity: string;
+  expiredInvestorIdentity?: string;
   transactionCount?: number;
 }
 
@@ -45,6 +60,7 @@ export interface TestnetDemoConfig {
   quoteTtlSeconds: number;
   priceNumerator: bigint;
   priceDenominator: bigint;
+  apiRequestsPerMinute: number;
   quoteRequestsPerMinute: number;
 }
 
@@ -79,6 +95,12 @@ export function loadConfig(env = process.env): TestnetDemoConfig {
     quoteTtlSeconds: positiveInteger(env.CORNER_STORE_TESTNET_QUOTE_TTL_SECONDS, 300, "quote TTL"),
     priceNumerator: positiveBigInt(env.CORNER_STORE_TESTNET_PRICE_NUMERATOR, 1n, "price numerator"),
     priceDenominator: positiveBigInt(env.CORNER_STORE_TESTNET_PRICE_DENOMINATOR, 1n, "price denominator"),
+    apiRequestsPerMinute: boundedPositiveInteger(
+      env.CORNER_STORE_TESTNET_API_REQUESTS_PER_MINUTE,
+      240,
+      10_000,
+      "API requests per minute"
+    ),
     quoteRequestsPerMinute: boundedPositiveInteger(
       env.CORNER_STORE_TESTNET_QUOTE_REQUESTS_PER_MINUTE,
       20,
@@ -93,7 +115,8 @@ function validateArtifact(value: unknown): PublicDeploymentArtifact {
   if (value.activationMode !== "public-testnet-reference-fixture" || value.productionDeployment !== false) {
     throw new Error("artifact is not a Corner Store public-testnet reference fixture");
   }
-  const numberFields = ["schemaVersion", "chainId", "createdAt"] as const;
+  if (value.schemaVersion !== 1) throw new Error("artifact schemaVersion must be 1");
+  const numberFields = ["chainId", "createdAt"] as const;
   for (const field of numberFields) {
     if (!Number.isSafeInteger(value[field]) || Number(value[field]) <= 0) {
       throw new Error(`artifact ${field} must be a positive integer`);
@@ -107,8 +130,11 @@ function validateArtifact(value: unknown): PublicDeploymentArtifact {
   }
   const addressFields = [
     "governance", "operator", "maker", "investor", "eligibleInvestorB", "ineligibleInvestor",
-    "rwaToken", "quote", "rfqVenue", "router", "engine", "policyReg", "rfqAdapter",
-    "makerAuthorizer", "qualifiedPurchaser", "acquisitionSource", "lockup"
+    "rwaToken", "quote", "rfqVenue", "elementReg", "recipeReg", "router", "engine", "policyReg",
+    "operatorReg", "venueReg", "selector", "rfqAdapter", "makerAuthorizer", "qualifiedPurchaser",
+    "acquisitionSource", "lockup", "identityRegistry", "identityRegistryStorage", "trustedIssuersRegistry",
+    "claimTopicsRegistry", "claimIssuer", "makerIdentity", "investorIdentity", "eligibleInvestorBIdentity",
+    "ineligibleInvestorIdentity"
   ] as const;
   const normalized: Record<string, unknown> = {...value};
   if (
@@ -125,6 +151,20 @@ function validateArtifact(value: unknown): PublicDeploymentArtifact {
   if (value.expiredInvestor !== undefined) {
     if (typeof value.expiredInvestor !== "string") throw new Error("artifact expiredInvestor is invalid");
     normalized.expiredInvestor = getAddress(value.expiredInvestor);
+  }
+  if (value.expiredInvestorIdentity !== undefined) {
+    if (typeof value.expiredInvestorIdentity !== "string") {
+      throw new Error("artifact expiredInvestorIdentity is invalid");
+    }
+    normalized.expiredInvestorIdentity = getAddress(value.expiredInvestorIdentity);
+  }
+  if (
+    normalized.expiredInvestor
+      && normalized.expiredInvestor !== "0x0000000000000000000000000000000000000000"
+      && (!normalized.expiredInvestorIdentity
+        || normalized.expiredInvestorIdentity === "0x0000000000000000000000000000000000000000")
+  ) {
+    throw new Error("artifact expiredInvestorIdentity is required for the expired investor");
   }
   return normalized as unknown as PublicDeploymentArtifact;
 }

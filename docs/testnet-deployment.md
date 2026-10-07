@@ -185,10 +185,13 @@ deployments/public/<deployment-id>-<chain-id>.json
 ```
 
 The artifact records chain ID, actors, every named protocol/identity address,
-the full Foundry deployment transaction list, and a `deployedContracts` index.
-It never contains private keys or RPC credentials. A record is promoted into
-`deployments/public/` only after the broadcast and read-only verifier succeed;
-failed or partial broadcasts cannot become published deployment records.
+the exact checked-out source commit, the full Foundry deployment transaction
+list, and a `deployedContracts` index. It never contains private keys or RPC
+credentials. Broadcast refuses a dirty worktree or a source-commit override
+that differs from `HEAD`. The wrapper enriches a private candidate, verifies
+that complete candidate against the chain, and then publishes it atomically to
+`deployments/public/`; failed or partial broadcasts cannot become published
+deployment records.
 
 The wrapper uses Foundry's sequential broadcast mode because this fixture emits
 many dependent initialization and governance-handoff transactions. This is
@@ -247,7 +250,10 @@ The verifier fails closed on:
 - missing runtime code;
 - governance ownership mismatch;
 - missing operator authorization;
+- Engine, policy registry, Router, selector, venue registry or RFQ adapter
+  wiring that differs from the artifact;
 - inactive Manifest or RFQ venue;
+- RFQ venue type or adapter mismatch;
 - unapproved maker;
 - missing maker/investor inventory;
 - an optional expired-claim wallet whose identity, inventory or exact QP expiry
@@ -324,8 +330,10 @@ Then run:
 scripts/run-testnet-rfq-demo.sh
 ```
 
-Open the printed URL and connect an artifact-listed investor wallet. The
-runtime verifies the artifact and chain before serving. The backend signs a
+Open the printed URL and connect an artifact-listed investor wallet. Before it
+listens, the runtime checks the artifact schema and chain plus runtime code,
+governance owners, operator roles, core contract wiring, RFQ venue activation,
+maker approval and fixture inventory. The backend signs a
 Maker quote using the existing RFQ SDK; it does **not** sign for the investor.
 The browser wallet submits its own token approval and final Router transaction.
 The page exposes the exact artifact addresses, current Manifest/Maker
@@ -343,6 +351,8 @@ private key, RPC URL or quote signature.
 When a pre-check is rejected, the page also presents a plain-language reason,
 the required user/operator action and an unlock or evidence-expiry time only
 when those values can be derived from current chain evidence.
+Holding-period countdowns advance from the latest observed chain timestamp,
+not the judge browser's local clock.
 
 For an external judge URL, keep this Node service on a private application
 port behind an HTTPS reverse proxy. The public edge must enforce a bounded
@@ -369,10 +379,14 @@ curl --fail http://127.0.0.1:8791/health
 ```
 
 Terminate HTTPS at the selected hosting platform or reverse proxy and forward
-only to port 8791. The application also enforces a 16 KiB request limit,
-per-client quote rate limit, browser security headers and an explicit
-`hackathon-testnet-only` acknowledgement for non-loopback binding. These are
-demo safeguards, not a replacement for the production RFQ host.
+only to port 8791. The application enforces a 16 KiB request limit, bounded
+request/header/keep-alive timeouts, a global budget for every chain-reading
+`/health` or `/api/*` request, a stricter global signed-quote budget, browser
+security headers and an explicit `hackathon-testnet-only` acknowledgement for
+non-loopback binding. Because the application deliberately does not trust
+forwarded client-IP headers, the HTTPS edge must add its own client-aware rate
+limit. These are demo safeguards, not a replacement for the production RFQ
+host.
 
 This is separate from the feature-rich local Anvil demo:
 

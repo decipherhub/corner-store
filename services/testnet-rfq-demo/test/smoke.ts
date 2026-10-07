@@ -31,14 +31,29 @@ const artifact = {
   rwaToken: "0x0000000000000000000000000000000000000020",
   quote: "0x0000000000000000000000000000000000000021",
   rfqVenue: "0x000000000000000000000000000000000000F00D",
+  elementReg: "0x0000000000000000000000000000000000000022",
+  recipeReg: "0x0000000000000000000000000000000000000023",
   router: "0x0000000000000000000000000000000000000030",
   engine: "0x0000000000000000000000000000000000000031",
   policyReg: "0x0000000000000000000000000000000000000032",
+  operatorReg: "0x0000000000000000000000000000000000000038",
+  venueReg: "0x0000000000000000000000000000000000000039",
+  selector: "0x000000000000000000000000000000000000003A",
   rfqAdapter: "0x0000000000000000000000000000000000000033",
   makerAuthorizer: "0x0000000000000000000000000000000000000034",
   qualifiedPurchaser: "0x0000000000000000000000000000000000000035",
   acquisitionSource: "0x0000000000000000000000000000000000000036",
-  lockup: "0x0000000000000000000000000000000000000037"
+  lockup: "0x0000000000000000000000000000000000000037",
+  identityRegistry: "0x0000000000000000000000000000000000000040",
+  identityRegistryStorage: "0x0000000000000000000000000000000000000041",
+  trustedIssuersRegistry: "0x0000000000000000000000000000000000000042",
+  claimTopicsRegistry: "0x0000000000000000000000000000000000000043",
+  claimIssuer: "0x0000000000000000000000000000000000000044",
+  makerIdentity: "0x0000000000000000000000000000000000000045",
+  investorIdentity: "0x0000000000000000000000000000000000000046",
+  eligibleInvestorBIdentity: "0x0000000000000000000000000000000000000047",
+  ineligibleInvestorIdentity: "0x0000000000000000000000000000000000000048",
+  expiredInvestorIdentity: "0x0000000000000000000000000000000000000049"
 };
 const dir = mkdtempSync(join(tmpdir(), "corner-store-testnet-demo-"));
 const path = join(dir, "artifact.json");
@@ -52,6 +67,7 @@ const config = loadConfig({
 });
 assert.equal(config.artifact.deploymentId, "smoke");
 assert.equal(config.makerWallet.address, maker.address);
+assert.equal(config.apiRequestsPerMinute, 240);
 assert.equal(config.quoteRequestsPerMinute, 20);
 const fileSecretConfig = loadConfig({
   CORNER_STORE_TESTNET_ARTIFACT: path,
@@ -84,9 +100,11 @@ const publicConfig = loadConfig({
   CORNER_STORE_TESTNET_MAKER_KEY: maker.privateKey,
   CORNER_STORE_TESTNET_DEMO_HOST: "0.0.0.0",
   CORNER_STORE_TESTNET_PUBLIC_ACKNOWLEDGEMENT: "hackathon-testnet-only",
+  CORNER_STORE_TESTNET_API_REQUESTS_PER_MINUTE: "30",
   CORNER_STORE_TESTNET_QUOTE_REQUESTS_PER_MINUTE: "3"
 });
 assert.equal(publicConfig.host, "0.0.0.0");
+assert.equal(publicConfig.apiRequestsPerMinute, 30);
 assert.equal(publicConfig.quoteRequestsPerMinute, 3);
 assert.throws(
   () => loadConfig({
@@ -96,6 +114,38 @@ assert.throws(
     CORNER_STORE_TESTNET_QUOTE_REQUESTS_PER_MINUTE: "1001"
   }),
   /at most 1000/
+);
+assert.throws(
+  () => loadConfig({
+    CORNER_STORE_TESTNET_ARTIFACT: path,
+    CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
+    CORNER_STORE_TESTNET_MAKER_KEY: maker.privateKey,
+    CORNER_STORE_TESTNET_API_REQUESTS_PER_MINUTE: "10001"
+  }),
+  /at most 10000/
+);
+
+const unsupportedSchemaPath = join(dir, "unsupported-schema.json");
+writeFileSync(unsupportedSchemaPath, JSON.stringify({...artifact, schemaVersion: 2}));
+assert.throws(
+  () => loadConfig({
+    CORNER_STORE_TESTNET_ARTIFACT: unsupportedSchemaPath,
+    CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
+    CORNER_STORE_TESTNET_MAKER_KEY: maker.privateKey
+  }),
+  /schemaVersion must be 1/
+);
+
+const missingExpiredIdentityPath = join(dir, "missing-expired-identity.json");
+const {expiredInvestorIdentity: _expiredInvestorIdentity, ...missingExpiredIdentity} = artifact;
+writeFileSync(missingExpiredIdentityPath, JSON.stringify(missingExpiredIdentity));
+assert.throws(
+  () => loadConfig({
+    CORNER_STORE_TESTNET_ARTIFACT: missingExpiredIdentityPath,
+    CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
+    CORNER_STORE_TESTNET_MAKER_KEY: maker.privateKey
+  }),
+  /expiredInvestorIdentity is required/
 );
 
 const limiter = new InMemoryRateLimiter(2, 1_000);
@@ -145,6 +195,8 @@ assert(html.includes('id="download-evidence"'));
 const app = readFileSync(join(__dirname, "../../../public/app.js"), "utf8");
 assert(app.includes('kind: "corner-store-public-testnet-rfq-settlement"'));
 assert(app.includes("confirmationMs"));
+assert(app.includes("currentChainTime()"));
+assert(app.includes("state.readiness.chainTimestamp"));
 
 const signed = {
   quote: {

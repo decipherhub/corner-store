@@ -41,6 +41,20 @@ source of truth로 사용한다.
   Docker secret Maker key, `/health`, 16 KiB body limit, quote rate limit과 browser
   security headers를 추가했다. Compose config는 검증했으며 로컬 Docker daemon이
   실행 중이 아니어서 image build는 아직 수행하지 못했다.
+- public broadcast는 dirty checkout과 잘못된 source commit override를 거절하고,
+  transaction metadata를 포함한 candidate artifact를 read-only 검증한 뒤에만
+  append-only final record를 원자적으로 발행한다. Node runtime도 listen 전에
+  owner/operator, Engine/Registry/Router/RFQ wiring, venue, maker, participant inventory와
+  선택형 expired fixture를 chain에서 다시 대조한다.
+- `/health`와 모든 `/api/*` chain read에는 proxy topology와 무관한 global request
+  budget, quote에는 더 낮은 별도 budget을 적용하고 request/header/keep-alive timeout을
+  제한했다. API 내부 오류는 allowlist된 입력 오류 외에는 공개하지 않으며 quote TTL은
+  운영자가 설정한 최대값을 넘길 수 없다. 보유기간 countdown은 browser 시간이 아닌
+  관측 chain timestamp를 사용한다.
+- 임시 Anvil 실제 배포에서 Solidity verifier와 Node startup attestation을 통과했고,
+  wiring을 바꾼 artifact는 listen 전에 거절되며 `/health`·API 공통 budget이 429를
+  반환함을 확인했다. pinned Foundry 1.7.1 전체 `scripts/check.sh`도 Foundry 960/960,
+  모든 service/clean-project/deploy-v3 검사와 함께 통과했다.
 - CLI reason catalog가 C-01-v2의 missing/broken/stale/not-matured 코드를 정확히
   해석하도록 갱신했다. targeted testnet-demo/CLI smoke, 임시 Anvil 실제 배포와
   HTTP explanation/display/expiry E2E, pinned Foundry 1.7.1 전체 `scripts/check.sh`(Foundry

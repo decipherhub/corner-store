@@ -25,6 +25,13 @@
 - Monad 배포 artifact, 심사위원용 HTTPS live URL, fixture wallet 안내와 측정된
   test transaction evidence를 제공하되 real asset, production issuer onboarding,
   real TA/KYC 연결 또는 규제 준수를 주장하지 않는다.
+- broadcast는 clean checkout의 정확한 source commit만 허용하고, 완성된 candidate
+  artifact의 on-chain wiring 검증이 끝난 뒤 append-only record를 원자적으로 발행한다.
+- public runtime은 listen 전에 artifact schema, owner/operator, core wiring, venue,
+  maker와 inventory를 다시 검증한다. chain-reading endpoint와 quote issuance에는
+  proxy header에 의존하지 않는 global budget과 bounded timeout을 적용한다.
+- 보유기간 남은 시간은 browser wall clock이 아니라 관측한 chain timestamp를 기준으로
+  표시한다.
 - 기존 Anvil showcase와 GIWA testnet 흐름은 변경하지 않는다.
 
 ### Verification
@@ -33,6 +40,9 @@
 - `npm test --prefix services/cli`
 - Monad RPC chain-id/readiness preflight
 - verified deployment artifact와 browser-wallet RFQ settlement
+- dirty/source-mismatch broadcast rejection과 candidate-before-publish 검증
+- artifact/on-chain wiring mismatch startup rejection
+- global API/quote budget과 chain-time countdown regression
 - clean-browser live URL rehearsal
 - `scripts/check.sh`
 - `git diff --check`

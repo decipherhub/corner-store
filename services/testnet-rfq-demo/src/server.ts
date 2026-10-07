@@ -10,8 +10,21 @@ const MAX_BODY = 16 * 1024;
 export async function startServer(runtime: TestnetRfqRuntime) {
   const publicDir = resolve(__dirname, "../../../public");
   const ethersBundle = resolve(__dirname, "../../../node_modules/ethers/dist/ethers.umd.min.js");
+  const apiLimiter = new InMemoryRateLimiter(runtime.config.apiRequestsPerMinute);
   const quoteLimiter = new InMemoryRateLimiter(runtime.config.quoteRequestsPerMinute);
-  const server = createServer((req, res) => void handle(req, res, runtime, publicDir, ethersBundle, quoteLimiter));
+  const server = createServer((req, res) => void handle(
+    req,
+    res,
+    runtime,
+    publicDir,
+    ethersBundle,
+    apiLimiter,
+    quoteLimiter
+  ));
+  server.requestTimeout = 15_000;
+  server.headersTimeout = 10_000;
+  server.keepAliveTimeout = 5_000;
+  server.maxHeadersCount = 64;
   await new Promise<void>((resolveListen, reject) => {
     server.once("error", reject);
     server.listen(runtime.config.port, runtime.config.host, () => {
@@ -28,9 +41,14 @@ async function handle(
   runtime: TestnetRfqRuntime,
   publicDir: string,
   ethersBundle: string,
+  apiLimiter: InMemoryRateLimiter,
   quoteLimiter: InMemoryRateLimiter
 ) {
   try {
+    if (req.url === "/health" || req.url?.startsWith("/api/")) {
+      const rate = apiLimiter.check("global", Date.now());
+      if (!rate.allowed) return rateLimited(res, rate.retryAfterSeconds);
+    }
     if (req.method === "GET" && req.url === "/health") {
       const blockNumber = await runtime.provider.getBlockNumber();
       return json(res, 200, {service: "corner-store-testnet-rfq-demo", status: "ok", blockNumber});
@@ -55,17 +73,14 @@ async function handle(
     }
 
     if (req.method === "POST" && req.url === "/api/quote") {
-      const rate = quoteLimiter.check(req.socket.remoteAddress ?? "unknown", Date.now());
-      if (!rate.allowed) {
-        res.setHeader("Retry-After", String(rate.retryAfterSeconds));
-        return json(res, 429, {error: "rate_limited"});
-      }
+      const rate = quoteLimiter.check("global", Date.now());
+      if (!rate.allowed) return rateLimited(res, rate.retryAfterSeconds);
       const body = await bodyJson(req);
       const signed = await runtime.quoteFor(
         address(body.taker, "taker"),
         uintString(body.amountIn, "amountIn"),
         side(body.side),
-        optionalPositiveInteger(body.ttlSeconds, "ttlSeconds")
+        optionalPositiveInteger(body.ttlSeconds, "ttlSeconds", runtime.config.quoteTtlSeconds)
       );
       const latest = await runtime.provider.getBlock("latest");
       if (!latest) throw new Error("latest block is unavailable");
@@ -86,9 +101,14 @@ async function handle(
   } catch (error) {
     return json(res, 400, {
       error: "invalid_request",
-      message: error instanceof Error ? error.message : "unknown error"
+      message: publicErrorMessage(error)
     });
   }
+}
+
+function rateLimited(res: ServerResponse, retryAfterSeconds: number) {
+  res.setHeader("Retry-After", String(retryAfterSeconds));
+  return json(res, 429, {error: "rate_limited"});
 }
 
 function sendFile(res: ServerResponse, path: string, type: string) {
@@ -181,12 +201,31 @@ function side(value: unknown): TradeSide {
   throw new Error("side must be buy or sell");
 }
 
-function optionalPositiveInteger(value: unknown, label: string): number | undefined {
+function optionalPositiveInteger(value: unknown, label: string, maximum: number): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isSafeInteger(value) || Number(value) <= 0) throw new Error(`${label} must be a positive integer`);
+  if (Number(value) > maximum) throw new Error(`${label} must be at most ${maximum}`);
   return Number(value);
 }
 
 function cryptoRandomHex(bytes: number): string {
   return require("crypto").randomBytes(bytes).toString("hex");
+}
+
+function publicErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  const safePatterns = [
+    /^(taker is required|invalid address)/,
+    /^amountIn must be a positive uint string$/,
+    /^side must be buy or sell$/,
+    /^ttlSeconds must be a positive integer$/,
+    /^ttlSeconds must be at most \d+$/,
+    /^request body exceeds 16 KiB$/,
+    /^JSON object required$/,
+    /^maker (inventory|allowance) is insufficient$/,
+    /^configured reference rate returns zero output$/
+  ];
+  return safePatterns.some((pattern) => pattern.test(message))
+    ? message
+    : "request could not be completed";
 }
