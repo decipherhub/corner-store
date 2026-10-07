@@ -94,6 +94,13 @@ interface ITokenPolicyRegistry {
 
     function pendingCompiledPlanHashOf(address token) external view returns (bytes32);
 
+    function pendingCompiledBindingCountOf(address token) external view returns (uint256);
+
+    function pendingCompiledRulesOf(address token, uint256 bindingIndex)
+        external
+        view
+        returns (CompiledElementRule[] memory);
+
     function pendingManifestUpdateOf(address token)
         external
         view

@@ -245,6 +245,49 @@ contract FactoryTest is Test {
         assertEq(reasonCode, bytes32("LEGAL-UPDATE"));
     }
 
+    function test_scheduleManifestUpdate_preservesRegisteredVenueCompatibility() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        factory.registerRWAToken(rwa, initial, _bindings(), venue, _venueCfg());
+
+        bytes32 lockupId = bytes32("C-01-v99");
+        elementReg.registerElement(lockupId, address(new FactoryElementMock(lockupId)));
+        recipeReg.registerRecipe(507, 1, address(new FactoryRecipeMock(507, lockupId)));
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(507, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnsupportedVenuePolicy.selector, lockupId));
+        factory.scheduleManifestUpdate(rwa, next, bindings, bytes32("LEGAL-UPDATE"));
+
+        (,, uint64 effectiveTime,) = tpr.pendingManifestUpdateOf(rwa);
+        assertEq(effectiveTime, 0, "rejected update must not remain pending");
+    }
+
+    function test_scheduleManifestUpdateWithConfig_preservesRegisteredVenueCompatibility() public {
+        ManifestCore memory initial = _manifest();
+        initial.fullManifestHash = keccak256("manifest-v1");
+        factory.registerRWAToken(rwa, initial, _bindings(), venue, _venueCfg());
+
+        bytes32 lockupId = bytes32("C-01-v99");
+        elementReg.registerElement(lockupId, address(new FactoryElementMock(lockupId)));
+        recipeReg.registerRecipe(507, 1, address(new FactoryRecipeMock(507, lockupId)));
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] = RecipeBinding(507, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+
+        ManifestCore memory next = initial;
+        next.fullManifestHash = keccak256("manifest-v2-with-config");
+        vm.expectRevert(abi.encodeWithSelector(Errors.UnsupportedVenuePolicy.selector, lockupId));
+        factory.scheduleManifestUpdate(rwa, next, bindings, overrides_, config, bytes32("LEGAL-UPDATE"));
+
+        (,, uint64 effectiveTime,) = tpr.pendingManifestUpdateOf(rwa);
+        assertEq(effectiveTime, 0, "rejected update must not remain pending");
+    }
+
     function test_scheduleManifestUpdate_forwardsFullPolicyConfigWithoutDroppingParameters() public {
         ManifestCore memory initial = _manifest();
         initial.fullManifestHash = keccak256("manifest-v1");

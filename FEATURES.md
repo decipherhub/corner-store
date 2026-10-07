@@ -111,6 +111,10 @@ passing
 
 - `C-01-*` holding-period family가 포함된 Recipe는 AMM에서 실행할 수 없으며 해당 조합은
   SDK, CLI, production onboarding/Safe export, Factory와 on-chain Engine에서 동일하게 거절한다.
+- Engine은 normal Recipe binding composition보다 먼저 venue compatibility invariant를
+  적용해 모든 지원 mode에서 같은 결과를 보장한다.
+- Factory가 관리하는 AMM token의 delayed Manifest update도 두 schedule overload에서
+  pending compiled plan을 검사하고 호환되지 않는 update를 원자적으로 거절한다.
 - 검사는 특정 v1/v2 문자열이 아니라 `C-01-` family prefix를 사용해 이후 immutable
   version도 fail-closed한다.
 - bundled `buidl-like`/`reg-d` config와 CLI onboarding default는 RFQ-only다.
@@ -120,7 +124,10 @@ passing
 ### Verification
 
 - Toolkit/CLI compatibility and onboarding smoke pass
-- Engine current/future C-01 rejection, AMM-compatible Recipe allow and RFQ C-01 allow pass
+- Engine current/future C-01 rejection, cross-mode compatibility regression,
+  AMM-compatible Recipe allow and RFQ C-01 allow pass
+- Factory onboarding and both delayed Manifest update overload compatibility tests pass
+- Follow-up full Foundry 960/960 and pinned Foundry `scripts/check.sh` pass
 - affected AMM/RFQ integration suites and live BUIDL-like/Reg-D Anvil E2E pass
 - full `scripts/check.sh`: Foundry 954/954, package/service/clean-project smoke,
   canonical Uniswap v3 5/5 and deploy-v3 10/10 pass
