@@ -11,6 +11,8 @@ import {OperatorRegistry} from "../src/registry/OperatorRegistry.sol";
 import {MakerAuthorizer} from "../src/registry/MakerAuthorizer.sol";
 import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
 import {RFQAdapter} from "../src/execution/adapters/rfq/RFQAdapter.sol";
+import {QualifiedPurchaser} from "../src/compliance/elements/QualifiedPurchaser.sol";
+import {ReasonCodes} from "../src/libraries/ReasonCodes.sol";
 import {PolicyStatus} from "../src/types/ComplianceTypes.sol";
 
 /// @title VerifyTestnetRFQ
@@ -37,6 +39,8 @@ contract VerifyTestnetRFQ is Script {
         address investor;
         address eligibleInvestorB;
         address ineligibleInvestor;
+        address expiredInvestor;
+        address qualifiedPurchaser;
         address identityRegistry;
         address identityRegistryStorage;
         address trustedIssuersRegistry;
@@ -46,6 +50,7 @@ contract VerifyTestnetRFQ is Script {
         address investorIdentity;
         address eligibleInvestorBIdentity;
         address ineligibleInvestorIdentity;
+        address expiredInvestorIdentity;
     }
 
     function run() external view {
@@ -109,6 +114,11 @@ contract VerifyTestnetRFQ is Script {
         a.investor = vm.parseJsonAddress(json, ".investor");
         a.eligibleInvestorB = vm.parseJsonAddress(json, ".eligibleInvestorB");
         a.ineligibleInvestor = vm.parseJsonAddress(json, ".ineligibleInvestor");
+        if (vm.keyExistsJson(json, ".expiredInvestor")) {
+            a.expiredInvestor = vm.parseJsonAddress(json, ".expiredInvestor");
+            a.expiredInvestorIdentity = vm.parseJsonAddress(json, ".expiredInvestorIdentity");
+        }
+        a.qualifiedPurchaser = vm.parseJsonAddress(json, ".qualifiedPurchaser");
         a.identityRegistry = vm.parseJsonAddress(json, ".identityRegistry");
         a.identityRegistryStorage = vm.parseJsonAddress(json, ".identityRegistryStorage");
         a.trustedIssuersRegistry = vm.parseJsonAddress(json, ".trustedIssuersRegistry");
@@ -141,6 +151,10 @@ contract VerifyTestnetRFQ is Script {
         _requireCode(a.investorIdentity, "investor identity");
         _requireCode(a.eligibleInvestorBIdentity, "investor B identity");
         _requireCode(a.ineligibleInvestorIdentity, "ineligible investor identity");
+        _requireCode(a.qualifiedPurchaser, "qualified purchaser element");
+        if (a.expiredInvestor != address(0)) {
+            _requireCode(a.expiredInvestorIdentity, "expired investor identity");
+        }
 
         _requireOwner(a.elementRegistry, a.governance, "element registry");
         _requireOwner(a.recipeRegistry, a.governance, "recipe registry");
@@ -172,6 +186,14 @@ contract VerifyTestnetRFQ is Script {
         require(IERC20(a.quoteToken).balanceOf(a.eligibleInvestorB) > 0, "investor B has no quote inventory");
         require(IERC20(a.rwaToken).balanceOf(a.ineligibleInvestor) > 0, "ineligible investor has no RWA inventory");
         require(IERC20(a.quoteToken).balanceOf(a.ineligibleInvestor) > 0, "ineligible investor has no quote inventory");
+        if (a.expiredInvestor != address(0)) {
+            require(IERC20(a.rwaToken).balanceOf(a.expiredInvestor) > 0, "expired investor has no RWA inventory");
+            require(IERC20(a.quoteToken).balanceOf(a.expiredInvestor) > 0, "expired investor has no quote inventory");
+            (bool passed, bytes32 reasonCode) = QualifiedPurchaser(a.qualifiedPurchaser)
+                .check(a.expiredInvestor, address(0), a.rwaToken, 0, bytes(""), bytes(""));
+            require(!passed, "expired investor QP claim unexpectedly passes");
+            require(reasonCode == ReasonCodes.encode(0, bytes32("A-13-v1"), 2), "expired investor QP reason mismatch");
+        }
     }
 
     function _requireCode(address target, string memory label) private view {

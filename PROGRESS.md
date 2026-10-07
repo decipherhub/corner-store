@@ -34,7 +34,9 @@ source of truth로 사용한다.
 - 선택형 expired-claim 지갑은 다른 투자자의 QP freshness cap을 바꾸지 않고
   366일 전 mock 증빙을 받아 네 번째 거부 장면을 만든다. 임시 Anvil 실제 배포와
   HTTP API에서 `Mock Restricted Stock (mRSTK)` 표시, 활성화된 네 번째 scenario와
-  `FAIL_QP_CLAIM_EXPIRED`/과거 expiry 근거를 함께 확인했다.
+  `FAIL_QP_CLAIM_EXPIRED`/과거 expiry 근거를 함께 확인했다. read-only deployment
+  verifier도 선택형 지갑의 identity, inventory와 정확한 QP expiry reason을
+  fail-closed 검증한다.
 - 외부 judge URL용으로 non-root/read-only OCI target, read-only artifact mount,
   Docker secret Maker key, `/health`, 16 KiB body limit, quote rate limit과 browser
   security headers를 추가했다. Compose config는 검증했으며 로컬 Docker daemon이

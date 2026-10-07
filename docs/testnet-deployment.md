@@ -250,6 +250,8 @@ The verifier fails closed on:
 - inactive Manifest or RFQ venue;
 - unapproved maker;
 - missing maker/investor inventory;
+- an optional expired-claim wallet whose identity, inventory or exact QP expiry
+  result does not match the published fixture;
 - missing allowances when requested.
 
 ## 8. Explorer Source Verification
