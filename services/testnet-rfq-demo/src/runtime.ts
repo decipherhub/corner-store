@@ -64,6 +64,15 @@ const ROUTER_WIRING_ABI = [
 const VENUE_REGISTRY_ABI = [
   "function venueOf(address venue) view returns (tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active))"
 ];
+const IDENTITY_TOKEN_ABI = ["function identityRegistry() view returns (address)"];
+const IDENTITY_REGISTRY_ABI = [
+  "function identity(address user) view returns (address)",
+  "function isVerified(address user) view returns (bool)",
+  "function identityStorage() view returns (address)",
+  "function issuersRegistry() view returns (address)",
+  "function topicsRegistry() view returns (address)"
+];
+const TRUSTED_ISSUERS_ABI = ["function isTrustedIssuer(address issuer) view returns (bool)"];
 const QP_ABI = [
   "function check(address user,address counterparty,address asset,uint256 amount,bytes context,bytes parameters) view returns (bool passed,bytes32 reasonCode)",
   "function claimOf(address user) view returns (uint8 basis,bool signatureValid,bool issuerTrusted,uint64 verifiedAt,uint8 ltStatus,bytes32 coveredCompany)",
@@ -445,6 +454,9 @@ async function verifyDeployment(config: TestnetDemoConfig, provider: JsonRpcProv
   const venueRegistry = new Contract(a.venueReg, VENUE_REGISTRY_ABI, provider);
   const rwa = new Contract(a.rwaToken, ERC20_ABI, provider);
   const quote = new Contract(a.quote, ERC20_ABI, provider);
+  const identityToken = new Contract(a.rwaToken, IDENTITY_TOKEN_ABI, provider);
+  const identityRegistry = new Contract(a.identityRegistry, IDENTITY_REGISTRY_ABI, provider);
+  const trustedIssuers = new Contract(a.trustedIssuersRegistry, TRUSTED_ISSUERS_ABI, provider);
 
   const [
     policyOperator,
@@ -465,7 +477,12 @@ async function verifyDeployment(config: TestnetDemoConfig, provider: JsonRpcProv
     routerSelector,
     routerOperators,
     adapterRouter,
-    adapterAuthorizer
+    adapterAuthorizer,
+    tokenIdentityRegistry,
+    identityStorage,
+    identityIssuers,
+    identityTopics,
+    claimIssuerTrusted
   ] = await Promise.all([
     policy.isOperator(a.operator),
     operatorRegistry.isOperator(a.operator),
@@ -485,7 +502,12 @@ async function verifyDeployment(config: TestnetDemoConfig, provider: JsonRpcProv
     router.selector(),
     router.operatorReg(),
     adapter.router(),
-    adapter.makerAuthorizer()
+    adapter.makerAuthorizer(),
+    identityToken.identityRegistry(),
+    identityRegistry.identityStorage(),
+    identityRegistry.issuersRegistry(),
+    identityRegistry.topicsRegistry(),
+    trustedIssuers.isTrustedIssuer(a.claimIssuer)
   ]);
 
   for (const [label, enabled] of [
@@ -513,6 +535,29 @@ async function verifyDeployment(config: TestnetDemoConfig, provider: JsonRpcProv
   expectAddress(String(routerOperators), a.operatorReg, "router operator registry");
   expectAddress(String(adapterRouter), a.router, "RFQ adapter router");
   expectAddress(String(adapterAuthorizer), a.makerAuthorizer, "RFQ adapter authorizer");
+  expectAddress(String(tokenIdentityRegistry), a.identityRegistry, "token identity registry");
+  expectAddress(String(identityStorage), a.identityRegistryStorage, "identity registry storage");
+  expectAddress(String(identityIssuers), a.trustedIssuersRegistry, "trusted issuers registry");
+  expectAddress(String(identityTopics), a.claimTopicsRegistry, "claim topics registry");
+  if (!claimIssuerTrusted) throw new Error("claim issuer is not trusted");
+
+  const identities = [
+    ["maker", a.maker, a.makerIdentity],
+    ["investor", a.investor, a.investorIdentity],
+    ["investor B", a.eligibleInvestorB, a.eligibleInvestorBIdentity],
+    ["ineligible investor", a.ineligibleInvestor, a.ineligibleInvestorIdentity],
+    ...(a.expiredInvestor && a.expiredInvestor !== "0x0000000000000000000000000000000000000000"
+      ? [["expired investor", a.expiredInvestor, a.expiredInvestorIdentity!]]
+      : [])
+  ] as const;
+  for (const [label, wallet, expectedIdentity] of identities) {
+    const [actualIdentity, verified] = await Promise.all([
+      identityRegistry.identity(wallet),
+      identityRegistry.isVerified(wallet)
+    ]);
+    expectAddress(String(actualIdentity), expectedIdentity, `${label} identity`);
+    if (!verified) throw new Error(`${label} is not ERC-3643 verified`);
+  }
 
   for (const [label, token, holder] of [
     ["maker RWA", rwa, a.maker],

@@ -18,6 +18,22 @@ import {ReasonCodes} from "../src/libraries/ReasonCodes.sol";
 import {PolicyStatus, VenueType} from "../src/types/ComplianceTypes.sol";
 import {VenueConfig} from "../src/types/VenueTypes.sol";
 
+interface ITestnetIdentityRegistry {
+    function identity(address user) external view returns (address);
+    function isVerified(address user) external view returns (bool);
+    function identityStorage() external view returns (address);
+    function issuersRegistry() external view returns (address);
+    function topicsRegistry() external view returns (address);
+}
+
+interface ITestnetIdentityToken {
+    function identityRegistry() external view returns (address);
+}
+
+interface ITestnetTrustedIssuersRegistry {
+    function isTrustedIssuer(address issuer) external view returns (bool);
+}
+
 /// @title VerifyTestnetRFQ
 /// @notice Read-only validation for a deployed public-testnet RFQ fixture.
 contract VerifyTestnetRFQ is Script {
@@ -176,6 +192,7 @@ contract VerifyTestnetRFQ is Script {
         require(MakerAuthorizer(a.makerAuthorizer).isOperator(a.operator), "maker operator is not authorized");
         require(RFQAdapter(a.rfqAdapter).isOperator(a.operator), "RFQ operator is not authorized");
         _verifyWiring(a);
+        _verifyIdentityWiring(a);
     }
 
     function _verifyWiring(Addresses memory a) private view {
@@ -199,6 +216,38 @@ contract VerifyTestnetRFQ is Script {
         require(address(router.operatorReg()) == a.operatorRegistry, "router operator registry mismatch");
         require(adapter.router() == a.router, "RFQ adapter router mismatch");
         require(address(adapter.makerAuthorizer()) == a.makerAuthorizer, "RFQ adapter authorizer mismatch");
+    }
+
+    function _verifyIdentityWiring(Addresses memory a) private view {
+        ITestnetIdentityRegistry registry = ITestnetIdentityRegistry(a.identityRegistry);
+        require(
+            ITestnetIdentityToken(a.rwaToken).identityRegistry() == a.identityRegistry,
+            "token identity registry mismatch"
+        );
+        require(registry.identityStorage() == a.identityRegistryStorage, "identity registry storage mismatch");
+        require(registry.issuersRegistry() == a.trustedIssuersRegistry, "trusted issuers registry mismatch");
+        require(registry.topicsRegistry() == a.claimTopicsRegistry, "claim topics registry mismatch");
+        require(
+            ITestnetTrustedIssuersRegistry(a.trustedIssuersRegistry).isTrustedIssuer(a.claimIssuer),
+            "claim issuer is not trusted"
+        );
+        _requireIdentity(registry, a.maker, a.makerIdentity, "maker");
+        _requireIdentity(registry, a.investor, a.investorIdentity, "investor");
+        _requireIdentity(registry, a.eligibleInvestorB, a.eligibleInvestorBIdentity, "investor B");
+        _requireIdentity(registry, a.ineligibleInvestor, a.ineligibleInvestorIdentity, "ineligible investor");
+        if (a.expiredInvestor != address(0)) {
+            _requireIdentity(registry, a.expiredInvestor, a.expiredInvestorIdentity, "expired investor");
+        }
+    }
+
+    function _requireIdentity(
+        ITestnetIdentityRegistry registry,
+        address wallet,
+        address expectedIdentity,
+        string memory label
+    ) private view {
+        require(registry.identity(wallet) == expectedIdentity, string.concat(label, " identity mismatch"));
+        require(registry.isVerified(wallet), string.concat(label, " is not ERC-3643 verified"));
     }
 
     function _verifyActivationAndInventory(Addresses memory a) private view {

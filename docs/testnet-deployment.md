@@ -252,6 +252,8 @@ The verifier fails closed on:
 - missing operator authorization;
 - Engine, policy registry, Router, selector, venue registry or RFQ adapter
   wiring that differs from the artifact;
+- token/Identity Registry/storage/trusted-issuer/topic wiring, wallet identity
+  binding or ERC-3643 verification that differs from the artifact;
 - inactive Manifest or RFQ venue;
 - RFQ venue type or adapter mismatch;
 - unapproved maker;

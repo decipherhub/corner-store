@@ -44,8 +44,9 @@ source of truth로 사용한다.
 - public broadcast는 dirty checkout과 잘못된 source commit override를 거절하고,
   transaction metadata를 포함한 candidate artifact를 read-only 검증한 뒤에만
   append-only final record를 원자적으로 발행한다. Node runtime도 listen 전에
-  owner/operator, Engine/Registry/Router/RFQ wiring, venue, maker, participant inventory와
-  선택형 expired fixture를 chain에서 다시 대조한다.
+  owner/operator, Engine/Registry/Router/RFQ wiring, token/Identity Registry와 wallet별
+  ONCHAINID binding, venue, maker, participant inventory와 선택형 expired fixture를
+  chain에서 다시 대조한다.
 - `/health`와 모든 `/api/*` chain read에는 proxy topology와 무관한 global request
   budget, quote에는 더 낮은 별도 budget을 적용하고 request/header/keep-alive timeout을
   제한했다. API 내부 오류는 allowlist된 입력 오류 외에는 공개하지 않으며 quote TTL은
