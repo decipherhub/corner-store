@@ -100,11 +100,12 @@ Monad hackathon judge image smoke:
 scripts/hackathon-monad-container-smoke.sh
 ```
 
-이 검사도 Docker daemon이 필요한 별도 CI gate다. pinned image build 뒤 non-root
-image user와 healthcheck, read-only Compose root filesystem, capability drop,
-loopback port, read-only artifact mount, Maker secret 및 global API/quote budget
-계약을 확인한다. 실제 chain-bound startup과 settlement는 public-testnet 또는 임시
-Anvil E2E에서 검증한다.
+이 검사도 Docker daemon이 필요한 별도 CI gate다. pinned image build 뒤 network-off,
+read-only, non-root container에서 packaged demo/RFQ runtime module과 정적 asset을
+실제 load한다. 이어서 image user와 healthcheck, read-only Compose root filesystem,
+capability drop, loopback port, read-only artifact mount, Maker secret 및 global
+API/quote budget 계약을 확인한다. 실제 chain-bound startup과 settlement는
+public-testnet 또는 임시 Anvil E2E에서 검증한다.
 
 
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote

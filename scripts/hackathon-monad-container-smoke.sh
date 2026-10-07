@@ -44,6 +44,26 @@ HEALTHCHECK=$(docker image inspect --format '{{json .Config.Healthcheck.Test}}' 
   exit 1
 }
 
+echo "==> Loading packaged runtime as the unprivileged image user"
+docker run --rm \
+  --read-only \
+  --network none \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --entrypoint node \
+  "$IMAGE" \
+  -e '
+    const fs = require("fs");
+    if (process.getuid?.() !== 10001 || process.getgid?.() !== 10001) {
+      throw new Error(`unexpected runtime identity ${process.getuid?.()}:${process.getgid?.()}`);
+    }
+    require("./dist/testnet-rfq-demo/src/config.js");
+    require("./dist/testnet-rfq-demo/src/runtime.js");
+    require("./dist/testnet-rfq-demo/src/server.js");
+    fs.accessSync("./public/index.html", fs.constants.R_OK);
+    fs.accessSync("./node_modules/ethers/package.json", fs.constants.R_OK);
+  '
+
 echo "==> Validating Monad hackathon Compose contract"
 CORNER_STORE_TESTNET_ARTIFACT="$TMP_DIR/deployment.json" \
 CORNER_STORE_TESTNET_RPC_URL="https://testnet-rpc.monad.xyz" \

@@ -47,7 +47,7 @@
 - global API/quote budget과 chain-time countdown regression
 - wallet network add/switch 및 account/chain change reset regression
 - clean-browser live URL rehearsal
-- `scripts/hackathon-monad-container-smoke.sh` OCI build/metadata/Compose contract
+- `scripts/hackathon-monad-container-smoke.sh` OCI build/metadata/runtime-module/Compose contract
 - `scripts/check.sh`
 - `git diff --check`
 

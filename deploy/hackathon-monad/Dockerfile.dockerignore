@@ -9,6 +9,8 @@
 !services/testnet-rfq-demo/public/
 !services/testnet-rfq-demo/public/**
 !services/rfq/
+!services/rfq/package.json
+!services/rfq/package-lock.json
 !services/rfq/src/
 !services/rfq/src/**
 services/**/node_modules
