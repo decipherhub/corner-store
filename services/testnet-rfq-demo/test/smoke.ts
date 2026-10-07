@@ -1,11 +1,14 @@
 import {strict as assert} from "assert";
 import {mkdtempSync, readFileSync, writeFileSync} from "fs";
+import {createServer} from "http";
+import {AddressInfo} from "net";
 import {tmpdir} from "os";
 import {join} from "path";
-import {Wallet} from "ethers";
+import {JsonRpcProvider, Wallet} from "ethers";
 
 import {loadConfig} from "../src/config";
 import {encodeReasonCode, explainBlockedTrade} from "../src/explain";
+import {PacedJsonRpcProvider} from "../src/rpc";
 import {TestnetRfqRuntime, buildRouterRequest} from "../src/runtime";
 import {InMemoryRateLimiter, ServiceUnavailableError, classifyPublicError, startServer} from "../src/server";
 
@@ -69,6 +72,7 @@ assert.equal(config.artifact.deploymentId, "smoke");
 assert.equal(config.makerWallet.address, maker.address);
 assert.equal(config.apiRequestsPerMinute, 240);
 assert.equal(config.quoteRequestsPerMinute, 20);
+assert.equal(config.rpcRequestsPerSecond, 10);
 const fileSecretConfig = loadConfig({
   CORNER_STORE_TESTNET_ARTIFACT: path,
   CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
@@ -123,6 +127,15 @@ assert.throws(
     CORNER_STORE_TESTNET_API_REQUESTS_PER_MINUTE: "10001"
   }),
   /at most 10000/
+);
+assert.throws(
+  () => loadConfig({
+    CORNER_STORE_TESTNET_ARTIFACT: path,
+    CORNER_STORE_TESTNET_RPC_URL: "http://127.0.0.1:8545",
+    CORNER_STORE_TESTNET_MAKER_KEY: maker.privateKey,
+    CORNER_STORE_TESTNET_RPC_REQUESTS_PER_SECOND: "1001"
+  }),
+  /RPC requests per second must be at most 1000/
 );
 
 const unsupportedSchemaPath = join(dir, "unsupported-schema.json");
@@ -383,9 +396,101 @@ async function serverFailureSmoke() {
   }
 }
 
+
+async function startRpcStub(mode: "limit" | "reject-first") {
+  const arrivals: number[] = [];
+  const seen = new Set<number>();
+  let window = 0;
+  let windowCount = 0;
+  let rejected = 0;
+  const answer = (item: {id: number; method: string}, now: number) => {
+    arrivals.push(now);
+    if (Math.floor(now / 1000) !== window) {
+      window = Math.floor(now / 1000);
+      windowCount = 0;
+    }
+    windowCount += 1;
+    const limited = mode === "limit" ? windowCount > 15 : !seen.has(item.id);
+    seen.add(item.id);
+    if (limited) {
+      rejected += 1;
+      return {jsonrpc: "2.0", id: item.id, error: {code: -32011, message: "requests limited to 15/sec"}};
+    }
+    if (item.method === "eth_chainId") return {jsonrpc: "2.0", id: item.id, result: "0x279f"};
+    if (item.method === "eth_blockNumber") return {jsonrpc: "2.0", id: item.id, result: "0x1"};
+    return {jsonrpc: "2.0", id: item.id, error: {code: -32601, message: "method not found"}};
+  };
+  const server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const now = Date.now();
+    res.writeHead(200, {"content-type": "application/json"});
+    res.end(JSON.stringify(Array.isArray(body) ? body.map((item) => answer(item, now)) : answer(body, now)));
+  });
+  await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+  return {
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    arrivals,
+    rejected: () => rejected,
+    close: () => {
+      server.closeAllConnections();
+      return new Promise((resolveClose) => server.close(resolveClose));
+    }
+  };
+}
+
+function maxItemsPerWindow(arrivals: number[], windowMs: number) {
+  return Math.max(...arrivals.map((start) => arrivals.filter((at) => at >= start && at < start + windowMs).length));
+}
+
+async function rpcPacingSmoke() {
+  const plainStub = await startRpcStub("limit");
+  const plain = new JsonRpcProvider(plainStub.url, 10143);
+  const plainResults = await Promise.allSettled(Array.from({length: 24}, () => plain.send("eth_blockNumber", [])));
+  plain.destroy();
+  await plainStub.close();
+  assert(plainResults.some((result) => result.status === "rejected"));
+
+  const pacedStub = await startRpcStub("limit");
+  const paced = new PacedJsonRpcProvider(pacedStub.url, 10);
+  const pacedResults = await Promise.all(Array.from({length: 24}, () => paced.send("eth_blockNumber", [])));
+  paced.destroy();
+  await pacedStub.close();
+  assert.deepEqual(pacedResults, Array(24).fill("0x1"));
+  // Full batches are scheduled exactly 1000 ms apart; allow 250 ms of loopback HTTP and timer jitter.
+  assert(maxItemsPerWindow(pacedStub.arrivals, 750) <= 10);
+
+  const retryStub = await startRpcStub("reject-first");
+  const retrying = new PacedJsonRpcProvider(retryStub.url, 100, {rateLimitRetryDelayMs: 50});
+  const retried = await Promise.all(Array.from({length: 5}, () => retrying.send("eth_blockNumber", [])));
+  retrying.destroy();
+  await retryStub.close();
+  assert.deepEqual(retried, Array(5).fill("0x1"));
+  assert(retryStub.rejected() >= 5);
+
+  const backlogStub = await startRpcStub("limit");
+  const backlogged = new PacedJsonRpcProvider(backlogStub.url, 1, {maxQueueDelayMs: 500});
+  const startedAt = Date.now();
+  const backlog = await Promise.all(Array.from({length: 5}, () => backlogged.send("eth_blockNumber", []).then(
+    () => undefined,
+    (error: Error & {code?: string; shortMessage?: string}) =>
+      ({code: error.code, message: error.shortMessage, elapsedMs: Date.now() - startedAt})
+  )));
+  backlogged.destroy();
+  await backlogStub.close();
+  const exhausted = backlog.filter(
+    (result) => result?.code === "TIMEOUT" && result.message === "RPC request budget exhausted; retry shortly"
+  );
+  assert(exhausted.length > 0);
+  assert(exhausted.every((result) => result!.elapsedMs < 500));
+}
+
 serverFailureSmoke()
+  .then(rpcPacingSmoke)
   .then(() => console.log("corner-store public-testnet RFQ demo smoke ok"))
   .catch((error) => {
     console.error(error);
-    process.exitCode = 1;
+    // Exit explicitly: a failed RPC pacing assertion can leave a stub server open.
+    process.exit(1);
   });

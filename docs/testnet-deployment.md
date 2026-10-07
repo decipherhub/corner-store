@@ -416,7 +416,11 @@ request/header/keep-alive timeouts, a global budget for every chain-reading
 security headers and an explicit `hackathon-testnet-only` acknowledgement for
 non-loopback binding. Because the application deliberately does not trust
 forwarded client-IP headers, the HTTPS edge must add its own client-aware rate
-limit. Allowlisted input-validation failures return `400 invalid_request`;
+limit. Outbound JSON-RPC calls are paced by
+`CORNER_STORE_TESTNET_RPC_REQUESTS_PER_SECOND` (default 10) to stay under the
+public Monad RPC limit of 15 requests per second; a request that would wait
+more than 10 seconds for that budget returns `503 service_unavailable`.
+Allowlisted input-validation failures return `400 invalid_request`;
 chain/runtime dependency failures return a sanitized `503 service_unavailable`,
 and unclassified internal failures return `500 internal_error`. Server failures
 emit a secret-free operator event with only the HTTP method, normalized API

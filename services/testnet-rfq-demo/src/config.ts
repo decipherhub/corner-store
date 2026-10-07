@@ -62,6 +62,7 @@ export interface TestnetDemoConfig {
   priceDenominator: bigint;
   apiRequestsPerMinute: number;
   quoteRequestsPerMinute: number;
+  rpcRequestsPerSecond: number;
 }
 
 export function loadConfig(env = process.env): TestnetDemoConfig {
@@ -106,6 +107,12 @@ export function loadConfig(env = process.env): TestnetDemoConfig {
       20,
       1_000,
       "quote requests per minute"
+    ),
+    rpcRequestsPerSecond: boundedPositiveInteger(
+      env.CORNER_STORE_TESTNET_RPC_REQUESTS_PER_SECOND,
+      10,
+      1_000,
+      "RPC requests per second"
     )
   };
 }
