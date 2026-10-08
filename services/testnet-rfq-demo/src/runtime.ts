@@ -238,15 +238,15 @@ export class TestnetRfqRuntime {
       scenarios: [
         {
           id: "success",
-          title: "Successful restricted-stock trade",
+          title: "Successful DRS trade",
           wallet: artifact.investor,
-          instruction: "Connect eligible investor A, choose Buy RWA, enter at least 5,000,000 and complete settlement."
+          instruction: "Connect eligible investor A, choose Buy DRS, enter at least 5,000,000 and complete settlement."
         },
         {
           id: "qualification-required",
-          title: "Qualification required",
+          title: "Qualified Purchaser (QP) claim required",
           wallet: artifact.ineligibleInvestor,
-          instruction: "Connect the ineligible investor, choose Buy RWA, enter 5,000,000 and run the pre-check."
+          instruction: "Connect the ineligible investor, choose Buy DRS, enter 5,000,000 and run the compliance pre-check."
         },
         {
           id: "holding-period",
@@ -254,12 +254,12 @@ export class TestnetRfqRuntime {
           wallet: artifact.eligibleInvestorB,
           enabled: artifact.eligibleInvestorBScenario === "holding-period-pending",
           instruction: artifact.eligibleInvestorBScenario === "holding-period-pending"
-            ? "Connect eligible investor B, choose Sell RWA, enter 5,000,000 and run the pre-check to see the unlock time."
+            ? "Connect eligible investor B, choose Sell DRS, enter 5,000,000 and run the compliance pre-check to see the evidence-backed unlock time."
             : "This deployment was not seeded with the optional holding-period scene."
         },
         {
           id: "claim-expiry",
-          title: "Qualification evidence expired",
+          title: "Qualified Purchaser (QP) evidence expired",
           wallet: artifact.expiredInvestor ?? "0x0000000000000000000000000000000000000000",
           enabled: Boolean(
             artifact.expiredInvestor
@@ -267,7 +267,7 @@ export class TestnetRfqRuntime {
           ),
           instruction: artifact.expiredInvestor
             && artifact.expiredInvestor !== "0x0000000000000000000000000000000000000000"
-            ? "Connect the expired-claim investor, choose Buy RWA, enter 5,000,000 and run the pre-check."
+            ? "Connect the expired-claim investor, choose Buy DRS, enter 5,000,000 and run the compliance pre-check."
             : "This deployment was not seeded with the optional expired-claim wallet."
         }
       ],

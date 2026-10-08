@@ -119,7 +119,7 @@ function validateState(state) {
     assert(ADDRESS.test(String(state.contracts[field])), `contracts.${field} is invalid`);
   }
   assert(isRecord(state.tokens) && isRecord(state.tokens.rwa) && isRecord(state.tokens.quote), "token metadata is missing");
-  assert(state.tokens.rwa.name === "Mock Restricted Stock" && state.tokens.rwa.symbol === "mRSTK", "mock restricted-stock label is missing");
+  assert(state.tokens.rwa.name === "Demo Restricted Security" && state.tokens.rwa.symbol === "DRS", "neutral DRS demo-asset label is missing");
   assert(isRecord(state.readiness), "readiness is missing");
   assert(state.readiness.makerApproved === true, "maker is not approved");
   assert(state.readiness.manifestActive === true, "Manifest is not active");

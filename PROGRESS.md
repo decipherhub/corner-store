@@ -29,14 +29,19 @@ source of truth로 사용한다.
   submission-to-confirmation 시간을 묶은 PII/secret-free JSON 증거를 브라우저에서
   다운로드할 수 있다. 실제 Monad 수치는 public-chain 체결 후 채운다.
 - Monad 배포에서는 정책 profile을 fork하지 않고 ERC-3643 token 표시 이름만
-  `Mock Restricted Stock (mRSTK)`로 주입할 수 있다. 기본값은 기존 BUIDL-like 이름을
+  `Demo Restricted Security (DRS)`로 주입할 수 있다. 기본값은 기존 BUIDL-like 이름을
   유지하므로 GIWA/기존 testnet 입력에는 영향이 없다.
 - 선택형 expired-claim 지갑은 다른 투자자의 QP freshness cap을 바꾸지 않고
   366일 전 mock 증빙을 받아 네 번째 거부 장면을 만든다. 임시 Anvil 실제 배포와
-  HTTP API에서 `Mock Restricted Stock (mRSTK)` 표시, 활성화된 네 번째 scenario와
+  HTTP API에서 `Demo Restricted Security (DRS)` 표시, 활성화된 네 번째 scenario와
   `FAIL_QP_CLAIM_EXPIRED`/과거 expiry 근거를 함께 확인했다. read-only deployment
   verifier도 선택형 지갑의 identity, inventory와 정확한 QP expiry reason을
   fail-closed 검증한다.
+- judge-facing terminology는 내부 정책 vocabulary를 우선한다. `Compliance`,
+  `Venue`, `Qualified Purchaser`는 각각 기술 평가 단계, execution layer와 실제
+  A-13 rule 이름으로 유지하되 reference/demo 경계와 비법률판정 면책을 함께
+  표시한다. 공개 자산명은 실상품 연상을 피하도록 `Demo Restricted Security
+  (DRS)`로 통일했고, 사용자 조치와 test operator 조치를 구분했다.
 - 외부 judge URL용으로 non-root/read-only OCI target, read-only artifact mount,
   Docker secret Maker key, `/health`, 16 KiB body limit, quote rate limit과 browser
   security headers를 추가했다. 로컬 Docker daemon은 실행 중이 아니지만 GitHub CI

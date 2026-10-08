@@ -128,7 +128,7 @@ function explainOperational(name: string, reasonCode: string): BlockExplanation 
     return {
       ...common,
       title: "The market maker is temporarily unavailable",
-      detail: "This venue currently refuses quotes from the configured market maker.",
+      detail: "The reference RFQ venue currently rejects quotes from the configured market maker.",
       action: "Wait for the test operator to restore the maker approval, then run the pre-check again.",
       timing: operatorTiming("There is no automatic unlock time; the test operator must restore approval.")
     };
@@ -153,10 +153,10 @@ function explainOperational(name: string, reasonCode: string): BlockExplanation 
   }
   return {
     ...common,
-    title: "The venue is not ready for this trade",
+    title: "The reference RFQ venue is not ready for this trade",
     detail: `The ${name} readiness check did not pass.`,
     action: "Refresh the page after the test operator restores the deployment state.",
-    timing: operatorTiming("The venue must be restored before this trade can continue.")
+    timing: operatorTiming("The reference RFQ venue must be restored before this trade can continue.")
   };
 }
 
@@ -164,22 +164,22 @@ function explainPolicy(name?: string): Omit<BlockExplanation, "code" | "technica
   switch (name) {
     case "FAIL_NOT_QP":
       return {
-        title: "This wallet is not qualified for the mock restricted stock",
-        detail: "The current test identity does not have the qualified-purchaser claim required by this policy.",
+        title: "This wallet is not qualified for Demo Restricted Security (DRS)",
+        detail: "The current test identity does not have the demo Qualified Purchaser (QP) claim required by this configured policy.",
         action: "Use the eligible test wallet or ask the test operator to issue a fresh demo qualification.",
         timing: operatorTiming("Qualification does not unlock automatically at a scheduled time.")
       };
     case "FAIL_QP_CLAIM_EXPIRED":
       return {
-        title: "The wallet qualification has expired",
-        detail: "The wallet had a test qualification, but its permitted freshness period has ended.",
+        title: "The demo Qualified Purchaser (QP) claim has expired",
+        detail: "The wallet had a demo QP claim, but its permitted freshness period has ended.",
         action: "Ask the test operator to refresh the demo qualification, then run the pre-check again.",
         timing: operatorTiming("An expired claim stays blocked until the operator refreshes it.")
       };
     case "HOLDING_PERIOD_NOT_ELAPSED":
       return {
         title: "The holding period has not finished",
-        detail: "The wallet sending the mock restricted stock acquired it too recently for this resale policy.",
+        detail: "The wallet sending Demo Restricted Security (DRS) acquired it too recently for this configured resale policy.",
         action: "Wait until the displayed availability time, then run the pre-check again.",
         timing: {
           kind: "automatic",
@@ -189,7 +189,7 @@ function explainPolicy(name?: string): Omit<BlockExplanation, "code" | "technica
     case "ACQUISITION_RECORD_MISSING":
       return {
         title: "The acquisition record is missing",
-        detail: "The policy cannot establish when the sending wallet acquired the mock restricted stock.",
+        detail: "The policy cannot establish when the sending wallet acquired Demo Restricted Security (DRS).",
         action: "Ask the test operator to publish a fresh acquisition snapshot for this wallet.",
         timing: operatorTiming("There is no automatic unlock time without an acquisition snapshot.")
       };
@@ -210,7 +210,7 @@ function explainPolicy(name?: string): Omit<BlockExplanation, "code" | "technica
     case "BELOW_MINIMUM_TRADE_AMOUNT":
       return {
         title: "The trade amount is below the policy minimum",
-        detail: "This mock asset only accepts trades at or above its configured minimum size.",
+        detail: "Demo Restricted Security (DRS) only accepts trades at or above its configured minimum size.",
         action: "Increase the amount and run the pre-check again.",
         timing: userTiming("This can be retried immediately with a larger amount.")
       };
@@ -219,14 +219,14 @@ function explainPolicy(name?: string): Omit<BlockExplanation, "code" | "technica
     case "KYC_CLAIM_MISSING":
     case "KYC_CLAIM_EXPIRED":
       return {
-        title: "The wallet cannot receive or send this mock asset",
+        title: "The wallet cannot receive or send Demo Restricted Security (DRS)",
         detail: "The ERC-3643 identity or transfer-eligibility check did not pass for the current wallet.",
         action: "Use an eligible test wallet or ask the test operator to refresh its demo identity claim.",
         timing: operatorTiming("Identity eligibility changes only after the test operator updates the fixture.")
       };
     case "MANIFEST_SUSPENDED":
       return {
-        title: "Trading for this mock asset is paused",
+        title: "Trading for Demo Restricted Security (DRS) is paused",
         detail: "The active policy is currently suspended, so no settlement can proceed.",
         action: "Wait for the operator's delayed resume process to complete, then refresh the page.",
         timing: operatorTiming("The exact resume time is shown only when a pending resume is available.")

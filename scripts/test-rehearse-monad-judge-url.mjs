@@ -31,7 +31,7 @@ const state = {
     expiredInvestor: address("9")
   },
   tokens: {
-    rwa: {address: address("3"), name: "Mock Restricted Stock", symbol: "mRSTK"},
+    rwa: {address: address("3"), name: "Demo Restricted Security", symbol: "DRS"},
     quote: {address: address("4"), name: "Mock Quote", symbol: "qUSD"}
   },
   readiness: {

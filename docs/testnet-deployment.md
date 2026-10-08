@@ -79,8 +79,8 @@ Use a unique append-only deployment id for the hackathon record:
 ```sh
 export CORNER_STORE_DEPLOYMENT_ID=monad-onchain-finance-rfq-v1
 export CORNER_STORE_TESTNET_INVESTOR_B_HOLDING_PERIOD_PENDING=true
-export CORNER_STORE_TESTNET_TOKEN_NAME="Mock Restricted Stock"
-export CORNER_STORE_TESTNET_TOKEN_SYMBOL=mRSTK
+export CORNER_STORE_TESTNET_TOKEN_NAME="Demo Restricted Security"
+export CORNER_STORE_TESTNET_TOKEN_SYMBOL=DRS
 # Optional fourth scene:
 export CORNER_STORE_TESTNET_EXPIRED_INVESTOR=0x...
 ```
@@ -92,6 +92,32 @@ The optional investor-B flag changes only that wallet's acquisition clock. It
 creates a deterministic Sell rejection with an onchain-derived availability
 time while leaving the existing GIWA and default public-testnet fixture
 behavior unchanged.
+
+### Judge-facing terminology contract
+
+The public demo uses the following terms consistently. These names preserve the
+product's technical vocabulary while keeping the reference and legal boundary
+explicit:
+
+- **Demo Restricted Security (DRS)** is the fictional public asset name. Do not
+  use a real product name or imply issuer affiliation.
+- **compliance pre-check** names the Corner Store technical evaluation step. A
+  passing result means the configured policy passed; it is not a legal or
+  regulatory determination and does not guarantee settlement.
+- **Qualified Purchaser (QP)** is retained when the `A-13-v1` Element is the
+  actual failed rule. Call the fixture a **demo QP claim**; do not replace the
+  rule name with a generic qualification that hides what was evaluated.
+- **venue** is the canonical execution-layer term. In explanatory prose use
+  **reference RFQ venue** so it is not presented as a licensed exchange or ATS.
+- **test participant** and **test operator** distinguish judge-controlled wallet
+  actions from fixture maintenance. Do not call either party a customer,
+  investor client, broker or custodian.
+- **technical evidence**, **execution trace** and **settlement evidence** describe
+  what the demo exposes. Do not call these outputs a compliance certificate,
+  legal record or audit approval.
+
+When outside copy advice conflicts with this contract, this repository contract
+and the accepted policy terminology take precedence.
 
 When `CORNER_STORE_TESTNET_EXPIRED_INVESTOR` is present, the fixture registers
 that separate wallet with valid mock identity wiring and a QP claim whose

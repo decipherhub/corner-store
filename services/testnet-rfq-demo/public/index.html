@@ -17,7 +17,7 @@
 
     <div class="notice">
       <strong>Reference environment</strong>
-      Mock TA claims and test assets are used. Your wallet signs approvals and Router settlement; the server only signs the Maker quote.
+      Demo TA claims and test assets are used. Corner Store evaluates configured compliance policies; results are technical demo outputs, not legal or regulatory determinations. Your wallet signs approvals and Router settlement; the server only signs the Maker quote.
     </div>
 
     <main>
@@ -50,8 +50,8 @@
           </div>
 
           <div class="segmented">
-            <button class="side active" data-side="buy">Buy RWA</button>
-            <button class="side" data-side="sell">Sell RWA</button>
+            <button class="side active" data-side="buy">Buy DRS</button>
+            <button class="side" data-side="sell">Sell DRS</button>
           </div>
 
           <label>Amount to pay
@@ -60,7 +60,7 @@
               <span id="input-symbol">—</span>
             </div>
           </label>
-          <div class="receive">Estimated receive <strong id="estimated">—</strong></div>
+          <div class="receive">Estimated output <strong id="estimated">—</strong></div>
 
           <button id="precheck" class="secondary" disabled>Run compliance pre-check</button>
           <div id="precheck-result" class="result neutral">Connect wallet to begin.</div>
@@ -96,7 +96,7 @@
             <div><dt>Expiry</dt><dd>—</dd></div>
             <div><dt>Nonce</dt><dd>—</dd></div>
           </dl>
-          <p class="muted">The exact reviewed quote is encoded into Router venueData. Compliance is evaluated again at settlement time.</p>
+          <p class="muted">The exact reviewed quote is encoded into Router venueData. Corner Store reruns the latest configured compliance policy at settlement. Passing this technical check is not a legal or regulatory determination.</p>
           <button id="approve" class="secondary" disabled>Approve input token</button>
           <button id="execute" disabled>Execute through Router</button>
         </article>

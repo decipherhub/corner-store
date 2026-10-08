@@ -32,7 +32,7 @@ async function load() {
     : undefined;
   $("deployment").textContent = state.deployment.deploymentId;
   $("network").textContent = `Chain ${state.deployment.chainId} · source ${short(state.deployment.sourceCommit)} · ${state.deployment.transactionCount ?? "—"} transactions`;
-  $("asset").textContent = `${state.tokens.rwa.name} (${state.tokens.rwa.symbol}) · mock testnet asset`;
+  $("asset").textContent = `${state.tokens.rwa.name} (${state.tokens.rwa.symbol}) · demo testnet asset`;
   $("rate").textContent = state.pricing.display;
   renderReadiness();
   renderContracts();
@@ -191,7 +191,7 @@ async function execute() {
   try {
     const router = new ethers.Contract(quoteEnvelope.execution.router, ROUTER_ABI, signer);
     await router.execute.staticCall(quoteEnvelope.execution.request);
-    addTrace("Final Router preflight", "Current compliance accepted");
+    addTrace("Final Router preflight", "Latest configured compliance policy passed");
     const transaction = await router.execute(quoteEnvelope.execution.request);
     addTrace("Router settlement", `Submitted ${short(transaction.hash)}`);
     const confirmationStartedAt = performance.now();
@@ -313,18 +313,18 @@ function hideBlockPanel() {
 }
 
 function timingText(timing) {
-  if (!timing) return "No reliable availability time is available.";
+  if (!timing) return "No evidence-backed availability time is available.";
   if (timing.availableAt) {
     const chainTime = currentChainTime();
     const suffix = chainTime === undefined
-      ? " · refresh to load the chain countdown"
+      ? " · Refresh to load the onchain countdown"
       : Number(timing.availableAt) > chainTime
         ? ` · about ${formatDuration(Number(timing.availableAt) - chainTime)} remaining`
-        : " · retry now";
+        : " · Retry now";
     return `${new Date(Number(timing.availableAt) * 1000).toLocaleString()}${suffix}`;
   }
   if (timing.evidenceExpiredAt) {
-    return `Evidence expired ${new Date(Number(timing.evidenceExpiredAt) * 1000).toLocaleString()} · operator refresh required`;
+    return `Evidence expired ${new Date(Number(timing.evidenceExpiredAt) * 1000).toLocaleString()} · Test operator refresh required`;
   }
   return timing.note;
 }

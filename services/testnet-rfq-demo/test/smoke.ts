@@ -220,6 +220,8 @@ const notQualified = explainBlockedTrade(
 );
 assert.equal(notQualified.technicalLabel, "FAIL_NOT_QP");
 assert.match(notQualified.title, /not qualified/);
+assert.match(notQualified.title, /Demo Restricted Security \(DRS\)/);
+assert.match(notQualified.detail, /Qualified Purchaser \(QP\)/);
 assert.equal(notQualified.timing.kind, "operator-action");
 
 const expiredQualification = explainBlockedTrade(
@@ -229,6 +231,7 @@ const expiredQualification = explainBlockedTrade(
 );
 assert.equal(expiredQualification.technicalLabel, "FAIL_QP_CLAIM_EXPIRED");
 assert.equal(expiredQualification.timing.evidenceExpiredAt, 1_900_000_000);
+assert.match(expiredQualification.title, /Qualified Purchaser \(QP\)/);
 assert.match(expiredQualification.action, /refresh/);
 
 const makerAllowance = explainBlockedTrade(
@@ -250,6 +253,11 @@ assert(html.includes('id="wallet-network"'));
 assert(html.includes('id="add-network"'));
 assert(html.includes('id="asset"'));
 assert(html.includes('id="download-evidence"'));
+assert(html.includes("Run compliance pre-check"));
+assert(html.includes("not a legal or regulatory determination"));
+assert(html.includes("Buy DRS"));
+assert(html.includes("Sell DRS"));
+assert.doesNotMatch(html, /Mock Restricted Stock|mRSTK/);
 const app = readFileSync(join(__dirname, "../../../public/app.js"), "utf8");
 assert(app.includes('kind: "corner-store-public-testnet-rfq-settlement"'));
 assert(app.includes("confirmationMs"));
@@ -260,6 +268,12 @@ assert(app.includes('wallet_switchEthereumChain'));
 assert(app.includes('wallet_addEthereumChain'));
 assert(app.includes('window.ethereum.on("accountsChanged"'));
 assert(app.includes('window.ethereum.on("chainChanged"'));
+assert(app.includes("Latest configured compliance policy passed"));
+assert(app.includes("No evidence-backed availability time is available."));
+const runtimeSource = readFileSync(join(__dirname, "../../../src/runtime.ts"), "utf8");
+assert(runtimeSource.includes("Qualified Purchaser (QP) claim required"));
+assert(runtimeSource.includes("choose Buy DRS"));
+assert(runtimeSource.includes("choose Sell DRS"));
 
 const signed = {
   quote: {

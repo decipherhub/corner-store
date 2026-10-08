@@ -25,6 +25,10 @@
 - Monad 배포 artifact, 심사위원용 HTTPS live URL, fixture wallet 안내와 측정된
   test transaction evidence를 제공하되 real asset, production issuer onboarding,
   real TA/KYC 연결 또는 규제 준수를 주장하지 않는다.
+- judge-facing copy는 fictional asset을 `Demo Restricted Security (DRS)`로
+  표시한다. `Compliance`, `Venue`, `Qualified Purchaser`는 제품과 A-13 정책의
+  canonical technical term으로 유지하되 reference/demo 한정과 비법률판정 면책을
+  같은 화면에 표시한다.
 - broadcast는 clean checkout의 정확한 source commit만 허용하고, 완성된 candidate
   artifact의 on-chain wiring 검증이 끝난 뒤 append-only record를 원자적으로 발행한다.
 - public runtime은 listen 전에 artifact schema, owner/operator, core/identity wiring,
