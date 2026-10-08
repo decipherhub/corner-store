@@ -24,6 +24,7 @@ tools/deploy-v3/node_modules
 deployments/*
 !deployments/public/
 !deployments/public/**
+.env
 .env.testnet
 services/rfq-host/dist/
 services/rfq-host/node_modules/
