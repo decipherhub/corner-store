@@ -112,6 +112,19 @@ public-testnet 또는 임시 Anvil E2E에서 검증한다.
 안정 reason subset(A-13, C-01-v2, minimum amount, B-02-v2, A-04와 suspended
 Manifest)이 CLI의 canonical decoder와 다른 이름으로 drift하면 전체 gate가 실패한다.
 
+같은 gate의 `scripts/test-rehearse-monad-judge-url.mjs`는 loopback fixture를
+통해 public judge rehearsal verifier를 검증한다. 실제 HTTPS URL이 준비되면 다음
+명령으로 chain 10143, startup attestation, Maker/Manifest/inventory readiness,
+필수 세 장면, browser wallet flow, security headers와 응답의 secret-shaped field
+부재를 확인한다. 성공 체결 후 내려받은 evidence를 같이 주면 deployment/source,
+contract, participant, token, transaction/block와 측정 confirmation time도 대조한다.
+
+```sh
+node scripts/rehearse-monad-judge-url.mjs \
+  --url https://<judge-host> \
+  --evidence /path/to/downloaded-evidence.json
+```
+
 
 Backend smoke는 injected scenario loading, ephemeral HTTP server의 health/quote
 API, fixed-rate pricing, maker signature, monotonic nonce와 numeric amount

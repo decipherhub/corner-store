@@ -60,6 +60,12 @@ source of truth로 사용한다.
 - judge quick start에서 공개 Monad metadata를 이용해 wallet network를 추가·전환할 수
   있다. account 또는 chain이 바뀌면 이전 account의 pre-check, quote와 signer 상태를
   폐기하고 새 지갑을 다시 동기화하므로 여러 fixture 장면 사이에 상태가 섞이지 않는다.
+- `scripts/rehearse-monad-judge-url.mjs`는 배포 후 공개 URL을 읽기 전용으로 검사한다.
+  public HTTPS/same-origin/security header, chain 10143, startup attestation,
+  Maker·Manifest·inventory readiness와 필수 세 장면을 확인하고, 선택형 claim-expiry
+  장면은 별도로 보고한다. 브라우저에서 내려받은 settlement evidence를 주면 live
+  deployment/source/contracts/participant/token과 transaction block·측정 시간을 함께
+  대조하므로 잘못된 URL이나 다른 배포의 증거를 제출 전에 거절한다.
 - 임시 Anvil 실제 배포에서 Solidity verifier와 Node startup attestation을 통과했고,
   wiring을 바꾼 artifact는 listen 전에 거절되며 `/health`·API 공통 budget이 429를
   반환함을 확인했다. pinned Foundry 1.7.1 전체 `scripts/check.sh`도 Foundry 960/960,

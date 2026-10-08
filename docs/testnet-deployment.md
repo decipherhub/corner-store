@@ -397,6 +397,23 @@ emit a secret-free operator event with only the HTTP method, normalized API
 surface, status and observation time. These are demo safeguards, not a
 replacement for the production RFQ host.
 
+Before sharing or recording the judge URL, run the repository rehearsal gate:
+
+```sh
+node scripts/rehearse-monad-judge-url.mjs --url https://<judge-host>
+```
+
+It fails closed when the public endpoint is not HTTPS, redirects off-origin,
+does not serve the expected security headers, is not bound to verified Monad
+chain `10143`, lacks active Maker/Manifest/inventory readiness, or omits one of
+the three required scenes (success, qualification rejection and holding period).
+The claim-expiry scene is reported separately because it is the first scenario
+to cut if the submission schedule slips. After one successful settlement, rerun
+with `--evidence <downloaded-json>` to bind the measured transaction record to
+the same deployment, contracts, fixture participant, token pair and current
+chain height. The verifier reads public responses only and never accepts or
+prints wallet credentials.
+
 This is separate from the feature-rich local Anvil demo:
 
 - `scripts/showcase.sh` remains the deterministic presenter/security demo;

@@ -39,6 +39,10 @@
   않고 재조회 또는 operator 확인이 필요하다고 안내한다.
 - judge quick start는 공개된 Monad network metadata로 browser wallet을 추가·전환하고,
   scenario account 또는 chain 변경 시 stale signer/quote 상태를 폐기한다.
+- 제출 전 rehearsal gate는 HTTPS, same-origin response, security headers, chain 10143,
+  startup verification, Maker/Manifest/inventory readiness와 필수 세 장면을 검증한다.
+  선택적으로 다운로드한 settlement evidence의 deployment/source/contract/participant/
+  token/transaction/block/측정 시간을 같은 live state에 대조한다.
 - 기존 Anvil showcase와 GIWA testnet 흐름은 변경하지 않는다.
 
 ### Verification
@@ -54,6 +58,7 @@
 - public-testnet/CLI stable reason catalog parity
 - wallet network add/switch 및 account/chain change reset regression
 - clean-browser live URL rehearsal
+- hosted URL/evidence fail-closed rehearsal regression
 - `scripts/hackathon-monad-container-smoke.sh` OCI build/metadata/runtime-module/Compose contract
 - `scripts/check.sh`
 - `git diff --check`
