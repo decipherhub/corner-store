@@ -42,3 +42,6 @@ jobs:
 
       - name: Build and smoke production service images
         run: scripts/production-container-smoke.sh
+
+      - name: Build and validate Monad hackathon demo image
+        run: scripts/hackathon-monad-container-smoke.sh

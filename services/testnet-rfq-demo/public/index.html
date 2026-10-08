@@ -17,7 +17,7 @@
 
     <div class="notice">
       <strong>Reference environment</strong>
-      Mock TA claims and test assets are used. Your wallet signs approvals and Router settlement; the server only signs the Maker quote.
+      Demo TA claims and test assets are used. Corner Store evaluates configured compliance policies; results are technical demo outputs, not legal or regulatory determinations. Your wallet signs approvals and Router settlement; the server only signs the Maker quote.
     </div>
 
     <main>
@@ -26,6 +26,7 @@
           <span class="label">Verified deployment</span>
           <h2 id="deployment">Loading…</h2>
           <div id="network" class="muted"></div>
+          <div id="asset" class="muted"></div>
         </article>
         <article>
           <span class="label">Runtime readiness</span>
@@ -49,8 +50,8 @@
           </div>
 
           <div class="segmented">
-            <button class="side active" data-side="buy">Buy RWA</button>
-            <button class="side" data-side="sell">Sell RWA</button>
+            <button class="side active" data-side="buy">Buy DRS</button>
+            <button class="side" data-side="sell">Sell DRS</button>
           </div>
 
           <label>Amount to pay
@@ -59,10 +60,24 @@
               <span id="input-symbol">—</span>
             </div>
           </label>
-          <div class="receive">Estimated receive <strong id="estimated">—</strong></div>
+          <div class="receive">Estimated output <strong id="estimated">—</strong></div>
 
           <button id="precheck" class="secondary" disabled>Run compliance pre-check</button>
           <div id="precheck-result" class="result neutral">Connect wallet to begin.</div>
+          <aside id="block-panel" class="block-panel hidden" aria-live="polite">
+            <span class="eyebrow">WHY THIS TRADE IS BLOCKED</span>
+            <h3 id="block-title">Policy check required</h3>
+            <p id="block-detail"></p>
+            <div class="block-guidance">
+              <div><span>What to do</span><strong id="block-action">—</strong></div>
+              <div><span>When available</span><strong id="block-time">—</strong></div>
+            </div>
+            <details class="technical-reason">
+              <summary>Technical evidence</summary>
+              <code id="block-code">—</code>
+              <div id="block-label" class="muted"></div>
+            </details>
+          </aside>
           <button id="request" disabled>Request signed quote</button>
         </article>
 
@@ -81,7 +96,7 @@
             <div><dt>Expiry</dt><dd>—</dd></div>
             <div><dt>Nonce</dt><dd>—</dd></div>
           </dl>
-          <p class="muted">The exact reviewed quote is encoded into Router venueData. Compliance is evaluated again at settlement time.</p>
+          <p class="muted">The exact reviewed quote is encoded into Router venueData. Corner Store reruns the latest configured compliance policy at settlement. Passing this technical check is not a legal or regulatory determination.</p>
           <button id="approve" class="secondary" disabled>Approve input token</button>
           <button id="execute" disabled>Execute through Router</button>
         </article>
@@ -93,11 +108,29 @@
             <span class="eyebrow">03 · EVIDENCE</span>
             <h2>Execution trace</h2>
           </div>
-          <button id="refresh" class="ghost">Refresh state</button>
+          <div class="evidence-actions">
+            <button id="download-evidence" class="ghost" disabled>Download test evidence</button>
+            <button id="refresh" class="ghost">Refresh state</button>
+          </div>
         </div>
         <ol id="trace">
           <li><span>Deployment artifact</span><strong>Loading</strong></li>
         </ol>
+      </section>
+
+      <section class="evidence judge-guide">
+        <div class="section-title">
+          <div>
+            <span class="eyebrow">JUDGE QUICK START</span>
+            <h2>Test the policy outcomes</h2>
+          </div>
+        </div>
+        <p class="muted">Import the disposable test wallet credentials supplied separately. Private keys are never embedded in this site or deployment artifact.</p>
+        <div class="network-setup-row">
+          <div id="wallet-network" class="network-setup muted"></div>
+          <button id="add-network" class="ghost" disabled>Add / switch network</button>
+        </div>
+        <div id="scenarios" class="scenario-grid"></div>
       </section>
 
       <details>

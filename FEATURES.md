@@ -9,6 +9,76 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## HACK-001 — Monad Onchain Finance RFQ Demo
+
+### Behavior
+
+- 기존 public-testnet RFQ deployment와 artifact-bound browser runtime을 Monad
+  testnet(chain ID 10143)에서 재사용하며 Core/RFQ 계약을 해커톤 전용으로
+  fork하지 않는다.
+- browser pre-check 거부는 raw `reasonCode`만 노출하지 않고, 사람이 이해할 수
+  있는 차단 사유, 필요한 다음 조치와 증거로 확인 가능한 해제·만료 시각을 함께
+  표시한다. 시간 근거가 없으면 임의 ETA 대신 operator/user action 필요를 명시한다.
+- 선택형 해커톤 fixture는 다른 투자자의 freshness를 약화하지 않고 별도 지갑에
+  만료된 QP 증빙을 주입해 success, qualification-required, holding-period와
+  claim-expiry 네 장면을 같은 배포에서 재현한다.
+- Monad 배포 artifact, 심사위원용 HTTPS live URL, fixture wallet 안내와 측정된
+  test transaction evidence를 제공하되 real asset, production issuer onboarding,
+  real TA/KYC 연결 또는 규제 준수를 주장하지 않는다.
+- judge-facing copy는 fictional asset을 `Demo Restricted Security (DRS)`로
+  표시한다. `Compliance`, `Venue`, `Qualified Purchaser`는 제품과 A-13 정책의
+  canonical technical term으로 유지하되 reference/demo 한정과 비법률판정 면책을
+  같은 화면에 표시한다.
+- broadcast는 clean checkout의 정확한 source commit만 허용하고, 완성된 candidate
+  artifact의 on-chain wiring 검증이 끝난 뒤 append-only record를 원자적으로 발행한다.
+- public runtime은 listen 전에 artifact schema, owner/operator, core/identity wiring,
+  wallet identity binding, venue, maker와 inventory를 다시 검증한다. chain-reading endpoint와 quote issuance에는
+  proxy header에 의존하지 않는 global budget과 bounded timeout을 적용한다.
+- 공개 API는 allowlist된 request validation 오류만 `400 invalid_request`로 반환하고,
+  RPC/runtime dependency 장애는 `503 service_unavailable`, 분류되지 않은 내부 오류는
+  `500 internal_error`로 원문을 숨긴다. 두 server failure는 PII/secret-free operator
+  event만 남긴다.
+- 보유기간 남은 시간은 browser wall clock이 아니라 관측한 chain timestamp를 기준으로
+  표시한다. 검증 가능한 availability evidence를 읽지 못하면 임의 시간을 표시하지
+  않고 재조회 또는 operator 확인이 필요하다고 안내한다.
+- judge quick start는 공개된 Monad network metadata로 browser wallet을 추가·전환하고,
+  scenario account 또는 chain 변경 시 stale signer/quote 상태를 폐기한다.
+- 제출 전 rehearsal gate는 HTTPS, same-origin response, security headers, chain 10143,
+  startup verification, Maker/Manifest/inventory readiness와 필수 세 장면을 검증한다.
+  선택적으로 다운로드한 settlement evidence의 deployment/source/contract/participant/
+  token/transaction/block/측정 시간을 같은 live state에 대조한다.
+- 기존 Anvil showcase와 GIWA testnet 흐름은 변경하지 않는다.
+
+### Verification
+
+- `npm test --prefix services/testnet-rfq-demo`
+- `npm test --prefix services/cli`
+- Monad RPC chain-id/readiness preflight
+- verified deployment artifact와 browser-wallet RFQ settlement
+- dirty/source-mismatch broadcast rejection과 candidate-before-publish 검증
+- artifact/on-chain wiring mismatch startup rejection
+- global API/quote budget과 chain-time countdown regression
+- request-validation 400 / internal 500 / runtime-upstream 503 classification regression
+- public-testnet/CLI stable reason catalog parity
+- wallet network add/switch 및 account/chain change reset regression
+- clean-browser live URL rehearsal
+- hosted URL/evidence fail-closed rehearsal regression
+- `scripts/hackathon-monad-container-smoke.sh` OCI build/metadata/runtime-module/Compose contract
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+active
+
+### Notes
+
+- Tracks issue #145. Decision Receipts r2/EAS/anchor/verifier work from #139 is
+  deferred to the November accelerator round and is not part of this feature.
+- 2026-10-07: official public RPC responded with chain ID 10143 and a current
+  block. Live deployment still requires funded disposable deployer/participant
+  wallets and must not commit their keys or credential-bearing RPC URLs.
+
 ## DATA-003: Isolated Demo and Production TA/KYC Provider Adapters
 
 ### Behavior

@@ -84,6 +84,12 @@ echo "==> Running public-testnet RFQ demo build + smoke test"
   npm test
 )
 
+echo "==> Checking public-testnet/CLI reason catalog parity"
+node scripts/check-testnet-reason-parity.mjs
+
+echo "==> Running Monad judge URL rehearsal smoke test"
+node scripts/test-rehearse-monad-judge-url.mjs
+
 echo "==> Running standalone SDK package consumer smoke test"
 scripts/sdk-product-smoke.sh
 

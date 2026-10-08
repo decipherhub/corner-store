@@ -10,8 +10,29 @@ import {TokenPolicyRegistry} from "../src/registry/TokenPolicyRegistry.sol";
 import {OperatorRegistry} from "../src/registry/OperatorRegistry.sol";
 import {MakerAuthorizer} from "../src/registry/MakerAuthorizer.sol";
 import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
+import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
+import {ComplianceEngine} from "../src/compliance/ComplianceEngine.sol";
 import {RFQAdapter} from "../src/execution/adapters/rfq/RFQAdapter.sol";
-import {PolicyStatus} from "../src/types/ComplianceTypes.sol";
+import {QualifiedPurchaser} from "../src/compliance/elements/QualifiedPurchaser.sol";
+import {ReasonCodes} from "../src/libraries/ReasonCodes.sol";
+import {PolicyStatus, VenueType} from "../src/types/ComplianceTypes.sol";
+import {VenueConfig} from "../src/types/VenueTypes.sol";
+
+interface ITestnetIdentityRegistry {
+    function identity(address user) external view returns (address);
+    function isVerified(address user) external view returns (bool);
+    function identityStorage() external view returns (address);
+    function issuersRegistry() external view returns (address);
+    function topicsRegistry() external view returns (address);
+}
+
+interface ITestnetIdentityToken {
+    function identityRegistry() external view returns (address);
+}
+
+interface ITestnetTrustedIssuersRegistry {
+    function isTrustedIssuer(address issuer) external view returns (bool);
+}
 
 /// @title VerifyTestnetRFQ
 /// @notice Read-only validation for a deployed public-testnet RFQ fixture.
@@ -29,6 +50,7 @@ contract VerifyTestnetRFQ is Script {
         address operatorRegistry;
         address engine;
         address venueRegistry;
+        address selector;
         address router;
         address makerAuthorizer;
         address rfqAdapter;
@@ -37,6 +59,8 @@ contract VerifyTestnetRFQ is Script {
         address investor;
         address eligibleInvestorB;
         address ineligibleInvestor;
+        address expiredInvestor;
+        address qualifiedPurchaser;
         address identityRegistry;
         address identityRegistryStorage;
         address trustedIssuersRegistry;
@@ -46,6 +70,7 @@ contract VerifyTestnetRFQ is Script {
         address investorIdentity;
         address eligibleInvestorBIdentity;
         address ineligibleInvestorIdentity;
+        address expiredInvestorIdentity;
     }
 
     function run() external view {
@@ -101,6 +126,7 @@ contract VerifyTestnetRFQ is Script {
         a.operatorRegistry = vm.parseJsonAddress(json, ".operatorReg");
         a.engine = vm.parseJsonAddress(json, ".engine");
         a.venueRegistry = vm.parseJsonAddress(json, ".venueReg");
+        a.selector = vm.parseJsonAddress(json, ".selector");
         a.router = vm.parseJsonAddress(json, ".router");
         a.makerAuthorizer = vm.parseJsonAddress(json, ".makerAuthorizer");
         a.rfqAdapter = vm.parseJsonAddress(json, ".rfqAdapter");
@@ -109,6 +135,11 @@ contract VerifyTestnetRFQ is Script {
         a.investor = vm.parseJsonAddress(json, ".investor");
         a.eligibleInvestorB = vm.parseJsonAddress(json, ".eligibleInvestorB");
         a.ineligibleInvestor = vm.parseJsonAddress(json, ".ineligibleInvestor");
+        if (vm.keyExistsJson(json, ".expiredInvestor")) {
+            a.expiredInvestor = vm.parseJsonAddress(json, ".expiredInvestor");
+            a.expiredInvestorIdentity = vm.parseJsonAddress(json, ".expiredInvestorIdentity");
+        }
+        a.qualifiedPurchaser = vm.parseJsonAddress(json, ".qualifiedPurchaser");
         a.identityRegistry = vm.parseJsonAddress(json, ".identityRegistry");
         a.identityRegistryStorage = vm.parseJsonAddress(json, ".identityRegistryStorage");
         a.trustedIssuersRegistry = vm.parseJsonAddress(json, ".trustedIssuersRegistry");
@@ -129,6 +160,7 @@ contract VerifyTestnetRFQ is Script {
         _requireCode(a.operatorRegistry, "operator registry");
         _requireCode(a.engine, "compliance engine");
         _requireCode(a.venueRegistry, "venue registry");
+        _requireCode(a.selector, "venue selector");
         _requireCode(a.router, "router");
         _requireCode(a.makerAuthorizer, "maker authorizer");
         _requireCode(a.rfqAdapter, "RFQ adapter");
@@ -141,6 +173,10 @@ contract VerifyTestnetRFQ is Script {
         _requireCode(a.investorIdentity, "investor identity");
         _requireCode(a.eligibleInvestorBIdentity, "investor B identity");
         _requireCode(a.ineligibleInvestorIdentity, "ineligible investor identity");
+        _requireCode(a.qualifiedPurchaser, "qualified purchaser element");
+        if (a.expiredInvestor != address(0)) {
+            _requireCode(a.expiredInvestorIdentity, "expired investor identity");
+        }
 
         _requireOwner(a.elementRegistry, a.governance, "element registry");
         _requireOwner(a.recipeRegistry, a.governance, "recipe registry");
@@ -155,6 +191,63 @@ contract VerifyTestnetRFQ is Script {
         require(OperatorRegistry(a.operatorRegistry).isOperator(a.operator), "execution operator is not authorized");
         require(MakerAuthorizer(a.makerAuthorizer).isOperator(a.operator), "maker operator is not authorized");
         require(RFQAdapter(a.rfqAdapter).isOperator(a.operator), "RFQ operator is not authorized");
+        _verifyWiring(a);
+        _verifyIdentityWiring(a);
+    }
+
+    function _verifyWiring(Addresses memory a) private view {
+        ComplianceEngine engine = ComplianceEngine(a.engine);
+        ExecutionRouter router = ExecutionRouter(a.router);
+        RFQAdapter adapter = RFQAdapter(a.rfqAdapter);
+
+        require(engine.router() == a.router, "engine router mismatch");
+        require(address(engine.policyReg()) == a.policyRegistry, "engine policy registry mismatch");
+        require(address(engine.elementReg()) == a.elementRegistry, "engine element registry mismatch");
+        require(address(engine.recipeReg()) == a.recipeRegistry, "engine recipe registry mismatch");
+        require(
+            address(TokenPolicyRegistry(a.policyRegistry).recipeReg()) == a.recipeRegistry, "policy recipe mismatch"
+        );
+        require(
+            address(TokenPolicyRegistry(a.policyRegistry).elementReg()) == a.elementRegistry, "policy element mismatch"
+        );
+        require(address(router.engine()) == a.engine, "router engine mismatch");
+        require(address(router.venueReg()) == a.venueRegistry, "router venue registry mismatch");
+        require(address(router.selector()) == a.selector, "router selector mismatch");
+        require(address(router.operatorReg()) == a.operatorRegistry, "router operator registry mismatch");
+        require(adapter.router() == a.router, "RFQ adapter router mismatch");
+        require(address(adapter.makerAuthorizer()) == a.makerAuthorizer, "RFQ adapter authorizer mismatch");
+    }
+
+    function _verifyIdentityWiring(Addresses memory a) private view {
+        ITestnetIdentityRegistry registry = ITestnetIdentityRegistry(a.identityRegistry);
+        require(
+            ITestnetIdentityToken(a.rwaToken).identityRegistry() == a.identityRegistry,
+            "token identity registry mismatch"
+        );
+        require(registry.identityStorage() == a.identityRegistryStorage, "identity registry storage mismatch");
+        require(registry.issuersRegistry() == a.trustedIssuersRegistry, "trusted issuers registry mismatch");
+        require(registry.topicsRegistry() == a.claimTopicsRegistry, "claim topics registry mismatch");
+        require(
+            ITestnetTrustedIssuersRegistry(a.trustedIssuersRegistry).isTrustedIssuer(a.claimIssuer),
+            "claim issuer is not trusted"
+        );
+        _requireIdentity(registry, a.maker, a.makerIdentity, "maker");
+        _requireIdentity(registry, a.investor, a.investorIdentity, "investor");
+        _requireIdentity(registry, a.eligibleInvestorB, a.eligibleInvestorBIdentity, "investor B");
+        _requireIdentity(registry, a.ineligibleInvestor, a.ineligibleInvestorIdentity, "ineligible investor");
+        if (a.expiredInvestor != address(0)) {
+            _requireIdentity(registry, a.expiredInvestor, a.expiredInvestorIdentity, "expired investor");
+        }
+    }
+
+    function _requireIdentity(
+        ITestnetIdentityRegistry registry,
+        address wallet,
+        address expectedIdentity,
+        string memory label
+    ) private view {
+        require(registry.identity(wallet) == expectedIdentity, string.concat(label, " identity mismatch"));
+        require(registry.isVerified(wallet), string.concat(label, " is not ERC-3643 verified"));
     }
 
     function _verifyActivationAndInventory(Addresses memory a) private view {
@@ -162,7 +255,10 @@ contract VerifyTestnetRFQ is Script {
             TokenPolicyRegistry(a.policyRegistry).statusOf(a.rwaToken) == PolicyStatus.ACTIVE,
             "RWA manifest is not active"
         );
-        require(VenueRegistry(a.venueRegistry).venueOf(a.rfqVenue).active, "RFQ venue is not active");
+        VenueConfig memory venue = VenueRegistry(a.venueRegistry).venueOf(a.rfqVenue);
+        require(venue.active, "RFQ venue is not active");
+        require(venue.venueType == VenueType.RFQ, "RFQ venue type mismatch");
+        require(venue.adapter == a.rfqAdapter, "RFQ venue adapter mismatch");
         require(RFQAdapter(a.rfqAdapter).approvedMaker(a.maker), "maker is not approved");
         require(IERC20(a.rwaToken).balanceOf(a.maker) > 0, "maker has no RWA inventory");
         require(IERC20(a.quoteToken).balanceOf(a.maker) > 0, "maker has no quote inventory");
@@ -172,6 +268,14 @@ contract VerifyTestnetRFQ is Script {
         require(IERC20(a.quoteToken).balanceOf(a.eligibleInvestorB) > 0, "investor B has no quote inventory");
         require(IERC20(a.rwaToken).balanceOf(a.ineligibleInvestor) > 0, "ineligible investor has no RWA inventory");
         require(IERC20(a.quoteToken).balanceOf(a.ineligibleInvestor) > 0, "ineligible investor has no quote inventory");
+        if (a.expiredInvestor != address(0)) {
+            require(IERC20(a.rwaToken).balanceOf(a.expiredInvestor) > 0, "expired investor has no RWA inventory");
+            require(IERC20(a.quoteToken).balanceOf(a.expiredInvestor) > 0, "expired investor has no quote inventory");
+            (bool passed, bytes32 reasonCode) = QualifiedPurchaser(a.qualifiedPurchaser)
+                .check(a.expiredInvestor, address(0), a.rwaToken, 0, bytes(""), bytes(""));
+            require(!passed, "expired investor QP claim unexpectedly passes");
+            require(reasonCode == ReasonCodes.encode(0, bytes32("A-13-v1"), 2), "expired investor QP reason mismatch");
+        }
     }
 
     function _requireCode(address target, string memory label) private view {

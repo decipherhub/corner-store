@@ -7,10 +7,31 @@ import {TestnetRfqRuntime, TradeSide, buildRouterRequest} from "./runtime";
 
 const MAX_BODY = 16 * 1024;
 
+export class ServiceUnavailableError extends Error {
+  constructor(readonly cause?: unknown) {
+    super("service dependency is unavailable");
+    this.name = "ServiceUnavailableError";
+  }
+}
+
 export async function startServer(runtime: TestnetRfqRuntime) {
   const publicDir = resolve(__dirname, "../../../public");
   const ethersBundle = resolve(__dirname, "../../../node_modules/ethers/dist/ethers.umd.min.js");
-  const server = createServer((req, res) => void handle(req, res, runtime, publicDir, ethersBundle));
+  const apiLimiter = new InMemoryRateLimiter(runtime.config.apiRequestsPerMinute);
+  const quoteLimiter = new InMemoryRateLimiter(runtime.config.quoteRequestsPerMinute);
+  const server = createServer((req, res) => void handle(
+    req,
+    res,
+    runtime,
+    publicDir,
+    ethersBundle,
+    apiLimiter,
+    quoteLimiter
+  ));
+  server.requestTimeout = 15_000;
+  server.headersTimeout = 10_000;
+  server.keepAliveTimeout = 5_000;
+  server.maxHeadersCount = 64;
   await new Promise<void>((resolveListen, reject) => {
     server.once("error", reject);
     server.listen(runtime.config.port, runtime.config.host, () => {
@@ -26,38 +47,54 @@ async function handle(
   res: ServerResponse,
   runtime: TestnetRfqRuntime,
   publicDir: string,
-  ethersBundle: string
+  ethersBundle: string,
+  apiLimiter: InMemoryRateLimiter,
+  quoteLimiter: InMemoryRateLimiter
 ) {
   try {
+    if (req.url === "/health" || req.url?.startsWith("/api/")) {
+      const rate = apiLimiter.check("global", Date.now());
+      if (!rate.allowed) return rateLimited(res, rate.retryAfterSeconds);
+    }
+    if (req.method === "GET" && req.url === "/health") {
+      const blockNumber = await providerCall(() => runtime.provider.getBlockNumber());
+      return json(res, 200, {service: "corner-store-testnet-rfq-demo", status: "ok", blockNumber});
+    }
     if (req.method === "GET" && req.url === "/") return sendFile(res, resolve(publicDir, "index.html"), "text/html");
     if (req.method === "GET" && req.url === "/app.js") return sendFile(res, resolve(publicDir, "app.js"), "text/javascript");
     if (req.method === "GET" && req.url === "/styles.css") return sendFile(res, resolve(publicDir, "styles.css"), "text/css");
     if (req.method === "GET" && req.url === "/vendor/ethers.js") return sendFile(res, ethersBundle, "text/javascript");
-    if (req.method === "GET" && req.url === "/api/state") return json(res, 200, await runtime.publicState());
+    if (req.method === "GET" && req.url === "/api/state") {
+      return json(res, 200, await runtimeCall(() => runtime.publicState()));
+    }
 
     if (req.method === "GET" && req.url?.startsWith("/api/wallet/")) {
-      return json(res, 200, await runtime.walletState(getAddress(decodeURIComponent(req.url.slice(12)))));
+      const wallet = getAddress(decodeURIComponent(req.url.slice(12)));
+      return json(res, 200, await runtimeCall(() => runtime.walletState(wallet)));
     }
 
     if (req.method === "POST" && req.url === "/api/precheck") {
       const body = await bodyJson(req);
-      return json(res, 200, await runtime.precheck(
-        address(body.taker, "taker"),
-        uintString(body.amountIn, "amountIn"),
-        side(body.side)
-      ));
+      const taker = address(body.taker, "taker");
+      const amountIn = uintString(body.amountIn, "amountIn");
+      const tradeSide = side(body.side);
+      return json(res, 200, await runtimeCall(() => runtime.precheck(taker, amountIn, tradeSide)));
     }
 
     if (req.method === "POST" && req.url === "/api/quote") {
+      const rate = quoteLimiter.check("global", Date.now());
+      if (!rate.allowed) return rateLimited(res, rate.retryAfterSeconds);
       const body = await bodyJson(req);
-      const signed = await runtime.quoteFor(
-        address(body.taker, "taker"),
-        uintString(body.amountIn, "amountIn"),
-        side(body.side),
-        optionalPositiveInteger(body.ttlSeconds, "ttlSeconds")
-      );
-      const latest = await runtime.provider.getBlock("latest");
-      if (!latest) throw new Error("latest block is unavailable");
+      const taker = address(body.taker, "taker");
+      const amountIn = uintString(body.amountIn, "amountIn");
+      const tradeSide = side(body.side);
+      const ttlSeconds = optionalPositiveInteger(body.ttlSeconds, "ttlSeconds", runtime.config.quoteTtlSeconds);
+      const signed = await runtimeCall(() => runtime.quoteFor(taker, amountIn, tradeSide, ttlSeconds));
+      const latest = await providerCall(async () => {
+        const block = await runtime.provider.getBlock("latest");
+        if (!block) throw new Error("latest block is unavailable");
+        return block;
+      });
       const routerNonce = BigInt(`0x${cryptoRandomHex(24)}`);
       const deadline = BigInt(latest.timestamp + 3600);
       return json(res, 200, {
@@ -73,15 +110,28 @@ async function handle(
 
     return json(res, 404, {error: "not_found"});
   } catch (error) {
-    return json(res, 400, {
-      error: "invalid_request",
-      message: error instanceof Error ? error.message : "unknown error"
-    });
+    const failure = classifyPublicError(error);
+    if (failure.status >= 500) {
+      console.error(JSON.stringify({
+        event: "testnet_demo_request_failed",
+        method: req.method ?? "UNKNOWN",
+        surface: requestSurface(req.url),
+        status: failure.status,
+        observedAt: new Date().toISOString()
+      }));
+    }
+    return json(res, failure.status, failure.body);
   }
+}
+
+function rateLimited(res: ServerResponse, retryAfterSeconds: number) {
+  res.setHeader("Retry-After", String(retryAfterSeconds));
+  return json(res, 429, {error: "rate_limited"});
 }
 
 function sendFile(res: ServerResponse, path: string, type: string) {
   const content = readFileSync(path);
+  securityHeaders(res);
   res.writeHead(200, {
     "content-type": `${type}; charset=utf-8`,
     "content-length": content.length,
@@ -92,12 +142,50 @@ function sendFile(res: ServerResponse, path: string, type: string) {
 
 function json(res: ServerResponse, status: number, value: unknown) {
   const content = Buffer.from(`${JSON.stringify(value)}\n`);
+  securityHeaders(res);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": content.length,
     "cache-control": "no-store"
   });
   res.end(content);
+}
+
+function securityHeaders(res: ServerResponse) {
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+}
+
+export class InMemoryRateLimiter {
+  private readonly entries = new Map<string, {windowStartMs: number; count: number}>();
+
+  constructor(private readonly maximum: number, private readonly windowMs = 60_000) {}
+
+  check(key: string, nowMs: number): {allowed: boolean; retryAfterSeconds: number} {
+    const current = this.entries.get(key);
+    if (!current || nowMs - current.windowStartMs >= this.windowMs) {
+      this.entries.set(key, {windowStartMs: nowMs, count: 1});
+      this.prune(nowMs);
+      return {allowed: true, retryAfterSeconds: 0};
+    }
+    if (current.count >= this.maximum) {
+      return {
+        allowed: false,
+        retryAfterSeconds: Math.max(1, Math.ceil((this.windowMs - (nowMs - current.windowStartMs)) / 1000))
+      };
+    }
+    current.count += 1;
+    return {allowed: true, retryAfterSeconds: 0};
+  }
+
+  private prune(nowMs: number) {
+    if (this.entries.size <= 1_024) return;
+    for (const [key, value] of this.entries) {
+      if (nowMs - value.windowStartMs >= this.windowMs) this.entries.delete(key);
+    }
+  }
 }
 
 async function bodyJson(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -109,7 +197,12 @@ async function bodyJson(req: IncomingMessage): Promise<Record<string, unknown>> 
     if (size > MAX_BODY) throw new Error("request body exceeds 16 KiB");
     chunks.push(buffer);
   }
-  const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    throw new Error("request body must be valid JSON");
+  }
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("JSON object required");
   return value as Record<string, unknown>;
 }
@@ -131,12 +224,95 @@ function side(value: unknown): TradeSide {
   throw new Error("side must be buy or sell");
 }
 
-function optionalPositiveInteger(value: unknown, label: string): number | undefined {
+function optionalPositiveInteger(value: unknown, label: string, maximum: number): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isSafeInteger(value) || Number(value) <= 0) throw new Error(`${label} must be a positive integer`);
+  if (Number(value) > maximum) throw new Error(`${label} must be at most ${maximum}`);
   return Number(value);
 }
 
 function cryptoRandomHex(bytes: number): string {
   return require("crypto").randomBytes(bytes).toString("hex");
+}
+
+export function classifyPublicError(error: unknown): {
+  status: 400 | 500 | 503;
+  body: {error: "invalid_request" | "internal_error" | "service_unavailable"; message: string};
+} {
+  const message = safePublicInputMessage(error);
+  if (message) {
+    return {status: 400, body: {error: "invalid_request", message}};
+  }
+  if (error instanceof ServiceUnavailableError) {
+    return {
+      status: 503,
+      body: {error: "service_unavailable", message: "request could not be completed"}
+    };
+  }
+  return {status: 500, body: {error: "internal_error", message: "request could not be completed"}};
+}
+
+async function providerCall<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    throw new ServiceUnavailableError(error);
+  }
+}
+
+async function runtimeCall<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isDependencyFailure(error) || isOperatorReadinessFailure(error)) {
+      throw new ServiceUnavailableError(error);
+    }
+    throw error;
+  }
+}
+
+function isDependencyFailure(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as {code?: unknown}).code)
+    : "";
+  return new Set([
+    "NETWORK_ERROR",
+    "SERVER_ERROR",
+    "TIMEOUT",
+    "CALL_EXCEPTION",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "ETIMEDOUT"
+  ]).has(code);
+}
+
+function isOperatorReadinessFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return /^maker (inventory|allowance) is insufficient$/.test(message);
+}
+
+function safePublicInputMessage(error: unknown): string | undefined {
+  const message = error instanceof Error ? error.message : "";
+  const safePatterns = [
+    /^(taker is required|invalid address)/,
+    /^amountIn must be a positive uint string$/,
+    /^side must be buy or sell$/,
+    /^ttlSeconds must be a positive integer$/,
+    /^ttlSeconds must be at most \d+$/,
+    /^request body exceeds 16 KiB$/,
+    /^request body must be valid JSON$/,
+    /^JSON object required$/
+  ];
+  return safePatterns.some((pattern) => pattern.test(message)) ? message : undefined;
+}
+
+function requestSurface(url: string | undefined): string {
+  if (url === "/health") return "/health";
+  if (url === "/api/state") return "/api/state";
+  if (url === "/api/precheck") return "/api/precheck";
+  if (url === "/api/quote") return "/api/quote";
+  if (url?.startsWith("/api/wallet/")) return "/api/wallet/:address";
+  return "other";
 }

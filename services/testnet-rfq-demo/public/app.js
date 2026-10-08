@@ -15,6 +15,8 @@ let account;
 let side = "buy";
 let quoteEnvelope;
 let precheckPassed = false;
+let lastEvidence;
+let chainClock;
 
 async function api(path, options) {
   const response = await fetch(path, options);
@@ -25,11 +27,17 @@ async function api(path, options) {
 
 async function load() {
   state = await api("/api/state");
+  chainClock = Number.isSafeInteger(state.readiness.chainTimestamp)
+    ? {timestamp: state.readiness.chainTimestamp, observedAt: performance.now()}
+    : undefined;
   $("deployment").textContent = state.deployment.deploymentId;
   $("network").textContent = `Chain ${state.deployment.chainId} · source ${short(state.deployment.sourceCommit)} · ${state.deployment.transactionCount ?? "—"} transactions`;
+  $("asset").textContent = `${state.tokens.rwa.name} (${state.tokens.rwa.symbol}) · demo testnet asset`;
   $("rate").textContent = state.pricing.display;
   renderReadiness();
   renderContracts();
+  renderScenarios();
+  $("add-network").disabled = !state.walletNetwork;
   updateSide();
   addTrace("Deployment artifact", "Verified addresses loaded");
 }
@@ -38,7 +46,15 @@ async function connect() {
   if (!window.ethereum) throw new Error("Browser wallet not found");
   provider = new ethers.BrowserProvider(window.ethereum);
   await provider.send("eth_requestAccounts", []);
-  signer = await provider.getSigner();
+  await syncConnectedWallet();
+}
+
+async function syncConnectedWallet(selectedAccount) {
+  if (!window.ethereum) throw new Error("Browser wallet not found");
+  provider = new ethers.BrowserProvider(window.ethereum);
+  signer = selectedAccount
+    ? await provider.getSigner(selectedAccount)
+    : await provider.getSigner();
   account = await signer.getAddress();
   const network = await provider.getNetwork();
   if (Number(network.chainId) !== state.deployment.chainId) {
@@ -51,6 +67,42 @@ async function connect() {
   addTrace("Wallet", `${short(account)} connected on chain ${network.chainId}`);
 }
 
+async function addOrSwitchNetwork() {
+  if (!window.ethereum) throw new Error("Browser wallet not found");
+  if (!state?.walletNetwork) throw new Error("This deployment does not publish wallet network settings");
+  const network = state.walletNetwork;
+  const chainId = ethers.toQuantity(network.chainId);
+  try {
+    await window.ethereum.request({method: "wallet_switchEthereumChain", params: [{chainId}]});
+  } catch (error) {
+    const code = Number(error?.code ?? error?.data?.originalError?.code);
+    if (code !== 4902) throw error;
+    await window.ethereum.request({
+      method: "wallet_addEthereumChain",
+      params: [{
+        chainId,
+        chainName: network.name,
+        nativeCurrency: {name: network.nativeCurrency, symbol: network.nativeCurrency, decimals: 18},
+        rpcUrls: [network.rpcUrl],
+        blockExplorerUrls: [network.explorerUrl]
+      }]
+    });
+    await window.ethereum.request({method: "wallet_switchEthereumChain", params: [{chainId}]});
+  }
+  addTrace("Wallet network", `${network.name} selected`);
+}
+
+function disconnectWallet(message) {
+  provider = undefined;
+  signer = undefined;
+  account = undefined;
+  updateSide();
+  $("wallet").textContent = "Not connected";
+  $("wallet-state").textContent = message;
+  $("connect").textContent = "Connect wallet";
+  $("precheck").disabled = true;
+}
+
 async function refreshWallet() {
   if (!account) return;
   const wallet = await api(`/api/wallet/${account}`);
@@ -61,6 +113,7 @@ async function refreshWallet() {
 function updateSide() {
   document.querySelectorAll(".side").forEach((button) => {
     button.classList.toggle("active", button.dataset.side === side);
+    button.textContent = `${button.dataset.side === "buy" ? "Buy" : "Sell"} ${state?.tokens.rwa.symbol ?? "RWA"}`;
   });
   const input = side === "buy" ? state?.tokens.quote : state?.tokens.rwa;
   $("input-symbol").textContent = input?.symbol ?? "—";
@@ -71,6 +124,7 @@ function updateSide() {
   $("execute").disabled = true;
   $("quote-status").textContent = "None";
   $("estimated").textContent = "—";
+  hideBlockPanel();
 }
 
 async function runPrecheck() {
@@ -87,7 +141,8 @@ async function runPrecheck() {
   $("precheck-result").className = `result ${result.allowed ? "pass" : "fail"}`;
   $("precheck-result").textContent = result.allowed
     ? "Pre-check passed. The Router will evaluate current policy again at settlement."
-    : `Blocked · ${result.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")} · ${result.reasonCode}`;
+    : `Blocked · ${result.explanation?.title || result.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`;
+  renderBlockPanel(result.explanation);
   $("request").disabled = !result.allowed;
   addTrace("Compliance pre-check", result.allowed ? "Allowed" : `Rejected ${result.reasonCode}`, !result.allowed);
 }
@@ -136,11 +191,36 @@ async function execute() {
   try {
     const router = new ethers.Contract(quoteEnvelope.execution.router, ROUTER_ABI, signer);
     await router.execute.staticCall(quoteEnvelope.execution.request);
-    addTrace("Final Router preflight", "Current compliance accepted");
+    addTrace("Final Router preflight", "Latest configured compliance policy passed");
     const transaction = await router.execute(quoteEnvelope.execution.request);
     addTrace("Router settlement", `Submitted ${short(transaction.hash)}`);
+    const confirmationStartedAt = performance.now();
+    const submittedAt = new Date().toISOString();
     const receipt = await transaction.wait();
-    addTrace("Asset movement", `Confirmed in block ${receipt.blockNumber}`);
+    const confirmationMs = Math.round(performance.now() - confirmationStartedAt);
+    const confirmationSeconds = confirmationMs / 1000;
+    addTrace("Asset movement", `Confirmed in block ${receipt.blockNumber} · ${confirmationSeconds.toFixed(2)}s after submission`);
+    lastEvidence = {
+      schemaVersion: 1,
+      kind: "corner-store-public-testnet-rfq-settlement",
+      deploymentId: state.deployment.deploymentId,
+      sourceCommit: state.deployment.sourceCommit,
+      chainId: state.deployment.chainId,
+      router: quoteEnvelope.execution.router,
+      rfqAdapter: quoteEnvelope.execution.spender,
+      wallet: account,
+      side,
+      tokenIn: quoteEnvelope.signed.quote.tokenIn,
+      tokenOut: quoteEnvelope.signed.quote.tokenOut,
+      amountIn: quoteEnvelope.signed.quote.amountIn,
+      amountOut: quoteEnvelope.signed.quote.amountOut,
+      transactionHash: transaction.hash,
+      blockNumber: Number(receipt.blockNumber),
+      submittedAt,
+      confirmedAt: new Date().toISOString(),
+      confirmationMs
+    };
+    $("download-evidence").disabled = false;
     $("quote-status").textContent = "Filled";
     await refreshWallet();
   } catch (error) {
@@ -182,11 +262,85 @@ function renderContracts() {
   }).join("");
 }
 
+function renderScenarios() {
+  const network = state.walletNetwork;
+  $("wallet-network").innerHTML = network
+    ? `Wallet network · <strong>${escapeHtml(network.name)}</strong> · Chain ID <code>${network.chainId}</code> · RPC <code>${escapeHtml(network.rpcUrl)}</code> · Currency <code>${escapeHtml(network.nativeCurrency)}</code>`
+    : `Use the network details supplied with deployment chain <code>${state.deployment.chainId}</code>.`;
+  $("scenarios").innerHTML = state.scenarios.map((scenario) => `
+    <article class="scenario-card ${scenario.enabled === false ? "disabled" : ""}">
+      <strong>${escapeHtml(scenario.title)}</strong>
+      <code>${escapeHtml(scenario.wallet)}</code>
+      <span>${escapeHtml(scenario.instruction)}</span>
+    </article>
+  `).join("");
+}
+
 function addTrace(label, detail, error = false) {
   const item = document.createElement("li");
   if (error) item.className = "error";
   item.innerHTML = `<span>${escapeHtml(label)}</span><strong>${escapeHtml(detail)}</strong>`;
   $("trace").appendChild(item);
+}
+
+function downloadEvidence() {
+  if (!lastEvidence) throw new Error("Complete a settlement before downloading evidence");
+  const content = `${JSON.stringify(lastEvidence, null, 2)}\n`;
+  const url = URL.createObjectURL(new Blob([content], {type: "application/json"}));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${lastEvidence.deploymentId}-${lastEvidence.transactionHash.slice(2, 12)}-evidence.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  addTrace("Test evidence", "Downloaded non-secret settlement evidence");
+}
+
+function renderBlockPanel(explanation) {
+  if (!explanation) return hideBlockPanel();
+  $("block-title").textContent = explanation.title;
+  $("block-detail").textContent = explanation.detail;
+  $("block-action").textContent = explanation.action;
+  $("block-time").textContent = timingText(explanation.timing);
+  $("block-code").textContent = explanation.code;
+  $("block-label").textContent = explanation.technicalLabel;
+  $("block-panel").classList.remove("hidden");
+}
+
+function hideBlockPanel() {
+  $("block-panel").classList.add("hidden");
+}
+
+function timingText(timing) {
+  if (!timing) return "No evidence-backed availability time is available.";
+  if (timing.availableAt) {
+    const chainTime = currentChainTime();
+    const suffix = chainTime === undefined
+      ? " · Refresh to load the onchain countdown"
+      : Number(timing.availableAt) > chainTime
+        ? ` · about ${formatDuration(Number(timing.availableAt) - chainTime)} remaining`
+        : " · Retry now";
+    return `${new Date(Number(timing.availableAt) * 1000).toLocaleString()}${suffix}`;
+  }
+  if (timing.evidenceExpiredAt) {
+    return `Evidence expired ${new Date(Number(timing.evidenceExpiredAt) * 1000).toLocaleString()} · Test operator refresh required`;
+  }
+  return timing.note;
+}
+
+function currentChainTime() {
+  if (!chainClock) return undefined;
+  return chainClock.timestamp + Math.floor((performance.now() - chainClock.observedAt) / 1000);
+}
+
+function formatDuration(seconds) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.ceil((seconds % 3600) / 60);
+  return [days ? `${days}d` : "", hours ? `${hours}h` : "", !days && minutes ? `${minutes}m` : ""]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function requireWallet() {
@@ -212,12 +366,20 @@ function escapeHtml(value) {
   })[character]);
 }
 
-$("connect").addEventListener("click", () => connect().catch((error) => addTrace("Wallet", readableError(error), true)));
+$("connect").addEventListener("click", () => connect().catch((error) => {
+  disconnectWallet("Select the deployment network, then reconnect the wallet.");
+  addTrace("Wallet", readableError(error), true);
+}));
+$("add-network").addEventListener("click", () => addOrSwitchNetwork().catch((error) => addTrace("Wallet network", readableError(error), true)));
 $("precheck").addEventListener("click", () => runPrecheck().catch((error) => addTrace("Pre-check", readableError(error), true)));
 $("request").addEventListener("click", () => requestQuote().catch((error) => addTrace("Quote", readableError(error), true)));
 $("approve").addEventListener("click", () => approve().catch((error) => addTrace("Approval", readableError(error), true)));
 $("execute").addEventListener("click", execute);
 $("refresh").addEventListener("click", () => Promise.all([load(), refreshWallet()]).catch((error) => addTrace("Refresh", readableError(error), true)));
+$("download-evidence").addEventListener("click", () => {
+  try { downloadEvidence(); }
+  catch (error) { addTrace("Test evidence", readableError(error), true); }
+});
 document.querySelectorAll(".side").forEach((button) => button.addEventListener("click", () => {
   side = button.dataset.side;
   updateSide();
@@ -228,6 +390,27 @@ $("amount").addEventListener("input", () => {
   $("request").disabled = true;
   $("approve").disabled = true;
   $("execute").disabled = true;
+  hideBlockPanel();
 });
+
+if (window.ethereum?.on) {
+  window.ethereum.on("accountsChanged", (accounts) => {
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      disconnectWallet("Wallet disconnected. Connect one of the deployed test participants.");
+      addTrace("Wallet", "Disconnected");
+      return;
+    }
+    updateSide();
+    $("precheck").disabled = true;
+    syncConnectedWallet(accounts[0]).catch((error) => {
+      disconnectWallet("Select the deployment network, then reconnect the wallet.");
+      addTrace("Wallet", readableError(error), true);
+    });
+  });
+  window.ethereum.on("chainChanged", () => {
+    disconnectWallet("Network changed. Reconnect the wallet to continue.");
+    addTrace("Wallet network", "Network changed; reconnect required");
+  });
+}
 
 load().catch((error) => addTrace("Startup", readableError(error), true));

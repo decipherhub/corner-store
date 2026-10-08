@@ -11,7 +11,88 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-없음. 다음 feature는 새 issue/우선순위 확인 후 하나만 active로 전환한다.
+`HACK-001 — Monad Onchain Finance RFQ Demo` (issue #145)
+
+- `hackathon/monad-onchain-finance`를 최신 `origin/main`의 별도 worktree에서
+  시작했다. 기존 root checkout과 미추적 개인 파일은 변경하지 않았다.
+- public-testnet browser runtime의 pre-check 결과에 차단 사유, 사용자/운영자
+  조치와 근거 있는 해제·증거 만료 시각을 반환하는 explanation 경계를 추가했다.
+  C-01-v2 보유기간은 acquisition snapshot과 immutable lockupSeconds로 실제
+  availability를 계산하며, QP claim expiry는 자동 해제가 아니라 재발급이 필요함을
+  구분한다.
+- Monad 전용 opt-in fixture가 investor B의 취득 시계를 배포 시점에서 시작해
+  Sell 보유기간 거부 장면을 재현한다. 화면에는 success/qualification/holding-period
+  심사 시나리오와 공개 주소만 표시하며, 지갑 비밀값은 별도 전달한다. 실제 임시
+  Anvil 배포와 HTTP pre-check에서 `HOLDING_PERIOD_NOT_ELAPSED`의 onchain unlock
+  time 및 `FAIL_NOT_QP`를 확인했다.
+- 성공 체결 후 deployment/source commit, chain, 공개 주소·금액, transaction/block와
+  submission-to-confirmation 시간을 묶은 PII/secret-free JSON 증거를 브라우저에서
+  다운로드할 수 있다. 실제 Monad 수치는 public-chain 체결 후 채운다.
+- Monad 배포에서는 정책 profile을 fork하지 않고 ERC-3643 token 표시 이름만
+  `Demo Restricted Security (DRS)`로 주입할 수 있다. 기본값은 기존 BUIDL-like 이름을
+  유지하므로 GIWA/기존 testnet 입력에는 영향이 없다.
+- 선택형 expired-claim 지갑은 다른 투자자의 QP freshness cap을 바꾸지 않고
+  366일 전 mock 증빙을 받아 네 번째 거부 장면을 만든다. 임시 Anvil 실제 배포와
+  HTTP API에서 `Demo Restricted Security (DRS)` 표시, 활성화된 네 번째 scenario와
+  `FAIL_QP_CLAIM_EXPIRED`/과거 expiry 근거를 함께 확인했다. read-only deployment
+  verifier도 선택형 지갑의 identity, inventory와 정확한 QP expiry reason을
+  fail-closed 검증한다.
+- judge-facing terminology는 내부 정책 vocabulary를 우선한다. `Compliance`,
+  `Venue`, `Qualified Purchaser`는 각각 기술 평가 단계, execution layer와 실제
+  A-13 rule 이름으로 유지하되 reference/demo 경계와 비법률판정 면책을 함께
+  표시한다. 공개 자산명은 실상품 연상을 피하도록 `Demo Restricted Security
+  (DRS)`로 통일했고, 사용자 조치와 test operator 조치를 구분했다.
+- 외부 judge URL용으로 non-root/read-only OCI target, read-only artifact mount,
+  Docker secret Maker key, `/health`, 16 KiB body limit, quote rate limit과 browser
+  security headers를 추가했다. 로컬 Docker daemon은 실행 중이 아니지만 GitHub CI
+  builder에서 clean-context image build와 final runtime module load가 통과했다.
+- public broadcast는 dirty checkout과 잘못된 source commit override를 거절하고,
+  transaction metadata를 포함한 candidate artifact를 read-only 검증한 뒤에만
+  append-only final record를 원자적으로 발행한다. Node runtime도 listen 전에
+  owner/operator, Engine/Registry/Router/RFQ wiring, token/Identity Registry와 wallet별
+  ONCHAINID binding, venue, maker, participant inventory와 선택형 expired fixture를
+  chain에서 다시 대조한다.
+- `/health`와 모든 `/api/*` chain read에는 proxy topology와 무관한 global request
+  budget, quote에는 더 낮은 별도 budget을 적용하고 request/header/keep-alive timeout을
+  제한했다. API 내부 오류는 allowlist된 입력 오류 외에는 공개하지 않으며 quote TTL은
+  운영자가 설정한 최대값을 넘길 수 없다. 보유기간 countdown은 browser 시간이 아닌
+  관측 chain timestamp를 사용하며, acquisition timing evidence를 읽지 못하면
+  "표시된 시간"을 가정하지 않고 재조회/operator 확인으로 fail closed한다.
+- API validation 실패는 안전한 입력 메시지와 함께 400으로, RPC/runtime dependency
+  실패는 원문을 숨긴 503, 분류되지 않은 내부 오류는 500으로 분리한다. server failure는
+  raw error·URL·address 없이 method와 normalized surface만 포함한 operator event를
+  남겨 공개 정보 노출 없이 장애와 사용자 오류를 구분한다.
+- judge quick start에서 공개 Monad metadata를 이용해 wallet network를 추가·전환할 수
+  있다. account 또는 chain이 바뀌면 이전 account의 pre-check, quote와 signer 상태를
+  폐기하고 새 지갑을 다시 동기화하므로 여러 fixture 장면 사이에 상태가 섞이지 않는다.
+- `scripts/rehearse-monad-judge-url.mjs`는 배포 후 공개 URL을 읽기 전용으로 검사한다.
+  public HTTPS/same-origin/security header, chain 10143, startup attestation,
+  Maker·Manifest·inventory readiness와 필수 세 장면을 확인하고, 선택형 claim-expiry
+  장면은 별도로 보고한다. 브라우저에서 내려받은 settlement evidence를 주면 live
+  deployment/source/contracts/participant/token과 transaction block·측정 시간을 함께
+  대조하므로 잘못된 URL이나 다른 배포의 증거를 제출 전에 거절한다.
+- 임시 Anvil 실제 배포에서 Solidity verifier와 Node startup attestation을 통과했고,
+  wiring을 바꾼 artifact는 listen 전에 거절되며 `/health`·API 공통 budget이 429를
+  반환함을 확인했다. pinned Foundry 1.7.1 전체 `scripts/check.sh`도 Foundry 960/960,
+  모든 service/clean-project/deploy-v3 검사와 함께 통과했다.
+- 로컬 Docker daemon이 꺼진 환경에서도 image build 회귀를 놓치지 않도록 CI에
+  `scripts/hackathon-monad-container-smoke.sh`를 추가했다. pinned image build 뒤
+  network-off/read-only/non-root 조건에서 packaged demo/RFQ runtime을 실제 load하고,
+  healthcheck와 Compose의 read-only filesystem, capability drop, loopback port,
+  artifact/secret mount 및 API budget 계약을 검증한다.
+- CLI reason catalog가 C-01-v2의 missing/broken/stale/not-matured 코드를 정확히
+  해석하도록 갱신했다. testnet panel이 사용하는 stable reason subset과 CLI decoder의
+  이름 parity도 `scripts/check.sh`에서 검증한다. targeted testnet-demo/CLI smoke, 임시 Anvil 실제 배포와
+  HTTP explanation/display/expiry E2E, pinned Foundry 1.7.1 전체 `scripts/check.sh`(Foundry
+  960/960 포함), Compose config와 `git diff --check`가 통과했다. 시스템 PATH의
+  Foundry 1.4.0 nightly는 기존 main 파일 포맷을 다르게 판정하므로 전체 검증에는
+  저장소 기준 1.7.1을 사용했다.
+- Monad 공식 public RPC `https://testnet-rpc.monad.xyz`가 chain ID 10143과 현재
+  block을 반환하는 것을 새 preflight script로 확인했다. 기존 비공개 `.env.testnet`은
+  GIWA chain 91342 설정이므로 수정하지 않았지만, 포함된 공개 actor 주소의 Monad
+  형식·중복·deployer gas balance는 읽기 전용 preflight를 통과했다. 실제 broadcast는
+  로컬 keystore unlock과 Monad 전용 deployment id/config가, HTTPS hosting은 target이
+  준비되는 즉시 진행한다.
 
 ## Completed
 

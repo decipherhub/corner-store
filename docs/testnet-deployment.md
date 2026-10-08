@@ -48,17 +48,97 @@ Obtain the official values from the hackathon or network operator:
 Do not infer these values from the network name. The deployment wrapper checks
 that the RPC-reported chain ID exactly matches `--chain-id`.
 
+### Monad Onchain Finance hackathon profile
+
+The current official Monad developer resources list the following public
+testnet values. Re-check them before broadcast because public endpoints can
+change:
+
+| Input | Value |
+| --- | --- |
+| network | Monad Testnet |
+| chain ID | `10143` |
+| public RPC | `https://testnet-rpc.monad.xyz` |
+| explorer | `https://testnet.monadexplorer.com` |
+| faucet | `https://faucet.monad.xyz` |
+
+The verified [`monad-developers`](https://github.com/monad-developers)
+organization links the canonical docs, testnet hub, faucet and explorer. Before
+loading any signer, run the read-only preflight:
+
+```sh
+scripts/preflight-monad-hackathon.sh
+```
+
+After loading the local deployment environment, add `--deployment-ready` to
+validate required inputs, distinct actor addresses and a non-zero deployer gas
+balance without printing any secret value.
+
+Use a unique append-only deployment id for the hackathon record:
+
+```sh
+export CORNER_STORE_DEPLOYMENT_ID=monad-onchain-finance-rfq-v1
+export CORNER_STORE_TESTNET_INVESTOR_B_HOLDING_PERIOD_PENDING=true
+export CORNER_STORE_TESTNET_TOKEN_NAME="Demo Restricted Security"
+export CORNER_STORE_TESTNET_TOKEN_SYMBOL=DRS
+# Optional fourth scene:
+export CORNER_STORE_TESTNET_EXPIRED_INVESTOR=0x...
+```
+
+Do not put a faucet wallet key, Maker key or credential-bearing fallback RPC in
+the deployment artifact or repository config.
+
+The optional investor-B flag changes only that wallet's acquisition clock. It
+creates a deterministic Sell rejection with an onchain-derived availability
+time while leaving the existing GIWA and default public-testnet fixture
+behavior unchanged.
+
+### Judge-facing terminology contract
+
+The public demo uses the following terms consistently. These names preserve the
+product's technical vocabulary while keeping the reference and legal boundary
+explicit:
+
+- **Demo Restricted Security (DRS)** is the fictional public asset name. Do not
+  use a real product name or imply issuer affiliation.
+- **compliance pre-check** names the Corner Store technical evaluation step. A
+  passing result means the configured policy passed; it is not a legal or
+  regulatory determination and does not guarantee settlement.
+- **Qualified Purchaser (QP)** is retained when the `A-13-v1` Element is the
+  actual failed rule. Call the fixture a **demo QP claim**; do not replace the
+  rule name with a generic qualification that hides what was evaluated.
+- **venue** is the canonical execution-layer term. In explanatory prose use
+  **reference RFQ venue** so it is not presented as a licensed exchange or ATS.
+- **test participant** and **test operator** distinguish judge-controlled wallet
+  actions from fixture maintenance. Do not call either party a customer,
+  investor client, broker or custodian.
+- **technical evidence**, **execution trace** and **settlement evidence** describe
+  what the demo exposes. Do not call these outputs a compliance certificate,
+  legal record or audit approval.
+
+When outside copy advice conflicts with this contract, this repository contract
+and the accepted policy terminology take precedence.
+
+When `CORNER_STORE_TESTNET_EXPIRED_INVESTOR` is present, the fixture registers
+that separate wallet with valid mock identity wiring and a QP claim whose
+`verifiedAt` is 366 days before deployment. The default one-year freshness cap
+therefore produces `FAIL_QP_CLAIM_EXPIRED` without changing the cap for other
+wallets. The wallet must be unique; omitting it preserves older deployment
+inputs and disables only the fourth judge scene.
+
 ## 2. Prepare Wallets
 
-Prepare at least four externally controlled wallets:
+Prepare five required externally controlled wallets and one optional scenario
+wallet:
 
 | Wallet | Purpose | Needs native test gas |
 | --- | --- | --- |
 | deployer | deploys and initializes the reference stack | yes, substantial |
 | maker | signs quotes, supplies RWA/quote inventory | yes |
 | eligible investor A | normal success scenario | yes |
-| eligible investor B | claim-expiry scenario | yes |
+| eligible investor B | holding-period scenario when the optional flag is enabled | yes |
 | ineligible investor | rejection scenario | yes |
+| expired-claim investor | optional claim-expiry pre-check | no transaction required |
 
 Governance and operator may equal the deployer for a short-lived hackathon
 fixture. They should be separate controlled addresses for longer-lived
@@ -131,10 +211,13 @@ deployments/public/<deployment-id>-<chain-id>.json
 ```
 
 The artifact records chain ID, actors, every named protocol/identity address,
-the full Foundry deployment transaction list, and a `deployedContracts` index.
-It never contains private keys or RPC credentials. A record is promoted into
-`deployments/public/` only after the broadcast and read-only verifier succeed;
-failed or partial broadcasts cannot become published deployment records.
+the exact checked-out source commit, the full Foundry deployment transaction
+list, and a `deployedContracts` index. It never contains private keys or RPC
+credentials. Broadcast refuses a dirty worktree or a source-commit override
+that differs from `HEAD`. The wrapper enriches a private candidate, verifies
+that complete candidate against the chain, and then publishes it atomically to
+`deployments/public/`; failed or partial broadcasts cannot become published
+deployment records.
 
 The wrapper uses Foundry's sequential broadcast mode because this fixture emits
 many dependent initialization and governance-handoff transactions. This is
@@ -193,9 +276,16 @@ The verifier fails closed on:
 - missing runtime code;
 - governance ownership mismatch;
 - missing operator authorization;
+- Engine, policy registry, Router, selector, venue registry or RFQ adapter
+  wiring that differs from the artifact;
+- token/Identity Registry/storage/trusted-issuer/topic wiring, wallet identity
+  binding or ERC-3643 verification that differs from the artifact;
 - inactive Manifest or RFQ venue;
+- RFQ venue type or adapter mismatch;
 - unapproved maker;
 - missing maker/investor inventory;
+- an optional expired-claim wallet whose identity, inventory or exact QP expiry
+  result does not match the published fixture;
 - missing allowances when requested.
 
 ## 8. Explorer Source Verification
@@ -268,12 +358,91 @@ Then run:
 scripts/run-testnet-rfq-demo.sh
 ```
 
-Open the printed URL and connect an artifact-listed investor wallet. The
-runtime verifies the artifact and chain before serving. The backend signs a
+Open the printed URL and connect an artifact-listed investor wallet. Before it
+listens, the runtime checks the artifact schema and chain plus runtime code,
+governance owners, operator roles, core contract wiring, RFQ venue activation,
+maker approval and fixture inventory. The backend signs a
 Maker quote using the existing RFQ SDK; it does **not** sign for the investor.
 The browser wallet submits its own token approval and final Router transaction.
 The page exposes the exact artifact addresses, current Manifest/Maker
 readiness, balances, QP pre-check, signed quote, transaction hash and block.
+It also renders the non-secret judge scenario addresses and measures wallet
+transaction confirmation time from submission to receipt. Test-wallet secrets
+must be delivered out of band and are never rendered by the service.
+For chain ID 10143 the page shows the official Monad testnet wallet settings;
+the backend's configured RPC URL remains private and is never returned. The
+quick-start action can add or switch the browser wallet using only those public
+network values. Changing the selected account or chain clears the previous
+pre-check, signed quote and signer state before another scenario can run.
+After a successful Router settlement, download the generated JSON evidence. It
+binds the deployment/source commit, chain, public wallet and contract addresses,
+amounts, transaction hash, block and measured submission-to-confirmation time.
+Review the file before attaching it to the hackathon submission; it contains no
+private key, RPC URL or quote signature.
+When a pre-check is rejected, the page also presents a plain-language reason,
+the required user/operator action and an unlock or evidence-expiry time only
+when those values can be derived from current chain evidence.
+Holding-period countdowns advance from the latest observed chain timestamp,
+not the judge browser's local clock.
+
+For an external judge URL, keep this Node service on a private application
+port behind an HTTPS reverse proxy. The public edge must enforce a bounded
+request rate and body size; the disposable Maker key remains available only to
+the server process. Do not expose the Maker environment, artifact filesystem or
+RPC credentials as static assets.
+
+`GET /health` verifies that the process can still read the configured chain and
+returns the latest observed block number; it does not expose local paths or
+credentials.
+
+The repository includes a portable non-root/read-only OCI target and Compose
+contract for this boundary. The container consumes the verified artifact and a
+Docker secret at runtime; neither is copied into the image:
+
+```sh
+export CORNER_STORE_TESTNET_ARTIFACT="$PWD/deployments/public/<deployment-id>-10143.json"
+export CORNER_STORE_TESTNET_RPC_URL=https://testnet-rpc.monad.xyz
+export CORNER_STORE_TESTNET_EXPLORER_URL=https://testnet.monadexplorer.com
+export CORNER_STORE_TESTNET_MAKER_KEY_FILE=/secure/path/disposable-maker-key
+
+docker compose -f deploy/hackathon-monad/compose.example.yaml up --build -d
+curl --fail http://127.0.0.1:8791/health
+```
+
+Terminate HTTPS at the selected hosting platform or reverse proxy and forward
+only to port 8791. The application enforces a 16 KiB request limit, bounded
+request/header/keep-alive timeouts, a global budget for every chain-reading
+`/health` or `/api/*` request, a stricter global signed-quote budget, browser
+security headers and an explicit `hackathon-testnet-only` acknowledgement for
+non-loopback binding. Because the application deliberately does not trust
+forwarded client-IP headers, the HTTPS edge must add its own client-aware rate
+limit. Outbound JSON-RPC calls are paced by
+`CORNER_STORE_TESTNET_RPC_REQUESTS_PER_SECOND` (default 10) to stay under the
+public Monad RPC limit of 15 requests per second; a request that would wait
+more than 10 seconds for that budget returns `503 service_unavailable`.
+Allowlisted input-validation failures return `400 invalid_request`;
+chain/runtime dependency failures return a sanitized `503 service_unavailable`,
+and unclassified internal failures return `500 internal_error`. Server failures
+emit a secret-free operator event with only the HTTP method, normalized API
+surface, status and observation time. These are demo safeguards, not a
+replacement for the production RFQ host.
+
+Before sharing or recording the judge URL, run the repository rehearsal gate:
+
+```sh
+node scripts/rehearse-monad-judge-url.mjs --url https://<judge-host>
+```
+
+It fails closed when the public endpoint is not HTTPS, redirects off-origin,
+does not serve the expected security headers, is not bound to verified Monad
+chain `10143`, lacks active Maker/Manifest/inventory readiness, or omits one of
+the three required scenes (success, qualification rejection and holding period).
+The claim-expiry scene is reported separately because it is the first scenario
+to cut if the submission schedule slips. After one successful settlement, rerun
+with `--evidence <downloaded-json>` to bind the measured transaction record to
+the same deployment, contracts, fixture participant, token pair and current
+chain height. The verifier reads public responses only and never accepts or
+prints wallet credentials.
 
 This is separate from the feature-rich local Anvil demo:
 

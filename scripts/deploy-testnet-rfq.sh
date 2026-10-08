@@ -16,6 +16,8 @@ VERIFIER=""
 VERIFIER_URL=""
 ARTIFACT="${CORNER_STORE_ARTIFACT:-}"
 FINAL_ARTIFACT=""
+PENDING_ARTIFACT=""
+CANDIDATE_ARTIFACT=""
 
 usage() {
   cat <<'EOF'
@@ -37,6 +39,9 @@ Optional environment:
   CORNER_STORE_OPERATOR               defaults to deployer
   CORNER_STORE_ARTIFACT               optional explicit artifact path
   CORNER_STORE_DEPLOYMENT_ID
+  CORNER_STORE_TESTNET_INVESTOR_B_HOLDING_PERIOD_PENDING
+  CORNER_STORE_TESTNET_EXPIRED_INVESTOR   optional stale-QP judge wallet
+  CORNER_STORE_TESTNET_TOKEN_NAME/SYMBOL  optional mock-asset display identity
   CORNER_STORE_TESTNET_*_QUOTE/RWA    initial balance overrides
 
 The command is a simulation unless --broadcast is explicitly supplied.
@@ -49,6 +54,26 @@ require_value() {
     echo "ERROR: $1 requires a value" >&2
     exit 2
   fi
+}
+
+cleanup_generated_artifacts() {
+  [[ -z "$PENDING_ARTIFACT" ]] || rm -f -- "$PENDING_ARTIFACT"
+  [[ -z "$CANDIDATE_ARTIFACT" ]] || rm -f -- "$CANDIDATE_ARTIFACT"
+}
+
+require_clean_broadcast_source() {
+  local head_commit dirty
+  head_commit=$(git rev-parse HEAD)
+  dirty=$(git status --porcelain --untracked-files=all)
+  if [[ -n "$dirty" ]]; then
+    echo "ERROR: broadcast requires a clean worktree so sourceCommit identifies the deployed code" >&2
+    exit 1
+  fi
+  if [[ -n "${CORNER_STORE_SOURCE_COMMIT:-}" && "$CORNER_STORE_SOURCE_COMMIT" != "$head_commit" ]]; then
+    echo "ERROR: CORNER_STORE_SOURCE_COMMIT must match the checked-out HEAD for broadcast" >&2
+    exit 1
+  fi
+  export CORNER_STORE_SOURCE_COMMIT="$head_commit"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -123,8 +148,16 @@ if [[ "$BROADCAST" -eq 1 && -e "$ARTIFACT" ]]; then
 fi
 
 if [[ "$BROADCAST" -eq 1 ]]; then
+  require_clean_broadcast_source
   FINAL_ARTIFACT="$ARTIFACT"
-  ARTIFACT="deployments/.pending-${DEPLOYMENT_ID}-${CHAIN_ID}.json"
+  PENDING_ARTIFACT="deployments/.pending-${DEPLOYMENT_ID}-${CHAIN_ID}-$$.json"
+  CANDIDATE_ARTIFACT="${FINAL_ARTIFACT}.candidate.$$"
+  [[ ! -e "$PENDING_ARTIFACT" && ! -e "$CANDIDATE_ARTIFACT" ]] || {
+    echo "ERROR: generated deployment artifact path already exists" >&2
+    exit 1
+  }
+  ARTIFACT="$PENDING_ARTIFACT"
+  trap cleanup_generated_artifacts EXIT
 fi
 
 export CORNER_STORE_ARTIFACT="$ARTIFACT"
@@ -174,10 +207,10 @@ if [[ "$BROADCAST" -eq 1 ]]; then
     exit 1
   }
 
-  node - "$ARTIFACT" "$FINAL_ARTIFACT" "$BROADCAST_FILE" <<'NODE'
+  node - "$ARTIFACT" "$CANDIDATE_ARTIFACT" "$BROADCAST_FILE" <<'NODE'
 const fs = require("fs");
 const path = require("path");
-const [pendingPath, finalPath, broadcastPath] = process.argv.slice(2);
+const [pendingPath, candidatePath, broadcastPath] = process.argv.slice(2);
 const artifact = JSON.parse(fs.readFileSync(pendingPath, "utf8"));
 const broadcast = JSON.parse(fs.readFileSync(broadcastPath, "utf8"));
 const receipts = new Map(
@@ -209,17 +242,26 @@ artifact.deployedContracts = broadcast.transactions
     transactionHash: entry.hash
   }));
 
-fs.mkdirSync(path.dirname(finalPath), { recursive: true });
-fs.writeFileSync(finalPath, `${JSON.stringify(artifact, null, 2)}\n`, {
+fs.mkdirSync(path.dirname(candidatePath), { recursive: true });
+fs.writeFileSync(candidatePath, `${JSON.stringify(artifact, null, 2)}\n`, {
   flag: "wx"
 });
 fs.unlinkSync(pendingPath);
 NODE
+  PENDING_ARTIFACT=""
 
-  export CORNER_STORE_ARTIFACT="$FINAL_ARTIFACT"
+  export CORNER_STORE_ARTIFACT="$CANDIDATE_ARTIFACT"
   forge script script/VerifyTestnetRFQ.s.sol:VerifyTestnetRFQ \
     --rpc-url "$RPC_URL" \
     --chain-id "$CHAIN_ID"
+
+  node - "$CANDIDATE_ARTIFACT" "$FINAL_ARTIFACT" <<'NODE'
+const fs = require("fs");
+const [candidatePath, finalPath] = process.argv.slice(2);
+fs.linkSync(candidatePath, finalPath);
+fs.unlinkSync(candidatePath);
+NODE
+  CANDIDATE_ARTIFACT=""
 
   echo "==> Saved verified append-only public deployment record: $FINAL_ARTIFACT"
   echo "    List records with: scripts/list-testnet-deployments.sh"

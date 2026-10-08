@@ -19,6 +19,7 @@ import {ComplianceEngine} from "../src/compliance/ComplianceEngine.sol";
 import {Sanctions} from "../src/compliance/elements/Sanctions.sol";
 import {AccreditedInvestor} from "../src/compliance/elements/AccreditedInvestor.sol";
 import {QualifiedPurchaser} from "../src/compliance/elements/QualifiedPurchaser.sol";
+import {LookThroughStatus} from "../src/interfaces/compliance/ILookThroughSource.sol";
 import {MinimumTradeAmount} from "../src/compliance/elements/MinimumTradeAmount.sol";
 import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../src/compliance/elements/IdentityUniqueness.sol";
@@ -70,6 +71,7 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         address investor;
         address eligibleInvestorB;
         address ineligibleInvestor;
+        address expiredInvestor;
     }
 
     struct Balances {
@@ -107,6 +109,8 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
     address internal investorIdentity;
     address internal eligibleInvestorBIdentity;
     address internal ineligibleInvestorIdentity;
+    address internal expiredInvestorIdentity;
+    bool internal investorBHoldingPeriodPending;
 
     function run() external returns (Deployment memory core) {
         Actors memory actors = _loadActors();
@@ -117,10 +121,14 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         string memory artifactPath = vm.envOr("CORNER_STORE_ARTIFACT", string(DEFAULT_ARTIFACT));
         string memory deploymentId = vm.envOr("CORNER_STORE_DEPLOYMENT_ID", string("hackathon-testnet-rfq"));
         string memory sourceCommit = vm.envOr("CORNER_STORE_SOURCE_COMMIT", string("unknown"));
+        string memory tokenName = vm.envOr("CORNER_STORE_TESTNET_TOKEN_NAME", string(BuidlLikeDemoAsset.TOKEN_NAME));
+        string memory tokenSymbol =
+            vm.envOr("CORNER_STORE_TESTNET_TOKEN_SYMBOL", string(BuidlLikeDemoAsset.TOKEN_SYMBOL));
+        investorBHoldingPeriodPending = vm.envOr("CORNER_STORE_TESTNET_INVESTOR_B_HOLDING_PERIOD_PENDING", false);
 
         vm.startBroadcast();
 
-        deployTREX(actors.deployer, BuidlLikeDemoAsset.TOKEN_NAME, BuidlLikeDemoAsset.TOKEN_SYMBOL);
+        deployTREX(actors.deployer, tokenName, tokenSymbol);
         core = deployCore(actors.deployer, actors.deployer, false, true);
         _bindCore(core);
 
@@ -143,6 +151,7 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         actors.investor = vm.envAddress("CORNER_STORE_TESTNET_INVESTOR");
         actors.eligibleInvestorB = vm.envAddress("CORNER_STORE_TESTNET_INVESTOR_B");
         actors.ineligibleInvestor = vm.envAddress("CORNER_STORE_TESTNET_INELIGIBLE_INVESTOR");
+        actors.expiredInvestor = vm.envOr("CORNER_STORE_TESTNET_EXPIRED_INVESTOR", address(0));
 
         require(actors.deployer != address(0), "deployer is required");
         require(actors.governance != address(0), "governance is required");
@@ -167,6 +176,15 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
                 && actors.operator != actors.eligibleInvestorB && actors.operator != actors.ineligibleInvestor,
             "control-plane and participant addresses must be separate"
         );
+        if (actors.expiredInvestor != address(0)) {
+            require(
+                actors.expiredInvestor != actors.deployer && actors.expiredInvestor != actors.governance
+                    && actors.expiredInvestor != actors.operator && actors.expiredInvestor != actors.maker
+                    && actors.expiredInvestor != actors.investor && actors.expiredInvestor != actors.eligibleInvestorB
+                    && actors.expiredInvestor != actors.ineligibleInvestor,
+                "expired investor must be unique"
+            );
+        }
     }
 
     function _loadBalances() internal view returns (Balances memory balances) {
@@ -243,37 +261,64 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         jurisdiction.setJurisdictionAllowed(ALLOWED_JURISDICTION, true);
         policyReg.setUnregulated(address(quoteToken));
 
-        investorIdentity = _verifyAndAttest(actors.investor, true);
-        eligibleInvestorBIdentity = _verifyAndAttest(actors.eligibleInvestorB, true);
-        ineligibleInvestorIdentity = _verifyAndAttest(actors.ineligibleInvestor, false);
+        investorIdentity = _verifyAndAttest(actors.investor, true, false);
+        eligibleInvestorBIdentity = _verifyAndAttest(actors.eligibleInvestorB, true, investorBHoldingPeriodPending);
+        ineligibleInvestorIdentity = _verifyAndAttest(actors.ineligibleInvestor, false, false);
+        if (actors.expiredInvestor != address(0)) {
+            expiredInvestorIdentity = _verifyAndAttestExpired(actors.expiredInvestor);
+        }
         makerIdentity = address(verifyInvestor(actors.maker));
-        _attestRwaSource(actors.maker);
+        _attestRwaSource(actors.maker, false);
 
         quoteToken.mint(actors.investor, balances.investorQuote);
         quoteToken.mint(actors.eligibleInvestorB, balances.investorQuote);
         quoteToken.mint(actors.ineligibleInvestor, balances.investorQuote);
+        if (actors.expiredInvestor != address(0)) quoteToken.mint(actors.expiredInvestor, balances.investorQuote);
         quoteToken.mint(actors.maker, balances.makerQuote);
 
         mint(actors.investor, balances.investorRwa);
         mint(actors.eligibleInvestorB, balances.investorRwa);
         mint(actors.ineligibleInvestor, balances.investorRwa);
+        if (actors.expiredInvestor != address(0)) mint(actors.expiredInvestor, balances.investorRwa);
         mint(actors.maker, balances.makerRwa);
     }
 
-    function _verifyAndAttest(address investor, bool isQp) internal returns (address identity) {
+    function _verifyAndAttest(address investor, bool isQp, bool holdingPeriodPending)
+        internal
+        returns (address identity)
+    {
         identity = address(verifyInvestor(investor));
         jurisdiction.setJurisdiction(investor, ALLOWED_JURISDICTION);
         identityUniqueness.bindIdentity(investor, keccak256(abi.encode("TESTNET_IDENTITY", investor)));
         accreditedInvestor.setAccredited(investor, true);
         qualifiedPurchaser.setQp(investor, isQp);
-        _attestRwaSource(investor);
+        _attestRwaSource(investor, holdingPeriodPending);
     }
 
-    function _attestRwaSource(address holder) internal {
+    function _verifyAndAttestExpired(address investor) internal returns (address identity) {
+        identity = address(verifyInvestor(investor));
+        jurisdiction.setJurisdiction(investor, ALLOWED_JURISDICTION);
+        identityUniqueness.bindIdentity(investor, keccak256(abi.encode("TESTNET_IDENTITY", investor)));
+        accreditedInvestor.setAccredited(investor, true);
+        qualifiedPurchaser.setQpClaim(
+            investor,
+            QualifiedPurchaser.QpClaim({
+                basis: QualifiedPurchaser.QpBasis.NATURAL,
+                signatureValid: true,
+                issuerTrusted: true,
+                verifiedAt: uint64(block.timestamp > 366 days ? block.timestamp - 366 days : 1),
+                ltStatus: LookThroughStatus.NONE,
+                coveredCompany: bytes32(0)
+            })
+        );
+        _attestRwaSource(investor, false);
+    }
+
+    function _attestRwaSource(address holder, bool holdingPeriodPending) internal {
         acquisitionSource.setSnapshot(
             holder,
             address(rwaToken),
-            uint64(1),
+            holdingPeriodPending ? uint64(block.timestamp) : uint64(1),
             uint64(block.timestamp + 30 days),
             keccak256(abi.encode("HACKATHON_TESTNET_TA_FIXTURE", holder)),
             IAcquisitionSource.AcquisitionStatus.VALID
@@ -362,6 +407,9 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         vm.serializeString(key, "activationMode", "public-testnet-reference-fixture");
         vm.serializeBool(key, "productionDeployment", false);
         vm.serializeBool(key, "participantApprovalsRequired", true);
+        vm.serializeString(
+            key, "eligibleInvestorBScenario", investorBHoldingPeriodPending ? "holding-period-pending" : "eligible"
+        );
         vm.serializeAddress(key, "deployer", actors.deployer);
         vm.serializeAddress(key, "governance", actors.governance);
         vm.serializeAddress(key, "operator", actors.operator);
@@ -369,6 +417,7 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         vm.serializeAddress(key, "investor", actors.investor);
         vm.serializeAddress(key, "eligibleInvestorB", actors.eligibleInvestorB);
         vm.serializeAddress(key, "ineligibleInvestor", actors.ineligibleInvestor);
+        vm.serializeAddress(key, "expiredInvestor", actors.expiredInvestor);
         vm.serializeAddress(key, "rwaToken", address(rwaToken));
         vm.serializeAddress(key, "quote", address(quoteToken));
         vm.serializeAddress(key, "rfqVenue", RFQ_VENUE);
@@ -405,6 +454,7 @@ contract DeployTestnetRFQ is Script, TREXCore, ProductionCoreDeployer {
         vm.serializeAddress(key, "investorIdentity", investorIdentity);
         vm.serializeAddress(key, "eligibleInvestorBIdentity", eligibleInvestorBIdentity);
         vm.serializeAddress(key, "ineligibleInvestorIdentity", ineligibleInvestorIdentity);
+        vm.serializeAddress(key, "expiredInvestorIdentity", expiredInvestorIdentity);
         string memory json = vm.serializeAddress(key, "claimTopicsRegistry", address(claimTopics));
         vm.writeJson(json, artifactPath);
     }

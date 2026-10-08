@@ -148,6 +148,13 @@ export const ELEMENT_CODE_NAMES: Record<string, Record<number, string>> = {
     5: "TOKEN_INSUFFICIENT_UNFROZEN",
     6: "TOKEN_TRANSFER_INELIGIBLE"
   },
+  // C-01-v2 provider-neutral acquisition snapshot outcomes.
+  "C-01-v2": {
+    1: "ACQUISITION_RECORD_MISSING",
+    2: "ACQUISITION_LINEAGE_BROKEN",
+    3: "ACQUISITION_RECORD_EXPIRED",
+    4: "HOLDING_PERIOD_NOT_ELAPSED"
+  },
   // A-08-v1 EntityEligibility (wave-2, CMP-003).
   "A-08-v1": {
     1: "ENTITY_CATEGORY_MISMATCH",
