@@ -93,6 +93,22 @@ source of truth로 사용한다.
   형식·중복·deployer gas balance는 읽기 전용 preflight를 통과했다. 실제 broadcast는
   로컬 keystore unlock과 Monad 전용 deployment id/config가, HTTPS hosting은 target이
   준비되는 즉시 진행한다.
+- 2026-10-08 Monad testnet deployment `monad-onchain-finance-rfq-v1` from source commit
+  `e7345b3`: 128/128 transactions with status 1 for 9.29 MON. Token
+  `Demo Restricted Security (DRS)`, quote `Testnet Quote USD (tqUSD)`, Router
+  `0xc7dA74CB5c924152255f20510411de44f852c271`, RFQ adapter
+  `0x7065C17fD83e3b3aBdBd243E689e976Fc3104b66`. The maker and investors A, B and
+  ineligible approved the RFQ adapter. Against the local runtime on loopback, the rehearsal
+  gate reported ready with the claim-expiry scene enabled, and 5,000,000 DRS pre-checks
+  returned allowed, `FAIL_NOT_QP`, `HOLDING_PERIOD_NOT_ELAPSED` (unlock 2027-10-08) and
+  `FAIL_QP_CLAIM_EXPIRED`. Investor A settled one 5,000,000 tqUSD → DRS Router RFQ trade
+  with a headless signer (tx
+  `0xa28dc68c3d02dfe411c6ba3d6d915705cbe88df4564a79fe9422fc7f914073f0`, block 69205198):
+  pre-check 329 ms, quote 524 ms, submit 418 ms, submit to receipt 4.3 s with ethers
+  default receipt polling.
+  검증: `scripts/preflight-monad-hackathon.sh --deployment-ready`; broadcast with the
+  built-in `VerifyTestnetRFQ`; `VerifyTestnetRFQ` with `CORNER_STORE_REQUIRE_APPROVALS=true`;
+  `node scripts/rehearse-monad-judge-url.mjs --url http://127.0.0.1:8791`.
 
 ## Completed
 

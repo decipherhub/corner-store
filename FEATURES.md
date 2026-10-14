@@ -78,6 +78,19 @@ active
 - 2026-10-07: official public RPC responded with chain ID 10143 and a current
   block. Live deployment still requires funded disposable deployer/participant
   wallets and must not commit their keys or credential-bearing RPC URLs.
+- 2026-10-08: deployed to Monad testnet from source commit `e7345b3` as
+  `deployments/public/monad-onchain-finance-rfq-v1-10143.json` (128 transactions, all
+  status 1, 9.29 MON) with the DRS name, the investor-B holding-period flag and the
+  expired-claim wallet. Remaining: HTTPS judge URL, judge wallet guide, browser-wallet
+  settlement with the `--evidence` rehearsal, and explorer source verification.
+- Fixture acquisition snapshots are valid for 30 days from deployment, until about
+  2026-11-07 17:11 KST. After that, sell-side checks that read the snapshot are expected
+  to report stale evidence until the snapshots are refreshed or the stack is redeployed.
+- `scripts/deploy-testnet-rfq.sh` without `--broadcast` fails on macOS bash 3.2 with
+  `MUTATION_ARGS[@]: unbound variable`, so the simulation ran as the equivalent
+  `forge script` command. `--broadcast` is unaffected.
+- An earlier 2026-10-07 Monad deployment from `3aa4af5` (`hackathon-testnet-rfq`,
+  `bBUIDL`/`tqUSD`, two scenes) is superseded and its record is not published.
 
 ## DATA-003: Isolated Demo and Production TA/KYC Provider Adapters
 
