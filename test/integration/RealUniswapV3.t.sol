@@ -20,6 +20,14 @@ interface ICanonicalUniswapV3Pool {
         external
         returns (uint256 amount0, uint256 amount1);
 
+    function swap(
+        address recipient,
+        bool zeroForOne,
+        int256 amountSpecified,
+        uint160 sqrtPriceLimitX96,
+        bytes calldata data
+    ) external returns (int256 amount0, int256 amount1);
+
     function token0() external view returns (address);
 
     function token1() external view returns (address);
@@ -45,6 +53,7 @@ contract RealUniswapV3Test is IntegrationBase {
     bytes32 internal poolInitCodeHash;
     bool internal quoteIsToken0;
     address internal mintCallbackPool;
+    address internal swapCallbackPool;
 
     function setUp() public {
         deployStack();
@@ -92,6 +101,7 @@ contract RealUniswapV3Test is IntegrationBase {
         req.context.venue = realPool;
         bool rwaIsToken0 = !quoteIsToken0;
         req.venueData = abi.encode(rwaIsToken0, _priceLimit(rwaIsToken0));
+        req.context.amountOut = _quoteExactInput(address(rwaToken), address(quote), rwaIsToken0, amountIn);
 
         doBuy(req);
 
@@ -136,6 +146,13 @@ contract RealUniswapV3Test is IntegrationBase {
         if (amount1Owed != 0) IERC20(pool_.token1()).transfer(msg.sender, amount1Owed);
     }
 
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+        require(msg.sender == swapCallbackPool, "swap callback: unauthorized");
+        address tokenIn = abi.decode(data, (address));
+        uint256 amountOwed = amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+        IERC20(tokenIn).transfer(msg.sender, amountOwed);
+    }
+
     function _deployAndSeedCanonicalPool() private {
         bytes memory factoryCode = _artifactBytecode(FACTORY_ARTIFACT);
         bytes memory poolCode = _artifactBytecode(POOL_ARTIFACT);
@@ -172,10 +189,24 @@ contract RealUniswapV3Test is IntegrationBase {
     }
 
     function _realPoolBuyRequest(address buyer, uint256 amountIn) private returns (ExecutionRequest memory req) {
-        req = buildBuyRequest(buyer, amountIn, 0);
+        uint256 amountOut = _quoteExactInput(address(quote), address(rwaToken), quoteIsToken0, amountIn);
+        req = buildBuyRequest(buyer, amountIn, amountOut);
         req.context.seller = realPool;
         req.context.venue = realPool;
         req.venueData = abi.encode(quoteIsToken0, _priceLimit(quoteIsToken0));
+    }
+
+    function _quoteExactInput(address tokenIn, address tokenOut, bool zeroForOne, uint256 amountIn)
+        private
+        returns (uint256 amountOut)
+    {
+        uint256 snapshotId = vm.snapshotState();
+        uint256 balanceBefore = IERC20(tokenOut).balanceOf(address(this));
+        swapCallbackPool = realPool;
+        ICanonicalUniswapV3Pool(realPool)
+            .swap(address(this), zeroForOne, int256(amountIn), _priceLimit(zeroForOne), abi.encode(tokenIn));
+        amountOut = IERC20(tokenOut).balanceOf(address(this)) - balanceBefore;
+        assertTrue(vm.revertToState(snapshotId), "quote simulation must restore pool state");
     }
 
     function _priceLimit(bool zeroForOne) private pure returns (uint160) {

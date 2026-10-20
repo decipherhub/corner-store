@@ -65,6 +65,14 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
   multi-Recipe 평가 결과를 얻은 뒤 Adapter를 호출한다.
 - Adapter에 전달하는 decision은 actor, token, amount, venue, version, expiry와
   execution nonce에 바인딩한다.
+- 현재 Router execution contract는 exact full fill만 지원한다. Router는 adapter 호출
+  전후의 authenticated buyer `tokenIn`/`tokenOut` 잔액 차이로 실제 정산량을 독립
+  측정하고, 사전 평가된 `context.amountIn/amountOut` 및 adapter 결과가 모두 일치할
+  때만 stateful commit을 수행한다. 불일치는 token 이동과 nonce를 함께 rollback한다.
+- fee-on-transfer/rebasing token은 asset onboarding에서 금지한다. buyer-side 잔액
+  차이만으로 intermediate settlement recipient의 실제 수령량까지 보편적으로 증명할
+  수 없기 때문이다. partial fill과 AMM price movement tolerance는 settlement-aware
+  compliance preview/evaluation이 별도 version으로 설계되기 전에는 지원하지 않는다.
 - 실행 caller는 `context.initiator`와 일치해야 한다.
 - 현재 self-directed AMM reference adapter는 initiator와 buyer가 같아야 한다.
   위임 실행은 암묵적인 주소 불일치로 표현하지 않고 별도 authorization
@@ -97,6 +105,9 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
   외부 승인이 확정되기 전 활성화하지 않는다.
 - RFQ와 Order Book settlement는 Router-only authorization 또는 동등한 권한 모델이
   확정되기 전 production-supported venue로 취급하지 않는다.
+- AMM 사용자는 실행 직전 quote로 exact output을 요청 context에 고정해야 한다.
+  `amountOutMin`만으로 compliance 수량을 대체하지 않으며, quote 이후 pool 상태가
+  바뀌어 실제 output이 달라지면 현재 version은 fail-closed한다.
 
 ## Open Decisions
 
@@ -104,6 +115,8 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
 - 외부 preview API의 응답 형식
 - nonce scope와 batch execution
 - adapter upgrade/replace governance
+- venue가 인증하거나 파생해야 하는 `seller`, `flowType`, affiliate 상태의 versioned
+  provenance contract
 - Router-exclusive, token-level enforcement, limited-scope 중 production 보장 모델
 - 일반 ERC-20 public venue fast path의 허용 venue와 관측 이벤트 범위
 - 자산 classification onboarding과 integrator API

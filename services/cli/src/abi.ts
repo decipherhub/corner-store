@@ -23,6 +23,7 @@ export const ERRORS_ABI = [
   "error AdapterNotRegistered()",
   "error VenueTypeMismatch()",
   "error SlippageExceeded()",
+  "error SettlementAmountMismatch()",
   "error RFQMakerNotApproved()",
   "error RFQQuoteUsed()",
   "error RFQQuoteExpired()",

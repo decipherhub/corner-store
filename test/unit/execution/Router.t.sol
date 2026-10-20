@@ -9,6 +9,7 @@ import {OperatorRegistry} from "../../../src/registry/OperatorRegistry.sol";
 import {MockComplianceEngine} from "../../mocks/MockComplianceEngine.sol";
 import {MockAdapter} from "../../mocks/MockAdapter.sol";
 import {ReentrantAdapter} from "../../mocks/ReentrantAdapter.sol";
+import {MockERC20} from "../../mocks/MockERC20.sol";
 import {VenueConfig, CustodyModel} from "../../../src/types/VenueTypes.sol";
 import {ExecutionRequest, ExecutionResult} from "../../../src/types/ExecutionTypes.sol";
 import {ComplianceContext, ComplianceDecision, VenueType, FlowType} from "../../../src/types/ComplianceTypes.sol";
@@ -25,8 +26,8 @@ contract RouterTest is Test {
 
     address internal constant VENUE = address(0xCAFE);
     address internal constant BUYER = address(0xB0B);
-    address internal constant TOKEN_IN = address(0x111);
-    address internal constant TOKEN_OUT = address(0x222);
+    address internal TOKEN_IN;
+    address internal TOKEN_OUT;
 
     bytes32 internal constant REASON_OK = bytes32(0);
     bytes32 internal constant REASON_BAD = bytes32("R-DENY");
@@ -37,6 +38,15 @@ contract RouterTest is Test {
         operatorReg = new OperatorRegistry();
         engine = new MockComplianceEngine();
         adapter = new MockAdapter();
+        MockERC20 tokenIn = new MockERC20("Token In", "TIN");
+        MockERC20 tokenOut = new MockERC20("Token Out", "TOUT");
+        TOKEN_IN = address(tokenIn);
+        TOKEN_OUT = address(tokenOut);
+
+        tokenIn.mint(BUYER, 1_000_000 ether);
+        tokenOut.mint(address(adapter), 1_000_000 ether);
+        vm.prank(BUYER);
+        tokenIn.approve(address(adapter), type(uint256).max);
 
         router = new ExecutionRouter(engine, venueReg, selector, operatorReg);
 
@@ -70,13 +80,14 @@ contract RouterTest is Test {
         d.reasonCode = reason;
     }
 
-    function _req(uint256 nonce, uint256 amountIn, uint64 deadline) internal pure returns (ExecutionRequest memory) {
+    function _req(uint256 nonce, uint256 amountIn, uint64 deadline) internal view returns (ExecutionRequest memory) {
         ComplianceContext memory ctx;
         ctx.initiator = BUYER;
         ctx.buyer = BUYER;
         ctx.tokenIn = TOKEN_IN;
         ctx.tokenOut = TOKEN_OUT;
         ctx.amountIn = amountIn;
+        ctx.amountOut = 1000;
         ctx.venueType = VenueType.AMM;
         ctx.venue = VENUE;
         ctx.flowType = FlowType.SECONDARY_TRADE;
@@ -91,6 +102,7 @@ contract RouterTest is Test {
 
     function test_execute_happyPath() public {
         ExecutionRequest memory req = _defaultReq();
+        req.context.amountOut = 777;
         adapter.setAmountOut(777);
 
         vm.recordLogs();
@@ -102,10 +114,12 @@ contract RouterTest is Test {
         assertEq(adapter.callCount(), 1);
         assertTrue(engine.committed(), "engine.commit called");
         assertEq(engine.commitCount(), 1);
+        assertEq(engine.lastCommit().amountOut, 777, "commit must use realized output");
     }
 
     function test_execute_emitsExecuted() public {
         ExecutionRequest memory req = _defaultReq();
+        req.context.amountOut = 777;
         adapter.setAmountOut(777);
         bytes32 expectedId = keccak256(abi.encode(req, block.number));
 
@@ -198,6 +212,76 @@ contract RouterTest is Test {
         router.execute(req);
 
         assertTrue(adapter.called(), "quote notional must not be compared to an RWA output cap");
+    }
+
+    function test_revert_whenRealizedTokenOutExceedsApprovedAmount() public {
+        ExecutionRequest memory req = _req(1, 500, uint64(block.timestamp + 1 hours));
+        req.context.amountOut = 150;
+        adapter.setAmountOut(250);
+        uint256 tokenInBefore = MockERC20(TOKEN_IN).balanceOf(BUYER);
+        uint256 tokenOutBefore = MockERC20(TOKEN_OUT).balanceOf(BUYER);
+
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.SettlementAmountMismatch.selector);
+        router.execute(req);
+
+        assertFalse(router.usedNonce(BUYER, req.nonce), "failed final authorization must roll back nonce");
+        assertFalse(adapter.called(), "failed final authorization must roll back adapter state");
+        assertFalse(engine.committed(), "failed final authorization must not commit");
+        assertEq(MockERC20(TOKEN_IN).balanceOf(BUYER), tokenInBefore, "input balance must roll back");
+        assertEq(MockERC20(TOKEN_OUT).balanceOf(BUYER), tokenOutBefore, "output balance must roll back");
+    }
+
+    function test_revert_whenRealizedTokenOutFallsBelowApprovedAmount() public {
+        ExecutionRequest memory req = _defaultReq();
+        req.context.amountOut = 250;
+        adapter.setAmountOut(150);
+        uint256 tokenInBefore = MockERC20(TOKEN_IN).balanceOf(BUYER);
+        uint256 tokenOutBefore = MockERC20(TOKEN_OUT).balanceOf(BUYER);
+
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.SettlementAmountMismatch.selector);
+        router.execute(req);
+
+        assertFalse(router.usedNonce(BUYER, req.nonce), "settlement mismatch must roll back nonce");
+        assertFalse(adapter.called(), "settlement mismatch must roll back adapter state");
+        assertFalse(engine.committed(), "settlement mismatch must not commit");
+        assertEq(MockERC20(TOKEN_IN).balanceOf(BUYER), tokenInBefore, "input balance must roll back");
+        assertEq(MockERC20(TOKEN_OUT).balanceOf(BUYER), tokenOutBefore, "output balance must roll back");
+    }
+
+    function test_revert_whenRealizedTokenInDiffersFromApprovedAmount() public {
+        ExecutionRequest memory req = _defaultReq();
+        adapter.setAmountIn(req.context.amountIn - 1);
+        uint256 tokenInBefore = MockERC20(TOKEN_IN).balanceOf(BUYER);
+        uint256 tokenOutBefore = MockERC20(TOKEN_OUT).balanceOf(BUYER);
+
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.SettlementAmountMismatch.selector);
+        router.execute(req);
+
+        assertFalse(router.usedNonce(BUYER, req.nonce), "settlement mismatch must roll back nonce");
+        assertFalse(adapter.called(), "settlement mismatch must roll back adapter state");
+        assertFalse(engine.committed(), "settlement mismatch must not commit");
+        assertEq(MockERC20(TOKEN_IN).balanceOf(BUYER), tokenInBefore, "input balance must roll back");
+        assertEq(MockERC20(TOKEN_OUT).balanceOf(BUYER), tokenOutBefore, "output balance must roll back");
+    }
+
+    function test_revert_whenAdapterReportsDifferentAmountOut() public {
+        ExecutionRequest memory req = _defaultReq();
+        adapter.setReportedAmountOut(req.context.amountOut + 1);
+        uint256 tokenInBefore = MockERC20(TOKEN_IN).balanceOf(BUYER);
+        uint256 tokenOutBefore = MockERC20(TOKEN_OUT).balanceOf(BUYER);
+
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.SettlementAmountMismatch.selector);
+        router.execute(req);
+
+        assertFalse(router.usedNonce(BUYER, req.nonce), "adapter report mismatch must roll back nonce");
+        assertFalse(adapter.called(), "adapter report mismatch must roll back adapter state");
+        assertFalse(engine.committed(), "adapter report mismatch must not commit");
+        assertEq(MockERC20(TOKEN_IN).balanceOf(BUYER), tokenInBefore, "input balance must roll back");
+        assertEq(MockERC20(TOKEN_OUT).balanceOf(BUYER), tokenOutBefore, "output balance must roll back");
     }
 
     function test_revert_buyWhenRegulatedTokenOutExceedsFiniteCap() public {
@@ -378,6 +462,7 @@ contract RouterTest is Test {
 
     function test_revert_slippage() public {
         ExecutionRequest memory req = _defaultReq();
+        req.context.amountOut = 777;
         req.amountOutMin = 778; // require more than the adapter will return
         adapter.setAmountOut(777);
 
@@ -388,6 +473,7 @@ contract RouterTest is Test {
 
     function test_execute_slippage_boundMet() public {
         ExecutionRequest memory req = _defaultReq();
+        req.context.amountOut = 777;
         req.amountOutMin = 777; // exactly meets the returned amount
         adapter.setAmountOut(777);
 

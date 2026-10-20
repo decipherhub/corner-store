@@ -118,6 +118,22 @@ source of truth로 사용한다.
 
 ## Completed
 
+- `EXEC-001 — Canonical Settlement Amount Binding` (issue #153): Router가 adapter
+  호출 전후 authenticated buyer의 `tokenIn`/`tokenOut` 잔액 차이로 실제 정산량을
+  직접 측정한다. 현재 execution version은 exact full fill만 허용하며 measured
+  input/output, 사전 평가된 context 수량과 adapter 보고 output이 모두 일치해야
+  stateful commit한다. 불일치 시 token 이동, nonce, adapter와 compliance 상태가
+  원자적으로 rollback된다. 기존 execution ID 형식은 유지하고 canonical Uniswap
+  test는 snapshot quote로 exact request를 구성한다. 체결 후 전체 Element를
+  다시 평가하면 pre-transfer balance를 읽는 Element 의미가 깨질 수 있어 사용하지
+  않았다. fee-on-transfer/rebasing token은 onboarding에서 금지하며 partial fill,
+  price-tolerant AMM과 venue-authoritative seller/flow/affiliate provenance는 별도
+  versioned 후속 범위다. 검증: Router 30/30, RFQAdapter 25/25, RFQFlow 9/9,
+  SwapFlow 8/8, canonical
+  Uniswap 5/5와 전체 Foundry 975/975 통과. pinned Foundry v1.7.1 전체
+  `scripts/check.sh`, packed clean-project adapter conformance, `buidl-like`와
+  `reg-d` Anvil E2E(각 7/7 + backend/CLI/Router RFQ flow), `git diff --check` 통과.
+
 - `DATA-003: Isolated Demo and Production TA/KYC Provider Adapters` (issue #128):
   `services/compliance-data` now defines KYC provider SPI 1.0.0 (`/spi`) with adapter metadata
   (SPI version, providerId, schema versions, fact capabilities, environment) and typed

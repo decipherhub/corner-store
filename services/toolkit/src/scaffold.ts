@@ -481,6 +481,8 @@ function venueDescriptor(): unknown {
       "token transfer safety",
       "callback origin validation when applicable",
       "venue-specific slippage and settlement accounting",
+      "exact full-fill settlement with standard non-rebasing ERC-20 tokens",
+      "asset onboarding that prohibits transfer-fee and rebasing tokens",
       "independent audit and deployment review"
     ]
   };
@@ -566,6 +568,8 @@ import {VenueRegistry} from "corner-store/src/execution/VenueRegistry.sol";
 import {VenueSelector} from "corner-store/src/execution/VenueSelector.sol";
 import {OperatorRegistry} from "corner-store/src/registry/OperatorRegistry.sol";
 import {MockComplianceEngine} from "corner-store/test/mocks/MockComplianceEngine.sol";
+import {MockERC20} from "corner-store/test/mocks/MockERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ExecutionRequest, ExecutionResult} from "corner-store/src/types/ExecutionTypes.sol";
 import {ComplianceContext, ComplianceDecision, FlowType, VenueType} from "corner-store/src/types/ComplianceTypes.sol";
 import {CustodyModel, VenueConfig} from "corner-store/src/types/VenueTypes.sol";
@@ -583,6 +587,16 @@ contract ExampleExternalVenue is IExternalVenue {
         if (failExecution) revert("venue failure");
         committedDuringExecute = engine.committed();
         callCount++;
+        require(
+            IERC20(request.context.tokenIn).transferFrom(
+                request.context.buyer, address(this), request.context.amountIn
+            ),
+            "input transfer failed"
+        );
+        require(
+            IERC20(request.context.tokenOut).transfer(request.context.buyer, request.context.amountOut),
+            "output transfer failed"
+        );
         return ExecutionResult({amountOut: request.context.amountOut, executionId: keccak256(abi.encode(request.nonce))});
     }
 }
@@ -593,11 +607,19 @@ contract CornerStoreVenueAdapterConformanceTest is Test {
     ExampleExternalVenue internal venue;
     CornerStoreVenueAdapter internal adapter;
     ExecutionRouter internal router;
+    MockERC20 internal tokenIn;
+    MockERC20 internal tokenOut;
 
     function setUp() public {
         engine = new MockComplianceEngine();
         venue = new ExampleExternalVenue(engine);
         adapter = new CornerStoreVenueAdapter(venue);
+        tokenIn = new MockERC20("Input", "IN");
+        tokenOut = new MockERC20("Output", "OUT");
+        tokenIn.mint(USER, 1_000);
+        tokenOut.mint(address(venue), 1_000);
+        vm.prank(USER);
+        tokenIn.approve(address(venue), type(uint256).max);
         VenueRegistry registry = new VenueRegistry();
         VenueSelector selector = new VenueSelector();
         OperatorRegistry operators = new OperatorRegistry();
@@ -654,8 +676,8 @@ contract CornerStoreVenueAdapterConformanceTest is Test {
             initiator: USER,
             buyer: USER,
             seller: address(0xCAFE),
-            tokenIn: address(0x1111),
-            tokenOut: address(0x2222),
+            tokenIn: address(tokenIn),
+            tokenOut: address(tokenOut),
             amountIn: 100,
             amountOut: 90,
             venueType: VenueType.AMM,

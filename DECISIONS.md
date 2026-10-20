@@ -1,5 +1,63 @@
 # Decisions
 
+## D023 — Router commit requires independently measured exact settlement amounts
+
+Date: 2026-10-20
+
+### Context
+
+Compliance evaluation and quantitative limits use the amounts in
+`ComplianceContext`, while an adapter also returns a settlement result. If those
+values diverge, stateful accounting cannot reliably describe the transfer that
+actually occurred. Re-running the full Compliance Engine after settlement is not
+safe because some Elements intentionally inspect pre-transfer balances and
+`canTransfer` state.
+
+### Decision
+
+The current Router execution version supports exact full fills only. It snapshots
+the authenticated buyer's `tokenIn` and `tokenOut` balances immediately before and
+after adapter execution and requires all of the following to match:
+
+- measured input and `context.amountIn`;
+- measured output and `context.amountOut`;
+- adapter-reported output and measured output.
+
+Only the measured context is passed to `ComplianceEngine.commit`. Any mismatch
+reverts the complete transaction, including token transfers and nonce consumption.
+AMM callers therefore bind an exact output quote before execution.
+
+### Alternatives Considered
+
+- Trust adapter-reported output: rejected because it does not independently prove
+  the payer/recipient balance changes.
+- Replace only `amountOut` during commit: rejected because the pre-trade decision
+  would still have evaluated a different amount.
+- Re-evaluate every Element after settlement: rejected because post-transfer
+  balances can change the meaning of checks designed for pre-transfer state.
+- Permit an output range immediately: deferred until a versioned preview or
+  settlement-aware compliance interface can preserve pre-state semantics.
+
+### Consequences
+
+- RFQ exact full fills remain compatible.
+- AMM price movement away from the quoted output fails closed and must be retried
+  with a fresh quote.
+- Fee-on-transfer/rebasing tokens are prohibited at asset onboarding and partial
+  fills are unsupported by this version. Buyer-side deltas do not prove every
+  intermediate settlement balance, so onboarding is the required control for
+  non-standard token behavior rather than a universal Router detection guarantee.
+- Venue-authoritative participant, flow and affiliate provenance remains a separate
+  production activation blocker.
+
+### Related Files
+
+- `src/execution/ExecutionRouter.sol`
+- `src/execution/adapters/amm/UniswapV3Adapter.sol`
+- `docs/architecture/execution-routing.md`
+- `docs/security.md`
+- GitHub issue #153
+
 ## D020 — Asset-side checks follow the actual regulated-token flow
 
 Date: 2026-09-29
