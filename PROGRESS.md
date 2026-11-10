@@ -802,6 +802,55 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- 2026-11-10, issue #132 integration: verified the four merged slices together
+  and added `CORE-015: Compliance Reporting and Settlement Reconstruction` as
+  `passing`. Added D024 through D027 for opt-in nonblocking A-12/v4 adoption,
+  canonical settlement reconstruction, restricted public reporting and
+  generic-by-default RFQ disclosure. Added the reporting spec to `docs/README.md`.
+  HACK-001 retains its existing state. Counsel questions are explicit open items.
+- The first merged gate failed before formatting because
+  `scripts/check-wave3-element-policies.sh` still required A-12-v1 and the v1
+  constructor. Updated only its expected registration and error text to require
+  A-12-v2, `RedFlagKnowledgeBarV2` and explicit `FLAG_ONLY`. The same complete gate
+  then passed. No contract/service behavior change was needed for integration.
+- Dependency setup passed with writable cache
+  `export npm_config_cache=/private/tmp/corner-store-132-integration/npm-cache`:
+  `npx --yes -p node@20 -p yarn@1.22.22 -c 'cd tools/deploy-v3 && yarn install --frozen-lockfile'`
+  and `npx --yes -p node@20 -c 'for service in rfq rfq-host toolkit cli rfq-demo-backend testnet-rfq-demo operator-api deployment-studio compliance-data; do echo "Installing $service"; npm ci --prefix "services/$service" || exit; done'`.
+  All nine lockfile-based service installs passed; operator-dashboard has no
+  lockfile or dependency install. Lockfiles did not change.
+- `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'` passed all 23 stages
+  with Foundry 1.7.1: 1,006 passed / 0 failed / 0 skipped across 63 suites,
+  including Reporter 16/16 and canonical Uniswap 5/5. All 10 service smoke suites
+  passed, including the RFQ host's 20 top-level scenarios and both Compliance
+  Data smoke/provider entrypoints. Clean packaged-consumer checks passed, with
+  generated adapter conformance 4/4 in each of two projects; deploy-v3 passed
+  10/10. High-severity lint, format, build, reason parity, wrapper/evidence-refresh
+  regressions, URL rehearsal, showcase plan and whitespace gates passed.
+  Existing compiler/lint warnings remain outside the high-severity gate.
+- `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'` passed the fresh BUIDL-like
+  chain's 7/7 scenarios and 30 additional explicit PASS checkpoints.
+  `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh --profile reg-d'` passed the fresh
+  Reg D chain's 7/7 scenarios and 20 additional explicit PASS checkpoints. Both
+  completed backend/CLI/Router buy/sell, failed-receipt rollback, maker revoke and
+  restore flows; BUIDL-like also verified QP/expiry isolation. Expected
+  `RFQMakerNotApproved()` rejection output is part of each successful E2E.
+- `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm run test:reporter-runtime --prefix services/toolkit'`
+  passed compiled ABI/SDK parity and four isolated Anvil cases: unknown denial,
+  unregulated pass, simultaneous public/restricted failures and historical read.
+  `forge build tools/deploy-wave3/DeployWave3Elements.s.sol` passed. Final
+  `forge fmt --check` and `git diff --check` passed. Generated deployment,
+  broadcast, dependency and build outputs remain ignored/untracked; only the
+  intended integration script and four documentation files are modified.
+- Next: review the uncommitted integration diff, coordinate the additive minor SDK
+  release and explicit deployment/consumer adoption, and obtain counsel/operator
+  decisions on A-12 review procedures, record categories/retention and disclosure
+  fields, audiences and wording. Align future #139 consumers with canonical event
+  selection. UNVERIFIED here: Docker image gates, public-network/demo health,
+  production provider/custody/retention integrations and production disclosure
+  approval. The opt-in v4 direct-script live suite was verified in its slice and
+  was not rerun by integration; the documented full launcher supports only
+  BUIDL-like and Reg D v3. No public deployment was changed.
 - RFQ maker settlement account와 signer authority를 분리했다. delegate 권한
   추가는 1일 delay, revoke는 즉시 적용하며 direct maker ECDSA와 ERC-1271도
   동일한 fill-time authorizer 경계에서 검증한다.

@@ -9,6 +9,80 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## CORE-015: Compliance Reporting and Settlement Reconstruction
+
+### Behavior
+
+- Issue #132 items 6, 7, 11 and 12 are additive capabilities with explicit
+  deployment/consumer selection and backward-compatible settlement behavior.
+- Opt-in `RegD506cRecipeV4` appends `A-12-v2` to V3's nine blocking requirements.
+  `RedFlagKnowledgeBarV2` declares matching `FLAG_ONLY` metadata, fixing the
+  wave-3 registration mismatch while preserving separate, nonblocking assessment
+  APIs/events. Assessments do not populate Engine flags. Direct scripts and CLI
+  accept `reg-d-v4`; default BUIDL-like and `reg-d` v3 selection are preserved.
+  Existing assets migrate through a reviewed, delayed Manifest update.
+- New Router deployments emit `SettlementExecutedV2` after successful commit with
+  execution ID, venue, token pair, fresh policy ID and measured input/output in
+  token base units. Legacy events, return values and execution ID derivation
+  retain their meanings. CLI decodes both versions. Indexers prefer V2 per
+  deployment/execution, use legacy fallback and deduplicate canonical logs by
+  chain ID, transaction hash and log index.
+- An explicitly deployed `ComplianceReporter` evaluates every active compiled
+  requirement across both regulated legs with the exact bound parameters. It
+  returns public pass/fail, undetermined and nonapplicable diagnostics separately
+  from the authoritative Engine outcome. Diagnostic path/flag failures do not
+  introduce new settlement restrictions; reports are snapshots, not authorization.
+- A-01, A-12 and all F-* versions share one opaque restricted outcome. Individual
+  sensitive rows/reasons/paths/counts are omitted; decision reason, flags and
+  relied claims are redacted whenever restricted checks are present, including
+  when nonapplicable. Existing public-chain data remains public. Toolkit exports
+  a typed reader requiring an explicit pinned block reference.
+- RFQ risk rejection may carry recognized operational identifiers. An optional
+  startup-snapshotted JSON policy maps them to `detailed`, `action_only` or
+  `generic` literal messages. HTTP 422/`risk_rejected` remains the default body;
+  approved disclosure is additive. Missing/invalid policies and unknown,
+  malformed, unallowlisted or sensitive reason lists suppress all disclosure.
+  Authentication, exact taker binding, signing/reservations and replay behavior
+  retain their existing meanings. Provider text is never interpolated.
+
+### Verification
+
+- `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'`: passed all 23
+  stages, including Foundry 1,006/1,006 across 63 suites (0 failed, 0 skipped),
+  all 10 service smoke suites, two generated adapter conformance runs at 4/4
+  each, clean packaged-consumer checks and deploy-v3 10/10.
+- `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'`: passed BUIDL-like 7/7
+  scenarios and 30 additional explicit PASS checkpoints.
+- `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh --profile reg-d'`: passed Reg D
+  7/7 scenarios and 20 additional explicit PASS checkpoints.
+- `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm run test:reporter-runtime --prefix services/toolkit'`:
+  passed compiled ABI/SDK parity and four Anvil cases: unknown denial, unregulated
+  pass, public/restricted failures and historical snapshot.
+- `forge build tools/deploy-wave3/DeployWave3Elements.s.sol`: passed.
+- `forge fmt --check` and `git diff --check`.
+
+### State
+
+passing
+
+### Notes
+
+- Integrated and verified on 2026-11-10 with Foundry 1.7.1 and Node 20 after
+  frozen-lockfile deploy-v3 installation and `npm ci` in all nine gate services
+  with lockfiles. The initial gate failed its stale A-12-v1 source assertion;
+  the checker now requires A-12-v2 and explicit `FLAG_ONLY` registration.
+- Decisions D024 through D027 record migration, canonical event selection,
+  restricted reporting and RFQ disclosure. Counsel questions remain open; this
+  feature does not establish legal adequacy, retention or chain-wide secrecy.
+- Specs: [requirement reporting](./docs/product-specs/compliance-reporting.md),
+  [settlement reconstruction](./docs/architecture/execution-routing.md),
+  [Reg D v4](./docs/compliance/recipes/R1_RegD-506c-Issuance.md),
+  [A-12 v2](./docs/compliance/spec-sheets/A-12_willful-blindness.spec.md) and
+  [RFQ disclosure](./docs/product-specs/production-rfq-policy.md).
+- Coordinated minor SDK release/package promotion and explicit deployment adoption
+  remain follow-up work. Docker image gates, live public-network behavior and
+  production provider/custody/retention integrations were not verified here.
+
 ## HACK-001 — Monad Onchain Finance RFQ Demo
 
 ### Behavior
