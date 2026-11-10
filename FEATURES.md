@@ -204,6 +204,58 @@ passing
 - Venue-authoritative `seller`, `flowType` and affiliate provenance is tracked
   separately and remains a production AMM activation blocker.
 
+## EXEC-002: Venue-Authoritative Execution Context
+
+### Behavior
+
+- Separate ExecutionRouterV2 authenticates venue/context before Engine evaluation
+  through a view-only verifier, without replacing context. Registration evidence
+  pins adapter/context versions, adapter/source/policy runtime hashes and final
+  configuration, with explicit reviewed immutable implementation approval.
+- RFQAdapterV3 signs the exact RFQQuoteV3/domain version 3, binding maker/taker,
+  token directions, exact amounts, venue, policy, flow and current A-06 aggregate.
+  Conditional primary uses a unique active compiled C-01-v2 distributor.
+- Actual security sender is buyer on tokenIn and seller on tokenOut. Every
+  regulated leg requires current trusted A-06 evidence; dual-regulated statuses
+  must agree. Refresh/revocation/expiry/decay invalidate old commitments.
+- Newly deployed AMM adapter version 2/context 1 binds seller/venue/target to the
+  registered pool and canonical token order, secondary/self-directed only.
+  Pool edits invalidate every venue sharing the adapter; re-registration clears
+  evidence. The C-01-family/AMM prohibition remains in force.
+- Settlement repeats authentication, preserves independently measured exact
+  full fill, atomic rollback, commit and existing events. Legacy Router/RFQ v2
+  APIs/signatures and the live public Monad deployment remain pinned.
+- Additive SDK builders/modules/conformance, schema 2 coordinator recovery,
+  opt-in host route/bootstrap capability and explicit CLI artifacts support v3.
+  Onboarding schema 6 verifies source/authority/Router/pool bindings and orders
+  final evidence pinning before maker activation. Legacy parsers remain explicit.
+
+### Verification
+
+- `scripts/check.sh` (Forge, service provenance suites, packed v3/schema 6 consumers)
+- `scripts/e2e-anvil.sh`
+- `scripts/e2e-anvil.sh --profile reg-d`
+- `scripts/e2e-context-provenance.sh` (both directions and mined mismatch rejection)
+- `forge fmt --check`
+- `git diff --check`
+- protected-path diff for public artifacts/runtime/container deployment
+
+### State
+
+passing
+
+### Notes
+
+- All delivery gates passed on 2026-11-11; exact commands and counts are recorded
+  in PROGRESS.md.
+  This branch preserves HACK-001 as requested; upstream #162 owns its completion
+  and #161 owns CORE-015/D024-D027. Only EXEC-002 is worked in this session.
+- D028/D029 and `docs/product-specs/execution-context-provenance.md` record all six
+  adopted defaults as open items for team confirmation. Reference/operator code
+  uses one local env/file key; key management, multisig and custody are deferred.
+- The new live fixture is a manual delivery/release gate alongside the two
+  existing Anvil profiles. CI retains its repository/container checks.
+
 ## SDK-007 — External User Golden Path Acceptance
 
 ### Behavior
