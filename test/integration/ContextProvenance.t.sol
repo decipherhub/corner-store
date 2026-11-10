@@ -7,6 +7,9 @@ import {RFQQuoteV3} from "../../src/execution/adapters/rfq/RFQV3Types.sol";
 import {ExecutionRouterV2} from "../../src/execution/ExecutionRouterV2.sol";
 import {ContextEvidence} from "../../src/execution/ContextEvidence.sol";
 import {MakerAuthorizer} from "../../src/registry/MakerAuthorizer.sol";
+import {EngineSelectionV2} from "../../src/compliance/elements/EngineSelectionV2.sol";
+import {EngineSelection} from "../../src/compliance/elements/EngineSelection.sol";
+import {BaseRecipe} from "../../src/compliance/recipes/BaseRecipe.sol";
 import {Affiliate} from "../../src/compliance/elements/Affiliate.sol";
 import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
 import {
@@ -14,11 +17,22 @@ import {
     ManifestPolicyConfig,
     ElementPolicyParameter,
     ElementEnforcementOverride,
+    RecipeBinding,
+    RecipeBindingMode,
     VenueType,
     FlowType
 } from "../../src/types/ComplianceTypes.sol";
 import {VenueConfig, VenueContextEvidence, CustodyModel} from "../../src/types/VenueTypes.sol";
 import {Errors} from "../../src/libraries/Errors.sol";
+
+contract ContextEngineSelectionRecipe is BaseRecipe {
+    constructor() BaseRecipe(9, 1, _ids()) {}
+
+    function _ids() private pure returns (bytes32[] memory ids) {
+        ids = new bytes32[](1);
+        ids[0] = "B-04-v2";
+    }
+}
 
 contract ContextProvenanceTest is IntegrationBase {
     uint256 internal constant MAKER_PK = 0xD311;
@@ -28,6 +42,7 @@ contract ContextProvenanceTest is IntegrationBase {
     RFQAdapterV3 internal rfq;
     ExecutionRouterV2 internal routerV2;
     Affiliate internal affiliate;
+    EngineSelectionV2 internal engineSelection;
 
     function setUp() public {
         maker = vm.addr(MAKER_PK);
@@ -81,6 +96,21 @@ contract ContextProvenanceTest is IntegrationBase {
         quote.approve(address(rfq), type(uint256).max);
         rwaToken.approve(address(rfq), type(uint256).max);
         vm.stopPrank();
+        engineSelection = new EngineSelectionV2();
+        engineSelection.setSupportedEngines(address(rwaToken), 4);
+        elementReg.registerElement("B-04-v2", address(engineSelection));
+        recipeReg.registerRecipe(9, 1, address(new ContextEngineSelectionRecipe()));
+        RecipeBinding[] memory bindings = new RecipeBinding[](2);
+        bindings[0] = _regDBindings(0)[0];
+        bindings[1] = RecipeBinding(9, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 90);
+        m = policyReg.manifestOf(address(rwaToken));
+        m.fullManifestHash = keccak256("context-direction-aware-policy");
+        policyReg.scheduleManifestUpdate(
+            address(rwaToken), m, bindings, new ElementEnforcementOverride[](0), config, bytes32("direction-aware")
+        );
+        (,, uint64 readyAt,) = policyReg.pendingManifestUpdateOf(address(rwaToken));
+        vm.warp(readyAt);
+        policyReg.activateManifestUpdate(address(rwaToken));
     }
 
     function _claim(address sender, Affiliate.AffiliateBasis basis) internal {
@@ -105,6 +135,8 @@ contract ContextProvenanceTest is IntegrationBase {
         req.context.amountOut = 100 ether;
         req.context.venue = VENUE;
         req.context.venueType = VenueType.RFQ;
+        req.context.sellerIsAffiliate =
+            affiliate.effectiveStatus(sell ? alice : maker, address(rwaToken)) == Affiliate.EffectiveStatus.AFFILIATE;
         req.context.flowType = primary ? FlowType.PRIMARY_DISTRIBUTION : FlowType.SECONDARY_TRADE;
         req.deadline = uint64(block.timestamp + 1 hours);
         req.nonce = 1;
@@ -153,6 +185,55 @@ contract ContextProvenanceTest is IntegrationBase {
         assertEq(rwaToken.balanceOf(alice), 900 ether);
         assertEq(quote.balanceOf(alice), 1100 ether);
         assertEq(quote.balanceOf(address(rfq)), 0);
+    }
+
+    function test_routerV2AffiliateSellRejectsTakerMMClaimWithoutMakerClaim() public {
+        _claim(alice, Affiliate.AffiliateBasis.OFFICER_DIRECTOR);
+        engineSelection.setMarketMakerClaim(alice, true);
+        ExecutionRequest memory req = _request(true, false);
+        vm.expectPartialRevert(Errors.ComplianceRejected.selector);
+        _execute(req);
+        _rollback();
+    }
+
+    function test_routerV2AffiliateSellPassesWithMakerMMClaimOnly() public {
+        _claim(alice, Affiliate.AffiliateBasis.OFFICER_DIRECTOR);
+        engineSelection.setMarketMakerClaim(maker, true);
+        ExecutionRequest memory req = _request(true, false);
+        _execute(req);
+        assertEq(rwaToken.balanceOf(alice), 900 ether);
+        assertEq(rwaToken.balanceOf(maker), 1100 ether);
+        assertEq(quote.balanceOf(alice), 1100 ether);
+        assertTrue(routerV2.usedNonce(alice, 1));
+        assertTrue(rfq.usedQuoteNonce(maker, 7));
+    }
+
+    function test_routerV2AffiliateBuyParityWithLegacyMMClaim() public {
+        _affiliateBuyParity(true);
+    }
+
+    function test_routerV2AffiliateBuyParityWithoutLegacyMMClaim() public {
+        _affiliateBuyParity(false);
+    }
+
+    function _affiliateBuyParity(bool hasClaim) internal {
+        _claim(maker, Affiliate.AffiliateBasis.OFFICER_DIRECTOR);
+        engineSelection.setMarketMakerClaim(alice, hasClaim);
+        engineSelection.setMarketMakerClaim(maker, !hasClaim);
+        EngineSelection legacy = new EngineSelection();
+        legacy.setSupportedEngines(address(rwaToken), 4);
+        legacy.setMarketMakerClaim(alice, hasClaim);
+        legacy.setMarketMakerClaim(maker, !hasClaim);
+        ExecutionRequest memory req = _request(false, false);
+        (bool oldPassed,) = legacy.check(alice, maker, address(rwaToken), 100 ether, abi.encode(req.context), "");
+        (bool newPassed,) =
+            engineSelection.check(alice, maker, address(rwaToken), 100 ether, abi.encode(req.context), "");
+        assertEq(newPassed, oldPassed);
+        assertEq(newPassed, hasClaim);
+        if (!hasClaim) vm.expectPartialRevert(Errors.ComplianceRejected.selector);
+        _execute(req);
+        if (hasClaim) assertEq(rwaToken.balanceOf(alice), 1100 ether);
+        else _rollback();
     }
 
     function test_primaryUsesActiveCompiledManifestAuthority() public {

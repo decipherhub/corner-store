@@ -229,13 +229,22 @@ passing
   opt-in host route/bootstrap capability and explicit CLI artifacts support v3.
   Onboarding schema 6 verifies source/authority/Router/pool bindings and orders
   final evidence pinning before maker activation. Legacy parsers remain explicit.
+- Opt-in B-04-v2 checks the actual security recipient's MM claim in both
+  directions. Schema 6 rejects active compiled B-04-v1 rules and unreadable
+  policy evidence, verifies Engine.router() as well as RouterV2.engine(), and
+  wires a separately deployed v3 Engine before adapter activation.
 
 ### Verification
 
 - `scripts/check.sh` (Forge, service provenance suites, packed v3/schema 6 consumers)
 - `scripts/e2e-anvil.sh`
 - `scripts/e2e-anvil.sh --profile reg-d`
-- `scripts/e2e-context-provenance.sh` (both directions and mined mismatch rejection)
+- `scripts/e2e-context-provenance.sh` (both directions, mined mismatch and
+  affiliate sender-only MM-claim rejection, recipient-only MM-claim settlement)
+- `ContextProvenanceTest`: asymmetric affiliate sells and legacy buy parity;
+  `EngineSelectionV2Test`: buy parity fuzzing, exemptions and fail-closed context
+- Toolkit provenance regressions: reverse Engine binding mismatch/unavailability,
+  active compiled B-04 direction checks and unsigned Engine wiring order
 - `forge fmt --check`
 - `git diff --check`
 - protected-path diff for public artifacts/runtime/container deployment
@@ -255,6 +264,9 @@ passing
   uses one local env/file key; key management, multisig and custody are deferred.
 - The new live fixture is a manual delivery/release gate alongside the two
   existing Anvil profiles. CI retains its repository/container checks.
+- Confirmed review fixes passed 1,100 Foundry tests, the Toolkit smoke gate plus
+  15 provenance tests, and 12 live v3 cases. PROGRESS.md records the exact fix
+  commands and distinguishes prior full delivery evidence from this fix session.
 
 ## SDK-007 — External User Golden Path Acceptance
 

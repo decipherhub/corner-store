@@ -24,6 +24,12 @@ hash as authority.
 
 For every security asset, `tokenOut` moves seller to buyer and `tokenIn` moves
 buyer to seller. The legacy boolean name does not change this direction rule.
+For affiliate RFQ sells, any applicable B-04 gate must opt into immutable
+`EngineSelectionV2` (`B-04-v2`), which uses `AssetFlow` to check the security
+recipient's MM claim. The recipient is the maker (`seller`) on a sell and the
+screened taker (`buyer`) on a buy. Register the new Element ID and exact Recipe
+binding through the normal Manifest lifecycle; existing B-04-v1 implementations,
+recipes and defaults are preserved.
 Enum values remain `SECONDARY_TRADE=0`, `PRIMARY_DISTRIBUTION=1`, `REDEMPTION=2`.
 
 RFQ supports secondary trades in both directions and conditional primary
@@ -134,11 +140,18 @@ re-pin every affected venue after later edits. AMM also requires
 `target == venue == seller`, registered pool membership and canonical token order.
 
 Onboarding schema 6 requires explicit Router runtime evidence and reviewed
-per-venue bindings. REGISTER plans order wiring/pool changes before registration,
-implementation approval and pinning, then maker activation. UPDATE verifies
-existing bindings without resetting pool state. `verifyVenueContext` checks
-versions, runtime/configuration, approval, source ownership, authorizer, Router
-dependencies and AMM membership/token order; missing/unavailable reads fail closed.
+per-venue bindings. Each v3 stack must use its own ComplianceEngine: the Engine's
+single `onlyRouter` binding cannot authorize a legacy Router and RouterV2 together.
+REGISTER plans include unsigned `Engine.setRouter(RouterV2)` before adapter
+wiring/pool changes, registration, implementation approval and pinning, then maker
+activation. UPDATE verifies existing bindings without rebinding the Engine or
+resetting pool state. `verifyVenueContext` checks versions, runtime/configuration,
+approval, source ownership, authorizer, Router dependencies, the reverse
+`Engine.router() == executionRouter` binding and AMM membership/token order.
+It inspects every active compiled binding for the onboarding token and rejects
+B-04-v1 even if non-blocking. B-04-v2 and policies without B-04 are supported;
+missing, unavailable or malformed compiled-policy reads fail closed. Repeat
+post-state verification for each onboarded security before activation.
 Schema 6 extends the existing unsigned plan format and adds no signing or custody.
 
 ## Migration and Verification
@@ -151,9 +164,10 @@ multisig and custody expansion remain deferred.
 
 The delivery gates are `scripts/check.sh`, both legacy `scripts/e2e-anvil.sh`
 profiles and `scripts/e2e-context-provenance.sh`. The isolated v3 runner uses real
-ERC-3643/ONCHAINID plus a minimal B-02-v2 token-wiring recipe, mock cash/pricing
-and local host/store/auth adapters. It proves both directions, mined mismatch
-rejections with unchanged balances/nonces and fresh-evidence settlement. It is not
+ERC-3643/ONCHAINID plus B-02-v2 token-wiring and B-04-v2 recipient-claim gates,
+mock cash/pricing and local host/store/auth adapters. It proves both directions,
+mined mismatch rejections with unchanged balances/nonces, affiliate sender-only
+MM-claim rejection and settlement with the recipient's MM claim only. It is not
 production infrastructure or a replacement for the Reg D integration tests.
 See [`../testing.md`](../testing.md) for the manual/CI gate boundary.
 

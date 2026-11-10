@@ -20,6 +20,7 @@ const abi = (file, contract) => JSON.parse(readFileSync(`out/${file}.sol/${contr
 const router = new Contract(a.routerV2, abi("ExecutionRouterV2", "ExecutionRouterV2"), taker);
 const adapter = new Contract(a.rfqV3Adapter, abi("RFQAdapterV3", "RFQAdapterV3"), provider);
 const affiliate = new Contract(a.affiliateSource, abi("Affiliate", "Affiliate"), admin);
+const engineSelection = new Contract(a.engineSelectionV2, abi("EngineSelectionV2", "EngineSelectionV2"), admin);
 const engine = new Contract(a.engine, abi("ComplianceEngine", "ComplianceEngine"), provider);
 const tokens = [a.cash, a.rwa].map((address) => new Contract(address, [
   "function approve(address,uint256) returns (bool)", "function balanceOf(address) view returns (uint256)"
@@ -78,7 +79,7 @@ try {
     const reject = async (label, bad, errorName) => {
       const before = await balances();
       await assert.rejects(router.execute.staticCall(bad), (error) =>
-        error.data?.slice(0, 10) === id(`${errorName}()`).slice(0, 10));
+        error.data?.slice(0, 10) === id(errorName.includes("(") ? errorName : `${errorName}()`).slice(0, 10));
       let receipt;
       try {receipt = await (await router.execute(bad, {gasLimit: 5000000})).wait();}
       catch (error) {receipt = error.receipt;}
@@ -86,7 +87,7 @@ try {
       assert.equal(receipt.status, 0);
       assert.deepEqual(await balances(), before);
       assert.equal(await router.usedNonce(taker.address, routerNonce), false);
-      assert.equal(await adapter.usedQuoteNonce(maker.address, signed.quote.nonce), false);
+      assert.equal(await adapter.usedQuoteNonce(maker.address, coder.decode([quoteTuple, "bytes"], bad.venueData)[0].nonce), false);
       pass(`${side}: ${label}, status 0 receipt, balances and nonces unchanged`);
     };
     await reject("seller mismatch", {...req, context: {...req.context, seller: taker.address}}, "RFQQuoteMismatch");
@@ -97,10 +98,19 @@ try {
     await (await affiliate.setClaim(sell ? taker.address : maker.address, a.rwa, 8, 1,
       admin.address, await now(), 0)).wait();
     await reject("actual sender evidence refresh invalidates signed commitment", req, "RFQQuoteMismatch");
-    const refreshed = await quote("refreshed");
+    await (await affiliate.setClaim(sell ? taker.address : maker.address, a.rwa, 1, 1,
+      admin.address, await now(), 0)).wait();
+    const refreshed = await quote("refreshed-affiliate");
     assert.notEqual(refreshed.quote.affiliateEvidenceHash, signed.quote.affiliateEvidenceHash);
-    const good = {...req, context: makeContext(refreshed.quote), deadline: refreshed.quote.expiry,
+    const good = {...req, context: makeContext(refreshed.quote, true), deadline: refreshed.quote.expiry,
       venueData: coder.encode([quoteTuple, "bytes"], [refreshed.quote, refreshed.signature])};
+    const sender = sell ? taker.address : maker.address;
+    const recipient = sell ? maker.address : taker.address;
+    await (await engineSelection.setMarketMakerClaim(sender, true)).wait();
+    await (await engineSelection.setMarketMakerClaim(recipient, false)).wait();
+    await reject("affiliate sender MM claim cannot substitute for recipient claim", good, "ComplianceRejected(bytes32)");
+    await (await engineSelection.setMarketMakerClaim(sender, false)).wait();
+    await (await engineSelection.setMarketMakerClaim(recipient, true)).wait();
     const before = await balances();
     const receipt = await (await router.execute(good)).wait();
     assert.equal(receipt.status, 1);
@@ -112,7 +122,7 @@ try {
     assert.equal(await router.usedNonce(taker.address, routerNonce), true);
     assert.equal(await adapter.usedQuoteNonce(maker.address, refreshed.quote.nonce), true);
     assert.ok(receipt.logs.some((log) => log.address.toLowerCase() === a.routerV2.toLowerCase()));
-    pass(`${side}: refreshed host quote settled exact token deltas through RouterV2, no custody`);
+    pass(`${side}: affiliate host quote settled to MM recipient with exact token deltas through RouterV2, no custody`);
     routerNonce++;
   }
   console.log(`Context provenance E2E: ${passes} passed, 0 failed`);

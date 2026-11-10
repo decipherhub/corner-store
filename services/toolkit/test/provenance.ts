@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
-import {AbiCoder, keccak256, toUtf8Bytes} from "ethers";
+import {AbiCoder, Interface, encodeBytes32String, keccak256, toUtf8Bytes} from "ethers";
 import {validateProductionOnboardingConfig, parseLegacyProductionOnboardingConfig, buildVenueContextTransactions, verifyVenueContext, venueContextConfigurationHash} from "../src";
 const addr = (n: number) => `0x${n.toString(16).padStart(40, "0")}`;
 const hash = (s: string) => keccak256(toUtf8Bytes(s));
@@ -46,7 +46,7 @@ test("unsigned activation transactions order wiring, pools, registration, review
 
 function reader(c: any, venue: any, patch: Record<string, unknown> = {}): any {
   const context = venue.context;
-  const base: Record<string, unknown> = {router: c.addresses.executionRouter, venueReg: c.addresses.venueRegistry, policyReg: c.addresses.tokenPolicyRegistry, operatorReg: c.addresses.operatorRegistry, engine: c.addresses.complianceEngine, adapterVersion: context.adapterVersion, contextVersion: 1, contextConfigHash: hash("adapter-config"), isContextImplementationApproved: true, affiliateSource: context.affiliateSource, owner: context.affiliateSourceOwner, makerAuthorizer: c.addresses.makerAuthorizer, registeredPool: true, token0: context.token0, token1: context.token1};
+  const base: Record<string, unknown> = {compiledBindingCountOf: 1n, compiledRulesOf: [[encodeBytes32String("B-04-v2"), 2]], router: c.addresses.executionRouter, venueReg: c.addresses.venueRegistry, policyReg: c.addresses.tokenPolicyRegistry, operatorReg: c.addresses.operatorRegistry, engine: c.addresses.complianceEngine, adapterVersion: context.adapterVersion, contextVersion: 1, contextConfigHash: hash("adapter-config"), isContextImplementationApproved: true, affiliateSource: context.affiliateSource, owner: context.affiliateSourceOwner, makerAuthorizer: c.addresses.makerAuthorizer, registeredPool: true, token0: context.token0, token1: context.token1};
   return {getCode: async () => code, call: async (_a: string, _abi: string[], fn: string) => {if (fn in patch) {if (patch[fn] instanceof Error) throw patch[fn]; return patch[fn];} if (fn === "contextEvidenceOf") return [context.adapterVersion, 1, context.adapterCodeHash, context.affiliateSource, context.affiliateSourceCodeHash, context.policyRegistry, context.policyRegistryCodeHash, context.configurationHash]; if (fn in base) return base[fn]; throw new Error(`unhandled ${fn}`);}};
 }
 
@@ -68,6 +68,65 @@ test("activation fails closed on mismatched and unavailable reads", async () => 
     const checks = await verifyVenueContext(c, v, reader(c, v, patch));
     assert.ok(checks.some((x: any) => !x.pass), JSON.stringify(patch));
   }
+});
+
+test("activation rejects a mismatched reverse Engine router binding", async () => {
+  const {c, v} = verifiedFixture();
+  const base = reader(c, v);
+  const patched = {...base, call: async (to: string, abi: string[], fn: string, args: unknown[]) =>
+    to === c.addresses.complianceEngine && fn === "router" ? addr(99) : base.call(to, abi, fn, args)};
+  const checks = await verifyVenueContext(c, v, patched);
+  assert.ok(checks.some((x: any) => x.name === `${c.addresses.complianceEngine}-router` && !x.pass));
+  assert.ok(checks.filter((x: any) => x.name !== `${c.addresses.complianceEngine}-router`).every((x: any) => x.pass));
+});
+
+test("activation rejects an unavailable reverse Engine router binding", async () => {
+  const {c, v} = verifiedFixture();
+  const base = reader(c, v);
+  const patched = {...base, call: async (to: string, abi: string[], fn: string, args: unknown[]) => {
+    if (to === c.addresses.complianceEngine && fn === "router") throw new Error("unavailable");
+    return base.call(to, abi, fn, args);
+  }};
+  const checks = await verifyVenueContext(c, v, patched);
+  assert.ok(checks.some((x: any) => x.name === `${c.addresses.complianceEngine}-router` && !x.pass));
+  assert.ok(checks.filter((x: any) => x.name !== `${c.addresses.complianceEngine}-router`).every((x: any) => x.pass));
+});
+
+test("activation rejects direction-unaware B-04 in the active compiled policy", async () => {
+  const {c, v} = verifiedFixture();
+  const checks = await verifyVenueContext(c, v, reader(c, v, {compiledRulesOf: [[encodeBytes32String("B-04-v1"), 2]]}));
+  assert.ok(checks.some((x: any) => x.name === "context-policy-direction" && !x.pass));
+});
+
+test("activation inspects every active binding and permits policies without B-04", async () => {
+  const {c, v} = verifiedFixture();
+  const base = reader(c, v, {compiledBindingCountOf: 2n});
+  const patched = {...base, call: async (to: string, abi: string[], fn: string, args: unknown[]) => {
+    if (fn === "compiledRulesOf") return [[encodeBytes32String(args[1] === 1 ? "B-04-v1" : "B-02-v2"), 2]];
+    return base.call(to, abi, fn, args);
+  }};
+  assert.ok((await verifyVenueContext(c, v, patched)).some((x: any) => x.name === "context-policy-direction" && !x.pass));
+  assert.ok((await verifyVenueContext(c, v, reader(c, v, {compiledRulesOf: [[encodeBytes32String("B-02-v2"), 2]]}))).every((x: any) => x.pass));
+});
+
+test("activation fails closed when compiled policy reads are unavailable or malformed", async () => {
+  for (const patch of [{compiledBindingCountOf: new Error("unavailable")}, {compiledRulesOf: new Error("unavailable")}, {compiledBindingCountOf: 0n}, {compiledBindingCountOf: 9n}, {compiledRulesOf: []}, {compiledRulesOf: [["malformed", 2]]}]) {
+    const {c, v} = verifiedFixture();
+    const checks = await verifyVenueContext(c, v, reader(c, v, patch));
+    assert.ok(checks.some((x: any) => x.name === "context-policy-direction" && !x.pass));
+  }
+});
+
+test("v3 activation binds its separate Engine before adapter wiring", () => {
+  const c = config();
+  const txs = buildVenueContextTransactions(c, ["policy-audit-checkpoint"]);
+  const binding = txs.find((t: any) => t.id === "context-engine-wire")!;
+  assert.ok(binding);
+  assert.equal(binding.to, c.addresses.complianceEngine);
+  const iface = new Interface(["function setRouter(address)"]);
+  assert.equal(iface.decodeFunctionData("setRouter", binding.data)[0].toLowerCase(), c.addresses.executionRouter.toLowerCase());
+  assert.deepEqual(binding.dependsOn, ["policy-audit-checkpoint"]);
+  assert.ok(txs.filter((t: any) => t.id.startsWith("context-adapter-")).every((t: any) => t.dependsOn.includes(binding.id)));
 });
 
 test("AMM activation requires registered target and exact canonical pool tokens", async () => {

@@ -1,4 +1,4 @@
-import {AbiCoder, Interface, keccak256, toUtf8Bytes} from "ethers";
+import {AbiCoder, Interface, encodeBytes32String, keccak256, toUtf8Bytes} from "ethers";
 import type {OnboardingReader, OnboardingTx, ProductionOnboardingCheck, ProductionOnboardingConfig, VenueInput} from "./production-onboarding";
 
 export interface VenueContextInput {
@@ -40,13 +40,14 @@ export function buildVenueContextTransactions(config: ProductionOnboardingConfig
   function add(id: string, to: string, data: string, dependencies: string[]) {
     txs.push({id, to, data, description: id, stage: "governance-owner", authority: "safe-owner", value: "0", operation: 0, dependsOn: [...dependencies]});
   }
+  add("context-engine-wire", config.addresses.complianceEngine!, adapter.encodeFunctionData("setRouter", [config.addresses.executionRouter]), dependsOn);
   const wiring = new Map<string, string>();
   const pools: string[] = [];
   for (const [index, v] of config.venues.entries()) {
     const key = v.adapter.toLowerCase();
     if (!wiring.has(key)) {
       const id = `context-adapter-${index + 1}-wire`;
-      add(id, v.adapter, adapter.encodeFunctionData("setRouter", [config.addresses.executionRouter]), dependsOn);
+      add(id, v.adapter, adapter.encodeFunctionData("setRouter", [config.addresses.executionRouter]), ["context-engine-wire"]);
       wiring.set(key, id);
     }
     if (enumNumber(v.venueType, ["AMM", "ORDER_BOOK", "RFQ"]) === 0) {
@@ -82,10 +83,27 @@ export async function verifyVenueContext(config: ProductionOnboardingConfig, ven
   }
   await read(venue.adapter, "function owner() view returns (address)", "owner", [], config.governance.safe);
   await read(c.affiliateSource, "function owner() view returns (address)", "owner", [], c.affiliateSourceOwner);
+  await read(config.addresses.complianceEngine!, "function router() view returns (address)", "router", [], config.addresses.executionRouter);
   await read(venue.adapter, "function router() view returns (address)", "router", [], config.addresses.executionRouter);
   await read(venue.adapter, "function adapterVersion() view returns (uint16)", "adapterVersion", [], c.adapterVersion);
   await read(venue.adapter, "function contextVersion() view returns (uint16)", "contextVersion", [], c.contextVersion);
   for (const [fn, expected] of [["venueReg", config.addresses.venueRegistry], ["policyReg", config.addresses.tokenPolicyRegistry], ["operatorReg", config.addresses.operatorRegistry], ["engine", config.addresses.complianceEngine]]) await read(config.addresses.executionRouter!, `function ${fn}() view returns (address)`, fn!, [], expected);
+  try {
+    const count = Number(await reader.call(config.addresses.tokenPolicyRegistry, ["function compiledBindingCountOf(address) view returns (uint256)"], "compiledBindingCountOf", [config.addresses.token]));
+    if (!Number.isInteger(count) || count < 1 || count > 8) throw new Error("invalid compiled binding count");
+    const legacyId = encodeBytes32String("B-04-v1").toLowerCase();
+    let directionAware = true;
+    for (let i = 0; i < count; i++) {
+      const rules = await reader.call(config.addresses.tokenPolicyRegistry, ["function compiledRulesOf(address,uint256) view returns (tuple(bytes32 elementId,uint8 action)[])"], "compiledRulesOf", [config.addresses.token, i]);
+      if (!Array.isArray(rules) || rules.length < 1 || rules.length > 32) throw new Error("invalid compiled rules");
+      for (const rule of rules) {
+        const id = String(rule.elementId ?? rule[0]);
+        if (!/^0x[0-9a-f]{64}$/i.test(id)) throw new Error("invalid compiled element ID");
+        if (id.toLowerCase() === legacyId) directionAware = false;
+      }
+    }
+    check("context-policy-direction", directionAware, "active compiled policy must replace B-04-v1 with opt-in B-04-v2 for context-aware venues");
+  } catch (error: any) {check("context-policy-direction", false, `unavailable: ${error.message}`);}
   await read(config.addresses.venueRegistry, VENUE_CONTEXT_ABI[3], "isContextImplementationApproved", [c.adapterCodeHash, c.adapterVersion, c.contextVersion], true);
   try {
     const actual = await reader.call(config.addresses.venueRegistry, [VENUE_CONTEXT_ABI[0]], "contextEvidenceOf", [venue.venue]);

@@ -1,5 +1,43 @@
 # Progress
 
+## 2026-11-11 Session: EXEC-002 Confirmed Review Fixes
+
+Scope: F1 recipient MM-claim selection and F2 reverse Engine/Router activation
+binding. Existing B-04-v1, its tests, default recipes and public Monad v2 paths
+are unchanged. EXEC-002 remains passing after the checks below.
+
+- F1: added opt-in immutable `EngineSelectionV2` (`B-04-v2`) using `AssetFlow`
+  for each security recipient. V3 integration/live fixtures register and bind
+  it explicitly. RouterV2 regressions cover both asymmetric affiliate sells and
+  buy parity with v1; unit coverage adds 256-run buy parity fuzzing, exemptions
+  and fail-closed context. Schema 6 scans every active compiled binding and
+  rejects B-04-v1 or unavailable/malformed reads, allowing policies without B-04.
+- F2: activation now requires `ComplianceEngine.router() == executionRouter`,
+  including unreadable-read rejection with all other bindings correct. REGISTER
+  plans add unsigned Engine wiring before adapter wiring. D028 and the product
+  spec require a separate v3 Engine because its Router authorization is single;
+  UPDATE continues to verify existing bindings without rebinding.
+- Tests first: with the original B-04, the two asymmetric sell regressions
+  failed and the other 11 integration tests passed. The initial Toolkit run
+  exposed all five new activation/wiring gaps (9 passed, 5 failed). Final
+  passing runs include the fixes and additional compiled-policy coverage.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0. Changed Solidity files were formatted with targeted `forge fmt` first. |
+| `forge build` | Exit 0; compiler/lint warnings remain. |
+| `forge test --offline` | Exit 0; 1,100 passed across 66 suites, 0 failed, 0 skipped. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm test --prefix services/toolkit'` | Exit 0; smoke gate and 15 provenance tests passed, 0 failed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'` | Exit 0; 12 passed: 10 mined rejections with unchanged balances/nonces and 2 affiliate settlements with recipient MM claims only. |
+| `git diff --check` | Exit 0. Protected-path diff against origin/main and legacy B-04/tests/recipe diff checks also exited 0. |
+
+Logs are local `/private/tmp/w157-fixes-*.log` files. UNVERIFIED in this fix
+session: the broader `scripts/check.sh`, legacy Anvil profiles and public or
+production activation were not rerun. Prior delivery evidence below is historical.
+Next: review these working-tree fixes and run the documented activation checks
+for each separately deployed v3 stack and onboarded security. No commit, push,
+publication or GitHub comment was performed.
+
 ## 2026-11-11 Session: EXEC-002 Delivery and Full Verification
 
 EXEC-002 (issue #157) is passing after all four approved implementation slices

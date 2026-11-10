@@ -12,6 +12,7 @@ import {MakerAuthorizer} from "../src/registry/MakerAuthorizer.sol";
 import {ComplianceEngine} from "../src/compliance/ComplianceEngine.sol";
 import {BaseRecipe} from "../src/compliance/recipes/BaseRecipe.sol";
 import {Erc3643NativeV2} from "../src/compliance/elements/Erc3643NativeV2.sol";
+import {EngineSelectionV2} from "../src/compliance/elements/EngineSelectionV2.sol";
 import {Affiliate} from "../src/compliance/elements/Affiliate.sol";
 import {ExecutionRouterV2} from "../src/execution/ExecutionRouterV2.sol";
 import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
@@ -25,12 +26,13 @@ contract ContextProvenanceRecipe is BaseRecipe {
     constructor() BaseRecipe(1, 1, _ids()) {}
 
     function _ids() private pure returns (bytes32[] memory ids) {
-        ids = new bytes32[](1);
+        ids = new bytes32[](2);
         ids[0] = "B-02-v2";
+        ids[1] = "B-04-v2";
     }
 }
 
-/// @notice Isolated local-only v3 fixture with real ERC-3643/ONCHAINID and a minimal token-wiring policy.
+/// @notice Isolated local-only v3 fixture with real ERC-3643/ONCHAINID and token-wiring/direction-aware engine gates.
 contract ContextProvenanceFixture is Script, TREXCore {
     string internal constant MNEMONIC = "test test test test test test test test test test test junk";
 
@@ -42,6 +44,7 @@ contract ContextProvenanceFixture is Script, TREXCore {
     VenueRegistry internal venues;
     ExecutionRouterV2 internal router;
     Affiliate internal affiliate;
+    EngineSelectionV2 internal engineSelection;
     RFQAdapterV3 internal adapter;
 
     function run() external {
@@ -67,6 +70,9 @@ contract ContextProvenanceFixture is Script, TREXCore {
             address(rwaToken), address(idRegistry), address(compliance), address(rwaToken).codehash
         );
         elements.registerElement("B-02-v2", address(nativeToken));
+        engineSelection = new EngineSelectionV2();
+        engineSelection.setSupportedEngines(address(rwaToken), 4);
+        elements.registerElement("B-04-v2", address(engineSelection));
         recipes.registerRecipe(1, 1, address(new ContextProvenanceRecipe()));
         ManifestCore memory manifest;
         manifest.supportedEngines = uint8(1 << uint256(VenueType.RFQ));
@@ -113,6 +119,7 @@ contract ContextProvenanceFixture is Script, TREXCore {
         vm.serializeAddress(key, "venueReg", address(venues));
         vm.serializeAddress(key, "policyReg", address(policies));
         vm.serializeAddress(key, "engine", address(engine));
+        vm.serializeAddress(key, "engineSelectionV2", address(engineSelection));
         vm.serializeAddress(key, "rwa", address(rwaToken));
         string memory json = vm.serializeAddress(key, "cash", address(cash));
         vm.writeJson(json, vm.envString("CONTEXT_PROVENANCE_ARTIFACT"));

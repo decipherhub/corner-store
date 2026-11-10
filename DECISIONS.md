@@ -1371,6 +1371,20 @@ contracts and the public RFQ v2 runtime.
 5. Implementation approval reviews immutable code and dependencies explicitly.
    Self-declared capability/runtime hashes cannot prove correctness or
    immutability. Governance-approved malicious code remains a trust boundary.
+6. V3 deployments admitting affiliate RFQ sells must use the new immutable
+   `EngineSelectionV2` (`B-04-v2`) wherever B-04 applies. It resolves the security
+   recipient per asset through `AssetFlow`: buyer for tokenOut, seller for
+   tokenIn, and checks that recipient's MM claim. Register the new ID and bind it
+   through an opt-in exact Recipe/Manifest update; existing B-04-v1, tests,
+   recipes and defaults stay unchanged. Schema 6 activation rejects any active
+   compiled B-04-v1 rule, including non-blocking rules, and unavailable/malformed
+   compiled-policy reads. Policies without B-04 remain supported.
+7. Deploy a separate ComplianceEngine for each v3 Router stack. Its single
+   `onlyRouter` binding cannot serve both legacy Router and RouterV2. Schema 6
+   REGISTER plans include unsigned `Engine.setRouter(RouterV2)` before adapter
+   wiring and final evidence pinning; UPDATE verifies existing wiring without
+   rebinding. Activation requires both `RouterV2.engine() == Engine` and
+   `Engine.router() == RouterV2`, rejecting mismatched or unavailable reads.
 
 ### Alternatives Considered
 
