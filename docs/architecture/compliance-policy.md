@@ -136,6 +136,32 @@ struct ComplianceDecision {
 }
 ```
 
+## Complete Requirement Reporting
+
+`ComplianceReporter` is an opt-in public view separate from settlement evaluation.
+It takes its immutable Registry references from an existing Engine, reads the same
+active compiled rules and aligned parameter bytes, and visits all requirements on
+both regulated legs. Rows identify token, binding, exact Recipe version, path,
+Element and compiled enforcement action. Statuses distinguish pass, fail,
+undetermined and nonapplicable. The authoritative Engine outcome is returned
+separately, including denials from policy, path and venue gates.
+
+A failed path alternative or flag-only check can coexist with Engine permission.
+Reporter failure does not create a new settlement restriction, and a report never
+authorizes execution. Engine/Router call paths remain unchanged and settlement
+still evaluates current state. Provider/Recipe reverts make diagnostics incomplete
+rather than hiding later requirements or returning a cached success.
+
+Public output aggregates all `A-01-*`, `A-12-*` and `F-*` checks into one opaque
+restricted outcome without sensitive rows or reasons. When these families are
+present, Engine reason, flags and relied-claim fields are redacted as well. This
+is a conservative disclosure default awaiting counsel approval of public fields;
+it does not conceal pre-existing on-chain state or direct calls. Confidential
+enrichment stays off-chain. The additive Toolkit reader uses an explicit block
+reference and typed results. See
+[`compliance-reporting.md`](../product-specs/compliance-reporting.md) for ABI,
+completeness, snapshot and disclosure semantics.
+
 ## Trust Boundaries
 
 - 법률 해석과 production 기준의 정확성은 승인된 Recipe/Manifest와 운영주체에
