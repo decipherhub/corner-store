@@ -472,6 +472,7 @@ async function strictFreshnessEvidenceSmoke(maker: `0x${string}`, makerWallet: W
     chainId: 31337,
     verifyingContract: ADAPTER,
     maker,
+    products: [durableProduct(maker)],
     signer: {signTypedData: (typedData: RFQTypedData) => {
       signerCalls += 1;
       return makerWallet.signTypedData(typedData.domain, typedData.types, typedData.message) as Promise<`0x${string}`>;
@@ -504,6 +505,7 @@ async function strictFreshnessEvidenceSmoke(maker: `0x${string}`, makerWallet: W
       chainId: 31337,
       verifyingContract: ADAPTER,
       maker,
+      products: [durableProduct(maker)],
       signer: staleSigner,
       pricing: {price: () => ({amountOut: "1", snapshotId: "stale-price", version: "price-v1", observedAt: now - 100, validUntil: now - 1, available: true})},
       riskCheck: {check: () => ({decision: "passed", snapshotId: "risk", version: "risk-v1", observedAt: now - 1, validUntil: now + 60, available: true})},
@@ -521,6 +523,7 @@ async function strictFreshnessEvidenceSmoke(maker: `0x${string}`, makerWallet: W
       chainId: 31337,
       verifyingContract: ADAPTER,
       maker,
+      products: [durableProduct(maker)],
       signer: riskRejectedSigner,
       pricing: {price: () => ({amountOut: "1", snapshotId: "price", version: "price-v1", observedAt: now - 1, validUntil: now + 60, available: true})},
       riskCheck: {check: () => ({decision: "rejected", reason: "raw desk private reason", snapshotId: "risk", version: "risk-v1", observedAt: now - 1, validUntil: now + 60, available: true})},
@@ -558,7 +561,7 @@ async function strictFreshnessEvidenceSmoke(maker: `0x${string}`, makerWallet: W
   await legacyStore().markSigned({scope, idempotencyKeyHash: hashCanonical({value: "legacy-no-evidence"}), requestHash: hashCanonical(request), signedQuote, quoteHash: hashCanonical({quote: signedQuote.quote, domain: signedQuote.typedData.domain}), now});
   await assertRejects(
     () => new RFQQuoteCoordinator({
-      chainId: 31337, verifyingContract: ADAPTER, maker, signer: {signTypedData: (typedData: RFQTypedData) => makerWallet.signTypedData(typedData.domain, typedData.types, typedData.message) as Promise<`0x${string}`>},
+      chainId: 31337, verifyingContract: ADAPTER, maker, products: [durableProduct(maker)], signer: {signTypedData: (typedData: RFQTypedData) => makerWallet.signTypedData(typedData.domain, typedData.types, typedData.message) as Promise<`0x${string}`>},
       pricing: {price: () => ({amountOut: "999", snapshotId: "new", version: "v", observedAt: now, validUntil: now + 1, available: true})},
       riskCheck: {check: () => ({decision: "passed", snapshotId: "new", version: "v", observedAt: now, validUntil: now + 1, available: true})},
       store: legacyStore(), now: () => now
@@ -574,6 +577,7 @@ async function typedSignerErrorSmoke(maker: `0x${string}`) {
     chainId: 31337,
     verifyingContract: ADAPTER,
     maker,
+    products: [durableProduct(maker)],
     signer: {signTypedData: async () => { throw new Error("KMS timeout"); }},
     pricing: {price: () => ({amountOut: "1", snapshotId: "price", version: "price-v1", observedAt: now, validUntil: now + 60, available: true})},
     riskCheck: {check: () => ({decision: "passed", snapshotId: "risk", version: "risk-v1", observedAt: now, validUntil: now + 60, available: true})},
@@ -609,12 +613,13 @@ async function strictReservedReplayEvidenceSmoke(maker: `0x${string}`, makerWall
     inventoryDelta: {maker: maker.toLowerCase() as `0x${string}`, token: TOKEN_OUT as `0x${string}`, venue: VENUE as `0x${string}`, amount: "1"},
     reservationExpiresAt: reserveTime + 60,
     createdAt: reserveTime,
+    productAuthorization: {schemaVersion: 1, chainId: 31337, adapter: ADAPTER, ...durableProduct(maker)},
     productionEvidence: baseEvidence
   });
   const staleSigner = new CaptureSigner();
   await assertRejects(
     () => new RFQQuoteCoordinator({
-      chainId: 31337, verifyingContract: ADAPTER, maker, signer: staleSigner,
+      chainId: 31337, verifyingContract: ADAPTER, maker, products: [durableProduct(maker)], signer: staleSigner,
       pricing: {price: () => ({amountOut: "999", snapshotId: "unused", version: "unused", observedAt: reserveTime, validUntil: reserveTime + 100, available: true})},
       riskCheck: {check: () => ({decision: "passed", snapshotId: "unused", version: "unused", observedAt: reserveTime, validUntil: reserveTime + 100, available: true})},
       store: staleStore(), now: () => reserveTime + 11
@@ -625,7 +630,7 @@ async function strictReservedReplayEvidenceSmoke(maker: `0x${string}`, makerWall
   assert(staleSigner.calls === 0, "stale reserved replay does not call signer");
   assert(staleRecord?.state === "REVOKED" && staleRecord.inventoryLease?.released === true && staleRecord.inventoryLease.releaseReason === "revoke", "stale reserved replay terminalizes and releases lease exactly once");
   await assertRejects(
-    () => new RFQQuoteCoordinator({chainId: 31337, verifyingContract: ADAPTER, maker, signer: staleSigner, pricing: {price: () => ({amountOut: "1"})}, riskCheck: new NoopInventoryRiskCheck(), store: staleStore(), now: () => reserveTime + 12}).quoteWithEvidence(staleIntent, {now: reserveTime + 12}),
+    () => new RFQQuoteCoordinator({chainId: 31337, verifyingContract: ADAPTER, maker, products: [durableProduct(maker)], signer: staleSigner, pricing: {price: () => ({amountOut: "1"})}, riskCheck: new NoopInventoryRiskCheck(), store: staleStore(), now: () => reserveTime + 12}).quoteWithEvidence(staleIntent, {now: reserveTime + 12}),
     "terminal stale reserved retry remains closed"
   );
   assert(staleSigner.calls === 0, "subsequent terminal retry still does not sign");
@@ -642,6 +647,7 @@ async function strictReservedReplayEvidenceSmoke(maker: `0x${string}`, makerWall
     inventoryDelta: {maker: maker.toLowerCase() as `0x${string}`, token: TOKEN_OUT as `0x${string}`, venue: VENUE as `0x${string}`, amount: "1"},
     reservationExpiresAt: reserveTime + 60,
     createdAt: reserveTime,
+    productAuthorization: {schemaVersion: 1, chainId: 31337, adapter: ADAPTER, ...durableProduct(maker)},
     productionEvidence: {
       pricing: {...baseEvidence.pricing, validUntil: reserveTime + 100},
       risk: {...baseEvidence.risk, validUntil: reserveTime + 100}
@@ -649,7 +655,7 @@ async function strictReservedReplayEvidenceSmoke(maker: `0x${string}`, makerWall
   });
   let freshSignerCalls = 0;
   const fresh = await new RFQQuoteCoordinator({
-    chainId: 31337, verifyingContract: ADAPTER, maker,
+    chainId: 31337, verifyingContract: ADAPTER, maker, products: [durableProduct(maker)],
     signer: {signTypedData: (typedData: RFQTypedData) => { freshSignerCalls += 1; return makerWallet.signTypedData(typedData.domain, typedData.types, typedData.message) as Promise<`0x${string}`>; }},
     pricing: {price: () => { throw new Error("should not reprice reserved retry"); }},
     riskCheck: {check: () => { throw new Error("should not rerisk reserved retry"); }},
@@ -852,6 +858,10 @@ function deferred<T>() {
     reject = rej;
   });
   return {promise, resolve, reject};
+}
+
+function durableProduct(maker: `0x${string}`) {
+  return {maker: maker.toLowerCase() as `0x${string}`, tokenIn: TOKEN_IN as `0x${string}`, tokenOut: TOKEN_OUT as `0x${string}`, venue: VENUE as `0x${string}`, policyId: POLICY_ID, capability: "rfq.quote.v2" as const, flowType: 0 as const};
 }
 
 function durableIntent(idempotencyKey: string) {

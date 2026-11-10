@@ -9,6 +9,38 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## RFQ-006: Bounded Lifetime and Pre-Pricing Product Authorization
+
+### Behavior
+
+- Production RFQ v2/v3 requests validate bounded TTL and a local operator product
+  catalog before dependency calls, pricing, risk, reservation or signing.
+- Authoritative product authorization and original expiry persist with the request;
+  replay never refreshes policy or signature. Failures use bounded, redacted codes.
+- Default TTL is 60 seconds, default maximum 300 seconds, hard maximum 3600 seconds.
+  Lightweight legacy SDK usage and protected public demo paths remain compatible.
+
+### Verification
+
+- RFQ/coordinator and host ordering, TTL boundary, persistence/replay and taxonomy tests
+- Node 20 RFQ, host, Toolkit and CLI tests
+- `forge fmt --check`, `forge test --offline`, `scripts/check.sh`, `git diff --check`
+- Both `scripts/e2e-anvil.sh` profiles and `scripts/e2e-context-provenance.sh`
+
+### State
+
+passing
+
+### Notes
+
+- Issue #155; D030. HACK-001 closure is owned by approved upstream PR #162.
+- Scope excludes contracts, custody/key management and the store creation flake.
+- Final verification: 1,100 Foundry tests; Node 20 RFQ/host/Toolkit/CLI smoke and
+  22/10/15/5 named tests; full repository gate; both legacy Anvil profiles and
+  12 context-provenance E2E cases passed. See the 2026-11-11 PROGRESS entry.
+- Production evidence callers must configure catalogs. Older records without a
+  persisted grant require draining and a fresh request namespace/store.
+
 ## HACK-001 — Monad Onchain Finance RFQ Demo
 
 ### Behavior
@@ -69,7 +101,7 @@
 
 ### State
 
-active
+passing
 
 ### Notes
 

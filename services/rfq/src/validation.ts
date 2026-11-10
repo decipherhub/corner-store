@@ -25,8 +25,8 @@ export function normalizeChainId(value: number): number {
   return value;
 }
 
-export function normalizeTtlSeconds(value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0) throw new Error("ttlSeconds must be a positive safe integer");
+export function normalizeTtlSeconds(value: number, maximum = Number.MAX_SAFE_INTEGER): number {
+  if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) throw new Error("ttlSeconds must be a positive safe integer within the configured maximum");
   return value;
 }
 

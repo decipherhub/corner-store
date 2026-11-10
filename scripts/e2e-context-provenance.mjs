@@ -40,7 +40,11 @@ const balances = async () => Promise.all(tokens.flatMap((token) =>
   [taker.address, maker.address, a.routerV2, a.rfqV3Adapter].map((address) => token.balanceOf(address))));
 const fresh = async () => ({snapshotId: "local-fixture", version: "1", observedAt: await now(),
   validUntil: await now() + 600, available: true});
-const config = {chainId: 31337, verifyingContract: a.rfqV3Adapter, maker: maker.address,
+const productPolicyId = (await engine.policyHashesOf(a.rwa)).policyId;
+const products = [2, 3].flatMap((version) => [false, true].map((sell) => ({maker: maker.address,
+  tokenIn: sell ? a.rwa : a.cash, tokenOut: sell ? a.cash : a.rwa, venue: a.rfqV3Venue,
+  policyId: productPolicyId, capability: `rfq.quote.v${version}`, flowType: 0})));
+const config = {products, maxTtlSeconds: 600, chainId: 31337, verifyingContract: a.rfqV3Adapter, maker: maker.address,
   now, defaultTtlSeconds: 600, signer: {signTypedData: (data) => maker.signTypedData(data.domain, data.types, data.message)},
   pricing: {price: async (request) => ({amountOut: request.amountIn, ...await fresh()})},
   riskCheck: {check: async () => ({...await fresh(), decision: "passed"})},
