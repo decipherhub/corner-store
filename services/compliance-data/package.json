@@ -26,18 +26,56 @@
       "require": "./dist/src/kyc-conformance.js",
       "default": "./dist/src/kyc-conformance.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./v2": {
+      "types": "./dist/src/identity-v2.d.ts",
+      "require": "./dist/src/identity-v2.js",
+      "default": "./dist/src/identity-v2.js"
+    },
+    "./spi-v2": {
+      "types": "./dist/src/kyc-spi-v2.d.ts",
+      "require": "./dist/src/kyc-spi-v2.js",
+      "default": "./dist/src/kyc-spi-v2.js"
+    },
+    "./demo-v2": {
+      "types": "./dist/src/kyc-demo-v2.d.ts",
+      "require": "./dist/src/kyc-demo-v2.js",
+      "default": "./dist/src/kyc-demo-v2.js"
+    },
+    "./conformance-v2": {
+      "types": "./dist/src/kyc-conformance-v2.d.ts",
+      "require": "./dist/src/kyc-conformance-v2.js",
+      "default": "./dist/src/kyc-conformance-v2.js"
+    }
   },
   "typesVersions": {
     "*": {
-      "spi": ["dist/src/kyc-spi.d.ts"],
-      "demo": ["dist/src/kyc-demo.d.ts"],
-      "conformance": ["dist/src/kyc-conformance.d.ts"]
+      "spi": [
+        "dist/src/kyc-spi.d.ts"
+      ],
+      "demo": [
+        "dist/src/kyc-demo.d.ts"
+      ],
+      "conformance": [
+        "dist/src/kyc-conformance.d.ts"
+      ],
+      "v2": [
+        "dist/src/identity-v2.d.ts"
+      ],
+      "spi-v2": [
+        "dist/src/kyc-spi-v2.d.ts"
+      ],
+      "demo-v2": [
+        "dist/src/kyc-demo-v2.d.ts"
+      ],
+      "conformance-v2": [
+        "dist/src/kyc-conformance-v2.d.ts"
+      ]
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node dist/test/smoke.js && node dist/test/kyc-provider.js"
+    "test": "npm run build && node dist/test/smoke.js && node dist/test/kyc-provider.js && node --test dist/test/kyc-v2.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

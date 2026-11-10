@@ -1,7 +1,8 @@
 # Opt-in identity policy topology
 
-Status: DATA-004 step 1, issue #159, intended decision D031. Evidence acceptance
-and integration are later steps of the approved plan. This is an enforcement
+Status: DATA-004 steps 1-2, issue #159, intended decision D031. Evidence acceptance
+is specified in [identity-evidence-v2.md](./identity-evidence-v2.md); trading
+integration is step 3 of the approved plan. This is an enforcement
 configuration contract, with no judgment about an operator's legal obligations.
 
 Schema 7 production onboarding adds `recipes[].identityPolicy` for recipes that
@@ -57,9 +58,9 @@ Schemas 1 through 6 retain their existing meaning and cannot opt into A-04-v2 or
 A-04-v1 is rejected. A-04-v1's ABI, automatically seeded legacy claim behavior,
 existing recipes and published RFQ v2 deployments remain unchanged.
 
-The step 1 A-04-v2 implementation is a fail-closed topology foundation. Even valid
-DIRECT parameters return A-04-v2 reason 2 (missing accepted evidence). There is no
-accepted-evidence setter or trading integration in this slice. Step 2 adds the
-separate evidence record and lifecycle before any v2 activation; step 3 supplies
+The step 1 foundation returned reason 2 for every valid DIRECT policy. Step 2
+adds separate operator-accepted evidence, issuer trust and lifecycle checks as
+specified in [identity-evidence-v2.md](./identity-evidence-v2.md). Valid DIRECT
+parameters alone still cannot pass without accepted evidence. Step 3 supplies
 the opt-in recipe and settlement verification. No v2 deployment is performed by
-step 1.
+steps 1-2.
