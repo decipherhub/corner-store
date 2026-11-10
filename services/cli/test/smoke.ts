@@ -2,7 +2,8 @@ import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "f
 import {createServer} from "http";
 import {tmpdir} from "os";
 import {join} from "path";
-import {AbiCoder, Wallet, verifyTypedData} from "ethers";
+import {AbiCoder, Interface, Wallet, verifyTypedData} from "ethers";
+import {EVENTS_ABI, ROUTER_ABI} from "../src/abi";
 
 import {
   BUIDL_LIKE_MANIFEST_HASH,
@@ -37,7 +38,8 @@ import {
   cmdProductionDeploy,
   cmdProductionOnboardingPlan,
   cmdProductionOnboardingVerify,
-  cmdProductionPlan
+  cmdProductionPlan,
+  formatEvent
 } from "../src/commands";
 import {createProjectDescriptor, resolveProjectTemplate} from "../../toolkit/src/project-templates";
 
@@ -72,6 +74,49 @@ const D01_DIRECT_CODE3 = "0x944f96138687357570c74d60495e55251602230e456018945bdf
 const F03_DIRECT_CODE2 = "0x5d92032bfc7789d5259fa504825a7aee201b62bfb2f705423901f179444eb22a";
 
 async function main() {
+  const settlementInterface = new Interface([
+    "event SettlementExecutedV2(bytes32 indexed executionId,address indexed venue,address tokenIn,address tokenOut,bytes32 indexed policyId,uint256 amountIn,uint256 amountOut)",
+    "event Executed(bytes32 indexed executionId,address indexed venue,uint256 amountOut)",
+    "event RFQFilled(bytes32 indexed quoteHash,address indexed maker,address indexed taker,uint256 amountIn,uint256 amountOut)"
+  ]);
+  const executionId = "0x" + "11".repeat(32);
+  const policyId = "0x" + "22".repeat(32);
+  const venue = "0x" + "33".repeat(20);
+  const tokenIn = "0x" + "44".repeat(20);
+  const tokenOut = "0x" + "55".repeat(20);
+  for (const abi of [ROUTER_ABI, EVENTS_ABI]) {
+    const iface = new Interface(abi);
+    for (const [input, output] of [[tokenIn, tokenOut], [tokenOut, tokenIn]]) {
+      const encoded = settlementInterface.encodeEventLog("SettlementExecutedV2", [
+        executionId, venue, input, output, policyId, 123n, 456n
+      ]);
+      const parsed = iface.parseLog(encoded);
+      assert(parsed?.name === "SettlementExecutedV2", "decodes the versioned settlement event");
+      assert(parsed!.args.executionId === executionId && parsed!.args.venue === venue, "decodes execution identity");
+      assert(parsed!.args.tokenIn === input && parsed!.args.tokenOut === output, "preserves buy/sell token direction");
+      assert(parsed!.args.policyId === policyId, "decodes fresh policy identity");
+      assert(parsed!.args.amountIn === 123n && parsed!.args.amountOut === 456n, "decodes raw measured amounts");
+      assert(
+        formatEvent(parsed!) === `SettlementExecutedV2 executionId=${executionId} venue=${venue} tokenIn=${input} tokenOut=${output} policyId=${policyId} amountIn=123 amountOut=456`,
+        "watch renders all V2 fields in token base units"
+      );
+    }
+    const legacy = iface.parseLog(settlementInterface.encodeEventLog("Executed", [executionId, venue, 456n]));
+    assert(legacy?.name === "Executed" && legacy.args.amountOut === 456n, "legacy Executed decoding is preserved");
+    assert(
+      formatEvent(legacy!) === `Executed          venue=${venue} amountOut=0.000000000000000456 executionId=${executionId}`,
+      "legacy watch output is preserved"
+    );
+  }
+  const rfqFilled = new Interface(EVENTS_ABI).parseLog(
+    settlementInterface.encodeEventLog("RFQFilled", [executionId, venue, tokenIn, 123n, 456n])
+  );
+  assert(rfqFilled?.name === "RFQFilled" && rfqFilled.args.amountIn === 123n, "RFQFilled decoding is preserved");
+  assert(
+    formatEvent(rfqFilled!) === `RFQFilled         maker=${venue} taker=${tokenIn} amountIn=0.000000000000000123 amountOut=0.000000000000000456`,
+    "RFQFilled watch output is preserved"
+  );
+
   assert(isNodeVersionSupported("18.0.0"), "Node 18 is supported");
   assert(isNodeVersionSupported("v24.4.1"), "newer Node releases are supported");
   assert(!isNodeVersionSupported("16.20.1"), "Node 16 is rejected");

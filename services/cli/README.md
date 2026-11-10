@@ -235,7 +235,7 @@ CLI v2 (CLI-002) adds preflight, the sell direction, and observability:
 corner-store check <buyer> [--venue amm|rfq] [--amount <n>] [--json]   # per-element compliance preflight (no trade) + engine verdict; exit 1 if rejected
 corner-store sell <amountIn> [--min <amountOut>]                        # AMM sell (tokenIn=RWA, tokenOut=QUOTE); defaults to investor account 1
 corner-store balances [addr...] [--json]                               # RWA/QUOTE balances + adapter allowances (default: the 5 well-known roles)
-corner-store watch [--from <block>]                                    # live event tail (Executed/RFQFilled/RFQQuoteCancelled/MakerApprovalSet/Manifest*/ComplianceFlags/SurveillanceFlag); Ctrl-C to stop
+corner-store watch [--from <block>]                                    # live event tail (SettlementExecutedV2/Executed/RFQFilled/RFQQuoteCancelled/MakerApprovalSet/Manifest*/ComplianceFlags/SurveillanceFlag); Ctrl-C to stop
 corner-store faucet <addr> <amount>                                    # mint QUOTE (MockERC20.mint is permissionless — demo-only)
 corner-store snapshot                                                  # anvil evm_snapshot -> prints id
 corner-store restore <id>                                              # anvil evm_revert (invalidates later snapshots)
@@ -252,6 +252,25 @@ Amounts are given in ether units (18 decimals). Failed transactions exit
 non-zero and print the decoded revert; any `ComplianceRejected(bytes32)` is
 auto-decoded against the precomputed reason table (`reason` also decodes a code
 standalone).
+
+### Settlement event decoding
+
+`watch` decodes the additive `SettlementExecutedV2` event on new Router deployments
+and continues decoding legacy `Executed` and RFQAdapter events on existing ones.
+The V2 line includes `executionId`, `venue`, `tokenIn`, `tokenOut`, the fresh
+decision's `policyId`, and measured `amountIn`/`amountOut`. V2 amounts are raw token
+base units so tokens with different decimals can be reconstructed without an
+18-decimal assumption. Legacy event lines keep their existing ether formatting.
+
+`watch` is a log tail, not a trade counter: a successful RFQ execution on a new
+Router shows `RFQFilled`, `Executed` and `SettlementExecutedV2`. Count only V2 as
+the canonical trade on deployments that emit it; use `Executed` as the fallback
+for old deployments. Select this capability per deployment, or prefer V2 per
+execution in mixed history. Never add RFQFilled or the paired legacy Executed as
+another trade. Deduplicate canonical logs by chain ID, transaction hash and log
+index, and correlate Router events by Router address and execution ID within the
+transaction. RFQFilled's quote hash differs from the Router execution ID.
+See [event versioning](../../docs/sdk-versioning.md#settlement-event-v2-migration).
 
 ## CLI demo (walkthrough)
 

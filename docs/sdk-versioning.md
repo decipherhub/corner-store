@@ -106,6 +106,30 @@ Migration steps:
 4. expire or cancel outstanding v1 quotes rather than converting them;
 5. run RFQ SDK/host conformance, Foundry RFQ tests and a Router settlement E2E.
 
+### Settlement event v2 migration
+
+New Router deployments add `SettlementExecutedV2(bytes32,address,address,address,bytes32,uint256,uint256)`
+without changing `execute`, `ExecutionResult`, the legacy `Executed` signature or
+RFQAdapter events. Its indexed fields are `executionId`, `venue` and `policyId`;
+the remaining fields are `tokenIn`, `tokenOut`, measured `amountIn` and measured
+`amountOut`, in that order. `policyId` comes from the fresh decision and amounts
+use token base units. Emission follows successful stateful commit.
+
+This is an additive event/CLI capability suitable for a minor SDK release. Updating
+the CLI does not upgrade deployed Router bytecode. Opt in by selecting a reviewed
+new Router deployment and recording its address and activation block. Regenerate
+consumer ABIs with both event versions and retain old decoding for historical or
+unchanged deployments, including the pinned public demo.
+
+Count only `SettlementExecutedV2` where supported. Legacy `Executed` and adapter
+`RFQFilled` from that execution are correlation records, not extra trades. Use
+`Executed` as the canonical fallback on older deployments, selected per deployment
+or per execution when reading mixed history. Deduplicate canonical logs by chain
+ID, transaction hash and log index; correlate legacy Router logs by Router address
+and execution ID within the transaction. An RFQ quote hash is not the Router
+execution ID. See [settlement events](./architecture/execution-routing.md#settlement-events)
+for field semantics.
+
 ### Production onboarding schema v5 migration
 
 Schema v5 is additive and does not reinterpret v1-v4 inputs. Use it when a policy

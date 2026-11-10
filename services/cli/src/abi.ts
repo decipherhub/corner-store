@@ -4,7 +4,8 @@
 // ExecutionRouter.execute takes a nested ExecutionRequest{ComplianceContext,...}.
 export const ROUTER_ABI = [
   "function execute((tuple(address initiator,address buyer,address seller,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,uint8 venueType,address venue,uint8 flowType,bool sellerIsAffiliate) context,uint256 amountOutMin,uint64 deadline,uint256 nonce,bytes venueData) req) returns (tuple(uint256 amountOut,bytes32 executionId))",
-  "event Executed(bytes32 indexed executionId, address indexed venue, uint256 amountOut)"
+  "event Executed(bytes32 indexed executionId, address indexed venue, uint256 amountOut)",
+  "event SettlementExecutedV2(bytes32 indexed executionId, address indexed venue, address tokenIn, address tokenOut, bytes32 indexed policyId, uint256 amountIn, uint256 amountOut)"
 ];
 
 // ExecutionRouter (and adapters) surface these custom errors on the revert path.
@@ -77,9 +78,10 @@ export const ENGINE_ABI = [
 ];
 
 // Event fragments for `watch` (src/libraries/Events.sol + RFQAdapter.sol). Only
-// the seven the tail decodes; topic0 hashes are derived from these at runtime.
+// the events the tail decodes; topic0 hashes are derived from these at runtime.
 export const EVENTS_ABI = [
   "event Executed(bytes32 indexed executionId, address indexed venue, uint256 amountOut)",
+  "event SettlementExecutedV2(bytes32 indexed executionId, address indexed venue, address tokenIn, address tokenOut, bytes32 indexed policyId, uint256 amountIn, uint256 amountOut)",
   "event RFQFilled(bytes32 indexed quoteHash, address indexed maker, address indexed taker, uint256 amountIn, uint256 amountOut)",
   "event RFQQuoteCancelled(address indexed maker, uint256 indexed nonce)",
   "event MakerApprovalSet(address indexed maker, bool approved)",

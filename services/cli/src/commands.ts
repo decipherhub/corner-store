@@ -1935,6 +1935,7 @@ export async function cmdFaucet(addr: string, amount: string, opts: GlobalOpts):
 // ---------------------------------------------------------------------------
 const WATCH_EVENTS = [
   "Executed",
+  "SettlementExecutedV2",
   "RFQFilled",
   "RFQQuoteCancelled",
   "MakerApprovalSet",
@@ -1977,11 +1978,13 @@ function bytes32Label(raw: string): string {
   return raw;
 }
 
-function formatEvent(parsed: {name: string; args: any}): string {
+export function formatEvent(parsed: {name: string; args: any}): string {
   const {name, args} = parsed;
   switch (name) {
     case "Executed":
       return `Executed          venue=${args.venue} amountOut=${formatEther(args.amountOut)} executionId=${args.executionId}`;
+    case "SettlementExecutedV2":
+      return `SettlementExecutedV2 executionId=${args.executionId} venue=${args.venue} tokenIn=${args.tokenIn} tokenOut=${args.tokenOut} policyId=${args.policyId} amountIn=${args.amountIn} amountOut=${args.amountOut}`;
     case "RFQFilled":
       return `RFQFilled         maker=${args.maker} taker=${args.taker} amountIn=${formatEther(args.amountIn)} amountOut=${formatEther(args.amountOut)}`;
     case "RFQQuoteCancelled":
