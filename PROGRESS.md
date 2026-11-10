@@ -1,5 +1,42 @@
 # Progress
 
+## 2026-11-11 Session: RFQ-006 Nested TTL Review Fix
+
+RFQ-006 is passing. Scope: the confirmed P3 pre-authentication recursive TTL hash in the production
+RFQ host. Non-number TTL values now contribute only `null` to the preliminary
+audit request hash; the original TTL still reaches validation after authentication
+and rate limiting. No product boundary, coordinator or contract behavior changed.
+
+Tests first: six HTTP regressions named `v{2,3} nested TTL preserves authentication
+and limiting before {401,429,400} rejection` send 6,000 nested arrays in a body
+below 16 KB. Against unchanged production code, all six failed with actual 500;
+14 unrelated tests were skipped by the name filter. After the one-line fix,
+the host smoke and all 24 named tests passed, including all six regressions.
+They assert bounded errors, exact authentication/limiter/incident/audit order,
+no quote records and the audit rejection reason.
+
+Commands use Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`:
+
+- `npm run build --prefix services/rfq-host && node --test --test-name-pattern="nested TTL" services/rfq-host/dist/test/authorization.js`:
+  exit 1 before the fix, six failed with 500. Log: `/private/tmp/w155-nested-before.log`.
+- `npm test --prefix services/rfq-host`: exit 0, smoke plus 24 named tests.
+  Log: `/private/tmp/w155-nested-host.log`.
+- `npm test --prefix services/rfq`: exit 0 on the first run, smoke plus 30 named tests.
+  Log: `/private/tmp/w155-nested-rfq.log`.
+- `scripts/check.sh`: exit 0 on the first run, including 1,100 Foundry tests,
+  service and packed-consumer checks and 10 deploy-v3 tests.
+  Log: `/private/tmp/w155-nested-check.log`.
+- `git diff --check`: exit 0.
+- `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`:
+  exit 0; protected paths unchanged.
+
+Runtime validation uses real loopback HTTP requests on both endpoints. Anvil E2E
+was not rerun because this fix only bounds pre-authentication hashing of malformed
+TTL; signing, settlement and contracts are unchanged. Prior E2E evidence remains
+in the entry below. Next: user reviews the working tree.
+No commit, push or external publication was performed.
+
 ## 2026-11-11 Session: RFQ-006 Confirmed Review Fixes
 
 RFQ-006 is passing after all requested gates. Scope: confirmed review findings

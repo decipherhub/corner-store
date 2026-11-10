@@ -368,7 +368,7 @@ async function handleRequest(
       tokenOut: parsedBody.tokenOut,
       amountIn: parsedBody.amountIn,
       venue: parsedBody.venue,
-      ttlSeconds: parsedBody.ttlSeconds
+      ttlSeconds: typeof parsedBody.ttlSeconds === "number" ? parsedBody.ttlSeconds : null
     });
     idempotencyKeyHash = hashCanonical({idempotencyKey: parsedBody.idempotencyKey});
 

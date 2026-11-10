@@ -24,6 +24,7 @@
 
 - RFQ/coordinator and host ordering, TTL boundary, persistence/replay and taxonomy tests
 - Both endpoint versions: auth/limiter/audit/incident ordering including audit failure;
+  deeply nested TTL preserves auth/limiter ordering and bounded rejection;
   both evidence APIs: PUBLISHED/RESERVED replay after catalog policy drift;
   terminal SIGN_FAILED/expired reservation retries return 400, unexpected errors 500
 - Node 20 RFQ, host, Toolkit and CLI tests
@@ -38,6 +39,8 @@ passing
 
 - Issue #155; D030. HACK-001 closure is owned by approved upstream PR #162.
 - Scope excludes contracts, custody/key management and the store creation flake.
+- Nested TTL follow-up: six regressions failed with 500 before the fix and passed
+  afterward; Node 20 host/RFQ suites and `scripts/check.sh` passed. See PROGRESS.
 - Final verification: 1,100 Foundry tests; Node 20 RFQ/host/Toolkit/CLI smoke and
   30/18/15/5 named tests; full repository gate; both legacy Anvil profiles and
   12 context-provenance E2E cases passed after F1-F3 fixes. See the 2026-11-11

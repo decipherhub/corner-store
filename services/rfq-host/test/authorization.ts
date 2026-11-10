@@ -42,6 +42,26 @@ async function post(url: string, path: string, input: unknown, authenticated = t
 for (const version of [2, 3]) {
   const path = version === 2 ? "/rfq/quote" : "/rfq/v3/quote";
   const input = {...body, ...(version === 3 ? {flowType: 0} : {})};
+  for (const [mode, authenticated, status, error, incident] of [
+    ["ok", false, 401, "unauthorized", "auth_abuse"],
+    ["limited", true, 429, "rate_limited", "rate_limited"],
+    ["ok", true, 400, "invalid_request", undefined]
+  ] as const) {
+    test(`v${version} nested TTL preserves authentication and limiting before ${status} rejection`, async () => {
+      const f = await fixture(mode);
+      try {
+        const nestedTtl = "[".repeat(6000) + "0" + "]".repeat(6000);
+        const encoded = JSON.stringify(input).replace('"ttlSeconds":60', `"ttlSeconds":${nestedTtl}`);
+        assert.ok(Buffer.byteLength(encoded) < 16 * 1024);
+        const response = await fetch(`${f.baseUrl}${path}`, {method: "POST", headers: {...(authenticated ? {authorization: "Bearer fixture-token"} : {}), "content-type": "application/json"}, body: encoded});
+        assert.equal(response.status, status);
+        assert.deepEqual(await response.json(), {error});
+        assert.deepEqual(f.calls, ["authentication", ...(authenticated ? ["limiter"] : []), ...(incident ? ["incident"] : []), "audit"]);
+        assert.deepEqual(f.records(), []);
+        assert.equal(f.audit.events[0].reason, error);
+      } finally {await f.close();}
+    });
+  }
   test(`v${version} rejects invalid TTL and unauthorized products before costly dependencies`, async () => {
     const f = await fixture();
     try {
