@@ -354,32 +354,29 @@ async function handleRequest(
 
     const v3 = req.url === "/rfq/v3/quote";
     const coordinator = v3 ? config.v3!.coordinator : config.coordinator;
-    let normalizedBody: NormalizedHostQuoteBody;
+    let parsedBody: Omit<NormalizedHostQuoteBody, "ttlSeconds"> & {ttlSeconds: unknown};
     try {
       const body = await readJsonBody(req, config.maxBodyBytes);
-      normalizedBody = normalizeQuoteBody(body, v3, coordinator.getQuoteLifetimePolicy());
+      parsedBody = normalizeQuoteBody(body, v3, coordinator.getQuoteLifetimePolicy());
     } catch (error) {
       if ((error as {statusCode?: number})?.statusCode === 413) throw error;
       throw new RFQCoordinatorError("INVALID_REQUEST", "invalid RFQ request");
     }
-    if (v3) config.v3!.coordinator.authorizeProduct(normalizedBody as NormalizedHostQuoteBody & {flowType: 0 | 1});
-    else config.coordinator.authorizeProduct(normalizedBody);
-
     requestHash = hashCanonical({
-      taker: normalizedBody.taker,
-      tokenIn: normalizedBody.tokenIn,
-      tokenOut: normalizedBody.tokenOut,
-      amountIn: normalizedBody.amountIn,
-      venue: normalizedBody.venue,
-      ttlSeconds: normalizedBody.ttlSeconds
+      taker: parsedBody.taker,
+      tokenIn: parsedBody.tokenIn,
+      tokenOut: parsedBody.tokenOut,
+      amountIn: parsedBody.amountIn,
+      venue: parsedBody.venue,
+      ttlSeconds: parsedBody.ttlSeconds
     });
-    idempotencyKeyHash = hashCanonical({idempotencyKey: normalizedBody.idempotencyKey});
+    idempotencyKeyHash = hashCanonical({idempotencyKey: parsedBody.idempotencyKey});
 
     const principal = await hostDependency("auth", () => config.authenticator.authenticate({headers: req.headers, method: req.method ?? "", url: req.url ?? ""}));
     const principalTaker = normalizeAddress(principal.taker, "authenticated taker");
     const authenticatedPrincipalHash = hashCanonical({principalId: principal.principalId});
     principalHash = authenticatedPrincipalHash;
-    if (principalTaker !== normalizedBody.taker) throw new ForbiddenError("authenticated taker does not match request taker");
+    if (principalTaker !== parsedBody.taker) throw new ForbiddenError("authenticated taker does not match request taker");
 
     const rate = await hostDependency("rate", () => config.rateLimiter.check({
       principalHash: authenticatedPrincipalHash,
@@ -394,6 +391,15 @@ async function handleRequest(
       metric(config, "rfq_host_http_requests_total", {route: "quote", outcome: "rate_limited"});
       return;
     }
+
+    let normalizedBody: NormalizedHostQuoteBody;
+    try {
+      normalizedBody = {...parsedBody, ttlSeconds: normalizeTtlSeconds(parsedBody.ttlSeconds as number, coordinator.getQuoteLifetimePolicy().maxTtlSeconds)};
+    } catch {
+      throw new RFQCoordinatorError("INVALID_REQUEST", "invalid RFQ request");
+    }
+    if (v3) config.v3!.coordinator.authorizeProduct(normalizedBody as NormalizedHostQuoteBody & {flowType: 0 | 1});
+    else config.coordinator.authorizeProduct(normalizedBody);
 
     if (config.readiness) {
       const report = await readReadiness(config.readiness, config.readinessTimeoutMs);
@@ -456,7 +462,7 @@ async function handleRequest(
   }
 }
 
-function normalizeQuoteBody(body: unknown, v3: boolean, lifetime: {defaultTtlSeconds: number; maxTtlSeconds: number}): NormalizedHostQuoteBody {
+function normalizeQuoteBody(body: unknown, v3: boolean, lifetime: {defaultTtlSeconds: number; maxTtlSeconds: number}): Omit<NormalizedHostQuoteBody, "ttlSeconds"> & {ttlSeconds: unknown} {
   if (!isRecord(body)) throw new Error("request body must be a JSON object");
   if (typeof body.idempotencyKey !== "string" || !body.idempotencyKey || body.idempotencyKey.length > 256) {
     throw new Error("idempotencyKey must be a 1-256 character string");
@@ -475,7 +481,7 @@ function normalizeQuoteBody(body: unknown, v3: boolean, lifetime: {defaultTtlSec
     tokenOut: normalizeAddress(tokenOut as Address, "tokenOut"),
     amountIn: toPositiveUintString(amountIn, "amountIn"),
     venue: normalizeAddress(venue as Address, "venue"),
-    ttlSeconds: normalizeTtlSeconds(ttlSeconds === undefined ? lifetime.defaultTtlSeconds : ttlSeconds as number, lifetime.maxTtlSeconds)
+    ttlSeconds: ttlSeconds === undefined ? lifetime.defaultTtlSeconds : ttlSeconds
   };
 }
 
@@ -609,7 +615,7 @@ function classifyError(error: unknown): {status: number; publicError: string; re
     };
   }
   if (error instanceof RFQCoordinatorError) {
-    if (error.code === "INVALID_REQUEST") return {status: 400, publicError: "invalid_request", reason: "invalid_request", module: "validation"};
+    if (error.code === "INVALID_REQUEST" || error.code === "TERMINAL_REPLAY") return {status: 400, publicError: "invalid_request", reason: "invalid_request", module: "validation"};
     if (error.code === "PRODUCT_UNAUTHORIZED") return {status: 403, publicError: "product_unauthorized", reason: "product_unauthorized", module: "product"};
     if (error.code === "CONFIGURATION_INVALID") return {status: 500, publicError: "configuration_invalid", reason: "configuration_invalid", module: "product"};
     if (error.code === "DEPENDENCY_UNAVAILABLE") return {status: 503, publicError: "dependency_unavailable", reason: "unavailable", module: boundedDependencyModule(tagged.dependencyModule), incident: "dependency_unavailable"};

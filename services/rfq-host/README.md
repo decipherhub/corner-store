@@ -9,11 +9,11 @@ transactional storage, TLS termination or WORM audit infrastructure.
 
 The host owns request-path hardening that belongs outside the SDK:
 
-1. request-size, JSON/schema and bounded TTL validation;
-2. local operator product authorization for maker, ordered pair, venue, policy,
-   version capability and flow, before dependency calls;
-3. authentication through `RFQAuthenticator` and exact normalized taker binding;
-4. principal-hash keyed rate limiting and required dependency readiness;
+1. request-size and JSON/schema parsing;
+2. authentication through `RFQAuthenticator` and exact normalized taker binding;
+3. principal-hash keyed rate limiting;
+4. bounded TTL and local product authorization for maker, ordered pair, venue,
+   policy, version capability and flow, then required dependency readiness;
 5. coordinator idempotency lookup and persisted authorization validation;
 6. new requests only: trusted `resolvePolicyId`, catalog policy match, actual
    pricing/risk freshness checks and atomic authorized inventory/nonce reservation;
@@ -51,10 +51,10 @@ quote response shapes and EIP-712 versions are unchanged.
 Defaults are 60-second TTL and 300-second maximum. Both must be positive safe
 integers with `defaultTtlSeconds <= maxTtlSeconds <= 3600`; the maximum is
 inclusive. If tuning below 60 seconds, also lower the default. Invalid configuration
-(including null) fails startup, and invalid TTL never reaches authentication,
-limiter, readiness, store, policy, pricing, risk or signer work. Configure these
-values in the bootstrap's coordinator config, not through new runtime environment
-variables. Catalogs accept 1-256 exact tuples; ambiguous or malformed entries fail
+(including null) fails startup. After authentication and rate limiting, invalid
+TTL is rejected before readiness, store, policy, pricing, risk or signer work.
+Configure these values in the bootstrap's coordinator config, not through new
+runtime environment variables. Catalogs accept 1-256 exact tuples; ambiguous or malformed entries fail
 closed. The constructor snapshots catalog entries so later input mutation cannot
 widen access.
 
@@ -64,7 +64,8 @@ expiry and signature remain authoritative. RESERVED recovery revalidates stored
 freshness and current v3 context before signing. Current tuple support and TTL
 limits still gate retries, so catalog removal or a lower lifetime cap may deny
 an older request. Production evidence calls require an explicit catalog even
-when called without HTTP.
+when called without HTTP. Both evidence APIs use the persisted grant on replay;
+current catalog policy is compared only for a new request.
 
 Existing record schemas remain readable; production retries lacking the new
 `productAuthorization` fail closed. Drain/expire old quotes and start a fresh
@@ -77,7 +78,9 @@ Failures are bounded: 400 `invalid_request`, 403 `product_unauthorized`,
 503 `dependency_unavailable`. Known resolver denial/configuration failures must
 throw `RFQCoordinatorError` with `PRODUCT_UNAUTHORIZED`/`CONFIGURATION_INVALID`;
 untyped provider throws are unavailable. Invalid resolver output is a configuration
-failure. Unexpected internal failures return redacted 500 `internal_error`.
+failure. Terminal unsigned retries after signing failure, expiry or revocation
+return 400 `invalid_request` through the typed `TERMINAL_REPLAY` error. Unexpected
+internal failures return redacted 500 `internal_error`.
 Existing authentication, inventory, risk, signer and audit codes remain in place.
 No exception text or arbitrary resolver/limiter reason becomes a diagnostic label.
 See the [production policy](../../docs/product-specs/production-rfq-policy.md).

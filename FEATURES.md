@@ -13,8 +13,8 @@
 
 ### Behavior
 
-- Production RFQ v2/v3 requests validate bounded TTL and a local operator product
-  catalog before dependency calls, pricing, risk, reservation or signing.
+- Production RFQ v2/v3 hosts authenticate and rate limit before bounded TTL and
+  local product authorization, then perform pricing, risk, reservation and signing.
 - Authoritative product authorization and original expiry persist with the request;
   replay never refreshes policy or signature. Failures use bounded, redacted codes.
 - Default TTL is 60 seconds, default maximum 300 seconds, hard maximum 3600 seconds.
@@ -23,6 +23,9 @@
 ### Verification
 
 - RFQ/coordinator and host ordering, TTL boundary, persistence/replay and taxonomy tests
+- Both endpoint versions: auth/limiter/audit/incident ordering including audit failure;
+  both evidence APIs: PUBLISHED/RESERVED replay after catalog policy drift;
+  terminal SIGN_FAILED/expired reservation retries return 400, unexpected errors 500
 - Node 20 RFQ, host, Toolkit and CLI tests
 - `forge fmt --check`, `forge test --offline`, `scripts/check.sh`, `git diff --check`
 - Both `scripts/e2e-anvil.sh` profiles and `scripts/e2e-context-provenance.sh`
@@ -36,8 +39,9 @@ passing
 - Issue #155; D030. HACK-001 closure is owned by approved upstream PR #162.
 - Scope excludes contracts, custody/key management and the store creation flake.
 - Final verification: 1,100 Foundry tests; Node 20 RFQ/host/Toolkit/CLI smoke and
-  22/10/15/5 named tests; full repository gate; both legacy Anvil profiles and
-  12 context-provenance E2E cases passed. See the 2026-11-11 PROGRESS entry.
+  30/18/15/5 named tests; full repository gate; both legacy Anvil profiles and
+  12 context-provenance E2E cases passed after F1-F3 fixes. See the 2026-11-11
+  confirmed review fixes PROGRESS entry.
 - Production evidence callers must configure catalogs. Older records without a
   persisted grant require draining and a fresh request namespace/store.
 

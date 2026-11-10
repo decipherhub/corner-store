@@ -29,11 +29,13 @@ test("invalid TTL and unauthorized products do no store, pricing, risk or signer
   for (const ttlSeconds of [0, -1, 0.5, Number.MAX_SAFE_INTEGER + 1, 121, null, NaN, Infinity]) {
     await assert.rejects(() => f.coordinator.quote({...intent, ttlSeconds} as any), code("INVALID_REQUEST"));
   }
-  for (const patch of [{venue: addr(9)}, {tokenIn: addr(9)}, {tokenOut: addr(9)}, {tokenIn: addr(4), tokenOut: addr(3)}, {policyId: otherPolicy}]) {
+  for (const patch of [{venue: addr(9)}, {tokenIn: addr(9)}, {tokenOut: addr(9)}, {tokenIn: addr(4), tokenOut: addr(3)}]) {
     await assert.rejects(() => f.coordinator.quote({...intent, ...patch}), code("PRODUCT_UNAUTHORIZED"));
   }
   await assert.rejects(() => f.coordinator.quote({...intent, flowType: 1} as any), code("INVALID_REQUEST"));
   assert.deepEqual(f.calls, []);
+  await assert.rejects(() => f.coordinator.quote({...intent, policyId: otherPolicy}), code("PRODUCT_UNAUTHORIZED"));
+  assert.deepEqual(f.calls, ["getByIdempotencyKeyHash"]);
   for (const patch of [{maker: addr(9)}, {products: [{...product, capability: "rfq.quote.v3"}]}]) {
     const denied = fixture(patch);
     await assert.rejects(() => denied.coordinator.quote(intent), code("PRODUCT_UNAUTHORIZED"));
@@ -153,3 +155,47 @@ test("store and risk outages are retryable, while missing inventory configuratio
   const config = {...inventory.config, products: [{...product, tokenOut: addr(9)}]};
   await assert.rejects(() => new RFQQuoteCoordinator(config).quote({...intent, tokenOut: addr(9)}), code("CONFIGURATION_INVALID"));
 });
+
+for (const version of [2, 3] as const) {
+  for (const api of ["quoteWithEvidence", "quoteAuthorizedWithEvidence"] as const) {
+    for (const state of ["PUBLISHED", "RESERVED"] as const) {
+      test(`v${version} ${api} ${state} replay uses persisted policy after catalog drift`, async () => {
+        const f = fixture();
+        const config = {...f.config, products: [{...product, capability: version === 3 ? "rfq.quote.v3" as const : "rfq.quote.v2" as const}]};
+        const create = (policy: typeof policyId | typeof otherPolicy, now: number): RFQQuoteCoordinator<2 | 3> => {
+          const cfg = {...config, now: () => now, products: [{...config.products[0], policyId: policy}]};
+          return new RFQQuoteCoordinator<2 | 3>({...cfg, quoteVersion: version, context: {resolve: async () => {f.calls.push("context"); return {contextVersion: 1, configurationHash: policyId, affiliateEvidenceHash: policyId, sellerIsAffiliate: false};}}});
+        };
+        const request = {...intent, ...(version === 3 ? {flowType: 0 as const} : {})};
+        const first = await create(policyId, 100).quoteWithEvidence(request, {now: 100});
+        const persisted = JSON.parse(readFileSync(f.filePath, "utf8"));
+        if (state === "RESERVED") {
+          persisted.records[0].state = state;
+          delete persisted.records[0].signedQuote; delete persisted.records[0].quoteHash;
+          writeFileSync(f.filePath, JSON.stringify(persisted));
+        }
+        const restarted = create(otherPolicy, 110);
+        const {policyId: ignored, ...body} = request;
+        const replay = () => api === "quoteWithEvidence"
+          ? restarted.quoteWithEvidence(request, {now: 110})
+          : restarted.quoteAuthorizedWithEvidence(body, () => {throw new Error("must not resolve");}, {now: 110});
+        f.calls.length = 0;
+        const result = await replay();
+        assert.deepEqual(result.signedQuote, first.signedQuote);
+        assert.deepEqual(result.record.productAuthorization, first.record.productAuthorization);
+        assert.equal(result.record.requestHash, first.record.requestHash);
+        assert.equal(result.replayed, state === "PUBLISHED");
+        assert.deepEqual(f.calls, state === "PUBLISHED" ? ["getByIdempotencyKeyHash"] : ["getByIdempotencyKeyHash", ...(version === 3 ? ["context"] : []), "signer", "markSigned"]);
+        if (api === "quoteWithEvidence") {
+          await assert.rejects(() => restarted.quoteWithEvidence({...request, policyId: otherPolicy}), code("IDEMPOTENCY_CONFLICT"));
+          await assert.rejects(() => restarted.quoteWithEvidence({...request, idempotencyKey: "new-request"}), code("PRODUCT_UNAUTHORIZED"));
+        }
+        delete persisted.records[0].productAuthorization;
+        writeFileSync(f.filePath, JSON.stringify(persisted));
+        f.calls.length = 0;
+        await assert.rejects(replay, code("CONFIGURATION_INVALID"));
+        assert.deepEqual(f.calls, ["getByIdempotencyKeyHash"]);
+      });
+    }
+  }
+}

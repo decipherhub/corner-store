@@ -1,5 +1,57 @@
 # Progress
 
+## 2026-11-11 Session: RFQ-006 Confirmed Review Fixes
+
+RFQ-006 is passing after all requested gates. Scope: confirmed review findings
+F1-F3 for issue #155, production host ordering, evidence API replay authority and
+terminal retry classification. Out of scope: contracts, public Monad/demo paths,
+key management and the known multi-process store creation flake.
+
+- F1: bounded body parsing remains before authentication; authentication/taker
+  binding and rate limiting now precede TTL/product authorization. Parent rejection
+  auditing, incidents and audit-failure handling remain in place. Both endpoints
+  count authentication, limiter, audit, incident, pricing, reservation, risk and
+  signer calls for unauthenticated, limited, invalid-TTL and unsupported-product
+  requests, with successful and failing audit sinks.
+- F2: current catalog policy is compared only after lookup establishes a new
+  request. Both evidence APIs validate replay against the persisted request/grant.
+  Eight v2/v3 PUBLISHED/RESERVED matrix cases cover policy drift, original quote,
+  expiry/grant preservation, conflicts, new-request policy denial and missing grants.
+- F3: `TERMINAL_REPLAY` maps expected unsigned signing-failure, expiry and revocation
+  retries to the parent's bounded 400 response. Same-key HTTP retries after signer
+  failure and after reservation expiry cover both versions; unexpected coordinator
+  failure still returns a bounded 500.
+- Updated D030, the production policy spec, host README and feature evidence.
+
+Tests first: after correcting test-only TypeScript typing, the focused Node 20
+build/regressions ran against unchanged production code: 18 passed, 13 failed.
+After the fixes, all 31 focused cases passed. Logs: `/private/tmp/w155-review-*.log`.
+Standalone `forge fmt --check` and Node 20 RFQ/host/Toolkit/CLI tests passed on the
+first run (smoke plus 30/18/15/5 named tests); no flake retry was needed.
+
+All service/script commands below ran with Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`; Foundry is 1.7.1.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0. |
+| `npm test --prefix services/rfq` | Exit 0; smoke + 30 named tests. |
+| `npm test --prefix services/rfq-host` | Exit 0; smoke + 18 named tests. |
+| `npm test --prefix services/toolkit` | Exit 0; smoke + 15 named tests. |
+| `npm test --prefix services/cli` | Exit 0; smoke + 5 named tests. |
+| `scripts/check.sh` | Exit 0, first run; 1,100 Foundry tests, all service/packed-consumer gates and 10 deploy-v3 tests passed. |
+| `scripts/e2e-anvil.sh` | Exit 0; BUIDL-like scenario suite and backend/CLI/Router/runtime checks passed. |
+| `scripts/e2e-anvil.sh --profile reg-d` | Exit 0; Reg D scenario suite and backend/CLI/Router/runtime checks passed. |
+| `scripts/e2e-context-provenance.sh` | Exit 0; 12 passed, 0 failed. |
+| `git diff --check` | Exit 0. |
+| `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad` | Exit 0; protected paths unchanged. |
+| Python added-character check | Exit 0; no added em dash characters. |
+
+This entry supersedes the original delivery's ordering claims below. All requested
+checks passed without reruns. UNVERIFIED: Docker/container execution and public or
+production integrations, outside this fix scope. Next: user reviews the working
+tree. No commit, push or external publication was performed.
+
 ## 2026-11-11 Session: RFQ-006 Issue #155 Delivery
 
 RFQ-006 is passing. Scope: production RFQ coordinator/host v2/v3 authorization,

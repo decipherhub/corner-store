@@ -315,7 +315,6 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
     if (!resolvePolicyId) {
       try {policyId = this.products ? normalizeBytes32((intent as IntentFor<V>).policyId, "policyId") : assertBytes32Hex((intent as IntentFor<V>).policyId, "policyId");}
       catch {throw new RFQCoordinatorError("INVALID_REQUEST", "invalid RFQ request");}
-      if (authorization && authorization.policyId !== policyId) throw new RFQCoordinatorError("PRODUCT_UNAUTHORIZED", "RFQ policy is not authorized");
     }
     const now = await this.timestamp();
     if (!Number.isSafeInteger(now + request.ttlSeconds)) throw new RFQCoordinatorError("INVALID_REQUEST", "invalid RFQ expiry");
@@ -330,8 +329,8 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
       const resolved = await this.dependency("policy", resolvePolicyId);
       try {policyId = normalizeBytes32(resolved, "policyId");}
       catch {throw new RFQCoordinatorError("CONFIGURATION_INVALID", "invalid resolved RFQ policy");}
-      if (authorization!.policyId !== policyId) throw new RFQCoordinatorError("PRODUCT_UNAUTHORIZED", "RFQ policy is not authorized");
     }
+    if (authorization && authorization.policyId !== policyId) throw new RFQCoordinatorError("PRODUCT_UNAUTHORIZED", "RFQ policy is not authorized");
     const normalized: PiiFreeQuoteRequest = {...request, policyId: policyId!};
     const requestHash = hashCanonical(normalized);
     const priceRequest: RFQPriceRequest = {
@@ -476,11 +475,13 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
 
       if (!record.inventoryLease || record.inventoryLease.released || record.inventoryLease.expiresAt <= now) {
         if (record.nonce) await this.dependency("store", () => this.config.store.expire({scope: this.scope(), nonce: record.nonce!, now}));
-        throw new Error("idempotent quote reservation is expired or released");
+        throw new RFQCoordinatorError("TERMINAL_REPLAY", "idempotent quote reservation is expired or released");
       }
       return this.signReservedRecord(record, requestHash, record.idempotencyKeyHash);
     }
-    if (record.state === "SIGN_FAILED") throw new Error("idempotent quote attempt previously failed during signing");
+    if (record.state === "SIGN_FAILED" || record.state === "EXPIRED" || record.state === "REVOKED") {
+      throw new RFQCoordinatorError("TERMINAL_REPLAY", "idempotent quote attempt is terminal");
+    }
     throw new Error(`idempotent quote is not publishable in state ${record.state}`);
   }
 
@@ -497,7 +498,7 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
     const now = await this.timestamp();
     if (record.inventoryLease.expiresAt <= now) {
       await this.dependency("store", () => this.config.store.expire({scope: this.scope(), nonce: record.nonce!, now}));
-      throw new Error("quote reservation expired before signing");
+      throw new RFQCoordinatorError("TERMINAL_REPLAY", "quote reservation expired before signing");
     }
     const quote: RFQQuote = {
       maker: this.maker,

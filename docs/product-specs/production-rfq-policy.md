@@ -38,6 +38,7 @@
 
 ```text
 authenticated taker
+  → hashed-principal rate limit
   → bounded TTL / local product authorization
   → idempotency lookup (persisted authorization on retry)
   → current on-chain policy ID resolution and catalog match (new request only)
@@ -66,11 +67,11 @@ without converting `services/rfq-demo-backend` into production infrastructure.
 The request sequence is fixed:
 
 ```text
-size/json/schema/TTL validation
-  → local maker/venue/pair/policy/capability/flow authorization
+size/json/schema parsing
   → authenticator principal+taker claim
   → exact normalized taker binding
   → hashed-principal rate limit
+  → bounded TTL / local maker/venue/pair/policy/capability/flow authorization
   → required dependency readiness
   → durable coordinator quoteAuthorizedWithEvidence
     → idempotency lookup and persisted authorization validation
@@ -117,8 +118,8 @@ Client-supplied fields:
 - TTL preference within operator limits
 - idempotency key
 
-The client never chooses `policyId`. After local authorization, authentication,
-rate limiting and readiness, the coordinator resolves it through a trusted Engine
+The client never chooses `policyId`. After authentication, rate limiting, local
+authorization and readiness, the coordinator resolves it through a trusted Engine
 read for a new request and compares it with the operator catalog. Replays use the
 persisted policy instead of performing a new read.
 
@@ -142,7 +143,8 @@ seconds and 300 seconds respectively. Both must be positive safe integers,
 `defaultTtlSeconds <= maxTtlSeconds <= 3600`. Operators can tune the maximum from
 1 to 3600 seconds and must lower the default explicitly if choosing a maximum
 below 60. Null, fractional, zero, negative, unsafe and out-of-range configuration
-fails at construction; invalid request TTL fails before any dependency call.
+fails at construction; invalid request TTL fails before quote dependencies,
+after host authentication and rate limiting.
 The maximum is inclusive. Unsupported TTL is rejected, never silently clamped.
 The host uses the selected endpoint coordinator's lifetime values.
 
@@ -157,8 +159,10 @@ requires an explicit entry and remains subject to current context verification.
 This is an operator product-support decision, not a replacement for ERC-3643,
 ONCHAINID or fill-time compliance.
 
-Local authorization precedes authentication and all shared limiter, readiness,
-store, policy, pricing, risk, context and signing dependencies. For new requests,
+Host authentication and shared rate limiting precede TTL/product authorization.
+Authorization precedes readiness, store, policy, pricing, risk, context and signing.
+Authentication/rate-limit rejections keep their existing audit and incident behavior,
+including best-effort audit failure handling. For new requests,
 a successful live resolver result must match the catalog policy before pricing.
 Unsupported products and policy mismatches return a terminal product denial.
 Resolver implementations must use `RFQCoordinatorError("PRODUCT_UNAUTHORIZED", ... )`
@@ -169,8 +173,10 @@ an arbitrary exception message.
 The reservation atomically stores `productAuthorization` schema 1, containing
 that exact tuple plus chain ID and adapter, alongside the normalized request,
 request hash, nonce and original expiry. Host retries compare the client request
-against the persisted request and validate the persisted authorization. They
-never resolve policy, reprice, extend expiry or re-sign a published quote, even if
+against the persisted request and validate the persisted authorization. Both
+`quoteWithEvidence` and `quoteAuthorizedWithEvidence` compare current catalog
+policy only after lookup establishes a new request. Replays never resolve policy,
+reprice, extend expiry or re-sign a published quote, even if
 the live resolver is unavailable or the catalog policy changed. RESERVED recovery
 uses that grant and original lease, rechecks freshness and v3 context, then signs.
 Current local tuple support and TTL limits still apply on every attempt; removing
@@ -190,6 +196,7 @@ both lifetime values to 600 seconds; the public Monad v2 demo is unchanged.
 | --- | --- | --- |
 | Invalid input or TTL | 400 `invalid_request` | Correct the request |
 | Unsupported product or policy mismatch | 403 `product_unauthorized` | Terminal for this product/configuration |
+| Terminal unsigned replay after signing failure, expiry or revocation | 400 `invalid_request` | Use a fresh request/key |
 | Idempotency conflict | 409 `idempotency_conflict` | Use the original request |
 | Invalid policy result, missing grant or configuration failure | 500 `configuration_invalid` | Operator correction required |
 | Policy/pricing/risk/store/auth/limiter dependency exception | 503 `dependency_unavailable` | Retry the same request/key after recovery |
@@ -359,8 +366,8 @@ existing exact-fill, rollback, commit and event invariants remain in force.
 
 `/rfq/quote` keeps its v2 schema/defaults. The opt-in `/rfq/v3/quote` requires
 `flowType` and rejects client `policyId`, `affiliateEvidenceHash` and
-`sellerIsAffiliate`. Local product authorization covers both endpoint versions before dependencies.
-After authentication, taker binding and rate limiting, the coordinator resolves
+`sellerIsAffiliate`. Both endpoint versions authorize products after authentication,
+taker binding and rate limiting, before quote dependencies. The coordinator resolves
 policy for new requests and then current context evidence.
 Unavailable context returns a redacted 503. Production bootstrap requires the
 explicit `v3_context_provenance` capability and ready `context` component.

@@ -1479,7 +1479,7 @@ existing consumers and deployed settlement.
 - `services/toolkit/src/production-onboarding.ts`
 - `scripts/e2e-context-provenance.sh`
 
-## D030: Production RFQ bounds lifetime and authorizes products before dependencies
+## D030: Production RFQ bounds lifetime and authorizes products before pricing
 
 Date: 2026-11-11
 
@@ -1496,24 +1496,30 @@ Re-resolving policy on a retry can change the request's authoritative identity.
    venue, execution-bound policy ID, quote capability and flow. Bound catalogs to
    1-256 entries, reject malformed/ambiguous entries and snapshot normalized
    values at construction. Hosts require a catalog for each enabled endpoint.
-   Local validation/authorization precedes authentication, shared limiting,
-   readiness, store and policy dependencies as well as pricing/risk/reserve/sign.
+   After bounded body parsing, hosts authenticate and bind the taker, then apply
+   shared limiting before TTL/product authorization. TTL/product rejection still
+   precedes readiness, store, policy, pricing, risk, reservation and signing.
+   Authentication/rate-limit rejection auditing and incidents retain parent behavior.
 2. Default TTL is 60 seconds and default maximum is 300 seconds. Operator tuning
    requires positive safe integers with default <= maximum <= 3600 seconds.
    Invalid configuration fails startup; invalid/above-maximum request TTL fails
-   before work. Never clamp a client's TTL silently.
+   before quote work, after host authentication/rate limiting. Never clamp a
+   client's TTL silently.
 3. For a new request, resolve the current policy server-side and require an exact
    catalog match before pricing. Persist the authoritative authorization schema
    1 (including chain and adapter) atomically with request, nonce and lease.
    Replays/conflicts use the original authorization/policy/expiry; no policy
    refresh, repricing or replacement signature for a published quote. RESERVED
    recovery retains freshness/context revalidation. Current local tuple support
-   and TTL limits still gate every attempt.
+   and TTL limits still gate every attempt. Both evidence APIs compare current
+   catalog policy only for new requests; retries validate the persisted grant.
 4. Distinguish invalid input (400), product denial (403), conflict (409), terminal
    policy/configuration failure (500) and retryable dependency failure (503).
    Known resolver denials/configuration errors use typed coordinator codes;
    arbitrary provider exceptions are unavailable. Diagnostics and metric labels
    use bounded, redacted reason/module values and never raw exception messages.
+   Expected terminal unsigned replays use `TERMINAL_REPLAY` and retain the bounded
+   400 `invalid_request` response; unexpected internal errors remain 500.
 5. Preserve deployed contracts, quote types/events/success responses and protected
    public Monad v2 paths. Legacy non-production `quote()` and lightweight SDK
    paths remain available. Both production evidence APIs require a catalog.
