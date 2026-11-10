@@ -196,3 +196,13 @@ A-04(확정 신원) → D-01(카운팅 단위) · A-01(스크리닝 속성) · F
 ## C. 변경 로그
 
 - [2026-07-22] v1.0 — 보경 검토본 기반. 제1부: 세 규범군(요건단위=사람 506(c)/§4(a)(7)/144(a)(2)/§3(c)(7) · BSA CIP §5318(l)/1023.220 true identity · 회피방지 12g5-1(a)(6)/(b)(3))·두 위협모델(위장분산·위장차용)·다지갑 허용/다신원 금지·하류 공급(D-01 hard dependency). 제2부: 실장 `IdentityUniqueness.sol`(1:1 binding 불변식·신원단위 상태·KycClaim·Identity/Dedup enum·check pipeline·REQ-A04-1~6·9 reason code·legacy seed·opt-in 상대방). A-04는 보경 기반 실구현이라 제2부는 현행 계약.
+
+## Opt-in A-04-v2 topology foundation (DATA-004 step 1)
+
+Issue #159 adds a separate A-04-v2 with required Manifest-owned track/topology
+parameters. The exact schema, blocking composition rules, schema 7 onboarding
+contract and fail-closed intermediate behavior are defined in
+[`identity-policy-topology.md`](../../product-specs/identity-policy-topology.md).
+A-04-v1 and this document's existing v1 behavior remain unchanged. Provenance,
+trusted issuers, keyed evidence commitments and optional LEI are subsequent
+DATA-004 work and are not implemented in this slice.

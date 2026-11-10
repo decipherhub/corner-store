@@ -21,6 +21,7 @@ import {
 } from "../types/ComplianceTypes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Events} from "../libraries/Events.sol";
+import {IdentityPolicy} from "../compliance/libraries/IdentityPolicy.sol";
 
 /// @title TokenPolicyRegistry
 /// @notice Manifest store + lifecycle state machine. Manifest recipe bindings are
@@ -499,6 +500,13 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         bytes[] memory parameters = new bytes[](required.length);
         for (uint256 i = 0; i < required.length; i++) {
             (rules[i], parameters[i]) = _compileElement(overrides_, config, bindingIndex, required[i]);
+            if (required[i] == IdentityPolicy.ELEMENT_ID) {
+                if (binding.mode != RecipeBindingMode.REQUIRED_BLOCKING) revert Errors.InvalidRecipeBinding();
+                if (rules[i].action != EnforcementAction.BLOCK) revert Errors.LooseningForbidden();
+                if (!IdentityPolicy.valid(parameters[i])) {
+                    revert Errors.InvalidPolicyParameter(bindingIndex, required[i]);
+                }
+            }
         }
         _rejectUnusedOrDuplicateOverrides(overrides_, bindingIndex, required);
         _rejectUnknownParameters(config, bindingIndex, required);
