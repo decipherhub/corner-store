@@ -102,6 +102,56 @@ state, WORM/retention audit, bounded metrics and incident routing. TLS terminati
 remains external; the host refuses public bind unless the operator explicitly
 acknowledges a trusted TLS/proxy boundary.
 
+### Versioned rejection disclosure
+
+The production host optionally loads an external JSON disclosure policy through
+`disclosurePolicyFile` at startup. Without an explicitly selected policy, fresh
+risk rejection retains `422 {"error":"risk_rejected"}`. A missing, unreadable,
+oversized or malformed policy also falls back to that response. This is an
+additive response capability; existing clients and bootstrap bundles require no
+migration, and signed quotes and persisted coordinator records keep their shapes.
+
+`RFQRiskDecision.reasonCodes` optionally carries structured operational reasons:
+`INVENTORY_LIMIT_EXCEEDED`, `RISK_LIMIT_EXCEEDED` and `PRICING_OUTSIDE_LIMITS`.
+The strict coordinator preserves recognized identifiers in
+`RFQCoordinatorError.reasonCodes` before nonce reservation or signing, without
+copying raw provider `reason` text. The risk module supplies these identifiers for
+its inventory, dealer-limit and pricing-limit checks. Existing pricing freshness,
+inventory reservation conflicts and signer failures keep their status mappings.
+Compliance identity/claim judgments and compliance reporter integration are
+outside this disclosure module.
+
+Policy schema v1 maps each allowlisted identifier to a `tier` and literal
+`message`, with a separate `policyVersion` identifier. The host validates the
+whole file with exact fields and snapshots it until restart. Mapping and wording
+are never embedded in coordinator or HTTP error-classification code.
+
+| Tier | Response detail |
+| --- | --- |
+| `detailed` | reviewed message and operational reason identifier |
+| `action_only` | reviewed next-action message without the reason identifier |
+| `generic` | reviewed generic message without the reason identifier |
+
+For allowlisted rejections, the host adds
+`disclosure: {policyVersion, reasons: [{tier, message, reasonCode?}]}`. It preserves
+`error: "risk_rejected"` and status 422. Authentication and exact taker binding
+precede disclosure; there is no client-selected audience or policy. Every reason
+must be recognized and allowlisted. Any missing, malformed, unknown or unallowlisted
+reason suppresses the entire disclosure object, including policy version and
+otherwise safe entries. Sanctions/AML/surveillance reasons are never recognized
+operational reasons, so they suppress the entire response even if a policy tries
+to allowlist them. Integrations must supply all structured reasons rather than
+filtering sensitive results before this boundary. Raw provider/internal text is
+never rendered, audited or used to interpolate a policy message.
+
+The shipped policy is reference-only and opt-in. Production audience mapping and
+wording require counsel/operator review; this implementation does not determine
+permitted recipients or legally sufficient explanations. Operators publish a new
+policy version and restart to activate a reviewed change. Rejection retries run
+existing checks again without allocating a nonce. Published quote replays use
+persisted evidence without provider recall or re-signing, and successful responses
+contain no disclosure fields. See the [host policy schema and example](../../services/rfq-host/README.md#rejection-disclosure-policy).
+
 ### Quote API boundary
 
 Client-supplied fields:
