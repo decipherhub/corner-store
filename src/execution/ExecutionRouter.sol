@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.17;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {Governed} from "../auth/Governed.sol";
 import {IExecutionRouter} from "../interfaces/execution/IExecutionRouter.sol";
@@ -10,7 +11,7 @@ import {IVenueSelector} from "../interfaces/execution/IVenueSelector.sol";
 import {IComplianceEngine} from "../interfaces/compliance/IComplianceEngine.sol";
 import {IOperatorRegistry} from "../interfaces/compliance/IOperatorRegistry.sol";
 import {ExecutionRequest, ExecutionResult} from "../types/ExecutionTypes.sol";
-import {ComplianceDecision} from "../types/ComplianceTypes.sol";
+import {ComplianceContext, ComplianceDecision} from "../types/ComplianceTypes.sol";
 import {VenueConfig} from "../types/VenueTypes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Events} from "../libraries/Events.sol";
@@ -103,14 +104,45 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
         //     of a disallowed type through an allowed-type bit.
         if (cfg.venueType != req.context.venueType) revert Errors.VenueTypeMismatch();
 
-        // 7. dispatch to adapter (performs the swap; non-custodial)
+        // 7. Snapshot the authenticated payer/recipient's balances, then dispatch
+        //    to the adapter. Adapters remain authorized settlement components, but
+        //    their reported amount is not accepted as the accounting source of truth.
+        uint256 tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer);
+        uint256 tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer);
         ExecutionResult memory r = IExecutionAdapter(cfg.adapter).execute(req, d);
 
-        // 7a. slippage bound — the realized output must meet the caller's minimum.
-        if (r.amountOut < req.amountOutMin) revert Errors.SlippageExceeded();
+        // 7a. Measure the actual settlement at the payer/recipient boundary. The
+        //     current execution contract supports exact full fills of standard,
+        //     non-rebasing ERC-20 tokens only. Token onboarding must prohibit
+        //     transfer-fee/rebasing assets; payer/recipient deltas alone cannot
+        //     prove every intermediate settlement balance. AMM price movement away
+        //     from the pre-authorized quantities is rejected until a separately
+        //     versioned preview/settlement-aware compliance contract is introduced.
+        uint256 tokenInAfter = IERC20(req.context.tokenIn).balanceOf(req.context.buyer);
+        uint256 tokenOutAfter = IERC20(req.context.tokenOut).balanceOf(req.context.buyer);
+        if (tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore) {
+            revert Errors.SettlementAmountMismatch();
+        }
 
-        // 8. post-trade commit hook (stateful element updates)
-        engine.commit(req.context);
+        uint256 realizedAmountIn = tokenInBefore - tokenInAfter;
+        uint256 realizedAmountOut = tokenOutAfter - tokenOutBefore;
+        if (
+            realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut
+                || r.amountOut != realizedAmountOut
+        ) {
+            revert Errors.SettlementAmountMismatch();
+        }
+
+        // 7b. slippage bound — the independently measured output must meet the
+        //     caller's minimum.
+        if (realizedAmountOut < req.amountOutMin) revert Errors.SlippageExceeded();
+
+        // 8. Post-trade commit uses the same measured quantities that were bound
+        //    by the pre-trade compliance decision.
+        ComplianceContext memory settledContext = req.context;
+        settledContext.amountIn = realizedAmountIn;
+        settledContext.amountOut = realizedAmountOut;
+        engine.commit(settledContext);
 
         // 9. emit + return
         emit Events.Executed(r.executionId, req.context.venue, r.amountOut);

@@ -164,6 +164,46 @@ passing
 
 - Regression coverage confirms that an actor mismatch leaves balances unchanged.
 
+## EXEC-001 — Canonical Settlement Amount Binding
+
+### Behavior
+
+- ExecutionRouter independently measures the authenticated buyer's `tokenIn` and
+  `tokenOut` balance deltas around adapter execution.
+- The current execution version accepts exact full fills only: measured input,
+  measured output, the pre-authorized context amounts and adapter-reported output
+  must agree before stateful compliance commit.
+- A mismatch atomically rolls back token movement, Router nonce consumption,
+  adapter state and compliance state.
+- Canonical Uniswap integration tests obtain an exact pre-execution quote without
+  weakening the production contract or changing the existing execution ID format.
+- Asset onboarding must prohibit fee-on-transfer/rebasing tokens; buyer-side
+  deltas are not a universal detector for intermediate settlement balances.
+  Partial fills and price-tolerant AMM settlement remain unsupported until a
+  separately versioned settlement-aware compliance design is implemented.
+
+### Verification
+
+- `forge test --offline --match-path test/unit/execution/Router.t.sol`
+- `forge test --offline --match-path test/unit/execution/RFQAdapter.t.sol`
+- `forge test --offline --match-path test/integration/RFQFlow.t.sol`
+- `forge test --offline --match-path test/integration/SwapFlow.t.sol`
+- `forge test --offline --match-path test/integration/RealUniswapV3.t.sol`
+- `forge test --offline`
+- `scripts/check.sh`
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Implements the realized-amount scope of issue #153 without changing the active
+  Monad deployment or its artifact.
+- Venue-authoritative `seller`, `flowType` and affiliate provenance is tracked
+  separately and remains a production AMM activation blocker.
+
 ## SDK-007 — External User Golden Path Acceptance
 
 ### Behavior

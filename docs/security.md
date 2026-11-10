@@ -122,6 +122,12 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 - ERC-20 상호작용은 return value를 직접 가정하지 않고 `SafeERC20` 또는 동등한
   safe wrapper를 사용한다.
 - 실패한 실행은 nonce, fill accounting과 token balance를 원자적으로 되돌려야 한다.
+- Router는 adapter가 보고한 output만 신뢰하지 않는다. authenticated buyer의
+  `tokenIn`/`tokenOut` 전후 잔액으로 실제 정산량을 측정하고 사전 승인된 exact
+  `amountIn/amountOut`과 adapter 결과가 모두 일치할 때만 commit한다. 측정 불일치와
+  partial fill은 현재 execution version에서 fail-closed한다. fee-on-transfer/rebasing
+  token은 onboarding에서 금지한다. buyer-side delta는 intermediate recipient의
+  실제 credit까지 증명하지 않으므로 모든 비표준 token을 자동 탐지한다고 가정하지 않는다.
 - ERC-3643 transfer 실패를 성공으로 취급하거나 swallow하지 않는다.
 - regulated asset Element는 `ctx.buyer`를 token recipient로 가정하지 않는다.
   `tokenOut` RWA는 `seller -> buyer`, `tokenIn` RWA는 `buyer -> seller`로 해석해
@@ -159,6 +165,10 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   token pair, venue, final policy ID, nonce와 expiry를 binding해야 한다.
 - Slippage, deadline과 amount cap은 서로 다른 축이다. `amountIn`, RWA 수량,
   quote notional과 investor/fund/offering cap의 기준을 혼동하지 않는다.
+- 현재 exact-fill AMM은 실행 직전 quote output을 compliance context에 고정한다.
+  가격 이동 허용 범위를 추가하려면 체결 후 전체 Element를 재실행하지 말고,
+  pre-state를 보존하는 별도 preview/settlement-aware evaluation contract를 설계해야
+  한다. 일부 Element는 pre-transfer balance와 `canTransfer`를 읽기 때문이다.
 - External call, callback, token transfer가 포함된 경로는 access control,
   reentrancy, unchecked return, signature replay와 business-logic bypass를 함께
   검토한다.

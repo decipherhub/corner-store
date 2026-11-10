@@ -20,6 +20,7 @@ library Errors {
     error ExecutionBindingMismatch(address subject, bytes32 expectedCodeHash, bytes32 actualCodeHash);
     error MaxAmountExceeded();
     error SlippageExceeded();
+    error SettlementAmountMismatch();
     error AMMPoolTokenMismatch();
     error RFQInvalidSignature();
     error RFQQuoteExpired();

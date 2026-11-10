@@ -103,7 +103,11 @@ The `dex-integration` template additionally generates:
 The starter deliberately delegates settlement to the external venue. Integrators
 must implement and audit token movement, callback origin checks, venue-specific
 slippage/accounting and custody behavior; passing conformance does not certify
-those responsibilities.
+those responsibilities. The current Router contract accepts exact full fills of
+standard, non-rebasing ERC-20 tokens only: the buyer's input/output balance deltas
+and the adapter-reported output must exactly match the authorized context amounts.
+Integrators must prohibit transfer-fee/rebasing tokens during onboarding and use a
+new versioned settlement contract before adding partial fills or price tolerance.
 
 ## Unified TypeScript Facade
 
