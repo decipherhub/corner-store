@@ -126,10 +126,12 @@ for sensitive checks and cannot become a second source of settlement authority.
    callers treat unavailable reads as unavailable, without cached permission.
    Reports never authorize execution or replace fill-time Engine evaluation.
 3. Aggregate all versions of A-01, A-12 and F-* into one restricted outcome.
-   Omit individual sensitive identifiers, reasons, paths, binding positions and
-   counts. Whenever these families are present, including when nonapplicable,
-   redact decision `reasonCode`, `flagsBitmap` and `reliedClaims` to prevent
-   indirect disclosure through those fields.
+   Withhold per-subject outcomes, reasons, flags and claims for these families.
+   Binding/Recipe composition, including which bindings contain restricted
+   elements, their positions and counts, is public Registry configuration and
+   is not hidden by the reporter. Whenever these families are present, including
+   when nonapplicable, redact decision `reasonCode`, `flagsBitmap` and
+   `reliedClaims` to prevent indirect disclosure through those fields.
 4. Export an additive typed Toolkit reader with an explicit pinned block reference
    and report version 1. Keep confidential enrichment in a separately controlled
    off-chain system. This API cannot conceal existing public storage, calldata,

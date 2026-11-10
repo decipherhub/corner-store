@@ -34,6 +34,7 @@ import {ReasonCodes} from "../../../src/libraries/ReasonCodes.sol";
 
 contract ReporterElement is BaseElement {
     mapping(address => uint8) public outcomes;
+    mapping(address => uint8) public subjectOutcomes;
     bool public zeroReason;
 
     constructor(bytes32 id, EnforcementAction action)
@@ -58,6 +59,10 @@ contract ReporterElement is BaseElement {
         outcomes[token] = outcome;
     }
 
+    function setSubjectOutcome(address subject, uint8 outcome) external {
+        subjectOutcomes[subject] = outcome;
+    }
+
     function setZeroReason() external {
         zeroReason = true;
     }
@@ -73,8 +78,9 @@ contract ReporterElement is BaseElement {
         ComplianceContext memory ctx = abi.decode(context, (ComplianceContext));
         require(buyer == ctx.buyer && seller == ctx.seller, "wrong subjects");
         require(amount == (token == ctx.tokenOut ? ctx.amountOut : ctx.amountIn), "wrong leg amount");
-        require(outcomes[token] != 2, "private provider error");
-        bool passed = outcomes[token] == 0;
+        uint8 outcome = outcomes[token] == 0 ? subjectOutcomes[buyer] : outcomes[token];
+        require(outcome != 2, "private provider error");
+        bool passed = outcome == 0;
         return (passed, passed || zeroReason ? bytes32(0) : ReasonCodes.encode(0, _meta.elementId, 7));
     }
 }
@@ -338,6 +344,46 @@ contract ReporterTest is Test {
         r = reporter.report(_ctx());
         assertEq(uint8(r.restrictedStatus), uint8(RequirementStatus.UNDETERMINED));
         assertFalse(r.complete);
+    }
+
+    function test_restrictedSubjectOutcome_doesNotChangePublicRows() public {
+        ReporterElement sanctions = _element("A-01-v8", EnforcementAction.BLOCK);
+        _element("A-12-v8", EnforcementAction.BLOCK);
+        _element("F-03-v8", EnforcementAction.BLOCK);
+        _recipe(1, "A-01-v8", "A-12-v8");
+        _recipe(2, "F-03-v8", FIRST);
+        _recipe(3, SECOND, bytes32(0));
+        _activate(RWA, _bindings(3));
+        policies.setUnregulated(OTHER);
+        ComplianceContext memory ctx = _ctx();
+        sanctions.setSubjectOutcome(ctx.buyer, 1);
+        ComplianceReport memory sanctioned = _parity(ctx);
+        ctx.buyer = address(4);
+        ComplianceReport memory clean = _parity(ctx);
+
+        assertTrue(sanctioned.complete);
+        assertTrue(clean.complete);
+        assertTrue(sanctioned.decisionRedacted);
+        assertTrue(clean.decisionRedacted);
+        assertEq(sanctioned.requirements.length, 2);
+        assertEq(clean.requirements.length, sanctioned.requirements.length);
+        assertEq(clean.requirements[0].bindingIndex, 1);
+        assertEq(clean.requirements[0].recipeId, 2);
+        assertEq(clean.requirements[0].elementId, FIRST);
+        assertEq(clean.requirements[1].bindingIndex, 2);
+        assertEq(clean.requirements[1].recipeId, 3);
+        assertEq(clean.requirements[1].elementId, SECOND);
+        assertEq(abi.encode(sanctioned.requirements), abi.encode(clean.requirements));
+        assertEq(uint8(sanctioned.restrictedStatus), uint8(RequirementStatus.FAIL));
+        assertEq(uint8(clean.restrictedStatus), uint8(RequirementStatus.PASS));
+        assertEq(uint8(sanctioned.engineStatus), uint8(RequirementStatus.FAIL));
+        assertEq(uint8(clean.engineStatus), uint8(RequirementStatus.PASS));
+        assertEq(sanctioned.decision.reasonCode, bytes32(0));
+        assertEq(clean.decision.reasonCode, bytes32(0));
+        assertEq(sanctioned.decision.flagsBitmap, 0);
+        assertEq(clean.decision.flagsBitmap, 0);
+        assertEq(sanctioned.decision.reliedClaims, bytes32(0));
+        assertEq(clean.decision.reliedClaims, bytes32(0));
     }
 
     function test_restrictedFlag_isOpaqueAndNonblocking_andSupportsPassAndNonapplicable() public {

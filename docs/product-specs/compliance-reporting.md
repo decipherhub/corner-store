@@ -95,14 +95,17 @@ The taxonomy in `docs/compliance` identifies A-01 as sanctions, A-12 as Red Flag
 Knowledge Bar, and F-* as conduct, surveillance and fraud-related checks.
 All versions matching `A-01-*`, `A-12-*` and `F-*` are restricted. These checks
 produce only one `restrictedStatus`, aggregated across both tokens and every
-binding. No sensitive row, element identifier, reason, binding/path identifier,
-count, or provider text is returned for them. Other families may be itemized.
+binding. Per-subject outcomes, reasons, flags and claims for these families are
+withheld; no individual restricted row or provider text is returned. Binding/Recipe
+composition, including which bindings contain restricted elements, their positions
+and counts, is public Registry configuration and is not hidden by the reporter.
+Other families may be itemized.
 
 Whenever a restricted family is present, even if nonapplicable, the returned
 Engine decision clears `reasonCode`, `flagsBitmap` and `reliedClaims` and sets
 `decisionRedacted=true`. This prevents the Engine's first failure reason or
-binding bit position from bypassing the report's row suppression. The Engine's
-allowed verdict, policy identity, constraints and decision hash are preserved.
+subject-specific failure or flag from bypassing the report's aggregation. The
+Engine's allowed verdict, policy identity, constraints and decision hash are preserved.
 Consumers needing confidential enrichment must use a separately controlled
 off-chain system. A downstream authenticated disclosure service may suppress
 additional public details according to its own versioned policy.
