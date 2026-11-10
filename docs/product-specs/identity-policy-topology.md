@@ -1,6 +1,6 @@
 # Opt-in identity policy topology
 
-Status: DATA-004 steps 1-3, issue #159, intended decision D031. Evidence acceptance
+DATA-004, issue #159 decision 24, D031. Evidence acceptance
 is specified in [identity-evidence-v2.md](./identity-evidence-v2.md); trading
 integration is specified in [identity-settlement-binding.md](./identity-settlement-binding.md).
 This is an enforcement
@@ -59,9 +59,9 @@ Schemas 1 through 6 retain their existing meaning and cannot opt into A-04-v2 or
 A-04-v1 is rejected. A-04-v1's ABI, automatically seeded legacy claim behavior,
 existing recipes and published RFQ v2 deployments remain unchanged.
 
-The step 1 foundation returned reason 2 for every valid DIRECT policy. Step 2
-adds separate operator-accepted evidence, issuer trust and lifecycle checks as
+Separate operator-accepted evidence, issuer trust and lifecycle checks are
 specified in [identity-evidence-v2.md](./identity-evidence-v2.md). Valid DIRECT
-parameters alone still cannot pass without accepted evidence. Step 3 supplies
-the opt-in recipe and settlement verification in an isolated local fixture.
+parameters alone still cannot pass without accepted evidence. The opt-in recipe
+and settlement verification use an isolated local fixture.
+The [P2 schedule](./identity-p2-schedule.md) covers full MEMBER support.
 No existing deployment is upgraded.

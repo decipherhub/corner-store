@@ -1543,3 +1543,221 @@ Re-resolving policy on a retry can change the request's authoritative identity.
 - `services/rfq/src/coordinator.ts`
 - `services/rfq-host/src/server.ts`
 - `services/rfq-host/README.md`
+
+
+## D031: Identity topology is an explicit per-recipe commitment
+
+Date: 2026-11-11. Issue #159 decision 24. Status: P1 guard implemented;
+full MEMBER support scheduled as separate November P2 work.
+
+### Context
+
+New identity policies must not silently choose a topology or allow an alternative
+Recipe to bypass it. Legacy policy tuples and deployments must keep their meaning.
+
+### Decision
+
+Use opt-in production onboarding schema 7 with `recipes[].identityPolicy` declaring
+RFQ/TSV and DIRECT. RFQ has no default; TSV is fixed to DIRECT. Reject unset,
+unknown and MEMBER values until the separate P2 implementation. Commit the exact
+64-byte `abi.encode(uint8 track, uint8 topology)` through required A-04-v2
+ManifestPolicyConfig parameters, preserving shared Manifest/RecipeBinding tuples.
+Require REQUIRED_BLOCKING bindings and BLOCK enforcement, including updates and
+mixed legacy/new compositions. Retain every schema 6 context check in schema 7.
+Schemas 1-6 keep their meaning and cannot select A-04-v2; schema 7 identity recipes
+cannot substitute A-04-v1.
+
+### Consequences
+
+Full-word decoding rejects noncanonical words, trailing data and malformed lengths.
+The live deployment exposed an EIP-170 size failure; equivalent compact validation
+now leaves TokenPolicyRegistry at 24,536 bytes, only 40 bytes below the limit.
+The deployed-size and composition/fuzz regressions must remain passing. MEMBER
+institution/attestation support and wallet sanctions in both modes are scheduled,
+not implemented. A TSV track declaration alone is not launch readiness.
+
+### Related Files
+
+- `docs/product-specs/identity-policy-topology.md`
+- `services/toolkit/src/identity-policy.ts`
+- `src/compliance/libraries/IdentityPolicy.sol`
+- `src/registry/TokenPolicyRegistry.sol`
+- `test/unit/registry/IdentityPolicyComposition.t.sol`
+
+## D032: External attestations require separate operator acceptance
+
+Date: 2026-11-11. Issue #159 decision 25. Status: P1 implemented.
+
+### Context
+
+Issuer and delegation provenance must be explicit without expanding A-04-v1's
+five-field KycClaim ABI or manufacturing valid evidence when binding a wallet.
+
+### Decision
+
+Deploy a separate A-04-v2 implementing IIdentityEvidenceV2. Its evidence binds
+wallet, identity, asset and binding generation to issuer ID, issuedAt, expiry,
+trust-basis commitment, attestation type and keyed evidence commitment. Operator
+acceptance is a decision based on evidence the operator accepted; external
+attestations do not replace it. SPI 2.0.0 requires explicit acceptance and strict
+audit before publishing eligible evidence. Preserve v1 exports and stores.
+
+Only authorized operators/owner manage issuer trust and evidence, with change
+events. Trade checks read current issuer trust and basis equality. Binding creates
+no evidence; unbind/rebind invalidates prior records. Missing, expired, unsupported,
+untrusted, mismatched or revoked evidence fails closed. Counterparty screening is
+an explicit operator setting with the same pipeline.
+
+### Consequences
+
+Restoring the exact trust basis can restore otherwise valid unexpired evidence;
+revoke individual records when reinstatement is unwanted. ERC-3643/ONCHAINID and
+provider accuracy remain external trust boundaries. The contract does not verify
+external signatures or recompute HMAC. The in-process reference store requires a
+transactional durable replacement in production. A-11 arithmetic is unchanged.
+
+### Related Files
+
+- `docs/product-specs/identity-evidence-v2.md`
+- `src/interfaces/compliance/IIdentityEvidenceV2.sol`
+- `src/compliance/elements/IdentityUniquenessV2.sol`
+- `services/compliance-data/src/kyc-v2.ts`
+- `test/unit/compliance/elements/IdentityEvidenceV2.t.sol`
+
+## D033: Compliance-data owns one local key for v2 evidence commitments
+
+Date: 2026-11-11. Issue #159 decision 26. Status: keyed commitments implemented;
+venue pseudonyms and private wallet mapping scheduled as separate P2 work.
+
+### Context
+
+Unkeyed identity-derived references permit outsiders to recompute guesses.
+Operator-api is a read-only public-commitment boundary, not an evidence processor.
+
+### Decision
+
+Use domain-separated HMAC-SHA-256 for v2 identity, source, assessment and evidence
+commitments over canonical JSON. Load exactly one 32-byte hex key from local env
+or file in the compliance-data runtime, and inject only a restricted hashing
+capability into adapters, coordinator, store validation and calldata translation.
+Missing/malformed/unreadable/ambiguous configuration fails startup; no unkeyed
+fallback. Operator-api never receives the key. On-chain acceptance receives only
+public enforcement fields and commitments through unsigned exported calldata.
+
+### Consequences
+
+V2 uses separate domains, SPI types and persisted records; no automatic v1 hash
+migration. Raw evidence, provider case references, LEI and keys remain off-chain.
+Same-assessment replay/conflict and monotonic revocation remain validated by the
+store. Key management, rotation, KMS/HSM, custody and multisig remain deferred.
+Venue-specific pseudonyms, private wallet mappings and same-identity blocking are
+scheduled before any TSV launch, not provided by keyed commitments alone.
+
+### Related Files
+
+- `services/compliance-data/src/kyc-hmac-v2.ts`
+- `services/compliance-data/src/kyc-calldata-v2.ts`
+- `services/compliance-data/examples/http-kyc-provider-adapter-v2.ts`
+- `services/compliance-data/test/kyc-v2.ts`
+- `docs/product-specs/identity-p2-schedule.md`
+
+## D034: Prove the existing self-directed settlement identity binding
+
+Date: 2026-11-11. Issue #159 decision 27. Status: P1 proofs implemented;
+settlement-asset cards scheduled as separate November P2 work.
+
+### Context
+
+AMM-002 / #143 already binds execution actors on the Router path. The requested
+check needs explicit identity-to-token-leg evidence for RFQ v2/v3 and AMM.
+
+### Decision
+
+Add named `test_settlementLegBoundToPermittedIdentity_*` invariants for buys and
+sells without changing settlement contracts. Assert the screened wallet/identity,
+exact investor/counterparty token deltas and zero Router/adapter custody. Actor
+mismatch and revoked identity/evidence must leave balances, nonces and surveillance
+unchanged; explicit restoration permits the failed request to retry once.
+
+Register opt-in RegD506cRecipeV4 (family 1, version 4) replacing only A-04-v1 with
+A-04-v2. Retain B-02-v2 and C-01-v2, so this recipe remains incompatible with AMM.
+Use isolated fixtures and a live provider-evidence-to-calldata-to-settlement gate.
+
+### Consequences
+
+The 42 named invariants use real ERC-3643/ONCHAINID. Their AMM pool is a fixed-rate
+callback mock with a separate C-01-free test recipe; canonical Uniswap regressions
+retain their existing policy. The live identity gate covers 40 RFQ v2/v3 cases
+with bilateral screening enabled explicitly. These proofs cover self-directed
+Router execution, not delegated transfers or transfers outside the Router.
+Cards describing issuer, AML-owner label and freeze scope remain unimplemented.
+
+### Related Files
+
+- `docs/product-specs/identity-settlement-binding.md`
+- `src/compliance/recipes/RegD506cRecipeV4.sol`
+- `test/integration/IdentitySettlementBinding.t.sol`
+- `scripts/e2e-identity-evidence.sh`
+- `script/IdentityEvidenceFixture.s.sol`
+
+## D035: LEI is optional private evidence, never an eligibility requirement
+
+Date: 2026-11-11. Issue #159 decision 28. Status: P1 implemented.
+
+### Context
+
+Legal-entity participants may supply an identifier without imposing a new policy
+requirement or changing eligibility/sanctions behavior for existing participants.
+
+### Decision
+
+Allow optional `lei` in v2 off-chain evidence. Validate the 20-character uppercase
+alphanumeric format ending in two digits and MOD-97-10 checksum. Include a supplied
+value in canonical evidence commitments and store round trips. Omission is valid;
+no policy requires LEI or treats it as a substitute for eligibility,
+beneficial-ownership or sanctions facts.
+
+### Consequences
+
+LEI stays out of public calldata, events, artifacts and audit records. V1 evidence
+shapes and all on-chain tuples remain unchanged. Tests cover omission, valid values,
+malformed length/characters/checksum, commitment changes and persistence.
+
+### Related Files
+
+- `services/compliance-data/src/kyc-spi-v2.ts`
+- `services/compliance-data/src/kyc-hmac-v2.ts`
+- `services/compliance-data/test/kyc-v2.ts`
+- `docs/product-specs/identity-evidence-v2.md`
+
+## D036: Jurisdictional sanctions bundles require a separate opt-in A-01-v2
+
+Date: 2026-11-11. Issue #159 decision 29. Status: design scheduled for November
+P2; no sanctions implementation in DATA-004.
+
+### Context
+
+A-01-v1 has one currentListVersion. Per-jurisdiction list bundles need independent
+list identities/versions without reinterpreting deployed claims or recipes.
+
+### Decision
+
+Schedule one separate PR for A-01-v2 with recipe-selected list bundles and
+`(listId, version)` entries. A version update invalidates stale claims independently
+for each list. TSV must include OFAC and cannot remove it through configuration
+or updates. Missing required-list claims fail closed. A local SDN-file import is
+sufficient; oracle/vendor integration is optional, not a prerequisite.
+
+### Consequences
+
+Acceptance tests must cover independent invalidation, missing claims and OFAC
+omission/removal rejection. Preserve A-01-v1's single-version behavior until
+explicit opt-in. Wallet screening remains required in both future topologies.
+DATA-004 does not claim jurisdictional list support or TSV launch readiness.
+Dates and assignees for the four P2 PR slots remain for team confirmation.
+
+### Related Files
+
+- `docs/product-specs/identity-p2-schedule.md`
+- `docs/compliance/spec-sheets/A-01_sanctions.spec.md`
+- `docs/ROADMAP.md`

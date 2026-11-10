@@ -1,6 +1,6 @@
 # Opt-in identity evidence settlement verification
 
-DATA-004 step 3, issue #159 decision 27, intended D034. This verifies the
+DATA-004, issue #159 decision 27, D034. This verifies the
 existing Router settlement binding implemented by AMM-002 (#143). Settlement
 contracts, quote schemas, existing recipes and public deployments are unchanged.
 
@@ -96,4 +96,6 @@ Further registry changes must preserve this gate or address code size separately
 
 This proof covers self-directed Router-mediated execution. Delegation, transfers
 outside the Router, settlement-asset cards, issuer/AML-owner labels and freeze
-scope are outside step 3. P2 scheduling and release gates remain step 4 work.
+scope remain outside P1. Their separate November PR slots are in the
+[P2 schedule](./identity-p2-schedule.md). Release gates are documented in
+[testing.md](../testing.md), with executed results in [PROGRESS.md](../../PROGRESS.md).

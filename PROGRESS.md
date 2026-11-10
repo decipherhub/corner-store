@@ -1,5 +1,91 @@
 # Progress
 
+## 2026-11-11 Session: DATA-004 Step 4 Release Finalization
+
+DATA-004 is passing after all required gates. Scope: issue #159 P1 release
+finalization, D031-D036, four separate November P2 PR slots, SDK/versioning and
+A-01/A-04/A-11 documentation, release verification and slice-note cleanup.
+Out of scope: P2 implementation, settlement contract changes, public Monad paths,
+production providers/durable storage, key management, custody and multisig.
+
+Steps 1-3 are already committed on this branch. Their deferred state-document
+entries are now finalized: explicit DIRECT/schema 7 topology guards; separate
+A-04-v2 evidence/issuer trust; SPI 2.0.0 operator acceptance, local compliance-data
+HMAC and optional LEI; opt-in Reg D v4 and named settlement proofs. D036 records
+scheduled design only. Reserved upstream decision/feature IDs were not reused.
+A-04-v1, existing recipes/quote schemas/API responses and A-11 expiry arithmetic
+retain their meanings. No deployed contract was upgraded.
+
+The first full gate provided the red baseline for one stale packed-consumer
+assertion: `PRODUCTION_ONBOARDING_SCHEMA_VERSION` was 7, expected 6. Updated only
+that assertion and its result label in `scripts/sdk-product-smoke.sh`, then reran
+the complete gate successfully. No product runtime code changed in step 4 and no
+new behavior tests were added. The known RFQ store flake did not occur.
+
+All service/script commands below used Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`; Foundry is 1.7.1.
+
+| Exact command inside the Node wrapper | Actual result |
+| --- | --- |
+| `scripts/check.sh` (first run) | Exit 1 at packed-consumer schema assertion, actual 7 vs expected 6; preceding 1,171 Foundry and RFQ/host/Toolkit/CLI tests passed. Log: `/private/tmp/w159-step4-check.log`. |
+| `scripts/check.sh` (after assertion fix) | Exit 0; 1,171/1,171 Foundry tests across 70 suites; format/high-severity lint/build; RFQ/host/Toolkit/CLI/compliance-data 30/24/30/8/21 named tests, all zero failed/skipped; all service smokes, provider conformance, packed consumers (6 version assertions), showcase plan, and 10/10 deploy-v3 tests passed. Log: `/private/tmp/w159-step4-check-final.log`. |
+| `scripts/e2e-anvil.sh` | Exit 0, first run; BUIDL-like 7/7 scenarios plus backend/CLI/Router, repeat trades, negative cases and temporal runtime flow passed. Log: `/private/tmp/w159-step4-buidl.log`. |
+| `scripts/e2e-anvil.sh --profile reg-d` | Exit 0, first run; Reg D 7/7 scenarios plus backend/CLI/Router and runtime checks passed. Log: `/private/tmp/w159-step4-regd.log`. |
+| `scripts/e2e-context-provenance.sh` | Exit 0, first run; 12/12 live cases, zero failed. Log: `/private/tmp/w159-step4-context.log`. |
+| `scripts/e2e-identity-evidence.sh` | Exit 0, first run; 40/40 live cases, zero failed, normal EIP-170 limits. Log: `/private/tmp/w159-step4-identity.log`. |
+| `node --version && yarn --version` | Exit 0; v20.20.2 and 1.22.22. |
+
+Exact log redirections used after each wrapped invocation were respectively
+`> /private/tmp/w159-step4-check.log 2>&1`,
+`> /private/tmp/w159-step4-check-final.log 2>&1`,
+`> /private/tmp/w159-step4-buidl.log 2>&1`,
+`> /private/tmp/w159-step4-regd.log 2>&1`,
+`> /private/tmp/w159-step4-context.log 2>&1` and
+`> /private/tmp/w159-step4-identity.log 2>&1`.
+
+Additional checks outside the wrapper:
+
+- `forge --version`: exit 0, 1.7.1-Homebrew.
+- `git diff --check`: exit 0, including final documentation edits.
+- `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`:
+  exit 0; protected paths unchanged in the working tree.
+- `git diff --exit-code feat/155-rfq-quote-bounds -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`:
+  exit 0; protected paths unchanged across all issue #159 slices.
+- Final Python document/link/state/character checks: exit 0; added local Markdown
+  links resolve, D031-D036 occur once each, DATA-004 is passing with no active
+  feature, and added lines contain no em dash. Slice notes were removed after
+  transferring their durable decisions, evidence and operating constraints here
+  and into the product specs.
+
+The release gate retains steps 1-3's v1 compatibility, full-word topology fuzzing,
+issuer trust/lifecycle, HMAC/LEI/privacy, store conflict/audit failure and codecs.
+It includes 42 named settlement-binding invariants plus recipe/missing-evidence/
+size tests. Identity live cases cover two acceptances, 32 mined rejections, four
+settlements, Manifest parameters and privacy. The step 2 fixture's historical gas
+measurements are retained in `docs/product-specs/identity-evidence-v2.md`; gas was
+not remeasured in step 4.
+
+November P2 slots are documented in `docs/product-specs/identity-p2-schedule.md`
+and linked from the roadmap: MEMBER institution/attestation support with wallet
+sanctions in both modes; venue pseudonyms/private wallet mapping/same-identity
+blocking before TSV launch; issuer/AML-owner/freeze-scope asset cards; and separate
+A-01-v2 list bundles with per-list invalidation and mandatory OFAC for TSV.
+They remain unimplemented. Team to confirm calendar dates/assignees; no PRs were
+opened. No item blocks this P1 release.
+
+Material operating constraints: bilateral A-04-v2 screening remains explicit;
+restoring the exact issuer basis can restore unexpired accepted evidence unless
+individually revoked; the reference store is in-process. TokenPolicyRegistry is
+24,536 bytes with the pinned compiler, leaving only 40 bytes of EIP-170 headroom.
+Its deployed-size regression passed; further growth needs explicit size work.
+
+UNVERIFIED: A-04-v2 with a canonical Uniswap pool in live Anvil (named AMM tests
+use a callback mock; existing canonical-pool regressions passed); RFQ-host HTTP
+with the new recipe (context-provenance HTTP passed separately); production
+providers/durable storage, public/external networks and Docker/container runtime.
+No external publication, commit, push or branch operation was performed. Next:
+user reviews the working tree; P2 proceeds as separate November PR work.
+
 ## 2026-11-11 Session: RFQ-006 Nested TTL Review Fix
 
 RFQ-006 is passing. Scope: the confirmed P3 pre-authentication recursive TTL hash in the production

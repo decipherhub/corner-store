@@ -18,7 +18,64 @@ operator must supply and verify a provider adapter, authorization, PII controls,
 durable database/WORM storage, finality/reorg handling, alerting and retention.
 Only snapshot hashes and PII-free references should be submitted on-chain.
 
-## Provider-neutral TA/KYC evidence
+## Opt-in identity evidence v2
+
+DATA-004 adds SPI 2.0.0 with separate evidence records consumed by A-04-v2.
+The v1 API, hashes, record shapes and entry points described below retain their
+existing meaning. Use explicit v2 names at the root or these package subpaths:
+
+| Import | Contents |
+| --- | --- |
+| `@corner-store/compliance-data/v2` | coordinator/store, local HMAC capability, LEI validation and unsigned acceptance translator |
+| `@corner-store/compliance-data/spi-v2` | SPI 2.0.0 types and metadata validation |
+| `@corner-store/compliance-data/demo-v2` | deterministic demo adapter, refused in production mode |
+| `@corner-store/compliance-data/conformance-v2` | `runKycProviderConformanceV2` |
+
+V2 assessments add `provenance` with issuer ID, issuedAt, expiry, trust-basis
+commitment and `PUBLIC_LOOKUP | SOURCE_REATTEST | SELECTIVE_DISCLOSURE` type.
+The coordinator requires `accept(assessment)` to return exactly `true` and a
+successful strict audit before publishing eligible evidence. This is a decision
+based on evidence the operator accepted. External ONCHAINID/provider claims do
+not replace operator acceptance or the external ERC-3643/ONCHAINID trust boundary.
+
+The compliance-data runtime loads exactly one local 32-byte hex HMAC key through
+`loadLocalKycCommitmentsV2` from `CORNER_STORE_KYC_HMAC_KEY` or
+`CORNER_STORE_KYC_HMAC_KEY_FILE`. Missing, malformed, unreadable or ambiguous
+configuration fails startup. Inject the returned restricted `hash` capability
+into the adapter, coordinator, store and translator. Operator-api never sees
+the key. Identity, source, assessment and evidence commitments use separate
+`corner-store/kyc/<purpose>/v2` HMAC-SHA-256 domains over canonical JSON;
+there is no unkeyed fallback or automatic rotation.
+
+`lei` is optional off-chain evidence. Validation checks 20 uppercase alphanumeric
+characters ending in two digits and a MOD-97-10 remainder of 1. When present it
+participates in the canonical commitment and persists through store round trips.
+No policy requires it; eligibility and sanctions checks remain independent.
+
+After a successful refresh, `identityEvidenceAcceptanceV2(snapshot, commitments,
+now)` revalidates the evidence and returns public fields and unsigned
+`acceptEvidence` calldata. It exports no raw provider payload, LEI or key and
+does not sign, broadcast, issue external KYC claims, bind a wallet or establish
+issuer trust. The operator separately configures those authorized on-chain
+actions. Root/v2 imports never load demo adapters or read a key at import time.
+
+`InMemoryKycEvidenceStoreV2` is an in-process reference. A production replacement
+must preserve HMAC revalidation, idempotent replay, conflict rejection and
+monotonic revocation transactionally. V1 and v2 stores reject the other's record
+shape; refresh under v2 rather than relabeling persisted records. Provider outage,
+timeout, revocation, stale evidence, rejected acceptance and audit/store failures
+fail closed. Key management, custody, multisig and production vendor selection
+remain deferred.
+
+See the [evidence contract](../../docs/product-specs/identity-evidence-v2.md),
+[schema 7 migration](../../docs/sdk-versioning.md), and
+[November P2 schedule](../../docs/product-specs/identity-p2-schedule.md).
+The isolated local integration is
+`npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/e2e-identity-evidence.sh'`
+from the repository root. It checks 40 live cases with both RFQ versions and
+directions; it is not a production provider integration.
+
+## Provider-neutral TA/KYC evidence (v1)
 
 `KycEvidenceCoordinator` adds the production boundary for identity/provider refreshes without
 encoding a vendor API. Operator-owned adapters implement `ProviderKycAdapter` and may call

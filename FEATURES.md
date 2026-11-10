@@ -9,6 +9,63 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DATA-004: Operator-Accepted Identity Evidence and Topology Guards
+
+### Behavior
+
+- Opt-in onboarding schema 7 declares per-recipe RFQ/TSV track and explicit
+  DIRECT topology through required, exact A-04-v2 ManifestPolicyConfig bytes.
+  Missing/unknown/MEMBER topology, nonblocking bindings and enforcement
+  downgrades fail closed at registration and update. Schema 6 context checks
+  remain required; schemas 1-6 retain their original meaning.
+- Separate A-04-v2 evidence binds identity, wallet and asset to issuer ID,
+  issuedAt, expiry, trust basis, type and keyed commitment. Binding creates no
+  accepted evidence. Current operator-managed issuer trust gates every trade.
+- SPI 2.0.0 requires explicit operator acceptance and strict audit. One local
+  env/file HMAC key belongs to compliance-data, never operator-api. V2 domains,
+  records, exports and unsigned acceptance codecs remain separate from v1.
+- Optional format/checksum-validated LEI stays off-chain and participates in
+  evidence commitments; no eligibility or sanctions policy requires it.
+- Reg D v4 opts into A-04-v2 while retaining the other v3 elements and the
+  C-01 AMM restriction. Named RFQ v2/v3 and AMM invariants prove the existing
+  self-directed settlement binding without settlement contract changes.
+- Existing deployments, recipes, events, API responses and live public Monad
+  RFQ v2 paths retain their meaning. Four P2 PR slots are scheduled separately.
+
+### Verification
+
+- Foundry topology/composition, issuer authorization/lifecycle, identity evidence,
+  256-run full-word parameter fuzzing, v1 compatibility and deployed-size tests.
+- Compliance-data v1/v2 provider conformance, HMAC/replay/conflict/audit/expiry
+  and optional LEI tests; Toolkit schema 7/codec/verifier and CLI tests.
+- 42 named settlement-binding tests plus recipe, missing-evidence and size
+  regressions; isolated `scripts/e2e-identity-evidence.sh` (40 live cases).
+- `scripts/check.sh`, both `scripts/e2e-anvil.sh` profiles,
+  `scripts/e2e-context-provenance.sh`, whitespace and protected-path checks.
+
+### State
+
+passing
+
+### Notes
+
+- Final release gates passed on 2026-11-11: 1,171 Foundry tests; both legacy
+  profiles 7/7 scenarios plus runtime flows; context 12/12; identity 40/40.
+  The full check passed after updating the stale packed schema-6 assertion.
+- Issue #159 decisions 24-29 map to D031-D036. D036 records scheduled design,
+  not implemented sanctions support. Reserved upstream IDs are unchanged.
+- Specs: `docs/product-specs/identity-policy-topology.md`,
+  `identity-evidence-v2.md`, `identity-settlement-binding.md` and
+  `identity-p2-schedule.md` in the same directory.
+- Counterparty evidence requires explicit operator enablement. Restoring the
+  exact issuer trust basis can restore unexpired evidence; revoke individual
+  records when reinstatement is unwanted. The reference store is in-process.
+- TokenPolicyRegistry runtime is 24,536 bytes with the pinned compiler, leaving
+  40 bytes below EIP-170. The size regression must remain passing.
+- MEMBER, pseudonyms/off-chain wallet mapping before TSV launch, asset cards,
+  jurisdictional lists, key management/custody/multisig and external vendors
+  remain deferred. Passing this feature does not establish TSV launch readiness.
+
 ## RFQ-006: Bounded Lifetime and Pre-Pricing Product Authorization
 
 ### Behavior

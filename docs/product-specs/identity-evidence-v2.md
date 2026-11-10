@@ -1,8 +1,7 @@
 # Operator-accepted identity evidence v2
 
-DATA-004 step 2, issue #159 decisions 25, 26 and 28, intended D032, D033 and
-D035. This opt-in version preserves A-04-v1, SPI v1, their persisted records and
-all existing recipes. Trading integration and named settlement invariants are
+DATA-004, issue #159 decisions 25, 26 and 28, D032, D033 and D035. This opt-in
+version preserves A-04-v1, SPI v1, their persisted records and all existing recipes. Trading integration and named settlement invariants are
 specified in [identity-settlement-binding.md](./identity-settlement-binding.md).
 The topology contract remains
 [identity-policy-topology.md](./identity-policy-topology.md).
@@ -136,5 +135,17 @@ rejects extra/private fields, zero commitments, malformed windows/types, legacy
 KycClaim calldata, noncanonical words and trailing data. Its separate selector is
 `0x9b3e5df6`; the static acceptance payload is 292 bytes including the selector.
 
-See SLICE_NOTES.md for executed gates and measured gas. No deployed contract,
-existing recipe, API response or public Monad artifact is changed by this step.
+## Verification and measured fixture gas
+
+`test/unit/compliance/elements/IdentityEvidenceV2.t.sol` covers authorization,
+trust, time windows, binding generations and acceptance/check gas. The step 2
+fixture measured `acceptEvidence` at 149,617 gas and `check` at 31,730 in the
+Foundry function gas report; deployment was 1,772,449 gas / 8,393 bytes. Separate
+uninstrumented harness deltas were 132,944 and 16,988 respectively. These are
+fixture measurements, not fee or savings guarantees; report instrumentation and
+warm/cold access change the observed cost.
+
+Executed release results are recorded in [PROGRESS.md](../../PROGRESS.md), and
+repeatable gates in [testing.md](../testing.md). See the
+[P2 schedule](./identity-p2-schedule.md) for deferred work. No deployed contract,
+existing recipe, API response or public Monad artifact is migrated.
