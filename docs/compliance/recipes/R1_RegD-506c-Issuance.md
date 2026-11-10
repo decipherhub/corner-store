@@ -13,6 +13,43 @@ review-required: legal
 tags: [recipe-requirement-spec, R1, reg-d, 506c, issuance, R1]
 ---
 
+## Current reference versions (issue #132, item 6)
+
+The implementation sections below describe the historical v2 reference. Current
+local defaults use `RegD506cRecipeV3` (family 1, version 3). The opt-in
+`RegD506cRecipeV4` (family 1, version 4) appends `A-12-v2` to V3's nine elements:
+
+| Order | Element ID | Compiled default action |
+| --- | --- | --- |
+| 1-5 | `A-01-v1`, `A-02-v1`, `A-03-v1`, `A-04-v1`, `A-05-v1` | `BLOCK` |
+| 6-9 | `B-01-v1`, `B-02-v2`, `C-01-v2`, `E-01-v1` | `BLOCK` |
+| 10 | `A-12-v2` | `FLAG_ONLY` |
+
+Both versions remain always applicable to their bound asset. A-12 returns
+`(true, bytes32(0))` for valid empty parameters, including flagged and uncertain
+assessments. Its review state is read separately; it does not set Engine flags or
+suspend a sale. The nine existing gates retain their behavior. Adding this
+always-passing element does not itself establish Rule 506(c) reasonable
+verification. Production membership, verification evidence and review obligations
+remain subject to separate counsel approval; the legal discussion below does not
+certify either reference version.
+
+For a fresh local reference stack, explicitly set `ASSET_PROFILE=reg-d-v4` for
+`script/DeployStack.s.sol`. Select `--profile reg-d-v4` with CLI `onboard` or
+`investor-setup`, matching the generated artifact. `buidl-like` remains the default
+profile and `reg-d` remains v3. The existing full `scripts/e2e-anvil.sh` launcher
+and Toolkit configuration templates retain their two supported profiles; use the
+scripts directly or the CLI for this opt-in reference version.
+
+For an existing v3 asset, register `RedFlagKnowledgeBarV2` as `A-12-v2` with
+`FLAG_ONLY`, then register recipe family 1/version 4. Registration alone does not
+change an active Manifest. Submit a new reviewed Manifest hash and a binding to
+`(1, 4)` through `scheduleManifestUpdate`, wait the configured timelock, then
+call `activateManifestUpdate`. The compiled plan and policy ID change at
+activation; outstanding RFQ quotes must use the new policy ID. Existing v3
+registrations, recipes and the public Monad demo remain unchanged.
+
+
 # R1 Reg D 506(c) Issuance — 요구사항 명세서 (Recipe)
 
 > **저술 지위 고지.** 본 Recipe의 법적 논증은 승준이 작성한 recipe walkthrough(2026-06-17, 조문별 삼단논법)를 산문 2부 형식으로 재구성한 것이며, 대응하는 보경 recipe 검토본은 존재하지 아니한다. 따라서 제1부는 element spec의 보경 파생분과 달리 **법률 검토 전 상태**이다(제4절). 또한 제2부의 기준 컨트랙트 `RegD506cRecipe.sol`은 스스로 "illustrative reference wiring, NOT approved production policy"로 선언한 참조 배선이므로, 그 요소 집합은 확정 정책이 아니다(제10절 seam).

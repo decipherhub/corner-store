@@ -24,7 +24,7 @@ export const DEFAULT_CHAIN_ID = 31337;
 export const ALLOWED_JURISDICTION = "US";
 
 export interface Artifact {
-  assetProfile?: "buidl-like" | "reg-d";
+  assetProfile?: "buidl-like" | "reg-d" | "reg-d-v4";
   ammAdapter: string;
   deployer: string;
   elementReg: string;

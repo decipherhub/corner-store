@@ -69,6 +69,7 @@ contract DemoScenarios is Script, DemoConstants {
     ExecutionRouter internal router;
     RFQAdapter internal rfqAdapter;
     bool internal useBuidlLikeProfile;
+    bool internal useRegDV4Profile;
     uint256 internal tradeAmount;
     uint256 internal rfqBuyAmountOut;
     uint256 internal sellTradeAmount;
@@ -521,7 +522,11 @@ contract DemoScenarios is Script, DemoConstants {
 
         bytes32 profileHash = keccak256(bytes(vm.parseJsonString(json, ".assetProfile")));
         useBuidlLikeProfile = profileHash == keccak256("buidl-like");
-        require(useBuidlLikeProfile || profileHash == keccak256("reg-d"), "artifact assetProfile invalid");
+        useRegDV4Profile = profileHash == keccak256("reg-d-v4");
+        require(
+            useBuidlLikeProfile || useRegDV4Profile || profileHash == keccak256("reg-d"),
+            "artifact assetProfile invalid"
+        );
 
         deployer = vm.parseJsonAddress(json, ".deployer");
         investor = vm.parseJsonAddress(json, ".investor");
@@ -595,7 +600,7 @@ contract DemoScenarios is Script, DemoConstants {
     function _baseBindings() internal view returns (RecipeBinding[] memory bindings) {
         bindings = useBuidlLikeProfile ? BuidlLikeDemoAsset.recipeBindings() : new RecipeBinding[](1);
         if (!useBuidlLikeProfile) {
-            bindings[0] = RecipeBinding(1, 3, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+            bindings[0] = RecipeBinding(1, useRegDV4Profile ? 4 : 3, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         }
     }
 
