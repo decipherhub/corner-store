@@ -1,5 +1,6 @@
 export * from "./checkpoint";
 export * from "./config";
+export * from "./compliance-reporting";
 export * from "./deploy";
 export * from "./integration";
 export * from "./multisig";

@@ -27,7 +27,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
-    "test": "npm run build && node dist/test/smoke.js"
+    "test": "npm run build && node dist/test/smoke.js",
+    "test:reporter-runtime": "npm run build && node dist/test/compliance-reporting-runtime.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

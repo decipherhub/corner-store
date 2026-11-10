@@ -1,4 +1,5 @@
 import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
+import {runComplianceReportingTests} from "./compliance-reporting";
 
 import {encodeBytes32String, keccak256} from "ethers";
 import {
@@ -1160,7 +1161,7 @@ try {
 } catch (err: any) {
   if (!err.message.includes("environment variable")) throw err;
 }
-onboardingVerificationPromise.then(() => {
+Promise.all([onboardingVerificationPromise, runComplianceReportingTests()]).then(() => {
   console.log("corner-store toolkit smoke ok");
 }).catch((err) => {
   console.error(err);
