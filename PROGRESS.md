@@ -1,5 +1,124 @@
 # Progress
 
+## 2026-11-11 Session: EXEC-002 Confirmed Review Fixes
+
+Scope: F1 recipient MM-claim selection and F2 reverse Engine/Router activation
+binding. Existing B-04-v1, its tests, default recipes and public Monad v2 paths
+are unchanged. EXEC-002 remains passing after the checks below.
+
+- F1: added opt-in immutable `EngineSelectionV2` (`B-04-v2`) using `AssetFlow`
+  for each security recipient. V3 integration/live fixtures register and bind
+  it explicitly. RouterV2 regressions cover both asymmetric affiliate sells and
+  buy parity with v1; unit coverage adds 256-run buy parity fuzzing, exemptions
+  and fail-closed context. Schema 6 scans every active compiled binding and
+  rejects B-04-v1 or unavailable/malformed reads, allowing policies without B-04.
+- F2: activation now requires `ComplianceEngine.router() == executionRouter`,
+  including unreadable-read rejection with all other bindings correct. REGISTER
+  plans add unsigned Engine wiring before adapter wiring. D028 and the product
+  spec require a separate v3 Engine because its Router authorization is single;
+  UPDATE continues to verify existing bindings without rebinding.
+- Tests first: with the original B-04, the two asymmetric sell regressions
+  failed and the other 11 integration tests passed. The initial Toolkit run
+  exposed all five new activation/wiring gaps (9 passed, 5 failed). Final
+  passing runs include the fixes and additional compiled-policy coverage.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0. Changed Solidity files were formatted with targeted `forge fmt` first. |
+| `forge build` | Exit 0; compiler/lint warnings remain. |
+| `forge test --offline` | Exit 0; 1,100 passed across 66 suites, 0 failed, 0 skipped. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm test --prefix services/toolkit'` | Exit 0; smoke gate and 15 provenance tests passed, 0 failed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'` | Exit 0; 12 passed: 10 mined rejections with unchanged balances/nonces and 2 affiliate settlements with recipient MM claims only. |
+| `git diff --check` | Exit 0. Protected-path diff against origin/main and legacy B-04/tests/recipe diff checks also exited 0. |
+
+Logs are local `/private/tmp/w157-fixes-*.log` files. UNVERIFIED in this fix
+session: the broader `scripts/check.sh`, legacy Anvil profiles and public or
+production activation were not rerun. Prior delivery evidence below is historical.
+Next: review these working-tree fixes and run the documented activation checks
+for each separately deployed v3 stack and onboarded security. No commit, push,
+publication or GitHub comment was performed.
+
+## 2026-11-11 Session: EXEC-002 Delivery and Full Verification
+
+EXEC-002 (issue #157) is passing after all four approved implementation slices
+and the delivery gates below. This session changed only delivery fixtures,
+documentation and tracking. Earlier slices are commits `31efdb1`, `a3d9d21` and
+`64f4326`; their implementation is verified by this session's full gate, rather
+than relying only on the slice notes. HACK-001 and other feature entries are
+preserved: upstream #162 owns HACK-001 completion and #161 owns
+CORE-015/D024-D027. This session allocates only EXEC-002 and D028/D029.
+
+### Scope and Delivered Behavior
+
+- Added an isolated loopback chain-31337 deployment fixture with real
+  ERC-3643/ONCHAINID and a minimal B-02-v2 live-wiring recipe, mock cash/pricing
+  and reference local host/auth/store/audit adapters. It deploys separate
+  RouterV2/RFQAdapterV3 and never replaces the legacy deployment artifact.
+- The v3 HTTP host/coordinator uses the on-chain context resolver, signs current
+  actual-sender evidence and settles both directions. Eight mismatches produce
+  exact-error static rejections plus mined status-0 receipts with unchanged
+  balances and Router/quote nonces. Fresh quotes after evidence refresh settle
+  exact token deltas with nonce consumption and zero custody balances.
+- Published the ownership matrix, authentication order, exact ordered RFQ v3
+  type/domain/encoding, A-06 leg/aggregate commitments, immutable approval and
+  final post-configuration evidence rules. Added compatibility and migration for
+  SDK exports/modules, coordinator schema 2, opt-in host capability/route, CLI
+  artifacts and onboarding schema 6, preserving explicit legacy parsers.
+- Added the EXEC-002 execution plan and D028/D029. The six adopted defaults
+  remain open for team confirmation: conditional primary, matching statuses for
+  dual-regulated pairs, mandatory A-06 on every regulated leg, immediate
+  evidence-change invalidation, immutable-only activation and opt-in migration
+  timing. A-06 remains operator-attested. Reference/operator signing uses one
+  local env/file key; key management, multisig and custody expansion are deferred.
+- Existing recipes/events/API defaults and public Monad RFQ v2 are preserved.
+  All three live Anvil scripts remain documented manual delivery/release gates,
+  matching the current CI boundary. No extra live deployment is added to CI.
+
+### Verification Commands and Actual Results
+
+Foundry 1.7.1, solc 0.8.17 and Node 20.20.2. Full command output was captured in
+local `/private/tmp/w157-*.log` files, outside the working tree.
+
+| Exact command | Actual result |
+| --- | --- |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'` | Exit 0 on first full run. Forge: 1,090 passed across 65 suites, 0 failed, 0 skipped. RFQ/host/Toolkit/CLI provenance: 13/4/9/5 passed (31 total), 0 failed. Packed consumers: 6 v3/schema 6 assertions and 8 generated adapter Forge tests passed. Vendored deploy-v3: 10 passed. All remaining legacy service/smoke gates passed; they do not report assertion counts. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'` | Exit 0; BUIDL-like 7/7 scenarios plus 30 additional printed PASS checks. Existing v2 backend/CLI/Router flow passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh --profile reg-d'` | Exit 0; Reg D 7/7 scenarios plus 20 additional printed PASS checks. Existing v2 backend/CLI/Router flow passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'` | Final exit 0; 10/10 live cases passed: 8 mined mismatch rejections and 2 bidirectional exact-fill settlements. |
+| `forge fmt script/ContextProvenanceFixture.s.sol` | Exit 0; only the new fixture formatted. |
+| `forge fmt --check` | Exit 0. |
+| `git diff --check` | Exit 0. |
+| `bash -n scripts/e2e-context-provenance.sh` | Exit 0. |
+| `npx --yes -p node@20 -c 'node --check scripts/e2e-context-provenance.mjs'` | Exit 0. |
+| `git diff --exit-code origin/main -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad` | Exit 0; all three protected paths unchanged across this branch. |
+
+The first new-E2E attempt failed compiling the fixture with stack-too-deep;
+moving deployment references into fixture storage fixed it. The next failed
+before any E2E case because the request fixture omitted `amountOutMin`; adding
+the explicit exact-output minimum fixed it. A subsequent burst broadcast stalled
+with one pending Anvil transaction and was interrupted (exit 130); sequential
+`--slow` broadcast completed and all 10 cases passed. These were fixture/runner
+issues; no product source or existing tests were changed in this session.
+The known RFQ multi-process initial-store race did not occur in the full gate,
+so no full-check rerun or flake fix was needed.
+Final read-only Python validation resolved all 51 local Markdown links in changed
+documents, found no added em dash characters and confirmed slice-note removal.
+`lsof` found no listeners remaining on E2E ports 8545, 8547 or 8787.
+
+### Limits and Next Work
+
+- UNVERIFIED: public/production v3 deployment, production infrastructure and
+  Docker container smoke gates were not run in this session. No public
+  broadcast, package publication, commit, push or GitHub comment was performed.
+- The local fixture proves protocol delivery with reference dependencies. It
+  does not validate a production TA provider, custom resolver, HA store, pricing
+  quality, proxy activation or non-Router enforcement.
+- Next: team confirms the six defaults, upstream #161/#162 merge, then any
+  explicitly authorized migration follows schema 6/post-state verification and
+  the documented manual delivery gates. Existing Monad traffic stays on v2.
+- `SLICE_NOTES.md` is removed after consolidating its intended product/tracking
+  text here and in FEATURES/D028/D029. No temporary debug files are added.
+
 ## Current Status
 
 저장소는 SDK/reference DEX 아키텍처·개발 계획 문서, Foundry product scaffold,

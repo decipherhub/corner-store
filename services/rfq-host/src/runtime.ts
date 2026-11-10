@@ -6,7 +6,7 @@ import {
   AuditSink,
   IncidentSink,
   MetricsSink,
-  ProductionRFQHost,
+  ProductionRFQHost, ProductionRFQHostConfig,
   RFQAuthenticator,
   RFQReadinessComponent,
   RFQReadinessProbe,
@@ -76,6 +76,7 @@ export interface ProductionRFQBootstrapContext {
 }
 
 export interface ProductionRFQDependencies {
+  v3?: ProductionRFQHostConfig["v3"];
   coordinator: RFQQuoteCoordinator;
   authenticator: RFQAuthenticator;
   resolvePolicyId(request: Omit<QuoteCoordinatorIntent, "policyId">): Promise<Hex> | Hex;
@@ -89,7 +90,7 @@ export interface ProductionRFQDependencies {
 
 export interface ProductionRFQBootstrapModule {
   contractVersion: typeof PRODUCTION_RFQ_BOOTSTRAP_CONTRACT_VERSION;
-  capabilities: Record<ProductionRFQCapability, true>;
+  capabilities: Record<ProductionRFQCapability, true> & {v3_context_provenance?: true};
   createProductionRFQDependencies(
     context: ProductionRFQBootstrapContext
   ): Promise<ProductionRFQDependencies> | ProductionRFQDependencies;
@@ -169,7 +170,9 @@ export async function startProductionRFQRuntime(
       contractVersion: PRODUCTION_RFQ_BOOTSTRAP_CONTRACT_VERSION,
       runtime: "production"
     }));
+    if (Boolean(dependencies.v3) !== (bootstrap.capabilities.v3_context_provenance === true)) throw new ProductionRFQRuntimeError("BOOTSTRAP_DEPENDENCIES_INVALID");
     host = await startProductionRFQHost({
+      v3: dependencies.v3,
       host: config.host,
       port: config.port,
       coordinator: dependencies.coordinator,
@@ -179,7 +182,7 @@ export async function startProductionRFQRuntime(
       audit: dependencies.audit,
       metrics: dependencies.metrics,
       incident: dependencies.incident,
-      readiness: productionReadiness(dependencies.readiness),
+      readiness: productionReadiness(dependencies.readiness, Boolean(dependencies.v3)),
       maxBodyBytes: config.maxBodyBytes,
       strictAudit: true,
       futureSkewSeconds: config.futureSkewSeconds,
@@ -230,8 +233,8 @@ async function loadAndValidateBootstrap(
   }
   const capabilityKeys = Object.keys(candidate.capabilities);
   if (
-    capabilityKeys.length !== REQUIRED_CAPABILITIES.length ||
-    capabilityKeys.some((name) => !(REQUIRED_CAPABILITIES as readonly string[]).includes(name)) ||
+    capabilityKeys.some((name) => ![...REQUIRED_CAPABILITIES, "v3_context_provenance"].includes(name as any)) ||
+    (candidate.capabilities.v3_context_provenance !== undefined && candidate.capabilities.v3_context_provenance !== true) ||
     REQUIRED_CAPABILITIES.some((name) => candidate.capabilities[name] !== true)
   ) {
     throw new ProductionRFQRuntimeError("BOOTSTRAP_CONTRACT_INVALID");
@@ -257,13 +260,15 @@ function validateDependencies(value: unknown): ProductionRFQDependencies {
   if (typeof value.resolvePolicyId !== "function" || checks.some(([target, method]) => !isRecord(target) || typeof target[method] !== "function")) {
     throw new ProductionRFQRuntimeError("BOOTSTRAP_DEPENDENCIES_INVALID");
   }
+  if (value.v3 !== undefined && (!isRecord(value.v3) || !isRecord(value.v3.coordinator) || typeof value.v3.coordinator.quoteWithEvidence !== "function" || typeof value.v3.resolvePolicyId !== "function")) throw new ProductionRFQRuntimeError("BOOTSTRAP_DEPENDENCIES_INVALID");
   if (value.close !== undefined && typeof value.close !== "function") {
     throw new ProductionRFQRuntimeError("BOOTSTRAP_DEPENDENCIES_INVALID");
   }
   return value as unknown as ProductionRFQDependencies;
 }
 
-function productionReadiness(probe: RFQReadinessProbe): RFQReadinessProbe {
+function productionReadiness(probe: RFQReadinessProbe, v3: boolean): RFQReadinessProbe {
+  const required: RFQReadinessComponent[] = [...REQUIRED_READINESS_COMPONENTS, ...(v3 ? ["context" as const] : [])];
   return {
     async check(): Promise<RFQReadinessReport> {
       let report: RFQReadinessReport;
@@ -281,7 +286,7 @@ function productionReadiness(probe: RFQReadinessProbe): RFQReadinessProbe {
           !status ||
           typeof status !== "object" ||
           typeof status.component !== "string" ||
-          !REQUIRED_READINESS_COMPONENTS.includes(status.component as RFQReadinessComponent) ||
+          !required.includes(status.component as RFQReadinessComponent) ||
           typeof status.ready !== "boolean" ||
           seen.has(status.component)
         ) {
@@ -290,7 +295,7 @@ function productionReadiness(probe: RFQReadinessProbe): RFQReadinessProbe {
         seen.add(status.component);
       }
       const byComponent = new Map(report.components.map((status) => [status.component, status.ready]));
-      const components = REQUIRED_READINESS_COMPONENTS.map((component) => ({
+      const components = required.map((component) => ({
         component,
         ready: byComponent.get(component) === true
       }));

@@ -17,7 +17,7 @@
 | Pricing | interface/reference only | market data, pricing strategy와 freshness |
 | Inventory risk | interface/reference only | balance, limits, concentration과 availability |
 | Nonce | interface/conformance | durable atomic store와 recovery |
-| Signer | typed-data interface | KMS/HSM/MPC custody와 access policy |
+| Signer | typed-data interface and single local env/file key in reference code | external signer/access policy; key management, multisig and custody expansion deferred |
 | Audit | record schema/integration seam | WORM, retention, access와 incident production |
 
 ## Owner and Trust Matrix
@@ -275,6 +275,37 @@ The operator owns retention, access control and WORM export.
 9. Successful fill consumes the entire quote exactly once.
 10. Regulated quantity, not quote-currency notional, is compared with compliance cap.
 
+### Opt-in RFQ v3 context provenance
+
+Separate `ExecutionRouterV2`/`RFQAdapterV3` deployments add authenticated context
+before Engine evaluation. Signed maker/taker, pair, exact amounts, venue,
+`flowType` and current actual-sender A-06 commitment must match the supplied
+context. Settlement repeats authentication and compares signed `policyId` with
+the fresh Engine decision before consuming the nonce and transferring. All
+existing exact-fill, rollback, commit and event invariants remain in force.
+
+`/rfq/quote` keeps its v2 schema/defaults. The opt-in `/rfq/v3/quote` requires
+`flowType` and rejects client `policyId`, `affiliateEvidenceHash` and
+`sellerIsAffiliate`. After authentication, taker binding and rate limiting, the
+host resolves policy and the coordinator resolves current context evidence.
+Unavailable context returns a redacted 503. Production bootstrap requires the
+explicit `v3_context_provenance` capability and ready `context` component.
+
+V3 schema 2 records persist the exact domain, quote version and context evidence.
+The coordinator resolves evidence before reservation and repeats it before
+signing, including the reserved quote nonce. Invalid recovery terminalizes the
+reservation and releases inventory; published replay returns the identical
+signature without silently refreshing it. Legacy schema 1 records remain legacy.
+Strict pricing/risk freshness, audit and inventory obligations also apply to v3.
+
+The exact domain, ordered type, flow constraints, registration evidence and six
+team-to-confirm defaults are specified in
+[`execution-context-provenance.md`](./execution-context-provenance.md).
+Migration and schema/capability compatibility are in
+[`../sdk-versioning.md`](../sdk-versioning.md). A-06 is operator-attested evidence,
+and custom context resolvers are an explicit integration trust boundary. The
+reference local host/store/auth/pricing fixture is not production infrastructure.
+
 ## Failure and Recovery
 
 | Failure point | Required behavior |
@@ -315,6 +346,12 @@ The operator owns retention, access control and WORM export.
 - quote-time eligible → fill-time ineligible rejects
 - finite regulated-asset cap works for RFQ buy and sell
 - direct Adapter call and wrong venue/type remain blocked
+- v3 buy/sell authenticate actual regulated sender, reject seller/flow/affiliate
+  mismatch before evaluation and invalidate quotes on evidence refresh
+- v2/v3 domain and calldata cross-rejection; current evidence/implementation
+  revocation, code/configuration drift and schema 6 activation-order regressions
+- isolated live v3 host/SDK/Router E2E with failed receipts, unchanged balances
+  and nonces, then fresh-evidence exact-fill recovery in both directions
 
 ### Operations
 

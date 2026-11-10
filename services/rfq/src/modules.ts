@@ -11,7 +11,7 @@ import {
   RFQ_MODULE_SCHEMA_VERSION,
   TypedDataSigner
 } from "./types";
-import {RFQBackendSDK, createRFQService} from "./quoteService";
+import {RFQBackendSDK, RFQBackendSDKV3, createRFQService} from "./quoteService";
 
 export const RFQ_MODULE_CAPABILITIES: Readonly<Record<RFQModuleKind, readonly string[]>> = {
   pricing: ["rfq.price.v1"],
@@ -70,7 +70,7 @@ export function validateRFQModule(module: RFQModule<unknown>, expectedKind?: RFQ
   }
 }
 
-export function validateRFQModuleSet(modules: RFQModuleSet): void {
+export function validateRFQModuleSet(modules: RFQModuleSet | import("./types").RFQModuleSetV3): void {
   validateRFQModule(modules.pricing, "pricing");
   validateRFQModule(modules.risk, "risk");
   validateRFQModule(modules.signer, "signer");
@@ -147,4 +147,23 @@ function descriptor(
     configKeys: options.configKeys ?? [],
     secretConfigKeys: options.secretConfigKeys ?? []
   };
+}
+
+export function createRFQServiceV3FromModules(config: import("./types").RFQModuleRuntimeConfigV3): import("./quoteService").RFQBackendSDKV3 {
+  validateRFQModuleSet(config.modules);
+  if (!config.modules.signer.descriptor.capabilities.includes("rfq.sign.eip712.v3")) throw new Error("signer missing capability rfq.sign.eip712.v3");
+  return new RFQBackendSDKV3({...config, pricing: config.modules.pricing.implementation, riskCheck: config.modules.risk.implementation, signer: config.modules.signer.implementation, nonceStore: config.modules.nonce.implementation});
+}
+
+export const RFQ_V3_MODULE_CAPABILITIES = {
+  ...RFQ_MODULE_CAPABILITIES,
+  signer: [...RFQ_MODULE_CAPABILITIES.signer, "rfq.sign.eip712.v3"]
+} as const;
+
+export function signerModuleV3(
+  id: string,
+  implementation: import("./types").TypedDataSignerV3,
+  options: ModuleOptions = {}
+): RFQModule<import("./types").TypedDataSignerV3> {
+  return defineRFQModule(descriptor(id, "signer", {...options, capabilities: ["rfq.sign.eip712.v3", ...(options.capabilities ?? [])]}), implementation);
 }

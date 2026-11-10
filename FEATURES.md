@@ -204,6 +204,70 @@ passing
 - Venue-authoritative `seller`, `flowType` and affiliate provenance is tracked
   separately and remains a production AMM activation blocker.
 
+## EXEC-002: Venue-Authoritative Execution Context
+
+### Behavior
+
+- Separate ExecutionRouterV2 authenticates venue/context before Engine evaluation
+  through a view-only verifier, without replacing context. Registration evidence
+  pins adapter/context versions, adapter/source/policy runtime hashes and final
+  configuration, with explicit reviewed immutable implementation approval.
+- RFQAdapterV3 signs the exact RFQQuoteV3/domain version 3, binding maker/taker,
+  token directions, exact amounts, venue, policy, flow and current A-06 aggregate.
+  Conditional primary uses a unique active compiled C-01-v2 distributor.
+- Actual security sender is buyer on tokenIn and seller on tokenOut. Every
+  regulated leg requires current trusted A-06 evidence; dual-regulated statuses
+  must agree. Refresh/revocation/expiry/decay invalidate old commitments.
+- Newly deployed AMM adapter version 2/context 1 binds seller/venue/target to the
+  registered pool and canonical token order, secondary/self-directed only.
+  Pool edits invalidate every venue sharing the adapter; re-registration clears
+  evidence. The C-01-family/AMM prohibition remains in force.
+- Settlement repeats authentication, preserves independently measured exact
+  full fill, atomic rollback, commit and existing events. Legacy Router/RFQ v2
+  APIs/signatures and the live public Monad deployment remain pinned.
+- Additive SDK builders/modules/conformance, schema 2 coordinator recovery,
+  opt-in host route/bootstrap capability and explicit CLI artifacts support v3.
+  Onboarding schema 6 verifies source/authority/Router/pool bindings and orders
+  final evidence pinning before maker activation. Legacy parsers remain explicit.
+- Opt-in B-04-v2 checks the actual security recipient's MM claim in both
+  directions. Schema 6 rejects active compiled B-04-v1 rules and unreadable
+  policy evidence, verifies Engine.router() as well as RouterV2.engine(), and
+  wires a separately deployed v3 Engine before adapter activation.
+
+### Verification
+
+- `scripts/check.sh` (Forge, service provenance suites, packed v3/schema 6 consumers)
+- `scripts/e2e-anvil.sh`
+- `scripts/e2e-anvil.sh --profile reg-d`
+- `scripts/e2e-context-provenance.sh` (both directions, mined mismatch and
+  affiliate sender-only MM-claim rejection, recipient-only MM-claim settlement)
+- `ContextProvenanceTest`: asymmetric affiliate sells and legacy buy parity;
+  `EngineSelectionV2Test`: buy parity fuzzing, exemptions and fail-closed context
+- Toolkit provenance regressions: reverse Engine binding mismatch/unavailability,
+  active compiled B-04 direction checks and unsigned Engine wiring order
+- `forge fmt --check`
+- `git diff --check`
+- protected-path diff for public artifacts/runtime/container deployment
+
+### State
+
+passing
+
+### Notes
+
+- All delivery gates passed on 2026-11-11; exact commands and counts are recorded
+  in PROGRESS.md.
+  This branch preserves HACK-001 as requested; upstream #162 owns its completion
+  and #161 owns CORE-015/D024-D027. Only EXEC-002 is worked in this session.
+- D028/D029 and `docs/product-specs/execution-context-provenance.md` record all six
+  adopted defaults as open items for team confirmation. Reference/operator code
+  uses one local env/file key; key management, multisig and custody are deferred.
+- The new live fixture is a manual delivery/release gate alongside the two
+  existing Anvil profiles. CI retains its repository/container checks.
+- Confirmed review fixes passed 1,100 Foundry tests, the Toolkit smoke gate plus
+  15 provenance tests, and 12 live v3 cases. PROGRESS.md records the exact fix
+  commands and distinguishes prior full delivery evidence from this fix session.
+
 ## SDK-007 — External User Golden Path Acceptance
 
 ### Behavior

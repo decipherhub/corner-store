@@ -1,3 +1,5 @@
+import {validateProductionOnboardingConfig} from "./production-onboarding";
+
 export type TemplateKind = "element" | "recipe" | "adapter" | "provider";
 
 export interface ToolkitTemplate {
@@ -58,4 +60,13 @@ export function getTemplate(id: string): ToolkitTemplate {
 export function validateTemplateInputs(template: ToolkitTemplate, inputs: Record<string, unknown>): void {
   const missing = template.requiredInputs.filter((key) => inputs[key] === undefined || inputs[key] === "");
   if (missing.length > 0) throw new Error(`${template.id} missing required inputs: ${missing.join(", ")}`);
+}
+
+export function createContextOnboardingTemplate(
+  legacy: import("./production-onboarding").ProductionOnboardingConfig,
+  activation: {executionRouter: string; executionRouterCodeHash: string; venues: import("./production-onboarding").VenueInput[]}
+): import("./production-onboarding").ProductionOnboardingConfig {
+  if (legacy.schemaVersion !== 5) throw new Error("explicit v5 policy configuration required before v6 opt-in migration");
+  const copy = JSON.parse(JSON.stringify(legacy)) as import("./production-onboarding").ProductionOnboardingConfig;
+  return validateProductionOnboardingConfig({...copy, schemaVersion: 6, addresses: {...copy.addresses, executionRouter: activation.executionRouter}, codeHashes: {...copy.codeHashes, executionRouter: activation.executionRouterCodeHash}, venues: JSON.parse(JSON.stringify(activation.venues))});
 }

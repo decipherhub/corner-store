@@ -175,6 +175,29 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 
 ## RFQ Safety
 
+- Opt-in RouterV2 authenticates venue context before policy evaluation; legacy
+  Router deployments retain their existing order. RFQAdapterV3 verifies signed
+  actors, token legs, amounts, venue, flow and actual-sender A-06 commitment in
+  preflight and settlement. Never interpret a v2 signature/calldata as v3.
+- Current A-06 evidence is mandatory for every regulated v3 leg and remains
+  operator-attested. Claim refresh, revocation, expiry or decay can invalidate a
+  quote immediately. The single context boolean requires matching statuses for
+  dual-regulated legs; conflicting/unknown/unavailable evidence fails closed.
+- RouterV2 requires reviewed immutable implementation approval and separately
+  pinned runtime/configuration evidence, including source and policy registry.
+  Runtime hashes do not prove immutability. Governance approval of malicious
+  code remains a trust boundary; proxy-aware activation is unsupported.
+- Venue re-registration clears context evidence. Every AMM `setPool` invalidates
+  all venues sharing that adapter through its configuration nonce. Complete all
+  wiring/pool edits before pinning and re-pin after changes. Schema 6 verifies
+  source ownership, authorizer, Router dependencies and canonical pool tokens.
+- V3 hosts derive policy/evidence server-side after authentication. RESERVED
+  records revalidate context/domain/nonce before signing; PUBLISHED replay never
+  silently re-signs. Reference/operator signing uses one local env/file key;
+  key management, multisig and custody expansion remain deferred.
+- The precise authority, commitment, flow and migration contract is
+  [`product-specs/execution-context-provenance.md`](./product-specs/execution-context-provenance.md).
+
 - RFQ settlement는 Router-only 진입점이어야 하며 direct adapter call로 compliance
   evaluation을 우회할 수 없어야 한다.
 - RFQ EIP-712 v2 signed quote는 chainId, verifyingContract, maker, taker, tokenIn,

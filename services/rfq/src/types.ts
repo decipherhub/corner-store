@@ -168,3 +168,55 @@ export interface RFQModuleRuntimeConfig {
   defaultTtlSeconds?: number;
   now?: () => number | Promise<number>;
 }
+
+export interface RFQQuoteV3 extends RFQQuote {
+  flowType: 0 | 1;
+  affiliateEvidenceHash: Hex;
+}
+
+export interface RFQTypedDataV3 {
+  domain: EIP712Domain;
+  types: {RFQQuoteV3: Array<{name: keyof RFQQuoteV3; type: string}>};
+  primaryType: "RFQQuoteV3";
+  message: RFQQuoteV3;
+}
+
+export interface SignedRFQQuoteV3 {
+  quote: RFQQuoteV3;
+  signature: Hex;
+  typedData: RFQTypedDataV3;
+}
+
+export interface TypedDataSignerV3 {
+  signTypedData(typedData: RFQTypedDataV3): Promise<Hex>;
+}
+
+export interface RFQQuoteRequestV3 extends RFQQuoteRequest {
+  flowType: 0 | 1;
+  affiliateEvidenceHash: Hex;
+}
+
+export interface RFQQuoteIntentV3 extends RFQQuoteIntent {
+  flowType: 0 | 1;
+}
+
+export interface RFQContextEvidence {
+  contextVersion: 1;
+  configurationHash: Hex;
+  affiliateEvidenceHash: Hex;
+  sellerIsAffiliate: boolean;
+}
+
+export interface RFQContextResolver {
+  resolve(request: RFQQuoteRequest & {flowType: 0 | 1}): Promise<RFQContextEvidence>;
+}
+
+export interface RFQBackendSDKConfigV3 extends Omit<RFQBackendSDKConfig, "signer"> {
+  signer: TypedDataSignerV3;
+  context: RFQContextResolver;
+}
+
+export type RFQModuleSetV3 = Omit<RFQModuleSet, "signer"> & {signer: RFQModule<TypedDataSignerV3>};
+export interface RFQModuleRuntimeConfigV3 extends Omit<RFQBackendSDKConfigV3, "signer" | "pricing"> {
+  modules: RFQModuleSetV3;
+}

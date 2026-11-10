@@ -329,6 +329,44 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - 아직 TTL이 남은 동일 quote의 Router fill-time `FAIL_QP_CLAIM_EXPIRED` 거부
 - temporal scenario 후 injected baseline QP 상태 복원
 
+### Isolated RFQ v3 Context Provenance E2E
+
+```sh
+npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'
+# Optional alternative loopback Anvil port (default 8547):
+scripts/e2e-context-provenance.sh --port 18547
+```
+
+The runner starts its own chain 31337, deploys
+`script/ContextProvenanceFixture.s.sol`, builds RFQ/host packages and starts an
+ephemeral loopback v3 host. It uses real ERC-3643/ONCHAINID, a minimal B-02-v2
+live-wiring recipe, mock cash/1:1 pricing and reference local auth/store/audit.
+It does not overwrite the legacy Anvil artifact or public deployment records.
+Its temporary artifact/store/logs and Anvil/host processes are cleaned on exit.
+
+For each buy and sell it checks seller, flow and affiliate-boolean mismatch,
+then refreshes the actual security sender's evidence without changing its
+effective status and rejects the old signed commitment. Every rejection checks
+the exact static-call error, a mined status-0 receipt and unchanged actor/custody
+balances plus Router/quote nonces. A fresh host quote then settles exact token
+deltas with nonce consumption and zero Router/adapter custody. The runner prints
+10 PASS cases and exits nonzero on any failed assertion.
+
+`scripts/check.sh` already includes RouterV2, ContextEvidence, RFQAdapterV3,
+real ERC-3643 and canonical Uniswap RouterV2 integration tests, four service
+provenance suites and packed v3/schema 6 consumers. These cover every signed-field
+mutation, primary authority, evidence lifecycle, cancellation/replay, cross-domain
+rejection, registration/configuration drift and atomic rollback. The dedicated
+live fixture is intentionally narrower than those suites.
+
+All three live Anvil commands are **manual delivery/release gates**:
+`scripts/e2e-anvil.sh`, `scripts/e2e-anvil.sh --profile reg-d` and
+`scripts/e2e-context-provenance.sh`. `.github/workflows/ci.yml` runs
+`scripts/check.sh` and separate container smokes, and currently runs none of the
+live scripts. Keep that CI boundary to avoid a further deployment in every PR;
+record all three manual results before accepting EXEC-002 or promoting v3.
+Public Monad remains RFQ v2 and is not redeployed by these gates.
+
 ### Integrated Check
 
 ```sh

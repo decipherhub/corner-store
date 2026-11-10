@@ -24,6 +24,11 @@ export const ERRORS_ABI = [
   "error VenueTypeMismatch()",
   "error SlippageExceeded()",
   "error SettlementAmountMismatch()",
+  "error InvalidExecutionContext()",
+  "error InvalidContextEvidence()",
+  "error InvalidAffiliateEvidence()",
+  "error ConflictingAffiliateStatus()",
+  "error ContextImplementationNotApproved()",
   "error RFQMakerNotApproved()",
   "error RFQQuoteUsed()",
   "error RFQQuoteExpired()",
@@ -166,3 +171,15 @@ export const ERC20_ABI = [
   "function mint(address to, uint256 amount)",
   "function symbol() view returns (string)"
 ];
+
+export const CONTEXT_VERIFIER_ABI = [
+  "function adapterVersion() view returns (uint16)",
+  "function contextVersion() view returns (uint16)",
+  "function router() view returns (address)",
+  "function contextConfigHash() view returns (bytes32)",
+  "function affiliateSource() view returns (address)",
+  "function venueReg() view returns (address)",
+  "function policyReg() view returns (address)"
+];
+export const RFQ_V3_ADAPTER_ABI = [...RFQ_ADAPTER_ABI, ...CONTEXT_VERIFIER_ABI];
+export {VENUE_CONTEXT_ABI} from "../../toolkit/src/venue-context";
