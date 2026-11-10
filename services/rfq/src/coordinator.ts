@@ -2,7 +2,7 @@ declare function require(name: string): any;
 
 import {verifyTypedData} from "ethers";
 
-import {domain, typedData} from "./eip712";
+import {domain, typedData, domainV3, typedDataV3} from "./eip712";
 import {
   Address,
   Hex,
@@ -15,8 +15,16 @@ import {
   RFQRiskDecision,
   RFQTypedData,
   SignedRFQQuote,
-  TypedDataSigner
+  TypedDataSigner,
+  SignedRFQQuoteV3,
+  RFQTypedDataV3,
+  RFQContextResolver,
+  RFQContextEvidence,
+  EIP712Domain,
+  RFQQuoteIntentV3,
+  TypedDataSignerV3
 } from "./types";
+import {normalizeFlowType, validateRFQContextEvidence, validateRFQQuoteV3} from "./quoteService";
 import {assertHex, normalizeAddress, normalizeChainId, normalizeTtlSeconds, toPositiveUintString} from "./validation";
 
 const fs = require("fs");
@@ -29,6 +37,7 @@ const DEFAULT_CONFIRMATIONS = 12;
 const DEFAULT_FUTURE_SKEW_SECONDS = 5;
 
 export type RFQCoordinatorErrorCode =
+  | "CONTEXT_EVIDENCE_INVALID"
   | "IDEMPOTENCY_CONFLICT"
   | "STRICT_EVIDENCE_REQUIRED"
   | "PRICING_FRESHNESS_INVALID"
@@ -82,7 +91,10 @@ export interface QuoteReconciliation {
 }
 
 export interface QuoteCoordinatorRecord {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
+  quoteVersion?: 3;
+  domain?: EIP712Domain;
+  contextEvidence?: RFQContextEvidence;
   state: QuoteLifecycleState;
   scope: QuoteNonceScope;
   idempotencyKeyHash: string;
@@ -91,7 +103,7 @@ export interface QuoteCoordinatorRecord {
   nonce?: string;
   inventoryLease?: InventoryLease;
   quoteHash?: string;
-  signedQuote?: SignedRFQQuote;
+  signedQuote?: SignedRFQQuote | SignedRFQQuoteV3;
   createdAt: number;
   updatedAt: number;
   pricingSnapshotId?: string;
@@ -106,6 +118,7 @@ export interface QuoteCoordinatorRecord {
 }
 
 export interface PiiFreeQuoteRequest {
+  flowType?: 0 | 1;
   taker: Address;
   tokenIn: Address;
   tokenOut: Address;
@@ -129,8 +142,8 @@ export interface StrictFreshnessPolicy {
   futureSkewSeconds?: number;
 }
 
-export interface QuoteWithEvidenceResult {
-  signedQuote: SignedRFQQuote;
+export interface QuoteWithEvidenceResult<V extends 2 | 3 = 2> {
+  signedQuote: SignedFor<V>;
   record: QuoteCoordinatorRecord;
   evidence?: RFQProductionEvidence;
   replayed: boolean;
@@ -161,6 +174,9 @@ export interface QuoteCoordinatorStore {
 }
 
 export interface ReserveQuoteInput {
+  quoteVersion?: 3;
+  domain?: EIP712Domain;
+  contextEvidence?: RFQContextEvidence;
   scope: QuoteNonceScope;
   idempotencyKeyHash: string;
   requestHash: string;
@@ -182,7 +198,7 @@ export interface MarkSignedInput {
   scope: QuoteNonceScope;
   idempotencyKeyHash: string;
   requestHash: string;
-  signedQuote: SignedRFQQuote;
+  signedQuote: SignedRFQQuote | SignedRFQQuoteV3;
   quoteHash: string;
   signerKeyRefHash?: string;
   now: number;
@@ -223,11 +239,17 @@ export interface RevokeInput {
   now: number;
 }
 
-export interface QuoteCoordinatorConfig {
+type SignedFor<V extends 2 | 3> = V extends 3 ? SignedRFQQuoteV3 : SignedRFQQuote;
+type DataFor<V extends 2 | 3> = V extends 3 ? RFQTypedDataV3 : RFQTypedData;
+type IntentFor<V extends 2 | 3> = V extends 3 ? QuoteCoordinatorIntent & RFQQuoteIntentV3 : QuoteCoordinatorIntent;
+
+export interface QuoteCoordinatorConfig<V extends 2 | 3 = 2> {
+  quoteVersion?: V;
+  context?: RFQContextResolver;
   chainId: number;
   verifyingContract: Address;
   maker: Address;
-  signer: TypedDataSigner;
+  signer: V extends 3 ? TypedDataSignerV3 : TypedDataSigner;
   pricing: PricingProvider;
   riskCheck: InventoryRiskCheck;
   store: QuoteCoordinatorStore;
@@ -236,10 +258,10 @@ export interface QuoteCoordinatorConfig {
   signerKeyRef?: string;
   moduleVersions?: Record<string, string>;
   confirmationDepth?: number;
-  verifySignature?: (typedData: RFQTypedData, signature: Hex, maker: Address) => Promise<void> | void;
+  verifySignature?: (typedData: DataFor<V>, signature: Hex, maker: Address) => Promise<void> | void;
 }
 
-export class RFQQuoteCoordinator {
+export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
   private readonly chainId: number;
   private readonly verifyingContract: Address;
   private readonly maker: Address;
@@ -247,7 +269,8 @@ export class RFQQuoteCoordinator {
   private readonly now: () => number | Promise<number>;
   private readonly confirmationDepth: number;
 
-  constructor(private readonly config: QuoteCoordinatorConfig) {
+  constructor(private readonly config: QuoteCoordinatorConfig<V> & (V extends 3 ? {quoteVersion: 3; context: RFQContextResolver} : unknown)) {
+    if (config.quoteVersion === 3 && !config.context) throw new Error("RFQ v3 requires a context resolver");
     this.chainId = normalizeChainId(config.chainId);
     this.verifyingContract = normalizeAddress(config.verifyingContract, "verifyingContract");
     this.maker = normalizeAddress(config.maker, "maker");
@@ -256,16 +279,16 @@ export class RFQQuoteCoordinator {
     this.confirmationDepth = normalizeConfirmations(config.confirmationDepth ?? DEFAULT_CONFIRMATIONS);
   }
 
-  async quote(intent: QuoteCoordinatorIntent): Promise<SignedRFQQuote> {
+  async quote(intent: IntentFor<V>): Promise<SignedFor<V>> {
     const result = await this.issueQuote(intent);
     return result.signedQuote;
   }
 
-  async quoteWithEvidence(intent: QuoteCoordinatorIntent, policy: StrictFreshnessPolicy = {}): Promise<QuoteWithEvidenceResult> {
+  async quoteWithEvidence(intent: IntentFor<V>, policy: StrictFreshnessPolicy = {}): Promise<QuoteWithEvidenceResult<V>> {
     return this.issueQuote(intent, policy);
   }
 
-  private async issueQuote(intent: QuoteCoordinatorIntent, strictPolicy?: StrictFreshnessPolicy): Promise<QuoteWithEvidenceResult> {
+  private async issueQuote(intent: IntentFor<V>, strictPolicy?: StrictFreshnessPolicy): Promise<QuoteWithEvidenceResult<V>> {
     const normalized = this.normalizeIntent(intent);
     const now = await this.timestamp();
     const requestHash = hashCanonical(normalized);
@@ -285,9 +308,13 @@ export class RFQQuoteCoordinator {
     const priced = await this.config.pricing.price(priceRequest);
     const amountOut = toPositiveUintString(priced.amountOut, "amountOut");
     const riskDecision = await this.config.riskCheck.check(priceRequest, {amountOut});
+    if (this.config.quoteVersion === 3 && riskDecision?.decision === "rejected") throw new RFQCoordinatorError("RISK_REJECTED", "risk rejected");
     const productionEvidence = strictPolicy ? validateProductionEvidence(priced, riskDecision, strictPolicy.now ?? now, strictPolicy.futureSkewSeconds ?? DEFAULT_FUTURE_SKEW_SECONDS) : undefined;
 
     const reserve = await this.config.store.reserveOrReturnExisting({
+      quoteVersion: this.config.quoteVersion === 3 ? 3 : undefined,
+      domain: this.config.quoteVersion === 3 ? domainV3(this.chainId, this.verifyingContract) : undefined,
+      contextEvidence: this.config.quoteVersion === 3 ? await this.resolveContext(normalized, amountOut) : undefined,
       scope,
       idempotencyKeyHash,
       requestHash,
@@ -349,6 +376,7 @@ export class RFQQuoteCoordinator {
       throw new Error("idempotencyKey is required and must be at most 256 characters");
     }
     return {
+      ...(this.config.quoteVersion === 3 ? {flowType: normalizeFlowType((intent as QuoteCoordinatorIntent & RFQQuoteIntentV3).flowType)} : {}),
       taker: normalizeAddress(intent.taker, "taker"),
       tokenIn: normalizeAddress(intent.tokenIn, "tokenIn"),
       tokenOut: normalizeAddress(intent.tokenOut, "tokenOut"),
@@ -359,13 +387,13 @@ export class RFQQuoteCoordinator {
     };
   }
 
-  private async responseOrResumeExisting(record: QuoteCoordinatorRecord, requestHash: string, strictPolicy?: StrictFreshnessPolicy): Promise<QuoteWithEvidenceResult> {
+  private async responseOrResumeExisting(record: QuoteCoordinatorRecord, requestHash: string, strictPolicy?: StrictFreshnessPolicy): Promise<QuoteWithEvidenceResult<V>> {
     if (record.requestHash !== requestHash) throw new RFQCoordinatorError("IDEMPOTENCY_CONFLICT", "idempotency key conflict: request hash differs");
     if (record.signedQuote) {
       if (strictPolicy && !record.productionEvidence) {
         throw new RFQCoordinatorError("STRICT_EVIDENCE_REQUIRED", "strict RFQ quote replay requires persisted production evidence");
       }
-      return {signedQuote: record.signedQuote, record, evidence: record.productionEvidence, replayed: true};
+      return {signedQuote: record.signedQuote as SignedFor<V>, record, evidence: record.productionEvidence, replayed: true};
     }
     if (record.state === "RESERVED") {
       const now = await this.timestamp();
@@ -392,7 +420,7 @@ export class RFQQuoteCoordinator {
     record: QuoteCoordinatorRecord,
     requestHash: string,
     idempotencyKeyHash: string
-  ): Promise<QuoteWithEvidenceResult> {
+  ): Promise<QuoteWithEvidenceResult<V>> {
     if (record.requestHash !== requestHash) throw new RFQCoordinatorError("IDEMPOTENCY_CONFLICT", "idempotency key conflict: request hash differs");
     if (record.state !== "RESERVED" || !record.nonce || !record.inventoryLease || record.inventoryLease.released) {
       throw new Error(`quote reservation is not signable in state ${record.state}`);
@@ -414,11 +442,29 @@ export class RFQQuoteCoordinator {
       nonce: record.nonce,
       expiry: record.inventoryLease.expiresAt
     };
-    const data = typedData(domain(this.chainId, this.verifyingContract), quote);
+    let data: RFQTypedData | RFQTypedDataV3;
+    if (this.config.quoteVersion === 3) {
+      try {
+        if (record.schemaVersion !== 2 || record.quoteVersion !== 3 || hashCanonical(record.domain) !== hashCanonical(domainV3(this.chainId, this.verifyingContract))) throw new Error("RFQ v3 reservation domain/version mismatch");
+        const current = await this.resolveContext(record.request, record.inventoryLease.amount, record.nonce);
+        if (hashCanonical(current) !== hashCanonical(record.contextEvidence)) throw new Error("RFQ v3 context evidence changed");
+        const v3Quote = {...quote, flowType: normalizeFlowType(record.request.flowType), affiliateEvidenceHash: current.affiliateEvidenceHash};
+        validateRFQQuoteV3(v3Quote);
+        data = typedDataV3(record.domain!, v3Quote);
+      } catch (error) {
+        await this.config.store.revoke({scope: this.scope(), nonce: record.nonce, now});
+        throw error;
+      }
+    } else {
+      if (record.quoteVersion === 3) throw new Error("RFQ v3 reservation requires the v3 coordinator");
+      data = typedData(domain(this.chainId, this.verifyingContract), quote);
+    }
     try {
       let signature: Hex;
       try {
-        signature = assertHex(await this.config.signer.signTypedData(data), "signature");
+        signature = assertHex(await (data.primaryType === "RFQQuoteV3"
+          ? (this.config.signer as TypedDataSignerV3).signTypedData(data)
+          : (this.config.signer as TypedDataSigner).signTypedData(data)), "signature");
       } catch (error) {
         throw new RFQCoordinatorError("SIGNER_CALL_FAILED", "external signer failed", error);
       }
@@ -427,8 +473,8 @@ export class RFQQuoteCoordinator {
       } catch (error) {
         throw error instanceof RFQCoordinatorError ? error : new RFQCoordinatorError("SIGNER_SIGNATURE_INVALID", "signer returned a signature that failed local verification", error);
       }
-      const signedQuote = {quote, signature, typedData: data};
-      const quoteHash = hashCanonical({quote, domain: data.domain});
+      const signedQuote = {quote: data.message, signature, typedData: data} as SignedRFQQuote | SignedRFQQuoteV3;
+      const quoteHash = hashCanonical({quote: data.message, domain: data.domain});
       const signedRecord = await this.config.store.markSigned({
         scope: this.scope(),
         idempotencyKeyHash,
@@ -441,7 +487,7 @@ export class RFQQuoteCoordinator {
       if (signedRecord.state !== "PUBLISHED" || signedRecord.quoteHash !== quoteHash || !signedRecord.signedQuote) {
         throw new Error(`quote publish failed from state ${signedRecord.state}`);
       }
-      return {signedQuote: signedRecord.signedQuote, record: signedRecord, evidence: signedRecord.productionEvidence, replayed: false};
+      return {signedQuote: signedRecord.signedQuote as SignedFor<V>, record: signedRecord, evidence: signedRecord.productionEvidence, replayed: false};
     } catch (error: any) {
       await this.config.store.markSignFailed({
         scope: this.scope(),
@@ -454,12 +500,20 @@ export class RFQQuoteCoordinator {
     }
   }
 
+  private async resolveContext(request: PiiFreeQuoteRequest, amountOut: string, nonce?: string): Promise<RFQContextEvidence> {
+    try {
+      return validateRFQContextEvidence(await this.config.context!.resolve({...request, maker: this.maker, amountOut, nonce, flowType: normalizeFlowType(request.flowType)}));
+    } catch (error) {
+      throw new RFQCoordinatorError("CONTEXT_EVIDENCE_INVALID", "RFQ v3 context evidence unavailable or invalid", error);
+    }
+  }
+
   private scope(): QuoteNonceScope {
     return {chainId: this.chainId, adapter: this.verifyingContract, maker: this.maker};
   }
 
-  private async verifySignature(data: RFQTypedData, signature: Hex): Promise<void> {
-    if (this.config.verifySignature) return this.config.verifySignature(data, signature, this.maker);
+  private async verifySignature(data: RFQTypedData | RFQTypedDataV3, signature: Hex): Promise<void> {
+    if (this.config.verifySignature) return this.config.verifySignature(data as DataFor<V>, signature, this.maker);
     const recovered = verifyTypedData(data.domain, data.types, data.message, signature).toLowerCase();
     if (recovered !== this.maker) throw new RFQCoordinatorError("SIGNER_SIGNATURE_INVALID", "signer returned a signature that does not recover the maker");
   }
@@ -480,7 +534,7 @@ export interface LocalFileQuoteCoordinatorStoreConfig {
 }
 
 interface StoreState {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   records: QuoteCoordinatorRecord[];
   lastNonceByScope: Record<string, string>;
   inventoryByScope: Record<string, {available: string; reserved: string}>;
@@ -520,8 +574,12 @@ export class LocalFileQuoteCoordinatorStore implements QuoteCoordinatorStore {
       const nonce = ((BigInt(state.lastNonceByScope[scopeKey] ?? "0") + 1n)).toString();
       state.lastNonceByScope[scopeKey] = nonce;
       bucket.reserved = (BigInt(bucket.reserved) + BigInt(input.inventoryDelta.amount)).toString();
+      if (input.quoteVersion === 3) state.schemaVersion = 2;
       const record: QuoteCoordinatorRecord = {
-        schemaVersion: 1,
+        schemaVersion: input.quoteVersion === 3 ? 2 : 1,
+        quoteVersion: input.quoteVersion,
+        domain: input.domain,
+        contextEvidence: input.contextEvidence,
         state: "RESERVED",
         scope: input.scope,
         idempotencyKeyHash: input.idempotencyKeyHash,
@@ -695,7 +753,7 @@ export class LocalFileQuoteCoordinatorStore implements QuoteCoordinatorStore {
 
   private assertInitialStateReadable(expectedInventoryByScope: StoreState["inventoryByScope"]): void {
     const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf8")) as StoreState;
-    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.records) || !parsed.lastNonceByScope || !parsed.inventoryByScope) {
+    if (![1, 2].includes(parsed.schemaVersion) || !Array.isArray(parsed.records) || !parsed.lastNonceByScope || !parsed.inventoryByScope) {
       throw new Error("quote coordinator store initial state is unreadable");
     }
     for (const [key, expected] of Object.entries(expectedInventoryByScope)) {
@@ -748,7 +806,7 @@ export class LocalFileQuoteCoordinatorStore implements QuoteCoordinatorStore {
     try {
       const raw = await fsp.readFile(this.filePath, "utf8");
       const parsed = JSON.parse(raw) as StoreState;
-      if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.records)) throw new Error("invalid schema");
+      if (![1, 2].includes(parsed.schemaVersion) || !Array.isArray(parsed.records)) throw new Error("invalid schema");
       return parsed;
     } catch (error: any) {
       throw new Error(`quote coordinator store unavailable: ${error.message}`);
@@ -926,4 +984,10 @@ function assertBytes32Hex(value: Hex, field: string): Hex {
   const hex = assertHex(value, field);
   if (!/^0x[a-fA-F0-9]{64}$/.test(hex)) throw new Error(`${field} must be 32-byte hex`);
   return hex;
+}
+
+export class RFQQuoteCoordinatorV3 extends RFQQuoteCoordinator<3> {
+  constructor(config: Omit<QuoteCoordinatorConfig<3>, "quoteVersion" | "context"> & {context: RFQContextResolver}) {
+    super({...config, quoteVersion: 3});
+  }
 }

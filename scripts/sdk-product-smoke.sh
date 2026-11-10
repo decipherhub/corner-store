@@ -46,8 +46,28 @@ node "$ROOT_DIR/services/cli/dist/cli/src/index.js" create "$LOCAL_TARGET_DIR" \
 (
   cd "$BOOT_DIR"
   npm init -y >/dev/null
-  npm install --prefer-offline --silent "$CLI_TARBALL" "$TOOLKIT_TARBALL"
+  npm install --prefer-offline --silent "$CLI_TARBALL" "$TOOLKIT_TARBALL" "$RFQ_TARBALL"
   node -e 'const t = require("@corner-store/toolkit"); const c = t.validateConfig(t.defaultConfig()); if (c.schemaVersion !== t.TOOLKIT_SCHEMA_VERSION || t.simulateConfig(c).venues.length === 0) process.exit(1)'
+  node - <<'NODE'
+const assert = require("node:assert/strict");
+const {Wallet, verifyTypedData} = require("ethers");
+const rfq = require("@corner-store/rfq-service");
+const toolkit = require("@corner-store/toolkit");
+(async () => {
+  const wallet = Wallet.createRandom();
+  const address = (n) => `0x${n.toString(16).padStart(40, "0")}`;
+  const service = new rfq.RFQQuoteServiceV3({chainId: 31337, verifyingContract: address(6), now: () => 100, nextNonce: () => 1n}, {signTypedData: (d) => wallet.signTypedData(d.domain, d.types, d.message)});
+  const signed = await service.createSignedQuote({maker: wallet.address, taker: address(2), tokenIn: address(3), tokenOut: address(4), amountIn: "10", amountOut: "20", venue: address(5), policyId: `0x${"11".repeat(32)}`, flowType: 0, affiliateEvidenceHash: `0x${"22".repeat(32)}`});
+  assert.equal(signed.typedData.domain.version, "3");
+  assert.equal(signed.typedData.primaryType, "RFQQuoteV3");
+  assert.equal(verifyTypedData(signed.typedData.domain, signed.typedData.types, signed.quote, signed.signature), wallet.address);
+  assert.equal(rfq.RFQ_DOMAIN_VERSION, "2");
+  assert.equal(toolkit.PRODUCTION_ONBOARDING_SCHEMA_VERSION, 6);
+  assert.equal(typeof toolkit.createContextOnboardingTemplate, "function");
+  console.log("Packed RFQ v3 and onboarding v6 smoke: 6 assertions passed.");
+})().catch((error) => {console.error(error); process.exitCode = 1;});
+NODE
+  ./node_modules/.bin/corner-store rfq-v3-quote --help >/dev/null
   ./node_modules/.bin/corner-store create "$TARGET_DIR" \
     --template dex-integration \
     --sdk "file:$RFQ_TARBALL" \
