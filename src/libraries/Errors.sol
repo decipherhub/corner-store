@@ -13,6 +13,11 @@ library Errors {
     error UnsupportedVenuePolicy(bytes32 elementId);
     error VenueSuspended();
     error AdapterNotRegistered();
+    error InvalidContextEvidence();
+    error ContextImplementationNotApproved();
+    error InvalidExecutionContext();
+    error InvalidAffiliateEvidence();
+    error ConflictingAffiliateStatus();
     error DeadlineExpired();
     error NonceUsed();
     error DecisionExpired();
