@@ -262,7 +262,7 @@ program
   .command("onboard")
   .description("factory one-call onboarding of the RWA token (retires+re-onboards if ACTIVE)")
   .option("--engines <list>", "supported engines, comma-separated (bundled profiles require rfq)", "rfq")
-  .option("--profile <profile>", "asset profile: buidl-like or reg-d (must match deployment artifact)")
+  .option("--profile <profile>", "asset profile: buidl-like, reg-d or reg-d-v4 (must match deployment artifact)")
   .action(run((opts, command) => cmd.cmdOnboard(command.optsWithGlobals())));
 
 program
@@ -284,7 +284,7 @@ program
   .command("investor-setup")
   .description("apply the selected asset profile's investor attestations + QUOTE funding")
   .argument("<address>")
-  .option("--profile <profile>", "asset profile: buidl-like or reg-d (must match deployment artifact)")
+  .option("--profile <profile>", "asset profile: buidl-like, reg-d or reg-d-v4 (must match deployment artifact)")
   .option("--fund <amount>", "QUOTE to mint to the investor (ether units; profile default when omitted)")
   .action(run((address, opts, command) => cmd.cmdInvestorSetup(address, command.optsWithGlobals())));
 

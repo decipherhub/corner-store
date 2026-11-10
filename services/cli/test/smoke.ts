@@ -364,6 +364,16 @@ async function main() {
   // --- asset profile selection -------------------------------------------
   assert(resolveAssetProfile() === "buidl-like", "BUIDL-like is the default asset profile");
   assert(resolveAssetProfile("reg-d") === "reg-d", "Reg D asset profile is selectable");
+  assert(resolveAssetProfile("reg-d-v4") === "reg-d-v4", "Reg D v4 is explicitly selectable");
+  assert(resolveAssetProfileForArtifact(undefined, "reg-d-v4") === "reg-d-v4", "v4 artifact selects v4");
+  assertThrows(
+    () => resolveAssetProfileForArtifact("reg-d-v4", "reg-d"),
+    "v4 cannot silently replace a deployed v3 profile"
+  );
+  assertThrows(
+    () => resolveAssetProfileForArtifact("reg-d", "reg-d-v4"),
+    "v4 artifact cannot be rebound to v3"
+  );
   assertThrows(() => resolveAssetProfile("unknown"), "unknown asset profile is rejected");
   assert(
     resolveAssetProfileForArtifact(undefined, "reg-d") === "reg-d",
@@ -392,6 +402,12 @@ async function main() {
   assert(
     JSON.stringify(regD.bindings) === JSON.stringify([[1, 3, 0, 0, 100]]) && regD.factsPacked === 0n,
     "Reg D uses a single RecipeBinding[] without fund mirror behavior"
+  );
+  const regDV4 = assetProfileBinding("reg-d-v4");
+  assert(
+    JSON.stringify(regDV4.bindings) === JSON.stringify([[1, 4, 0, 0, 100]]) &&
+      regDV4.factsPacked === regD.factsPacked && regDV4.fullManifestHash === regD.fullManifestHash,
+    "Reg D v4 changes only the explicit recipe version"
   );
   assert(
     buidl.fullManifestHash === "0x744909471e0ff4dd681441302626bc3a1d6dde6def9073f79e66994351634c11",

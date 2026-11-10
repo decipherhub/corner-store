@@ -2,7 +2,7 @@ import {AbiCoder, keccak256, parseEther, toUtf8Bytes} from "ethers";
 
 import {CliError} from "./util";
 
-export type AssetProfile = "buidl-like" | "reg-d";
+export type AssetProfile = "buidl-like" | "reg-d" | "reg-d-v4";
 
 export type RecipeBindingTuple = [recipeId: number, recipeVersion: number, mode: number, pathGroupId: number, priority: number];
 export type ElementPolicyParameterTuple = [bindingIndex: number, elementId: string, schemaId: string, schemaVersion: number, parameters: string];
@@ -33,8 +33,8 @@ export const BUIDL_LIKE_MANIFEST_HASH = keccak256(
 
 export function resolveAssetProfile(value?: string): AssetProfile {
   const profile = value ?? "buidl-like";
-  if (profile !== "buidl-like" && profile !== "reg-d") {
-    throw new CliError(`unknown asset profile "${profile}" (expected buidl-like or reg-d)`);
+  if (profile !== "buidl-like" && profile !== "reg-d" && profile !== "reg-d-v4") {
+    throw new CliError(`unknown asset profile "${profile}" (expected buidl-like, reg-d or reg-d-v4)`);
   }
   return profile;
 }
@@ -67,5 +67,5 @@ export function assetProfileBinding(value?: string): AssetProfileBinding {
       ]
     };
   }
-  return {profile, bindings: [[1, 3, 0, 0, 100]], factsPacked: 0n, fullManifestHash: ZERO32};
+  return {profile, bindings: [[1, profile === "reg-d-v4" ? 4 : 3, 0, 0, 100]], factsPacked: 0n, fullManifestHash: ZERO32};
 }
