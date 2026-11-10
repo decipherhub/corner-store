@@ -25,33 +25,19 @@ import {
   TypedDataSignerV3
 } from "./types";
 import {normalizeFlowType, validateRFQContextEvidence, validateRFQQuoteV3} from "./quoteService";
-import {assertHex, normalizeAddress, normalizeChainId, normalizeTtlSeconds, toPositiveUintString} from "./validation";
+import {assertHex, normalizeAddress, normalizeChainId, normalizeTtlSeconds, normalizeBytes32, toPositiveUintString} from "./validation";
+
+import {RFQCoordinatorError} from "./errors";
+import {RFQAuthorizedProduct, RFQProductAuthorization, RFQProductCatalog, quoteLifetimePolicy} from "./productAuthorization";
+export {RFQCoordinatorError, RFQCoordinatorErrorCode} from "./errors";
 
 const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
 
-const DEFAULT_TTL_SECONDS = 60;
 const DEFAULT_CONFIRMATIONS = 12;
 const DEFAULT_FUTURE_SKEW_SECONDS = 5;
-
-export type RFQCoordinatorErrorCode =
-  | "CONTEXT_EVIDENCE_INVALID"
-  | "IDEMPOTENCY_CONFLICT"
-  | "STRICT_EVIDENCE_REQUIRED"
-  | "PRICING_FRESHNESS_INVALID"
-  | "RISK_FRESHNESS_INVALID"
-  | "RISK_REJECTED"
-  | "SIGNER_CALL_FAILED"
-  | "SIGNER_SIGNATURE_INVALID";
-
-export class RFQCoordinatorError extends Error {
-  constructor(readonly code: RFQCoordinatorErrorCode, message: string, readonly cause?: unknown) {
-    super(message);
-    this.name = "RFQCoordinatorError";
-  }
-}
 
 export type QuoteLifecycleState =
   | "RECEIVED"
@@ -95,6 +81,7 @@ export interface QuoteCoordinatorRecord {
   quoteVersion?: 3;
   domain?: EIP712Domain;
   contextEvidence?: RFQContextEvidence;
+  productAuthorization?: RFQProductAuthorization;
   state: QuoteLifecycleState;
   scope: QuoteNonceScope;
   idempotencyKeyHash: string;
@@ -177,6 +164,7 @@ export interface ReserveQuoteInput {
   quoteVersion?: 3;
   domain?: EIP712Domain;
   contextEvidence?: RFQContextEvidence;
+  productAuthorization?: RFQProductAuthorization;
   scope: QuoteNonceScope;
   idempotencyKeyHash: string;
   requestHash: string;
@@ -239,6 +227,8 @@ export interface RevokeInput {
   now: number;
 }
 
+export type AuthorizedQuoteIntent<V extends 2 | 3 = 2> = Omit<IntentFor<V>, "policyId">;
+
 type SignedFor<V extends 2 | 3> = V extends 3 ? SignedRFQQuoteV3 : SignedRFQQuote;
 type DataFor<V extends 2 | 3> = V extends 3 ? RFQTypedDataV3 : RFQTypedData;
 type IntentFor<V extends 2 | 3> = V extends 3 ? QuoteCoordinatorIntent & RFQQuoteIntentV3 : QuoteCoordinatorIntent;
@@ -254,6 +244,8 @@ export interface QuoteCoordinatorConfig<V extends 2 | 3 = 2> {
   riskCheck: InventoryRiskCheck;
   store: QuoteCoordinatorStore;
   defaultTtlSeconds?: number;
+  maxTtlSeconds?: number;
+  products?: readonly RFQAuthorizedProduct[];
   now?: () => number | Promise<number>;
   signerKeyRef?: string;
   moduleVersions?: Record<string, string>;
@@ -266,6 +258,8 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
   private readonly verifyingContract: Address;
   private readonly maker: Address;
   private readonly defaultTtlSeconds: number;
+  private readonly maxTtlSeconds: number;
+  private readonly products?: RFQProductCatalog;
   private readonly now: () => number | Promise<number>;
   private readonly confirmationDepth: number;
 
@@ -274,7 +268,10 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
     this.chainId = normalizeChainId(config.chainId);
     this.verifyingContract = normalizeAddress(config.verifyingContract, "verifyingContract");
     this.maker = normalizeAddress(config.maker, "maker");
-    this.defaultTtlSeconds = normalizeTtlSeconds(config.defaultTtlSeconds ?? DEFAULT_TTL_SECONDS);
+    const lifetime = quoteLifetimePolicy(config.defaultTtlSeconds, config.maxTtlSeconds);
+    this.defaultTtlSeconds = lifetime.defaultTtlSeconds;
+    this.maxTtlSeconds = lifetime.maxTtlSeconds;
+    this.products = config.products === undefined ? undefined : new RFQProductCatalog(config.products);
     this.now = config.now ?? (() => Math.floor(Date.now() / 1000));
     this.confirmationDepth = normalizeConfirmations(config.confirmationDepth ?? DEFAULT_CONFIRMATIONS);
   }
@@ -285,18 +282,57 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
   }
 
   async quoteWithEvidence(intent: IntentFor<V>, policy: StrictFreshnessPolicy = {}): Promise<QuoteWithEvidenceResult<V>> {
+    this.assertProductionConfiguration();
     return this.issueQuote(intent, policy);
   }
 
-  private async issueQuote(intent: IntentFor<V>, strictPolicy?: StrictFreshnessPolicy): Promise<QuoteWithEvidenceResult<V>> {
-    const normalized = this.normalizeIntent(intent);
+  getQuoteLifetimePolicy(): {defaultTtlSeconds: number; maxTtlSeconds: number} {
+    return {defaultTtlSeconds: this.defaultTtlSeconds, maxTtlSeconds: this.maxTtlSeconds};
+  }
+
+  assertProductionConfiguration(): void {
+    if (!this.products) throw new RFQCoordinatorError("CONFIGURATION_INVALID", "production RFQ requires a product catalog");
+  }
+
+  authorizeProduct(intent: AuthorizedQuoteIntent<V>): RFQProductAuthorization {
+    this.assertProductionConfiguration();
+    return this.authorizeNormalized(this.normalizeRequest(intent))!;
+  }
+
+  async quoteAuthorizedWithEvidence(
+    intent: AuthorizedQuoteIntent<V>,
+    resolvePolicyId: () => Promise<Hex> | Hex,
+    policy: StrictFreshnessPolicy = {}
+  ): Promise<QuoteWithEvidenceResult<V>> {
+    this.assertProductionConfiguration();
+    return this.issueQuote(intent, policy, resolvePolicyId);
+  }
+
+  private async issueQuote(intent: IntentFor<V> | AuthorizedQuoteIntent<V>, strictPolicy?: StrictFreshnessPolicy, resolvePolicyId?: () => Promise<Hex> | Hex): Promise<QuoteWithEvidenceResult<V>> {
+    const request = this.normalizeRequest(intent);
+    const authorization = this.authorizeNormalized(request);
+    let policyId: Hex | undefined;
+    if (!resolvePolicyId) {
+      try {policyId = this.products ? normalizeBytes32((intent as IntentFor<V>).policyId, "policyId") : assertBytes32Hex((intent as IntentFor<V>).policyId, "policyId");}
+      catch {throw new RFQCoordinatorError("INVALID_REQUEST", "invalid RFQ request");}
+    }
     const now = await this.timestamp();
-    const requestHash = hashCanonical(normalized);
+    if (!Number.isSafeInteger(now + request.ttlSeconds)) throw new RFQCoordinatorError("INVALID_REQUEST", "invalid RFQ expiry");
     const idempotencyKeyHash = hashSecret(intent.idempotencyKey, "idempotencyKey");
     const scope = this.scope();
-    const existing = await this.config.store.getByIdempotencyKeyHash(scope, idempotencyKeyHash);
-    if (existing) return this.responseOrResumeExisting(existing, requestHash, strictPolicy);
-
+    const existing = await this.dependency("store", () => this.config.store.getByIdempotencyKeyHash(scope, idempotencyKeyHash));
+    if (existing) {
+      const replayRequest = {...request, policyId: policyId ?? existing.request.policyId};
+      return this.responseOrResumeExisting(existing, hashCanonical(replayRequest), strictPolicy);
+    }
+    if (resolvePolicyId) {
+      const resolved = await this.dependency("policy", resolvePolicyId);
+      try {policyId = normalizeBytes32(resolved, "policyId");}
+      catch {throw new RFQCoordinatorError("CONFIGURATION_INVALID", "invalid resolved RFQ policy");}
+    }
+    if (authorization && authorization.policyId !== policyId) throw new RFQCoordinatorError("PRODUCT_UNAUTHORIZED", "RFQ policy is not authorized");
+    const normalized: PiiFreeQuoteRequest = {...request, policyId: policyId!};
+    const requestHash = hashCanonical(normalized);
     const priceRequest: RFQPriceRequest = {
       maker: this.maker,
       taker: normalized.taker,
@@ -305,16 +341,20 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
       amountIn: normalized.amountIn,
       venue: normalized.venue
     };
-    const priced = await this.config.pricing.price(priceRequest);
-    const amountOut = toPositiveUintString(priced.amountOut, "amountOut");
-    const riskDecision = await this.config.riskCheck.check(priceRequest, {amountOut});
+    const priced = await this.dependency("pricing", () => this.config.pricing.price(priceRequest));
+    let amountOut: string;
+    try {amountOut = toPositiveUintString(priced.amountOut, "amountOut");}
+    catch {throw new RFQCoordinatorError("PRICING_FRESHNESS_INVALID", "pricing result invalid");}
+    const riskDecision = await this.dependency("risk", () => this.config.riskCheck.check(priceRequest, {amountOut}));
     if (this.config.quoteVersion === 3 && riskDecision?.decision === "rejected") throw new RFQCoordinatorError("RISK_REJECTED", "risk rejected");
     const productionEvidence = strictPolicy ? validateProductionEvidence(priced, riskDecision, strictPolicy.now ?? now, strictPolicy.futureSkewSeconds ?? DEFAULT_FUTURE_SKEW_SECONDS) : undefined;
 
-    const reserve = await this.config.store.reserveOrReturnExisting({
+    const contextEvidence = this.config.quoteVersion === 3 ? await this.resolveContext(normalized, amountOut) : undefined;
+    const reserve = await this.dependency("store", () => this.config.store.reserveOrReturnExisting({
+      productAuthorization: authorization,
       quoteVersion: this.config.quoteVersion === 3 ? 3 : undefined,
       domain: this.config.quoteVersion === 3 ? domainV3(this.chainId, this.verifyingContract) : undefined,
-      contextEvidence: this.config.quoteVersion === 3 ? await this.resolveContext(normalized, amountOut) : undefined,
+      contextEvidence,
       scope,
       idempotencyKeyHash,
       requestHash,
@@ -330,7 +370,7 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
       pricingSnapshotId: pricingSnapshotId(priced),
       moduleVersions: this.config.moduleVersions,
       productionEvidence
-    });
+    }));
     if (reserve.existing) return this.responseOrResumeExisting(reserve.record, requestHash, strictPolicy);
     return this.signReservedRecord(reserve.record, requestHash, idempotencyKeyHash);
   }
@@ -371,24 +411,51 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
     return this.confirmationDepth;
   }
 
-  private normalizeIntent(intent: QuoteCoordinatorIntent): PiiFreeQuoteRequest {
-    if (!intent.idempotencyKey || intent.idempotencyKey.length > 256) {
-      throw new Error("idempotencyKey is required and must be at most 256 characters");
+  private normalizeRequest(intent: IntentFor<V> | AuthorizedQuoteIntent<V>): Omit<PiiFreeQuoteRequest, "policyId"> {
+    try {
+      if (typeof intent.idempotencyKey !== "string" || !intent.idempotencyKey || intent.idempotencyKey.length > 256) throw new Error("invalid idempotencyKey");
+      if (this.config.quoteVersion !== 3 && (intent as Partial<RFQQuoteIntentV3>).flowType !== undefined) throw new Error("v2 does not accept flowType");
+      return {
+        ...(this.config.quoteVersion === 3 ? {flowType: normalizeFlowType((intent as RFQQuoteIntentV3).flowType)} : {}),
+        taker: normalizeAddress(intent.taker, "taker"),
+        tokenIn: normalizeAddress(intent.tokenIn, "tokenIn"),
+        tokenOut: normalizeAddress(intent.tokenOut, "tokenOut"),
+        amountIn: toPositiveUintString(intent.amountIn, "amountIn"),
+        venue: normalizeAddress(intent.venue, "venue"),
+        ttlSeconds: normalizeTtlSeconds(intent.ttlSeconds === undefined ? this.defaultTtlSeconds : intent.ttlSeconds, this.maxTtlSeconds)
+      };
+    } catch {
+      throw new RFQCoordinatorError("INVALID_REQUEST", "invalid RFQ request");
     }
-    return {
-      ...(this.config.quoteVersion === 3 ? {flowType: normalizeFlowType((intent as QuoteCoordinatorIntent & RFQQuoteIntentV3).flowType)} : {}),
-      taker: normalizeAddress(intent.taker, "taker"),
-      tokenIn: normalizeAddress(intent.tokenIn, "tokenIn"),
-      tokenOut: normalizeAddress(intent.tokenOut, "tokenOut"),
-      amountIn: toPositiveUintString(intent.amountIn, "amountIn"),
-      venue: normalizeAddress(intent.venue, "venue"),
-      policyId: assertBytes32Hex(intent.policyId, "policyId"),
-      ttlSeconds: normalizeTtlSeconds(intent.ttlSeconds ?? this.defaultTtlSeconds)
-    };
+  }
+
+  private authorizeNormalized(request: Omit<PiiFreeQuoteRequest, "policyId">): RFQProductAuthorization | undefined {
+    return this.products?.authorize({chainId: this.chainId, adapter: this.verifyingContract, maker: this.maker, tokenIn: request.tokenIn, tokenOut: request.tokenOut, venue: request.venue, capability: this.config.quoteVersion === 3 ? "rfq.quote.v3" : "rfq.quote.v2", flowType: request.flowType ?? 0});
+  }
+
+  private validatePersistedAuthorization(record: QuoteCoordinatorRecord): void {
+    if (!this.products) return;
+    const expected = {schemaVersion: 1, chainId: this.chainId, adapter: this.verifyingContract, maker: this.maker, tokenIn: record.request.tokenIn, tokenOut: record.request.tokenOut, venue: record.request.venue, policyId: record.request.policyId, capability: this.config.quoteVersion === 3 ? "rfq.quote.v3" : "rfq.quote.v2", flowType: record.request.flowType ?? 0};
+    if (!record.productAuthorization || hashCanonical(record.productAuthorization) !== hashCanonical(expected) || hashCanonical(record.request) !== record.requestHash || (record.quoteVersion === 3) !== (this.config.quoteVersion === 3)) {
+      throw new RFQCoordinatorError("CONFIGURATION_INVALID", "persisted RFQ authorization is missing or inconsistent");
+    }
+  }
+
+  private async dependency<T>(module: "policy" | "pricing" | "risk" | "store", operation: () => T | Promise<T>): Promise<T> {
+    try {return await operation();}
+    catch (error) {
+      if (error instanceof RFQCoordinatorError) throw error;
+      if (module === "store" && error instanceof Error) {
+        if (error.message.includes("idempotency key conflict") || error.message.includes("insufficient unreserved inventory")) throw error;
+        if (error.message === "inventory is not configured for maker/token/venue") throw new RFQCoordinatorError("CONFIGURATION_INVALID", "RFQ inventory is not configured");
+      }
+      throw Object.assign(new RFQCoordinatorError("DEPENDENCY_UNAVAILABLE", "RFQ dependency unavailable"), {dependencyModule: module});
+    }
   }
 
   private async responseOrResumeExisting(record: QuoteCoordinatorRecord, requestHash: string, strictPolicy?: StrictFreshnessPolicy): Promise<QuoteWithEvidenceResult<V>> {
     if (record.requestHash !== requestHash) throw new RFQCoordinatorError("IDEMPOTENCY_CONFLICT", "idempotency key conflict: request hash differs");
+    this.validatePersistedAuthorization(record);
     if (record.signedQuote) {
       if (strictPolicy && !record.productionEvidence) {
         throw new RFQCoordinatorError("STRICT_EVIDENCE_REQUIRED", "strict RFQ quote replay requires persisted production evidence");
@@ -401,18 +468,20 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
         try {
           revalidateProductionEvidence(record.productionEvidence, strictPolicy.now ?? now, strictPolicy.futureSkewSeconds ?? DEFAULT_FUTURE_SKEW_SECONDS);
         } catch (error) {
-          if (record.nonce) await this.config.store.revoke({scope: this.scope(), nonce: record.nonce, now});
+          if (record.nonce) await this.dependency("store", () => this.config.store.revoke({scope: this.scope(), nonce: record.nonce!, now}));
           throw error;
         }
       }
 
       if (!record.inventoryLease || record.inventoryLease.released || record.inventoryLease.expiresAt <= now) {
-        if (record.nonce) await this.config.store.expire({scope: this.scope(), nonce: record.nonce, now});
-        throw new Error("idempotent quote reservation is expired or released");
+        if (record.nonce) await this.dependency("store", () => this.config.store.expire({scope: this.scope(), nonce: record.nonce!, now}));
+        throw new RFQCoordinatorError("TERMINAL_REPLAY", "idempotent quote reservation is expired or released");
       }
       return this.signReservedRecord(record, requestHash, record.idempotencyKeyHash);
     }
-    if (record.state === "SIGN_FAILED") throw new Error("idempotent quote attempt previously failed during signing");
+    if (record.state === "SIGN_FAILED" || record.state === "EXPIRED" || record.state === "REVOKED") {
+      throw new RFQCoordinatorError("TERMINAL_REPLAY", "idempotent quote attempt is terminal");
+    }
     throw new Error(`idempotent quote is not publishable in state ${record.state}`);
   }
 
@@ -425,10 +494,11 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
     if (record.state !== "RESERVED" || !record.nonce || !record.inventoryLease || record.inventoryLease.released) {
       throw new Error(`quote reservation is not signable in state ${record.state}`);
     }
+    this.validatePersistedAuthorization(record);
     const now = await this.timestamp();
     if (record.inventoryLease.expiresAt <= now) {
-      await this.config.store.expire({scope: this.scope(), nonce: record.nonce, now});
-      throw new Error("quote reservation expired before signing");
+      await this.dependency("store", () => this.config.store.expire({scope: this.scope(), nonce: record.nonce!, now}));
+      throw new RFQCoordinatorError("TERMINAL_REPLAY", "quote reservation expired before signing");
     }
     const quote: RFQQuote = {
       maker: this.maker,
@@ -452,7 +522,7 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
         validateRFQQuoteV3(v3Quote);
         data = typedDataV3(record.domain!, v3Quote);
       } catch (error) {
-        await this.config.store.revoke({scope: this.scope(), nonce: record.nonce, now});
+        await this.dependency("store", () => this.config.store.revoke({scope: this.scope(), nonce: record.nonce!, now}));
         throw error;
       }
     } else {
@@ -475,7 +545,7 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
       }
       const signedQuote = {quote: data.message, signature, typedData: data} as SignedRFQQuote | SignedRFQQuoteV3;
       const quoteHash = hashCanonical({quote: data.message, domain: data.domain});
-      const signedRecord = await this.config.store.markSigned({
+      const signedRecord = await this.dependency("store", async () => this.config.store.markSigned({
         scope: this.scope(),
         idempotencyKeyHash,
         requestHash,
@@ -483,19 +553,19 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
         quoteHash,
         signerKeyRefHash: this.config.signerKeyRef ? hashSecret(this.config.signerKeyRef, "signerKeyRef") : undefined,
         now: await this.timestamp()
-      });
+      }));
       if (signedRecord.state !== "PUBLISHED" || signedRecord.quoteHash !== quoteHash || !signedRecord.signedQuote) {
         throw new Error(`quote publish failed from state ${signedRecord.state}`);
       }
       return {signedQuote: signedRecord.signedQuote as SignedFor<V>, record: signedRecord, evidence: signedRecord.productionEvidence, replayed: false};
     } catch (error: any) {
-      await this.config.store.markSignFailed({
+      await this.dependency("store", async () => this.config.store.markSignFailed({
         scope: this.scope(),
         idempotencyKeyHash,
         requestHash,
         now: await this.timestamp(),
         errorRef: error?.message ? hashSecret(error.message, "signError") : undefined
-      });
+      }));
       throw error;
     }
   }
@@ -580,6 +650,7 @@ export class LocalFileQuoteCoordinatorStore implements QuoteCoordinatorStore {
         quoteVersion: input.quoteVersion,
         domain: input.domain,
         contextEvidence: input.contextEvidence,
+        productAuthorization: input.productAuthorization,
         state: "RESERVED",
         scope: input.scope,
         idempotencyKeyHash: input.idempotencyKeyHash,

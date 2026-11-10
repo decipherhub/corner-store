@@ -1,5 +1,186 @@
 # Progress
 
+## 2026-11-11 Session: RFQ-006 Nested TTL Review Fix
+
+RFQ-006 is passing. Scope: the confirmed P3 pre-authentication recursive TTL hash in the production
+RFQ host. Non-number TTL values now contribute only `null` to the preliminary
+audit request hash; the original TTL still reaches validation after authentication
+and rate limiting. No product boundary, coordinator or contract behavior changed.
+
+Tests first: six HTTP regressions named `v{2,3} nested TTL preserves authentication
+and limiting before {401,429,400} rejection` send 6,000 nested arrays in a body
+below 16 KB. Against unchanged production code, all six failed with actual 500;
+14 unrelated tests were skipped by the name filter. After the one-line fix,
+the host smoke and all 24 named tests passed, including all six regressions.
+They assert bounded errors, exact authentication/limiter/incident/audit order,
+no quote records and the audit rejection reason.
+
+Commands use Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`:
+
+- `npm run build --prefix services/rfq-host && node --test --test-name-pattern="nested TTL" services/rfq-host/dist/test/authorization.js`:
+  exit 1 before the fix, six failed with 500. Log: `/private/tmp/w155-nested-before.log`.
+- `npm test --prefix services/rfq-host`: exit 0, smoke plus 24 named tests.
+  Log: `/private/tmp/w155-nested-host.log`.
+- `npm test --prefix services/rfq`: exit 0 on the first run, smoke plus 30 named tests.
+  Log: `/private/tmp/w155-nested-rfq.log`.
+- `scripts/check.sh`: exit 0 on the first run, including 1,100 Foundry tests,
+  service and packed-consumer checks and 10 deploy-v3 tests.
+  Log: `/private/tmp/w155-nested-check.log`.
+- `git diff --check`: exit 0.
+- `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`:
+  exit 0; protected paths unchanged.
+
+Runtime validation uses real loopback HTTP requests on both endpoints. Anvil E2E
+was not rerun because this fix only bounds pre-authentication hashing of malformed
+TTL; signing, settlement and contracts are unchanged. Prior E2E evidence remains
+in the entry below. Next: user reviews the working tree.
+No commit, push or external publication was performed.
+
+## 2026-11-11 Session: RFQ-006 Confirmed Review Fixes
+
+RFQ-006 is passing after all requested gates. Scope: confirmed review findings
+F1-F3 for issue #155, production host ordering, evidence API replay authority and
+terminal retry classification. Out of scope: contracts, public Monad/demo paths,
+key management and the known multi-process store creation flake.
+
+- F1: bounded body parsing remains before authentication; authentication/taker
+  binding and rate limiting now precede TTL/product authorization. Parent rejection
+  auditing, incidents and audit-failure handling remain in place. Both endpoints
+  count authentication, limiter, audit, incident, pricing, reservation, risk and
+  signer calls for unauthenticated, limited, invalid-TTL and unsupported-product
+  requests, with successful and failing audit sinks.
+- F2: current catalog policy is compared only after lookup establishes a new
+  request. Both evidence APIs validate replay against the persisted request/grant.
+  Eight v2/v3 PUBLISHED/RESERVED matrix cases cover policy drift, original quote,
+  expiry/grant preservation, conflicts, new-request policy denial and missing grants.
+- F3: `TERMINAL_REPLAY` maps expected unsigned signing-failure, expiry and revocation
+  retries to the parent's bounded 400 response. Same-key HTTP retries after signer
+  failure and after reservation expiry cover both versions; unexpected coordinator
+  failure still returns a bounded 500.
+- Updated D030, the production policy spec, host README and feature evidence.
+
+Tests first: after correcting test-only TypeScript typing, the focused Node 20
+build/regressions ran against unchanged production code: 18 passed, 13 failed.
+After the fixes, all 31 focused cases passed. Logs: `/private/tmp/w155-review-*.log`.
+Standalone `forge fmt --check` and Node 20 RFQ/host/Toolkit/CLI tests passed on the
+first run (smoke plus 30/18/15/5 named tests); no flake retry was needed.
+
+All service/script commands below ran with Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`; Foundry is 1.7.1.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0. |
+| `npm test --prefix services/rfq` | Exit 0; smoke + 30 named tests. |
+| `npm test --prefix services/rfq-host` | Exit 0; smoke + 18 named tests. |
+| `npm test --prefix services/toolkit` | Exit 0; smoke + 15 named tests. |
+| `npm test --prefix services/cli` | Exit 0; smoke + 5 named tests. |
+| `scripts/check.sh` | Exit 0, first run; 1,100 Foundry tests, all service/packed-consumer gates and 10 deploy-v3 tests passed. |
+| `scripts/e2e-anvil.sh` | Exit 0; BUIDL-like scenario suite and backend/CLI/Router/runtime checks passed. |
+| `scripts/e2e-anvil.sh --profile reg-d` | Exit 0; Reg D scenario suite and backend/CLI/Router/runtime checks passed. |
+| `scripts/e2e-context-provenance.sh` | Exit 0; 12 passed, 0 failed. |
+| `git diff --check` | Exit 0. |
+| `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad` | Exit 0; protected paths unchanged. |
+| Python added-character check | Exit 0; no added em dash characters. |
+
+This entry supersedes the original delivery's ordering claims below. All requested
+checks passed without reruns. UNVERIFIED: Docker/container execution and public or
+production integrations, outside this fix scope. Next: user reviews the working
+tree. No commit, push or external publication was performed.
+
+## 2026-11-11 Session: RFQ-006 Issue #155 Delivery
+
+RFQ-006 is passing. Scope: production RFQ coordinator/host v2/v3 authorization,
+lifetime validation, persistence/replay and failure taxonomy. Out of scope:
+contracts, recipes, key management/custody, pricing strategy, public deployment
+and the pre-existing multi-process store creation race. HACK-001 closure is in
+approved upstream PR #162; this work allocates only RFQ-006 and D030.
+
+- Wrote `PLAN_155.md` before tests/implementation, then removed it after delivery;
+  the final handoff includes its contents. D030 records the implemented decision.
+- Added a bounded local catalog binding maker, ordered pair, venue, policy,
+  version capability and flow. Both host endpoints require explicit catalogs.
+  TTL and product rejection precede authentication, limiter, readiness, store,
+  policy, pricing, risk, context and signer calls. Live resolved policy must match
+  the catalog before pricing a new request.
+- Default TTL/max are 60/300 seconds, tunable through bootstrap coordinator
+  configuration with positive safe integers and default <= max <= 3600. Invalid
+  config fails construction/startup, invalid TTL fails before dependencies.
+- Persist schema-1 `productAuthorization` alongside existing record schemas 1/2,
+  request hash, nonce and lease. Host replay/conflicts use original authorization
+  and policy without resolver/pricing/risk recalls or replacement signatures;
+  RESERVED recovery keeps original expiry and freshness/context revalidation.
+- Added bounded typed 400 invalid-request, 403 product-denial, 500 configuration
+  and 503 dependency codes, preserving existing conflict/risk/signer/audit codes.
+  Known resolver denials/config errors stay terminal; untyped provider exceptions
+  remain retryable. Diagnostic reason/module labels redact provider messages.
+- Added 9 coordinator and 6 host named tests for invalid/boundary TTL, unsupported
+  products and versions/flows, zero dependency calls, restart/policy drift,
+  conflicts, concurrent retry, RESERVED recovery, altered/missing stored grants,
+  configuration validation and dependency/taxonomy redaction on both endpoints.
+- Updated production fixtures with explicit catalog grants, local context E2E
+  with explicit 600s default/max and both directions/versions, and the container
+  readiness smoke double with the required coordinator methods. Deployed contracts,
+  existing quote types/success responses and protected Monad paths are unchanged.
+
+### Verification Commands and Actual Results
+
+Foundry 1.7.1 and Node 20.20.2. Logs are local `/private/tmp/w155-*.log`, outside
+the working tree. Service test commands ran inside the Node 20/Yarn wrapper below.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0. No Solidity edits. |
+| `forge test --offline` | Exit 0; 1,100 passed, 66 suites, 0 failed/skipped. |
+| `npm test --prefix services/rfq` | Final exit 0; smoke plus 22 named tests passed. |
+| `npm test --prefix services/rfq-host` | Final exit 0; smoke plus 10 named tests passed. |
+| `npm test --prefix services/toolkit` | Exit 0; smoke plus 15 named tests passed. |
+| `npm test --prefix services/cli` | Exit 0; smoke plus 5 named tests passed. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'` | Exit 0 on first full run; all format/lint/build/Foundry/service/packed-consumer/vendor/whitespace gates passed. Vendored deploy-v3: 10 passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'` | Exit 0; BUIDL-like 7-scenario suite and backend/CLI/Router/runtime checks passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh --profile reg-d'` | Exit 0; Reg D 7-scenario suite and backend/CLI/Router/runtime checks passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'` | Exit 0; 12 passed, including 10 mined rejections with unchanged balances/nonces and 2 exact-fill settlements. |
+| `git diff --check` | Exit 0. |
+| `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad` | Exit 0; protected paths unchanged. |
+| `bash -n scripts/production-container-smoke.sh` | Exit 0. |
+| `npx --yes -p node@20 -c 'node --check scripts/e2e-context-provenance.mjs'` | Exit 0. |
+| Extracted container bootstrap + Node 20 `startProductionRFQRuntime()` harness | Exit 0; HTTP health/ready 200 and graceful shutdown passed with the exact updated smoke fixture. |
+| Python local-doc-link and added-character checks | Exit 0; 5 local links valid, no added em dash characters. |
+
+The exact standalone service invocation was:
+
+```sh
+npx --yes -p node@20 -p yarn@1.22.22 -c 'for service in rfq rfq-host toolkit cli; do npm test --prefix "services/$service" > "/private/tmp/w155-final-$service.log" 2>&1; check_status=$?; echo "$service exit $check_status"; tail -12 "/private/tmp/w155-final-$service.log"; if [ "$check_status" -ne 0 ]; then exit "$check_status"; fi; done'
+```
+
+Tests-first evidence: the initial RFQ build failed on missing API/types, and
+`npx --yes -p node@20 -c 'node --test services/rfq/dist/test/authorization.js'`
+then ran the emitted regressions against baseline code: 0 passed, 6 failed. The
+initial host build failed on the missing product/configuration error codes.
+During implementation, a focused run exposed a missing-grant hashing bug (5/6
+passed), which was fixed. One intermediate `npm test --prefix services/rfq`
+run hit the known `multi-process initial store creation is race-safe` flake with
+`Unexpected end of JSON input` (`w155-rfq-test-2.log`). The single requested retry
+passed that race check but exposed a fresh RESERVED test fixture missing its new
+grant (`w155-rfq-test-2-retry.log`). Adding that explicit fixture grant fixed the
+migration. The next service run passed all then-current 19 named tests, and the
+final standalone/full-gate runs passed all 22. The store creation implementation
+was not changed. No full-gate rerun was needed.
+
+### Limits and Next Work
+
+- UNVERIFIED: Docker image/container execution and public/production deployment
+  were not run. The changed container fixture was syntax-checked and exercised
+  through the real local runtime; no image/release change was made.
+- Production operator catalog approval, HA store, live pricing/risk/auth/provider
+  integrations and WORM retention remain operator boundaries. Production evidence
+  callers must add explicit catalogs; records without historical grants must be
+  drained/expired and isolated under a fresh request namespace/store, never
+  automatically backfilled. Current tuple support/TTL caps still gate retries.
+- Next: user reviews the working tree. No commit, push, GitHub comment, public
+  broadcast or publication was performed.
+
 ## 2026-11-11 Session: EXEC-002 Confirmed Review Fixes
 
 Scope: F1 recipient MM-claim selection and F2 reverse Engine/Router activation
@@ -128,7 +309,13 @@ reference execution contracts와 vendored Uniswap v3 배포 도구를 포함한�
 Element/Recipe/Manifest/Operator 4-Layer와 mode-aware `RecipeBinding[]` 모델을
 source of truth로 사용한다.
 
-## Active Feature
+## Current Feature
+
+`RFQ-006: Bounded Lifetime and Pre-Pricing Product Authorization` (issue #155).
+RFQ-006 is passing after all requested gates. HACK-001 closure is in approved
+upstream PR #162; the historical HACK-001 notes below are retained.
+
+### Upstream HACK-001 history
 
 `HACK-001 — Monad Onchain Finance RFQ Demo` (issue #145)
 

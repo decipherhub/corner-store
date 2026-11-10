@@ -9,6 +9,45 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## RFQ-006: Bounded Lifetime and Pre-Pricing Product Authorization
+
+### Behavior
+
+- Production RFQ v2/v3 hosts authenticate and rate limit before bounded TTL and
+  local product authorization, then perform pricing, risk, reservation and signing.
+- Authoritative product authorization and original expiry persist with the request;
+  replay never refreshes policy or signature. Failures use bounded, redacted codes.
+- Default TTL is 60 seconds, default maximum 300 seconds, hard maximum 3600 seconds.
+  Lightweight legacy SDK usage and protected public demo paths remain compatible.
+
+### Verification
+
+- RFQ/coordinator and host ordering, TTL boundary, persistence/replay and taxonomy tests
+- Both endpoint versions: auth/limiter/audit/incident ordering including audit failure;
+  deeply nested TTL preserves auth/limiter ordering and bounded rejection;
+  both evidence APIs: PUBLISHED/RESERVED replay after catalog policy drift;
+  terminal SIGN_FAILED/expired reservation retries return 400, unexpected errors 500
+- Node 20 RFQ, host, Toolkit and CLI tests
+- `forge fmt --check`, `forge test --offline`, `scripts/check.sh`, `git diff --check`
+- Both `scripts/e2e-anvil.sh` profiles and `scripts/e2e-context-provenance.sh`
+
+### State
+
+passing
+
+### Notes
+
+- Issue #155; D030. HACK-001 closure is owned by approved upstream PR #162.
+- Scope excludes contracts, custody/key management and the store creation flake.
+- Nested TTL follow-up: six regressions failed with 500 before the fix and passed
+  afterward; Node 20 host/RFQ suites and `scripts/check.sh` passed. See PROGRESS.
+- Final verification: 1,100 Foundry tests; Node 20 RFQ/host/Toolkit/CLI smoke and
+  30/18/15/5 named tests; full repository gate; both legacy Anvil profiles and
+  12 context-provenance E2E cases passed after F1-F3 fixes. See the 2026-11-11
+  confirmed review fixes PROGRESS entry.
+- Production evidence callers must configure catalogs. Older records without a
+  persisted grant require draining and a fresh request namespace/store.
+
 ## HACK-001 — Monad Onchain Finance RFQ Demo
 
 ### Behavior
@@ -69,7 +108,7 @@
 
 ### State
 
-active
+passing
 
 ### Notes
 

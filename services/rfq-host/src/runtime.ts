@@ -248,7 +248,10 @@ async function loadAndValidateBootstrap(
 function validateDependencies(value: unknown): ProductionRFQDependencies {
   if (!isRecord(value)) throw new ProductionRFQRuntimeError("BOOTSTRAP_DEPENDENCIES_INVALID");
   const checks = [
-    [value.coordinator, "quoteWithEvidence"],
+    [value.coordinator, "quoteAuthorizedWithEvidence"],
+    [value.coordinator, "authorizeProduct"],
+    [value.coordinator, "assertProductionConfiguration"],
+    [value.coordinator, "getQuoteLifetimePolicy"],
     [value.authenticator, "authenticate"],
     [value.rateLimiter, "check"],
     [value.audit, "record"],
@@ -260,7 +263,7 @@ function validateDependencies(value: unknown): ProductionRFQDependencies {
   if (typeof value.resolvePolicyId !== "function" || checks.some(([target, method]) => !isRecord(target) || typeof target[method] !== "function")) {
     throw new ProductionRFQRuntimeError("BOOTSTRAP_DEPENDENCIES_INVALID");
   }
-  if (value.v3 !== undefined && (!isRecord(value.v3) || !isRecord(value.v3.coordinator) || typeof value.v3.coordinator.quoteWithEvidence !== "function" || typeof value.v3.resolvePolicyId !== "function")) throw new ProductionRFQRuntimeError("BOOTSTRAP_DEPENDENCIES_INVALID");
+  if (value.v3 !== undefined && (!isRecord(value.v3) || !isRecord(value.v3.coordinator) || ["quoteAuthorizedWithEvidence", "authorizeProduct", "assertProductionConfiguration", "getQuoteLifetimePolicy"].some((method) => typeof (value.v3 as Record<string, any>).coordinator[method] !== "function") || typeof value.v3.resolvePolicyId !== "function")) throw new ProductionRFQRuntimeError("BOOTSTRAP_DEPENDENCIES_INVALID");
   if (value.close !== undefined && typeof value.close !== "function") {
     throw new ProductionRFQRuntimeError("BOOTSTRAP_DEPENDENCIES_INVALID");
   }
