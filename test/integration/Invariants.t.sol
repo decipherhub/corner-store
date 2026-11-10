@@ -129,4 +129,68 @@ contract InvariantsTest is IntegrationBase {
         mockRouter.execute(ok);
         assertEq(rwaToken.balanceOf(alice), 5 ether, "swap within maxAmount settled");
     }
+
+    // =========================================================================
+    // PARAMETERIZED FUZZ INVARIANTS (Issue #156 Production Assurance Gates)
+    // =========================================================================
+
+    /// @notice Invariant: For any arbitrary unmapped venue address, the router strictly
+    ///         reverts with AdapterNotRegistered before executing any balance mutations.
+    function testFuzz_unregisteredVenue_adapterNotRegistered(address randomVenue) public {
+        vm.assume(randomVenue != address(pool) && randomVenue != address(0));
+        vm.assume(venueReg.venueOf(randomVenue).adapter == address(0));
+
+        ExecutionRequest memory req = buildBuyRequest(alice, 50 ether, 50 ether);
+        req.context.venue = randomVenue;
+
+        vm.prank(alice);
+        vm.expectRevert(Errors.AdapterNotRegistered.selector);
+        router.execute(req);
+    }
+
+    /// @notice Invariant: For any arbitrary swap amount and nonce, replaying the identical
+    ///         caller + nonce tuple strictly reverts with NonceUsed.
+    function testFuzz_nonceReplay_nonceUsed(uint96 rawAmount, uint64 rawNonce) public {
+        uint256 amount = bound(uint256(rawAmount), 1 ether, 100 ether);
+        fundBuyerQuote(alice, amount * 2);
+
+        ExecutionRequest memory req = buildBuyRequest(alice, amount, amount);
+        req.nonce = uint256(rawNonce);
+
+        vm.prank(alice);
+        router.execute(req);
+
+        // Replaying same request with identical nonce from same caller must strictly revert
+        vm.prank(alice);
+        vm.expectRevert(Errors.NonceUsed.selector);
+        router.execute(req);
+    }
+
+    /// @notice Invariant: The non-custodial guarantee holds universally across all bounded
+    ///         swap amounts: router and adapter hold strictly zero balance post-swap.
+    function testFuzz_nonCustodial_zeroBalancesAfterSwap(uint96 rawAmount) public {
+        uint256 amount = bound(uint256(rawAmount), 1 ether, 100 ether);
+        fundBuyerQuote(alice, amount);
+
+        ExecutionRequest memory req = buildBuyRequest(alice, amount, amount);
+        vm.prank(alice);
+        router.execute(req);
+
+        assertEq(rwaToken.balanceOf(address(router)), 0, "router RWA == 0");
+        assertEq(quote.balanceOf(address(router)), 0, "router quote == 0");
+        assertEq(rwaToken.balanceOf(address(adapter)), 0, "adapter RWA == 0");
+        assertEq(quote.balanceOf(address(adapter)), 0, "adapter quote == 0");
+    }
+
+    /// @notice Invariant: When an operator suspends a venue via emergency kill-switch,
+    ///         all subsequent executions across any arbitrary amount strictly revert.
+    function testFuzz_suspendedVenue_blocks(uint96 rawAmount) public {
+        uint256 amount = bound(uint256(rawAmount), 1 ether, 100 ether);
+        operatorReg.setVenueSuspended(address(pool), true, bytes32("kill"));
+
+        ExecutionRequest memory req = buildBuyRequest(alice, amount, amount);
+        vm.prank(alice);
+        vm.expectRevert(Errors.VenueSuspended.selector);
+        router.execute(req);
+    }
 }
