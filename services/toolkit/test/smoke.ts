@@ -1,4 +1,5 @@
 import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
+import {runComplianceReportingTests} from "./compliance-reporting";
 
 import {encodeBytes32String, keccak256} from "ethers";
 import {
@@ -53,7 +54,7 @@ import {
   validatePolicyAuditArtifact,
   validatePolicyAuditArtifactFile
 } from "../src/policy-audit";
-import {assertRecipeVenueCompatibility} from "../src/policy-compatibility";
+import {assertProfileVenueCompatibility, assertRecipeVenueCompatibility} from "../src/policy-compatibility";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -75,6 +76,11 @@ const config = loadConfig(path);
 if (config.asset.profile !== "buidl-like" || !config.venues.rfq) throw new Error("default config regression");
 if (JSON.parse(readFileSync(path, "utf8")).schemaVersion !== 1) throw new Error("version missing");
 validateConfig({...defaultConfig(), asset: {profile: "reg-d"}});
+assertProfileVenueCompatibility("reg-d-v4", false);
+assertThrows(
+  () => assertProfileVenueCompatibility("reg-d-v4", true),
+  "Reg D v4 still rejects AMM because it retains C-01-v2"
+);
 assertThrows(
   () => validateConfig({...defaultConfig(), venues: {amm: true, rfq: true, orderBook: false}}),
   "lockup-restricted profile accepted AMM"
@@ -1160,7 +1166,7 @@ try {
 } catch (err: any) {
   if (!err.message.includes("environment variable")) throw err;
 }
-onboardingVerificationPromise.then(() => {
+Promise.all([onboardingVerificationPromise, runComplianceReportingTests()]).then(() => {
   console.log("corner-store toolkit smoke ok");
 }).catch((err) => {
   console.error(err);

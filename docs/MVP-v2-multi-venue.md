@@ -324,6 +324,18 @@ quote, manifest version, nonce와 expiry에 바인딩되어야 한다. preview �
 
 Corner Store reference DEX는 실행 엔진을 Adapter로 분리한다.
 
+The current Router settlement contract requires exact full fills. It measures the
+authenticated buyer's input debit and output credit around adapter execution and
+requires them to equal `context.amountIn` and `context.amountOut`, respectively;
+the adapter-reported output must also equal the measured output. Only these
+measured amounts reach stateful commit. Any mismatch rolls back transfers, nonce
+consumption and compliance state. AMM callers must bind an exact quoted output
+before execution, in addition to `amountOutMin`; price movement that changes the
+output requires a fresh quote and request. Partial fills and output tolerance need
+a separately versioned settlement-aware compliance design. Asset onboarding must
+prohibit fee-on-transfer and rebasing tokens, since buyer-side deltas alone do not
+prove every intermediate recipient's credit.
+
 ### AMM
 
 Uniswap v3는 첫 AMM reference adapter다. Pool identity onboarding, factory/pool과

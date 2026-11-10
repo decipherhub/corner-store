@@ -146,6 +146,13 @@ contract ExecutionRouter is IExecutionRouter, Governed, ReentrancyGuard {
 
         // 9. emit + return
         emit Events.Executed(r.executionId, req.context.venue, r.amountOut);
+        _emitSettlementExecutedV2(r.executionId, settledContext, d.policyId);
         return r;
+    }
+
+    function _emitSettlementExecutedV2(bytes32 executionId, ComplianceContext memory ctx, bytes32 policyId) private {
+        emit Events.SettlementExecutedV2(
+            executionId, ctx.venue, ctx.tokenIn, ctx.tokenOut, policyId, ctx.amountIn, ctx.amountOut
+        );
     }
 }

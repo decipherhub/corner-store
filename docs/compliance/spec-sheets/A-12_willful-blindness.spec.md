@@ -10,6 +10,34 @@ stateful: false
 tags: [requirement-spec, A-12, red-flag, willful-blindness, resale-safe-harbor, antifraud, stateless, R2, R4]
 ---
 
+## Current reference implementation (issue #132, item 6)
+
+`RedFlagKnowledgeBarV2.sol` is the opt-in `A-12-v2` implementation. Its metadata
+and registration both declare `FLAG_ONLY`. The legacy `RedFlagKnowledgeBar.sol`
+retains its `A-12-v1` identity and `BLOCK` metadata; explicitly registering v1 as
+`FLAG_ONLY` reverts with `InvalidElementMetadata`.
+
+V2 preserves the existing seven categories, uncertainty marker, operator-only
+writes, resolution rules and raw-mask retention. Audit events and reason hashes
+use the new `A-12-v2` identity. With valid empty parameters, `check()` returns
+`(true, bytes32(0))` regardless of the assessment. Unsupported nonempty parameters
+retain the common BaseElement rejection. `screen`, `dispositionOf`,
+`routesToReview` and `assessmentOf` expose review results separately; the Engine
+does not turn those results into flags or blocking decisions. These reference
+records and events are public chain data and provide no confidential record store.
+
+Reg D family 1/version 4 includes A-12-v2 as its tenth element. V3 and the default
+profiles remain unchanged. The wave-3 registration script now deploys v2, without
+activating a recipe or migrating an asset. See the
+[R1 version and migration contract](../recipes/R1_RegD-506c-Issuance.md).
+
+This reference wiring does not establish reasonable verification under 506(c).
+Production screening integration and review procedures remain open. Counsel must
+define which red flags suspend reliance before sale, who resolves them and what
+evidence suffices. The target requirements below do not imply that those
+procedures are implemented by this always-passing element.
+
+
 # A-12 Willful Blindness Blocker (모름 항변 차단) — 요구사항 및 reference 구현 명세서
 
 본 문서는 컴플라이언스 부품 A-12(모름 항변 차단, Red Flag Knowledge Bar)의 요구사항과 reference 구현 명세서이다. **제1부**는 법적 근거와 논증을, **제2부**는 구현 명세를 규정한다. 법적 실질은 보경 변호사가 검토·작성한 walkthrough에 의한다. illustrative reference 컨트랙트는 `RedFlagKnowledgeBar.sol`로 구현되어 있으나 operator attestation을 사용하는 mock/reference 경계이며, production surveillance data source와 active Recipe 배선은 완료되지 않았다. 표시-비차단(flag-not-block) 온체인 패턴은 동일 계열(패턴 C 감시형)인 형제 부품 `SurveillanceFlag.sol`(F-02) 및 F-03을 참조한다. 시스템 공유 개념(Element/Recipe/Manifest·검증 패턴·on/off-chain 경계)은 `SPEC.md`에 의한다.

@@ -82,6 +82,44 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
 - Router에 의도하지 않은 사용자 자산 잔액이 남지 않는다.
 - pause 또는 delist 이후 신규 실행을 허용하지 않는다.
 
+## Settlement Events
+
+New Router deployments emit `SettlementExecutedV2` after a successful
+`ComplianceEngine.commit`, alongside the unchanged legacy `Executed` event:
+
+```solidity
+event SettlementExecutedV2(
+    bytes32 indexed executionId,
+    address indexed venue,
+    address tokenIn,
+    address tokenOut,
+    bytes32 indexed policyId,
+    uint256 amountIn,
+    uint256 amountOut
+);
+```
+
+`policyId` is the fresh pre-trade decision's final policy ID, not a caller-supplied
+value or a post-commit policy lookup. Amounts are the independently measured buyer
+balance deltas passed to commit, in each token's raw base units. Buy and sell retain
+their actual `tokenIn`/`tokenOut` order. The execution ID is the adapter result's
+existing execution ID; its derivation does not change. No reasons, surveillance
+flags or identity evidence are added to this event. Any revert, including a failed
+commit, rolls back settlement and its receipt logs.
+
+`SettlementExecutedV2` is the canonical trade-counting event for deployments that
+emit it. Index each canonical log once by chain ID, transaction hash and log index.
+Treat `Executed` and adapter `RFQFilled` logs from the same execution as
+compatibility/correlation records, never additional trades. Correlate Router logs
+by Router address and execution ID within the transaction; RFQFilled's quote hash
+is not the Router execution ID. For older Router deployments, use `Executed` as the
+canonical fallback and enrich from calldata or adapter logs. Select the event
+version per deployment, or prefer V2 per execution when processing mixed history.
+Existing deployed bytecode and RFQAdapter event signatures remain unchanged.
+
+These events support settlement reconstruction. They do not provide a retention
+service or establish which records an operator must retain.
+
 ## Current Decisions
 
 - policy evaluation과 venue dispatch 책임을 분리하기 위해 `ExecutionRouter`와

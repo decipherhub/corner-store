@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {Test} from "forge-std/Test.sol";
 import {RegD506cRecipe} from "../../../src/compliance/recipes/RegD506cRecipe.sol";
 import {RegD506cRecipeV3} from "../../../src/compliance/recipes/RegD506cRecipeV3.sol";
+import {RegD506cRecipeV4} from "../../../src/compliance/recipes/RegD506cRecipeV4.sol";
 import {Fund3c7Recipe} from "../../../src/compliance/recipes/Fund3c7Recipe.sol";
 import {ComplianceContext, VenueType, FlowType} from "../../../src/types/ComplianceTypes.sol";
 
@@ -65,6 +66,21 @@ contract RecipesTest is Test {
         assertEq(e.length, 9);
         assertEq(e[6], bytes32("B-02-v2"));
         assertEq(e[7], bytes32("C-01-v2"));
+    }
+
+    function test_regd_v4_appendsA12WithoutChangingV3() public {
+        RegD506cRecipeV4 regdV4 = new RegD506cRecipeV4();
+        assertEq(regdV4.recipeId(), uint16(1));
+        assertEq(regdV4.version(), uint16(4));
+        assertTrue(regdV4.isApplicable(""));
+        bytes32[] memory previous = regdV3.requiredElements();
+        bytes32[] memory current = regdV4.requiredElements();
+        assertEq(previous.length, 9);
+        assertEq(current.length, 10);
+        for (uint256 i = 0; i < previous.length; i++) {
+            assertEq(current[i], previous[i]);
+        }
+        assertEq(current[9], bytes32("A-12-v2"));
     }
 
     function test_fund_isApplicable_gated_on_bit0() public {

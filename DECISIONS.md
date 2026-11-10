@@ -1,5 +1,230 @@
 # Decisions
 
+## D024: Reg D v4 adopts immutable nonblocking A-12 v2 by explicit selection
+
+Date: 2026-11-10
+
+### Context
+
+Issue #132 item 6 calls for A-12 in the Reg D reference recipe. The legacy
+wave-3 script requested `FLAG_ONLY` for A-12-v1, whose immutable metadata declares
+`BLOCK`; the real ElementRegistry rejects that mismatch. Existing registered
+versions and active Manifests must retain their meanings.
+
+### Decision
+
+1. Add `RedFlagKnowledgeBarV2` with identity `A-12-v2` and matching `FLAG_ONLY`
+   metadata. Preserve its nonblocking check behavior and separate assessment
+   APIs/events. Review assessments do not populate Engine flags or create a new
+   settlement gate.
+2. Add family 1 version 4, `RegD506cRecipeV4`, with V3's nine Elements in the same
+   order followed by A-12-v2. Wave-3 registers v2 explicitly as `FLAG_ONLY` without
+   activating a Recipe or migrating an asset.
+3. Require explicit `ASSET_PROFILE=reg-d-v4` selection through DeployStack and
+   matching direct-script/CLI inputs. The default stays BUIDL-like; `reg-d` stays
+   v3. The full E2E launcher and Toolkit templates retain their two profiles.
+4. Existing v3 assets adopt v4 only through a reviewed Manifest commitment, exact
+   Recipe binding, scheduled semantic update, timelock and activation. The new
+   policy ID invalidates prior-policy RFQ quotes at settlement.
+
+### Alternatives Considered
+
+- Change A-12-v1 metadata or v3 membership: rejected because immutable policy
+  identities and existing deployments must retain their reviewed behavior.
+- Turn assessments into an automatic blocking gate: deferred pending approved
+  production review procedures and a separately specified enforcement change.
+
+### Consequences
+
+- Registration and activation remain separate; the additional reference profile
+  is opt-in. An always-passing A-12 check does not establish verification adequacy.
+- Open counsel items: which red flags suspend reliance before sale, who resolves
+  them, what evidence suffices, and whether this reference composition is suitable
+  for an intended production policy. These questions remain unresolved.
+- Include this additive capability in a coordinated minor SDK release under
+  `docs/sdk-versioning.md`; package promotion remains separate release work.
+
+### Related Files
+
+- `src/compliance/elements/RedFlagKnowledgeBarV2.sol`
+- `src/compliance/recipes/RegD506cRecipeV4.sol`
+- `tools/deploy-wave3/DeployWave3Elements.s.sol`
+- `scripts/check-wave3-element-policies.sh`
+- `docs/compliance/recipes/R1_RegD-506c-Issuance.md`
+- `docs/compliance/spec-sheets/A-12_willful-blindness.spec.md`
+
+## D025: Additive canonical settlement events preserve legacy consumers
+
+Date: 2026-11-10
+
+### Context
+
+Issue #132 item 7 needs token, policy and measured amount fields for settlement
+reconstruction. Existing consumers use Router `Executed` and RFQAdapter events;
+adding another event must not cause indexers to count a trade multiple times.
+
+### Decision
+
+1. New Router deployments emit `SettlementExecutedV2` only after successful
+   `ComplianceEngine.commit`. It carries execution ID, venue, token pair, the
+   fresh pre-trade decision's policy ID and independently measured input/output
+   in token base units. Execution ID, venue and policy ID are indexed.
+2. Preserve legacy Router/adapter events, return values and execution ID
+   derivation. Use a private emission helper to accommodate Solidity 0.8.17's
+   stack limit without changing compiler settings or settlement order.
+3. Use V2 as the canonical settlement record where available and legacy `Executed`
+   as fallback. Select capability per deployment, or prefer V2 per execution for
+   mixed history. Legacy/adapter logs correlate to that settlement. Deduplicate
+   canonical logs by chain ID, transaction hash and log index.
+4. CLI decoding supports both versions. Existing immutable deployments require
+   explicit selection of a new Router address to gain the event capability.
+
+### Alternatives Considered
+
+- Replace legacy events: rejected because existing indexers and CLI consumers
+  require backward compatibility.
+- Count every Router/adapter event independently: rejected because those logs
+  describe the same execution.
+
+### Consequences
+
+- The event adds reconstruction fields without identity evidence, reasons or
+  surveillance details. It does not implement record retention.
+- Open counsel items: applicable record categories, RFQ/precheck classification,
+  retention, legal holds and required retrievable contents. Events and hashes do
+  not substitute for retained records; no legal applicability is decided here.
+- Coordinate future issue #139 consumers with the same canonical event selection.
+  This additive event/CLI capability fits a minor SDK release.
+
+### Related Files
+
+- `src/execution/ExecutionRouter.sol`
+- `src/libraries/Events.sol`
+- `services/cli/src/abi.ts`
+- `services/cli/src/commands.ts`
+- `docs/architecture/execution-routing.md`
+- `docs/sdk-versioning.md`
+
+## D026: Complete public diagnostics remain separate from settlement authority
+
+Date: 2026-11-10
+
+### Context
+
+Issue #132 item 11 requests all requirement outcomes rather than only the first
+Engine failure. Detailed public results also need a defined disclosure boundary
+for sensitive checks and cannot become a second source of settlement authority.
+
+### Decision
+
+1. An explicitly deployed immutable `ComplianceReporter` binds its Registry
+   references to the selected Engine and reads both active legs' exact compiled
+   rules/parameters. It preserves the Engine outcome and continues through every
+   requirement, including path alternatives and flag-only checks.
+2. Return diagnostic pass/fail, undetermined and nonapplicable results separately
+   from `engineStatus`. Provider/Recipe failures make the report incomplete;
+   callers treat unavailable reads as unavailable, without cached permission.
+   Reports never authorize execution or replace fill-time Engine evaluation.
+3. Aggregate all versions of A-01, A-12 and F-* into one restricted outcome.
+   Withhold per-subject outcomes, reasons, flags and claims for these families.
+   Binding/Recipe composition, including which bindings contain restricted
+   elements, their positions and counts, is public Registry configuration and
+   is not hidden by the reporter. Whenever these families are present, including
+   when nonapplicable, redact decision `reasonCode`, `flagsBitmap` and
+   `reliedClaims` to prevent indirect disclosure through those fields.
+4. Export an additive typed Toolkit reader with an explicit pinned block reference
+   and report version 1. Keep confidential enrichment in a separately controlled
+   off-chain system. This API cannot conceal existing public storage, calldata,
+   events, Registry composition or direct Engine/Element queries.
+
+### Alternatives Considered
+
+- Extend Engine short-circuit evaluation to provide all diagnostics: rejected
+  because settlement semantics must remain stable.
+- Expose every sensitive row or redact rows alone: rejected because reasons,
+  flags and relied-claim fields can disclose suppressed checks indirectly.
+
+### Consequences
+
+- A diagnostic failure can coexist with Engine permission when a path alternative
+  or nonblocking check fails. Consumers must preserve that distinction.
+- Open counsel items: approve public fields and recipient access; confirm the
+  restricted taxonomy and any additional aggregation/suppression; decide whether
+  the coarse restricted result and Engine verdict suit the intended audience.
+  SAR-related records and confidential investigation enrichment stay off-chain.
+- The reporting boundary makes no chain-wide secrecy or disclosure-approval claim.
+  Production adoption remains explicit. Plan a coordinated minor SDK release;
+  existing package versions and persisted schemas are not reinterpreted.
+
+### Related Files
+
+- `src/compliance/ComplianceReporter.sol`
+- `src/interfaces/compliance/IComplianceReporter.sol`
+- `src/types/ComplianceReportTypes.sol`
+- `services/toolkit/src/compliance-reporting.ts`
+- `docs/product-specs/compliance-reporting.md`
+- `docs/architecture/compliance-policy.md`
+
+## D027: RFQ rejection disclosure is opt-in and generic by default
+
+Date: 2026-11-10
+
+### Context
+
+Issue #132 item 12 requests useful operational RFQ rejection feedback without
+exposing provider text or sensitive compliance findings. Disclosure belongs at
+host presentation, independently of compliance reporting and settlement authority.
+
+### Decision
+
+1. The coordinator may emit only recognized operational identifiers:
+   `INVENTORY_LIMIT_EXCEEDED`, `RISK_LIMIT_EXCEEDED` and `PRICING_OUTSIDE_LIMITS`.
+   A schema-v1 JSON policy maps them to `detailed`, `action_only` or `generic`
+   tiers and literal messages. Only detailed entries expose the identifier.
+2. Snapshot an optional `disclosurePolicyFile` at host startup, supplied directly
+   or through the existing production bootstrap dependencies. Select no default
+   file; the shipped policy is reference-only. Policy changes require a reviewed
+   version and restart.
+3. Disclose only when every supplied reason is recognized and explicitly
+   allowlisted. Unknown, malformed, unallowlisted or sensitive reasons suppress
+   the entire response's disclosure, including policy version. Missing, oversized
+   or invalid policy files disable disclosure. Sanctions, AML and surveillance
+   identifiers cannot be enabled through policy edits.
+4. Preserve HTTP 422 and `error: "risk_rejected"`, adding only optional
+   `disclosure`. Never interpolate provider/internal text. Keep authentication,
+   exact taker binding, reservation/signing, persisted quote records and idempotent
+   replay behavior unchanged. Do not reinterpret existing schema/bootstrap versions.
+
+### Alternatives Considered
+
+- Return raw provider rejection messages: rejected because wording and sensitive
+  content cannot be controlled by the disclosure policy.
+- Disclose recognized entries from a partly unknown list: rejected because the
+  whole response requires a known, reviewed disclosure classification.
+- Enable the reference policy by default: rejected because audience and wording
+  approval remain operator/counsel decisions.
+
+### Consequences
+
+- Structured complete reason lists are required; the host does not infer
+  sensitivity from provider text. No privileged audience or reporter integration
+  is introduced by this capability.
+- Open counsel/operator items: approve authenticated recipients for each tier,
+  the mapping of each operational identifier and exact production wording. The
+  reference policy does not establish sufficient disclosure or recipient access.
+- The public SDK additions fit a coordinated minor release; package publication
+  and version promotion remain release-owner work.
+
+### Related Files
+
+- `services/rfq/src/types.ts`
+- `services/rfq/src/coordinator.ts`
+- `services/rfq-host/src/disclosure.ts`
+- `services/rfq-host/src/server.ts`
+- `services/rfq-host/src/runtime.ts`
+- `services/rfq-host/policies/disclosure.v1.json`
+- `docs/product-specs/production-rfq-policy.md`
+
 ## D023 — Router commit requires independently measured exact settlement amounts
 
 Date: 2026-10-20

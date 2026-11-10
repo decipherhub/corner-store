@@ -523,13 +523,15 @@ async function strictFreshnessEvidenceSmoke(maker: `0x${string}`, makerWallet: W
       maker,
       signer: riskRejectedSigner,
       pricing: {price: () => ({amountOut: "1", snapshotId: "price", version: "price-v1", observedAt: now - 1, validUntil: now + 60, available: true})},
-      riskCheck: {check: () => ({decision: "rejected", reason: "raw desk private reason", snapshotId: "risk", version: "risk-v1", observedAt: now - 1, validUntil: now + 60, available: true})},
+      riskCheck: {check: () => ({decision: "rejected", reason: "raw desk private reason", reasonCodes: ["INVENTORY_LIMIT_EXCEEDED", "RISK_LIMIT_EXCEEDED", "PRICING_OUTSIDE_LIMITS"], snapshotId: "risk", version: "risk-v1", observedAt: now - 1, validUntil: now + 60, available: true})},
       store: new LocalFileQuoteCoordinatorStore({filePath: riskRejectedPath, inventory: [{maker, token: TOKEN_OUT, venue: VENUE, available: "10"}]}),
       now: () => now
     }).quoteWithEvidence({...durableIntent("risk-rejected-strict"), amountIn: "1"}, {now});
     throw new Error("risk rejected expected");
   } catch (error) {
     assert(error instanceof RFQCoordinatorError && error.code === "RISK_REJECTED", "fresh risk rejection uses stable typed code");
+    assert(JSON.stringify((error as RFQCoordinatorError).reasonCodes) === JSON.stringify(["INVENTORY_LIMIT_EXCEEDED", "RISK_LIMIT_EXCEEDED", "PRICING_OUTSIDE_LIMITS"]), "risk rejection preserves structured operational reasons");
+    assert(!JSON.stringify(error).includes("raw desk private reason"), "risk rejection does not copy provider text");
   }
   assert(riskRejectedSigner.calls === 0 && JSON.parse(fs.readFileSync(riskRejectedPath, "utf8")).records.length === 0, "risk rejected does not reserve nonce or call signer");
 

@@ -12,6 +12,8 @@ import {
   RFQPriceRequest,
   RFQQuote,
   RFQQuoteIntent,
+  RFQ_REJECTION_REASON_CODES,
+  RFQRejectionReasonCode,
   RFQRiskDecision,
   RFQTypedData,
   SignedRFQQuote,
@@ -38,9 +40,14 @@ export type RFQCoordinatorErrorCode =
   | "SIGNER_SIGNATURE_INVALID";
 
 export class RFQCoordinatorError extends Error {
-  constructor(readonly code: RFQCoordinatorErrorCode, message: string, readonly cause?: unknown) {
+  readonly reasonCodes?: readonly RFQRejectionReasonCode[];
+
+  constructor(readonly code: RFQCoordinatorErrorCode, message: string, readonly cause?: unknown, reasonCodes?: readonly RFQRejectionReasonCode[]) {
     super(message);
     this.name = "RFQCoordinatorError";
+    if (Array.isArray(reasonCodes) && reasonCodes.length > 0 && reasonCodes.length <= 32 && reasonCodes.every((value) => RFQ_REJECTION_REASON_CODES.includes(value))) {
+      this.reasonCodes = Object.freeze([...new Set(reasonCodes)]);
+    }
   }
 }
 
@@ -790,8 +797,7 @@ function validateProductionEvidence(price: unknown, risk: void | RFQRiskDecision
     risk: validateModuleFreshness("risk", risk, now, futureSkewSeconds)
   };
   if (risk && typeof risk === "object" && risk.decision === "rejected") {
-    // Stable public code only; do not propagate raw operator risk reason.
-    throw new RFQCoordinatorError("RISK_REJECTED", "risk rejected");
+    throw new RFQCoordinatorError("RISK_REJECTED", "risk rejected", undefined, risk.reasonCodes);
   }
   return evidence;
 }
