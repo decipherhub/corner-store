@@ -103,9 +103,18 @@ export interface PricingProvider {
   price(request: RFQPriceRequest): Promise<RFQPrice> | RFQPrice;
 }
 
+export const RFQ_REJECTION_REASON_CODES = [
+  "INVENTORY_LIMIT_EXCEEDED",
+  "RISK_LIMIT_EXCEEDED",
+  "PRICING_OUTSIDE_LIMITS"
+] as const;
+
+export type RFQRejectionReasonCode = typeof RFQ_REJECTION_REASON_CODES[number];
+
 export interface RFQRiskDecision extends Partial<RFQFreshnessEvidence> {
   decision?: "passed" | "rejected";
   reason?: string;
+  reasonCodes?: readonly RFQRejectionReasonCode[];
 }
 
 export interface InventoryRiskCheck {

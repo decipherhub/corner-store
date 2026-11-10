@@ -50,6 +50,68 @@ provided by an operator bundle, and readiness gates quote issuance. See
 the complete environment schema, OCI build target, read-only deployment example
 and release evidence requirements.
 
+## Rejection disclosure policy
+
+Disclosure is opt-in through `ProductionRFQHostConfig.disclosurePolicyFile`.
+The production bootstrap may return the same optional field in
+`ProductionRFQDependencies`, pointing to an operator-mounted JSON file. No new
+environment variable or bootstrap contract version is required. Without a path,
+the response remains `422 {"error":"risk_rejected"}`.
+
+The host reads and validates the file once at startup. Restart with a newly
+versioned reviewed policy to change disclosure. Missing, unreadable, oversized
+(over 16 KiB), invalid JSON or schema-invalid files disable disclosure. Startup
+and quote rejection still work with the generic response. The schema is exact:
+
+```json
+{
+  "schemaVersion": 1,
+  "policyVersion": "operator-v1",
+  "reasons": {
+    "INVENTORY_LIMIT_EXCEEDED": {
+      "tier": "detailed",
+      "message": "Requested quote exceeds available inventory."
+    }
+  }
+}
+```
+
+`policyVersion` is a 1-64 character identifier containing letters, digits, dots,
+underscores or hyphens, starting with a letter or digit. Messages are nonempty
+strings of at most 512 characters without control characters. Unknown fields,
+reason identifiers and tiers invalidate the whole file.
+
+[`policies/disclosure.v1.json`](policies/disclosure.v1.json) demonstrates the
+three tiers. It is a reference policy, is never loaded automatically, and requires
+operator/counsel approval of audience mapping and wording before production use.
+Policy entries apply only to the authenticated taker requesting its own quote;
+there is no privileged audience or compliance-report endpoint in this module.
+
+| Tier | Optional response entry |
+| --- | --- |
+| `detailed` | policy message, tier and structured `reasonCode` |
+| `action_only` | policy message and tier, with no reason identifier |
+| `generic` | policy message and tier, with no reason identifier |
+
+An allowlisted rejection adds `disclosure: {policyVersion, reasons: [...]}` to
+the existing body. Status codes and `error` values stay unchanged. Every reason
+must be recognized and allowlisted; otherwise the entire response stays generic
+with no disclosure or policy version. The SDK accepts only operational
+`INVENTORY_LIMIT_EXCEEDED`, `RISK_LIMIT_EXCEEDED` and `PRICING_OUTSIDE_LIMITS`
+identifiers from a risk decision's optional `reasonCodes`. Unknown or malformed
+reason lists suppress all entries, including otherwise safe entries. Sanctions,
+AML and surveillance identifiers are outside this allowlist and always suppress
+the whole response, even if a policy file attempts to disclose them. Integrations
+must supply the complete structured reason list; the host does not interpret raw
+provider text or integrate compliance reporter results.
+
+Only policy-owned literal wording can reach the response. Raw `reason` text,
+provider errors and internal messages never populate disclosure, audits or
+metrics. Rejected requests allocate no nonce and do not sign; retrying a rejection
+reruns the existing checks. Published quote replays retain the existing persisted
+evidence behavior and never call providers or sign again. Successful quote bodies
+contain no disclosure fields.
+
 ## Test
 
 ```sh
@@ -66,4 +128,7 @@ retry without re-signing, incident
 hook isolation, PII-free audit redaction, bounded metrics, successful quote
 issuance and idempotent replay.
 It also proves unauthenticated requests cannot trigger policy resolution and that
-the server-owned resolved policy is included in the EIP-712 v2 quote.
+the server-owned resolved policy is included in the EIP-712 v2 quote. Disclosure
+coverage includes all three tiers, authenticated taker binding, rejection retries,
+quote replays, missing/malformed policy fallback and whole-response suppression
+for unknown, malformed and sensitive reasons.

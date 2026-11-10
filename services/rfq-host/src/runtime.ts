@@ -84,6 +84,7 @@ export interface ProductionRFQDependencies {
   metrics: MetricsSink;
   incident: IncidentSink;
   readiness: RFQReadinessProbe;
+  disclosurePolicyFile?: string;
   close?(): Promise<void> | void;
 }
 
@@ -186,7 +187,8 @@ export async function startProductionRFQRuntime(
       readinessTimeoutMs: config.readinessTimeoutMs,
       requestTimeoutMs: config.requestTimeoutMs,
       headersTimeoutMs: config.headersTimeoutMs,
-      publicBindAcknowledged: config.publicBindAcknowledged
+      publicBindAcknowledged: config.publicBindAcknowledged,
+      disclosurePolicyFile: dependencies.disclosurePolicyFile
     });
   } catch (error) {
     await safeClose(dependencies?.close);

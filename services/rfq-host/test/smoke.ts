@@ -1,5 +1,5 @@
 import {createServer, request as httpRequest} from "http";
-import {mkdtempSync, readFileSync} from "fs";
+import {mkdtempSync, readFileSync, writeFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
 import assert from "assert";
@@ -43,6 +43,10 @@ async function main(): Promise<void> {
   await limiterCapacityPreventsPrincipalSpray();
   await rejectsStaleMissingFutureFreshnessBeforeSigning();
   await rejectsFreshRiskDecisionWith422();
+  await disclosesOnlyPolicyWordingAfterAuthentication();
+  await disclosurePolicyFailuresStayGeneric();
+  await unknownAndSensitiveReasonsSuppressWholeResponse();
+  await disclosureDoesNotChangeQuoteReplays();
   await rejectsBadSignerAndNotifiesIncident();
   await externalSignerThrowUsesStableSignerIncident();
   await failsClosedWhenStrictAuditCannotPersist();
@@ -216,6 +220,158 @@ async function rejectsFreshRiskDecisionWith422(): Promise<void> {
   }
 }
 
+function disclosurePolicy() {
+  return {
+    schemaVersion: 1,
+    policyVersion: "test-v1",
+    reasons: {
+      INVENTORY_LIMIT_EXCEEDED: {tier: "detailed", message: "Requested quote exceeds available inventory."},
+      RISK_LIMIT_EXCEEDED: {tier: "action_only", message: "Request a smaller quote or contact the operator."},
+      PRICING_OUTSIDE_LIMITS: {tier: "generic", message: "Quote request cannot be fulfilled."}
+    }
+  };
+}
+
+function policyFile(value: unknown = disclosurePolicy()): string {
+  const file = join(mkdtempSync(join(tmpdir(), "corner-store-rfq-disclosure-")), "policy.json");
+  writeFileSync(file, JSON.stringify(value));
+  return file;
+}
+
+async function disclosesOnlyPolicyWordingAfterAuthentication(): Promise<void> {
+  for (const [reasonCode, entry] of Object.entries(disclosurePolicy().reasons)) {
+    const config = baseConfig({riskDecision: risk({decision: "rejected", reason: "private provider text", reasonCodes: [reasonCode] as RFQRiskDecision["reasonCodes"]})});
+    const ctx = await start({...config, disclosurePolicyFile: policyFile()});
+    try {
+      assert.deepEqual((await post(ctx.baseUrl, quoteBody("disclosure-auth"))).body, {error: "unauthorized"});
+      assert.deepEqual((await post(ctx.baseUrl, quoteBody("disclosure-auth", OTHER_TAKER), GOOD_TOKEN)).body, {error: "forbidden"});
+      const first = await post(ctx.baseUrl, quoteBody("disclosure-retry"), GOOD_TOKEN);
+      assert.equal(first.status, 422);
+      assert.deepEqual(first.body, {error: "risk_rejected", disclosure: {
+        policyVersion: "test-v1",
+        reasons: [{...entry, ...(entry.tier === "detailed" ? {reasonCode} : {})}]
+      }});
+      const retry = await post(ctx.baseUrl, quoteBody("disclosure-retry"), GOOD_TOKEN);
+      assert.equal(retry.status, 422);
+      assert.deepEqual(retry.body, first.body);
+      assert.equal(config.signer.signCount, 0);
+      assert.deepEqual(readRecords(config.storePath), []);
+      assert(!JSON.stringify([first.body, ctx.audit.events, ctx.incident.incidents, ctx.metrics.increments]).includes("private provider text"));
+    } finally {
+      await ctx.close();
+    }
+  }
+  const config = baseConfig({riskDecision: risk({decision: "rejected", reasonCodes: ["INVENTORY_LIMIT_EXCEEDED", "RISK_LIMIT_EXCEEDED", "PRICING_OUTSIDE_LIMITS"]})});
+  const file = policyFile({...JSON.parse(readFileSync(join(__dirname, "../../policies/disclosure.v1.json"), "utf8")), policyVersion: "test-v1"});
+  const ctx = await start({...config, disclosurePolicyFile: file});
+  try {
+    writeFileSync(file, JSON.stringify({...disclosurePolicy(), policyVersion: "changed-after-startup", reasons: {}}));
+    const response = await post(ctx.baseUrl, quoteBody("combined-disclosure"), GOOD_TOKEN);
+    assert.equal(response.status, 422);
+    assert.deepEqual(response.body, {error: "risk_rejected", disclosure: {policyVersion: "test-v1", reasons: [
+      {...disclosurePolicy().reasons.INVENTORY_LIMIT_EXCEEDED, reasonCode: "INVENTORY_LIMIT_EXCEEDED"},
+      disclosurePolicy().reasons.RISK_LIMIT_EXCEEDED,
+      disclosurePolicy().reasons.PRICING_OUTSIDE_LIMITS
+    ]}});
+  } finally {
+    await ctx.close();
+  }
+}
+
+async function disclosurePolicyFailuresStayGeneric(): Promise<void> {
+  const malformedJson = policyFile();
+  writeFileSync(malformedJson, "{");
+  for (const disclosurePolicyFile of [
+    undefined,
+    join(mkdtempSync(join(tmpdir(), "corner-store-missing-policy-")), "missing.json"),
+    malformedJson,
+    policyFile({...disclosurePolicy(), schemaVersion: 2}),
+    policyFile({...disclosurePolicy(), policyVersion: ""}),
+    policyFile({...disclosurePolicy(), extra: true}),
+    policyFile({...disclosurePolicy(), reasons: {...disclosurePolicy().reasons, SANCTIONS_MATCH: {tier: "detailed", message: "unsafe"}}}),
+    policyFile({...disclosurePolicy(), reasons: {INVENTORY_LIMIT_EXCEEDED: {tier: "other", message: "unsafe"}}}),
+    policyFile({...disclosurePolicy(), reasons: {INVENTORY_LIMIT_EXCEEDED: {tier: "detailed", message: "safe", extra: "unsafe"}}}),
+    policyFile({...disclosurePolicy(), reasons: {INVENTORY_LIMIT_EXCEEDED: {tier: "detailed", message: ""}}}),
+    policyFile({...disclosurePolicy(), reasons: {INVENTORY_LIMIT_EXCEEDED: {tier: "detailed", message: "x".repeat(513)}}}),
+    policyFile({...disclosurePolicy(), reasons: {INVENTORY_LIMIT_EXCEEDED: {tier: "detailed", message: "unsafe\nmessage"}}}),
+    policyFile({...disclosurePolicy(), policyVersion: "x".repeat(65)}),
+    policyFile({...disclosurePolicy(), padding: "x".repeat(16 * 1024)}),
+    policyFile(null),
+    policyFile({...disclosurePolicy(), reasons: {}})
+  ]) {
+    const config = baseConfig({riskDecision: risk({decision: "rejected", reasonCodes: ["INVENTORY_LIMIT_EXCEEDED"]})});
+    const ctx = await start({...config, disclosurePolicyFile});
+    try {
+      const response = await post(ctx.baseUrl, quoteBody("invalid-disclosure-policy"), GOOD_TOKEN);
+      assert.equal(response.status, 422);
+      assert.deepEqual(response.body, {error: "risk_rejected"});
+      assert.equal(config.signer.signCount, 0);
+    } finally {
+      await ctx.close();
+    }
+  }
+}
+
+async function unknownAndSensitiveReasonsSuppressWholeResponse(): Promise<void> {
+  const configuredPolicy = policyFile();
+  for (const codes of [
+    undefined, [], ["UNKNOWN"], ["INVENTORY_LIMIT_EXCEEDED", "UNKNOWN"],
+    ["INVENTORY_LIMIT_EXCEEDED", "SANCTIONS_MATCH"],
+    ["AML_REVIEW", "INVENTORY_LIMIT_EXCEEDED"],
+    ["INVENTORY_LIMIT_EXCEEDED", "SURVEILLANCE_FLAG"],
+    ["INVENTORY_LIMIT_EXCEEDED", null], "INVENTORY_LIMIT_EXCEEDED",
+    Array(33).fill("INVENTORY_LIMIT_EXCEEDED")
+  ]) {
+    const config = baseConfig({riskDecision: risk({decision: "rejected", reason: "sensitive internal details", reasonCodes: codes as RFQRiskDecision["reasonCodes"]})});
+    const ctx = await start({...config, disclosurePolicyFile: configuredPolicy});
+    try {
+      const response = await post(ctx.baseUrl, quoteBody("suppressed-disclosure"), GOOD_TOKEN);
+      assert.equal(response.status, 422);
+      assert.deepEqual(response.body, {error: "risk_rejected"});
+    } finally {
+      await ctx.close();
+    }
+  }
+  for (const sensitive of ["SANCTIONS_MATCH", "AML_REVIEW", "SURVEILLANCE_FLAG"]) {
+    const config = baseConfig({riskDecision: risk({decision: "rejected", reasonCodes: ["INVENTORY_LIMIT_EXCEEDED", sensitive] as RFQRiskDecision["reasonCodes"]})});
+    const ctx = await start({...config, disclosurePolicyFile: policyFile({...disclosurePolicy(), reasons: {
+      ...disclosurePolicy().reasons, [sensitive]: {tier: "detailed", message: "Must never be returned."}
+    }})});
+    try {
+      assert.deepEqual((await post(ctx.baseUrl, quoteBody("unsafe-policy"), GOOD_TOKEN)).body, {error: "risk_rejected"});
+    } finally {
+      await ctx.close();
+    }
+  }
+  const config = baseConfig({riskDecision: risk({decision: "rejected", reasonCodes: ["INVENTORY_LIMIT_EXCEEDED", "RISK_LIMIT_EXCEEDED"]})});
+  const ctx = await start({...config, disclosurePolicyFile: policyFile({...disclosurePolicy(), reasons: {
+    INVENTORY_LIMIT_EXCEEDED: disclosurePolicy().reasons.INVENTORY_LIMIT_EXCEEDED
+  }})});
+  try {
+    assert.deepEqual((await post(ctx.baseUrl, quoteBody("partially-allowlisted"), GOOD_TOKEN)).body, {error: "risk_rejected"});
+  } finally {
+    await ctx.close();
+  }
+}
+
+async function disclosureDoesNotChangeQuoteReplays(): Promise<void> {
+  const decision = risk();
+  const config = baseConfig({riskDecision: decision});
+  const ctx = await start({...config, disclosurePolicyFile: policyFile()});
+  try {
+    const first = await post(ctx.baseUrl, quoteBody("disclosure-quote-replay"), GOOD_TOKEN);
+    assert.equal(first.status, 200);
+    decision.decision = "rejected";
+    decision.reasonCodes = ["INVENTORY_LIMIT_EXCEEDED"];
+    const replay = await post(ctx.baseUrl, quoteBody("disclosure-quote-replay"), GOOD_TOKEN);
+    assert.equal(replay.status, 200);
+    assert.deepEqual(replay.body, first.body);
+    assert.equal(config.signer.signCount, 1);
+  } finally {
+    await ctx.close();
+  }
+}
+
 async function rejectsBadSignerAndNotifiesIncident(): Promise<void> {
   const config = baseConfig({verifySignature: () => { throw new Error("signer returned a signature that does not recover the maker"); }});
   const ctx = await start(config);
@@ -350,7 +506,11 @@ async function validatesProductionRuntimeContractAndGracefulShutdown(): Promise<
   assert.equal(runtimeErrorCode(failed), "BOOTSTRAP_LOAD_FAILED");
   assert(!JSON.stringify(failed).includes(GOOD_TOKEN));
 
-  const fixture = baseConfig();
+  const now = Math.floor(Date.now() / 1000);
+  const fixture = baseConfig({
+    pricingResult: price({observedAt: now, validUntil: now + 60}),
+    riskDecision: risk({decision: "rejected", reasonCodes: ["INVENTORY_LIMIT_EXCEEDED"], observedAt: now, validUntil: now + 60})
+  });
   let closeCalls = 0;
   const port = await freePort();
   const logs: unknown[] = [];
@@ -378,13 +538,20 @@ async function validatesProductionRuntimeContractAndGracefulShutdown(): Promise<
         metrics: fixture.metrics,
         incident: fixture.incident,
         readiness: readiness(),
+        disclosurePolicyFile: policyFile(),
         close: () => { closeCalls += 1; }
       })
     })
   });
-  assert.equal((await get(`${runtime.host.baseUrl}/health`)).status, 200);
-  assert.equal((await get(`${runtime.host.baseUrl}/ready`)).status, 200);
-  await Promise.all([runtime.shutdown("SIGTERM"), runtime.shutdown("SIGTERM")]);
+  try {
+    assert.equal((await get(`${runtime.host.baseUrl}/health`)).status, 200);
+    assert.equal((await get(`${runtime.host.baseUrl}/ready`)).status, 200);
+    const rejection = await post(runtime.host.baseUrl, quoteBody("bootstrap-disclosure"), GOOD_TOKEN);
+    assert.equal(rejection.status, 422);
+    assert.equal(rejection.body.disclosure.policyVersion, "test-v1");
+  } finally {
+    await Promise.all([runtime.shutdown("SIGTERM"), runtime.shutdown("SIGTERM")]);
+  }
   assert.equal(closeCalls, 1);
   assert(logs.some((entry: any) => entry.event === "rfq_host_started"));
   assert(logs.some((entry: any) => entry.event === "rfq_host_stopped"));
@@ -434,6 +601,7 @@ function baseConfig(overrides: Partial<ProductionRFQHostConfig> & {
     strictAudit: overrides.strictAudit,
     readiness: overrides.readiness,
     readinessTimeoutMs: overrides.readinessTimeoutMs,
+    disclosurePolicyFile: overrides.disclosurePolicyFile,
     storePath,
     signer: signer as CountingSigner
   };
