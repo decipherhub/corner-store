@@ -2,8 +2,9 @@
 
 DATA-004 step 2, issue #159 decisions 25, 26 and 28, intended D032, D033 and
 D035. This opt-in version preserves A-04-v1, SPI v1, their persisted records and
-all existing recipes. Trading integration and named settlement invariants belong
-to step 3. The topology contract remains
+all existing recipes. Trading integration and named settlement invariants are
+specified in [identity-settlement-binding.md](./identity-settlement-binding.md).
+The topology contract remains
 [identity-policy-topology.md](./identity-policy-topology.md).
 
 ## On-chain enforcement

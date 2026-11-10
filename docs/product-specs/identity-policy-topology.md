@@ -1,8 +1,9 @@
 # Opt-in identity policy topology
 
-Status: DATA-004 steps 1-2, issue #159, intended decision D031. Evidence acceptance
+Status: DATA-004 steps 1-3, issue #159, intended decision D031. Evidence acceptance
 is specified in [identity-evidence-v2.md](./identity-evidence-v2.md); trading
-integration is step 3 of the approved plan. This is an enforcement
+integration is specified in [identity-settlement-binding.md](./identity-settlement-binding.md).
+This is an enforcement
 configuration contract, with no judgment about an operator's legal obligations.
 
 Schema 7 production onboarding adds `recipes[].identityPolicy` for recipes that
@@ -62,5 +63,5 @@ The step 1 foundation returned reason 2 for every valid DIRECT policy. Step 2
 adds separate operator-accepted evidence, issuer trust and lifecycle checks as
 specified in [identity-evidence-v2.md](./identity-evidence-v2.md). Valid DIRECT
 parameters alone still cannot pass without accepted evidence. Step 3 supplies
-the opt-in recipe and settlement verification. No v2 deployment is performed by
-steps 1-2.
+the opt-in recipe and settlement verification in an isolated local fixture.
+No existing deployment is upgraded.
