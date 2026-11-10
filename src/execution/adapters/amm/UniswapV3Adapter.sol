@@ -6,9 +6,16 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Governed} from "../../../auth/Governed.sol";
 import {IAMMAdapter} from "../../../interfaces/execution/adapters/IAMMAdapter.sol";
 import {IPool} from "../../../interfaces/execution/adapters/IPool.sol";
+import {IExecutionContextVerifier} from "../../../interfaces/execution/IExecutionContextVerifier.sol";
+import {IVenueRegistry} from "../../../interfaces/execution/IVenueRegistry.sol";
 import {ExecutionRequest, ExecutionResult} from "../../../types/ExecutionTypes.sol";
-import {ComplianceDecision} from "../../../types/ComplianceTypes.sol";
+import {ComplianceDecision, FlowType, VenueType} from "../../../types/ComplianceTypes.sol";
+import {VenueConfig} from "../../../types/VenueTypes.sol";
 import {Errors} from "../../../libraries/Errors.sol";
+
+interface IAMMRouterRegistry {
+    function venueReg() external view returns (IVenueRegistry);
+}
 
 /// @title UniswapV3Adapter
 /// @notice Non-custodial AMM adapter that routes a swap through a registered Uniswap-v3-style
@@ -22,11 +29,14 @@ import {Errors} from "../../../libraries/Errors.sol";
 ///     `req.context.amountIn` (positive => exact input).
 ///   - The callback `data` ABI-encodes `(address payer, address tokenIn)` where `payer` is the
 ///     buyer who has approved this adapter to spend `tokenIn`.
-contract UniswapV3Adapter is IAMMAdapter, Governed {
+contract UniswapV3Adapter is IAMMAdapter, IExecutionContextVerifier, Governed {
     using SafeERC20 for IERC20;
 
     mapping(address => bool) public registeredPool;
     address public router;
+    uint16 public constant adapterVersion = 2;
+    uint16 public constant contextVersion = 1;
+    uint256 public poolConfigurationNonce;
 
     event PoolSet(address indexed pool, bool registered);
     event RouterSet(address indexed router);
@@ -43,7 +53,44 @@ contract UniswapV3Adapter is IAMMAdapter, Governed {
 
     function setPool(address pool, bool registered) external onlyOwner {
         registeredPool[pool] = registered;
+        poolConfigurationNonce++;
         emit PoolSet(pool, registered);
+    }
+
+    function contextConfigHash() external view returns (bytes32) {
+        return keccak256(abi.encode(router, poolConfigurationNonce));
+    }
+
+    function validateContext(ExecutionRequest calldata req, VenueConfig calldata cfg) external view {
+        _validateContext(req, cfg);
+    }
+
+    function _validateContext(ExecutionRequest calldata req, VenueConfig memory cfg)
+        internal
+        view
+        returns (bool zeroForOne, uint160 sqrtPriceLimitX96)
+    {
+        if (req.context.buyer == address(0) || req.context.initiator != req.context.buyer) {
+            revert Errors.NotAuthorized();
+        }
+        if (
+            !cfg.active || cfg.adapter != address(this) || cfg.venueType != VenueType.AMM
+                || req.context.venueType != VenueType.AMM || cfg.target != req.context.venue
+                || req.context.seller != cfg.target || req.context.flowType != FlowType.SECONDARY_TRADE
+                || req.context.tokenIn == req.context.tokenOut || req.context.amountIn > uint256(type(int256).max)
+        ) revert Errors.InvalidExecutionContext();
+        require(registeredPool[cfg.target], "pool not registered");
+        IVenueRegistry venues = IAMMRouterRegistry(router).venueReg();
+        if (keccak256(abi.encode(cfg)) != keccak256(abi.encode(venues.venueOf(req.context.venue)))) {
+            revert Errors.InvalidExecutionContext();
+        }
+        (zeroForOne, sqrtPriceLimitX96) = _decodeVenueData(req.venueData);
+        IPool pool = IPool(cfg.target);
+        address expectedTokenIn = address(zeroForOne ? pool.token0() : pool.token1());
+        address expectedTokenOut = address(zeroForOne ? pool.token1() : pool.token0());
+        if (req.context.tokenIn != expectedTokenIn || req.context.tokenOut != expectedTokenOut) {
+            revert Errors.AMMPoolTokenMismatch();
+        }
     }
 
     /// @notice Executes the swap for a single request.
@@ -55,23 +102,9 @@ contract UniswapV3Adapter is IAMMAdapter, Governed {
         onlyRouter
         returns (ExecutionResult memory)
     {
-        // The current AMM flow is self-directed: initiator, payer and recipient
-        // resolve to one authenticated buyer. Delegated execution requires a
-        // separately versioned authorization component.
-        if (req.context.buyer == address(0) || req.context.initiator != req.context.buyer) {
-            revert Errors.NotAuthorized();
-        }
-
-        address pool = req.context.venue;
-        require(registeredPool[pool], "pool not registered");
-
-        (bool zeroForOne, uint160 sqrtPriceLimitX96) = _decodeVenueData(req.venueData);
-        IPool targetPool = IPool(pool);
-        address expectedTokenIn = address(zeroForOne ? targetPool.token0() : targetPool.token1());
-        address expectedTokenOut = address(zeroForOne ? targetPool.token1() : targetPool.token0());
-        if (req.context.tokenIn != expectedTokenIn || req.context.tokenOut != expectedTokenOut) {
-            revert Errors.AMMPoolTokenMismatch();
-        }
+        VenueConfig memory cfg = IAMMRouterRegistry(router).venueReg().venueOf(req.context.venue);
+        (bool zeroForOne, uint160 sqrtPriceLimitX96) = _validateContext(req, cfg);
+        IPool targetPool = IPool(cfg.target);
 
         // Encode payer + tokenIn so the callback can pull funds from the buyer.
         bytes memory cb = abi.encode(req.context.buyer, req.context.tokenIn);
