@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {spawnSync} from "node:child_process";
+import {execFileSync, spawnSync} from "node:child_process";
 import {cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join, resolve} from "node:path";
@@ -140,3 +140,31 @@ test("production CLI retains the Foundry account when Commander parses it as a g
   assert.match(result.stderr, /clean Git/);
   assert.doesNotMatch(result.stderr, /requires --ledger or --account/);
 });
+
+for (const flag of ["assume-unchanged", "skip-worktree"]) {
+  test(`CLI production deploy blocks ${flag} captured edits before RPC`, async () => {
+    const sourceRoot = join(root, flag); cpSync(contracts, sourceRoot, {recursive: true});
+    const git = (...args: string[]) => execFileSync("git", ["-C", sourceRoot, ...args], {encoding: "utf8"}).trim();
+    git("init", "-q"); git("add", ".");
+    git("-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-qm", "fixture");
+    git("update-index", `--${flag}`, "script/ProductionCoreDeployer.sol");
+    const deployer = join(sourceRoot, "script/ProductionCoreDeployer.sol");
+    put(deployer, readFileSync(deployer, "utf8") + "\n// hidden edit\n");
+    assert.equal(git("status", "--porcelain"), "");
+    const captured = captureProductionSource(sourceRoot);
+    const working = join(root, `consumer-${flag}`); mkdirSync(working);
+    const localConfig = {...config, release: {sourceCommit: git("rev-parse", "HEAD"), contractsHash: captured.sourceHash}};
+    put(join(working, "production.json"), JSON.stringify(localConfig));
+    const cwd = process.cwd(); process.chdir(working);
+    try {
+      const plan = output(() => cmdProductionPlan("production.json", {contracts: sourceRoot}));
+      const review = {schemaVersion: 2, configHash: plan.configHash, sourceCommit: localConfig.release.sourceCommit,
+        contractsHash: captured.sourceHash, identity: plan.identity, evidenceId: plan.evidenceId,
+        dryRun: {passed: true, chainId: config.network.chainId},
+        forkSimulation: {passed: true, chainId: config.network.chainId, blockNumber: 1}, reviewedAt: "2026-11-11T00:00:00Z"};
+      put(join(working, config.deployment.evidence), JSON.stringify(review));
+      await assert.rejects(cmdProductionDeploy("production.json", {contracts: sourceRoot, account: "fixture", confirm: "production-deploy"}), /clean Git/);
+      assert(!existsSync(join(working, config.deployment.artifact)));
+    } finally { process.chdir(cwd); }
+  });
+}

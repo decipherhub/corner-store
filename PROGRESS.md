@@ -1,5 +1,51 @@
 # Progress
 
+## 2026-11-11 Session: DEPLOY-004 Confirmed Review Fixes
+
+DEPLOY-004 is passing. Scope: F1 publication path replacement and F2 hidden Git
+input edits from `../out-review-154.md`, regression tests and related evidence
+wording. No contract, legacy artifact, public/demo path, custody or signing change.
+
+F1: `services/toolkit/src/production-publication.ts:160` holds a no-follow file
+descriptor across validation/linking, verifies final regular-file device/inode/size,
+and rechecks the created entry before mismatch cleanup and directory fsync.
+Staging ownership, permissions, ancestry and directory identity are checked.
+Missing staging before completion fails closed; recovery never overwrites finals.
+F2: `services/toolkit/src/production-evidence.ts:105` compares every captured
+input's raw bytes with HEAD blobs through committed submodule gitlinks, independent
+of index flags. Missing/different blobs cannot grant clean provenance or broadcast.
+
+Tests first: six targeted Toolkit cases failed against the original implementation
+(three publication cases and three provenance cases); both CLI index-flag cases
+failed by reaching RPC preflight instead of refusing provenance. Added cleanup
+replacement and missing-HEAD guards afterward. All ten new cases now pass, plus
+existing interruption/SIGKILL/recovery cases. Test names and locations:
+`services/toolkit/test/production-publication.ts:131`,
+`services/toolkit/test/production-evidence.ts:144` and
+`services/cli/test/production-evidence.ts:145`.
+
+All Node commands used `npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`
+(Node 20.20.2, Yarn 1.22.22); Foundry 1.7.1. Logs use `/private/tmp/w154-review-`.
+
+| Command inside the wrapper | Actual result | Log suffix |
+| --- | --- | --- |
+| `npm test --prefix services/toolkit && npm test --prefix services/cli && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; smokes, Toolkit 66/66, CLI 19/19, legacy 2/2, zero failures/skips | `focused-catfile.log` |
+| `scripts/check.sh` | Exit 0; 1,171 Foundry tests, all service checks, 50 packed production assertions including 28-transaction deployment/recovery, legacy 2/2 and deploy-v3 10/10 | `check-final.log` |
+| `scripts/e2e-anvil.sh && scripts/e2e-anvil.sh --profile reg-d && scripts/e2e-context-provenance.sh && scripts/e2e-identity-evidence.sh` | Exit 0; both profiles 7/7 plus runtime flows, context 12/12, identity 40/40 | `e2e.log` |
+| `npm test --prefix services/rfq` | Exit 0; smoke and 30/30 named tests after the unrelated assertion failure below | `rfq-rerun.log` |
+
+Earlier attempts are not passes: stdin-based Git hashing stalled full-source
+capture, so those runs were interrupted and replaced by direct HEAD-blob reads.
+The next full check failed at RFQ's unchanged concurrent nonce-order assertion
+(`check-catfile.log`), also present on origin/main; isolated RFQ and the complete
+rerun passed. No RFQ source was changed. Red logs: `red.log`, `cli-red.log`.
+
+D037/D038 and the production runbook clarify the enforced behavior. Whitespace,
+protected-path comparisons against `feat/159-identity-decisions` and original v1
+example preservation pass. No commit, push or external publication. Next: user
+reviews this working tree. Other filesystems and power-loss durability remain
+unverified, as before.
+
 ## 2026-11-11 Session: DEPLOY-004 Step 3 Release Finalization
 
 DEPLOY-004 is passing after all required release gates. Scope: issue #154 step 3,

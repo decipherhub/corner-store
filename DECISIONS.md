@@ -1784,6 +1784,8 @@ exclude inherited build overrides and verify copied bytes before execution.
 Record HEAD plus explicit clean/dirty/source-only/unavailable provenance, with
 staged, unstaged, untracked and recursive submodule evidence. Dirty, unavailable
 and source-only provenance permits diagnostics but blocks production broadcast.
+Before granting clean provenance, compare captured bytes with HEAD blobs,
+following committed submodule gitlinks independently of index visibility flags.
 Bind canonical configuration, deployment ID, chain and wiring into evidenceId;
 plans, unsigned exports, review evidence and deployment records must agree.
 
@@ -1821,11 +1823,15 @@ candidate inside its captured workspace. Validate successful canonical receipts,
 receipt-derived addresses, exact transaction inputs/order, reconstructed runtime
 bytecode, ownership/operator/wiring and Safe state before publication.
 
-Publish one complete envelope by exclusive creation, file fsync, descriptor
-closure and a no-replacement hard link, then parent fsync, staging-link cleanup
-and another fsync. Never use a replacing rename; unsupported semantics fail
-closed. Apply the same publisher to signable exports. The raw-byte publisher
-preserves imported signed bytes without reserialization.
+Use a private uid-owned staging directory without symlinked ancestry and reject
+group/world write permissions. Publish by exclusive no-follow creation and file
+fsync, validate through a no-follow descriptor held across the no-replacement
+hard link, then verify the final regular file's device, inode and size. On mismatch,
+remove only the created entry after rechecking its identity and fail closed.
+Parent fsync, staging-link cleanup and another fsync complete publication. Never
+use a replacing rename; unsupported semantics fail closed. Apply the same
+publisher to signable exports. The raw-byte publisher preserves imported signed
+bytes without reserialization.
 
 Persist immutable journal events. Recovery rebuilds and revalidates staged
 commitments, receipts and chain state before publication/cleanup. It never

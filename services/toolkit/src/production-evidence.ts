@@ -102,19 +102,43 @@ export function sanitizedProductionEnv(home: string, inherited: NodeJS.ProcessEn
   };
 }
 
-export function readProductionProvenance(root: string): ProductionProvenance {
+export function readProductionProvenance(root: string, manifest?: ProductionManifestEntry[]): ProductionProvenance {
   const empty = {head: null, changesHash: null, submodulesHash: null};
   if (!existsSync(join(root, ".git"))) return {state: "source-only", ...empty};
   try {
     const env: NodeJS.ProcessEnv = {PATH: process.env.PATH, HOME: homedir(), LC_ALL: "C", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_OPTIONAL_LOCKS: "0"};
-    const git = (args: string[]) => execFileSync("git", ["-C", root, ...args], {env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: MAX_BUFFER});
+    const git = (args: string[], directory = root) => execFileSync("git", ["-C", directory, ...args], {env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: MAX_BUFFER});
     if (realpathSync(git(["rev-parse", "--show-toplevel"]).trim()) !== realpathSync(root)) return {state: "unavailable", ...empty};
     const head = git(["rev-parse", "HEAD"]).trim();
     if (!/^[0-9a-f]{40}$/.test(head)) throw new Error("invalid HEAD");
     const status = git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none"]);
     const submodules = git(["submodule", "status", "--recursive"]);
-    const dirty = status.length !== 0 || submodules.split("\n").some((line) => line && !line.startsWith(" "));
+    let dirty = status.length !== 0 || submodules.split("\n").some((line) => line && !line.startsWith(" "));
     const changes = [status, git(["diff", "--binary", "--no-ext-diff", "--no-textconv", "HEAD", "--"])];
+    const blobs = new Map<string, {oid: string; directory: string}>();
+    const tree = (directory: string, commit: string, prefix = "") => {
+      for (const record of git(["ls-tree", "-r", "-z", commit], directory).split("\0").filter(Boolean)) {
+        const entry = /^(\d+) (blob|commit) ([0-9a-f]+)\t([\s\S]+)$/.exec(record);
+        if (!entry) throw new Error("invalid production HEAD tree");
+        const [, mode, type, oid, path] = entry;
+        const full = `${prefix}${path}`;
+        if (type === "commit") {
+          if (!manifest || manifest.some((input) => input.path.startsWith(`${full}/`))) tree(join(directory, path), oid, `${full}/`);
+        } else if (mode === "100644" || mode === "100755") blobs.set(full, {oid, directory});
+      }
+    };
+    // Read the committed trees, including pinned gitlinks, independently of index flags.
+    tree(root, head);
+    const inputs: Array<{path: string; sha256?: string; size?: number}> = manifest ?? [...blobs.keys()].sort().map((path) => ({path}));
+    for (const entry of inputs) {
+      const committed = blobs.get(entry.path);
+      const bytes = readInput(root, entry.path);
+      const blob = committed && execFileSync("git", ["-C", committed.directory, "cat-file", "blob", committed.oid], {env, stdio: ["ignore", "pipe", "pipe"], maxBuffer: MAX_BUFFER});
+      if (!blob || !bytes.equals(blob) || (entry.sha256 !== undefined && (bytesHash(bytes) !== entry.sha256 || bytes.length !== entry.size))) {
+        dirty = true;
+        changes.push(entry.path, committed?.oid ?? "missing HEAD blob", bytesHash(bytes));
+      }
+    }
     for (const file of git(["ls-files", "--others", "--exclude-standard", "-z"]).split("\0").filter(Boolean).sort()) {
       changes.push(file, bytesHash(readInput(root, file)));
     }
@@ -285,7 +309,7 @@ export function captureProductionSource(root: string): ProductionSource {
     paths.add("services/cli/scripts/prepare-package.mjs");
     const manifest = [...paths].sort().map((path) => { const bytes = readInput(root, path); return {path, size: bytes.length, sha256: bytesHash(bytes)}; });
     const selected = {schemaVersion: 2 as const, manifest, standardJsonInput: input, profile: "default" as const, compilerVersion: config.solc, compilerPaths, orchestrationTools: orchestrationTools(root)};
-    const source: ProductionSource = {...selected, sourceHash: productionDigest("source", selected), provenance: readProductionProvenance(root)};
+    const source: ProductionSource = {...selected, sourceHash: productionDigest("source", selected), provenance: readProductionProvenance(root, manifest)};
     if (existsSync(join(root, SOURCE_BUNDLE))) {
       const saved = JSON.parse(readInput(root, SOURCE_BUNDLE).toString()) as ProductionSource;
       verifyProductionManifest(root, saved);
@@ -416,7 +440,7 @@ export function buildProductionIdentity(root: string, config: ProductionConfig, 
     const identity = createProductionIdentity(source, build, config);
     verifyProductionManifest(workspace, source);
     verifyProductionManifest(root, source);
-    if (canonicalProductionJson(readProductionProvenance(root)) !== canonicalProductionJson(source.provenance)) throw new Error("production Git provenance changed during build");
+    if (canonicalProductionJson(readProductionProvenance(root, source.manifest)) !== canonicalProductionJson(source.provenance)) throw new Error("production Git provenance changed during build");
     const result = {source, build, identity, compilerOutput: info.output as JsonObject, workspace, forgePath, solcPath, env: compilerEnv(env), dispose};
     if (!options.keepWorkspace) dispose();
     return result;

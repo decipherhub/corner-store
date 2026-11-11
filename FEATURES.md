@@ -33,6 +33,9 @@
 
 - Toolkit/CLI source/build/provenance mutation, package/runtime equivalence,
   publication failure/concurrency/SIGKILL/recovery and chain tampering tests.
+- Review regressions replace staged entries/parents during linking, reject
+  unsafe staging ownership/permissions, preserve another writer's final, and
+  block hidden index-flag edits, submodule edits and missing HEAD blobs.
 - Packed clean Git-backed consumer: real production dry-run/fork, export,
   deployment and verification with one evidenceId; source-only broadcast denial.
 - Existing public artifact listing, pinned hash, CLI/Operator API reads and
@@ -48,10 +51,11 @@ passing
 ### Notes
 
 - Issue #154; D037-D039 defaults adopted, team-to-confirm.
-- Final gates passed on 2026-11-11: 1,171 Foundry tests, 58 Toolkit/17 CLI
+- Review fixes verified on 2026-11-11: 1,171 Foundry tests, 66 Toolkit/19 CLI
   named tests, 50 packed production assertions and two public compatibility
   cases. Legacy profiles passed 7/7 each; context 12/12; identity 40/40.
-  Full repository check passed first run with no RFQ flake. See PROGRESS.
+  An unrelated RFQ nonce-order assertion failed once; isolated RFQ and the full
+  rerun passed. See PROGRESS for attempts and logs.
 - Plan: `docs/exec-plans/completed/DEPLOY-004-append-only-production-evidence.md`.
 - Main remains at 7893021 as of the step 3 sequencing check. Prerequisite PRs
   must merge before release; this authorized work proceeds on the supplied stack.

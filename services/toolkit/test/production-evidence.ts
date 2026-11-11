@@ -140,6 +140,55 @@ test("sanitized environment excludes inherited build and Git overrides", () => {
   for (const key of ["FOUNDRY_OPTIMIZER", "DAPP_LIBRARIES", "SOLC", "NODE_OPTIONS", "GIT_DIR"]) assert.equal(env[key], undefined);
 });
 
+for (const flag of ["assume-unchanged", "skip-worktree"]) {
+  test(`captured ${flag} edits cannot claim clean provenance or authorize broadcast`, () => {
+    const root = fixture();
+    git(root, "init", "-q"); git(root, "add", ".");
+    git(root, "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-qm", "fixture");
+    const clean = captureProductionSource(root);
+    assert.equal(clean.provenance.state, "clean");
+    git(root, "update-index", `--${flag}`, "script/ProductionCoreDeployer.sol");
+    put(root, "script/ProductionCoreDeployer.sol", readFileSync(join(root, "script/ProductionCoreDeployer.sol"), "utf8") + "\n// hidden edit\n");
+    assert.equal(git(root, "status", "--porcelain"), "");
+    assert.equal(git(root, "diff", "HEAD"), "");
+    const source = captureProductionSource(root);
+    assert.equal(source.provenance.state, "dirty");
+    const built = buildProductionIdentity(root, configured(source));
+    assert.throws(() => assertProductionBroadcastIdentity(built.identity, configured(source)), /clean Git/);
+    assert.throws(() => createProductionDeploymentPlan(configured(source), {kind: "account", name: "fixture"}, true, built.identity), /clean Git/);
+  });
+}
+
+test("captured submodule inputs compare with the parent HEAD gitlink despite index flags", () => {
+  const root = fixture(); const sub = temp();
+  put(sub, "Dependency.sol", "pragma solidity 0.8.17; contract Dependency {}\n");
+  git(sub, "init", "-q"); git(sub, "add", ".");
+  git(sub, "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-qm", "dependency");
+  git(root, "init", "-q");
+  git(root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, "lib/dependency");
+  put(root, "src/Core.sol", 'pragma solidity 0.8.17; import "../lib/dependency/Dependency.sol"; contract Core is Dependency {}\n');
+  git(root, "add", ".");
+  git(root, "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-qm", "fixture");
+  assert.equal(captureProductionSource(root).provenance.state, "clean");
+  for (const flag of ["assume-unchanged", "skip-worktree"]) {
+    const dependency = join(root, "lib/dependency");
+    git(dependency, "update-index", `--${flag}`, "Dependency.sol");
+    put(dependency, "Dependency.sol", "pragma solidity 0.8.17; contract Dependency { uint public changed = 1; }\n");
+    assert.equal(git(root, "status", "--porcelain"), "");
+    assert.equal(captureProductionSource(root).provenance.state, "dirty");
+    put(dependency, "Dependency.sol", "pragma solidity 0.8.17; contract Dependency {}\n");
+    git(dependency, "update-index", `--no-${flag}`, "Dependency.sol");
+  }
+});
+
+test("captured ignored inputs missing from HEAD cannot claim clean provenance", () => {
+  const root = fixture(); put(root, ".gitignore", "src/Core.sol\n");
+  git(root, "init", "-q"); git(root, "add", ".");
+  git(root, "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-qm", "fixture");
+  assert.equal(git(root, "status", "--porcelain"), "");
+  assert.equal(captureProductionSource(root).provenance.state, "dirty");
+});
+
 test("isolated builds bind tools, compiler settings, bytecode and immutable references", () => {
   const root = fixture(); const source = captureProductionSource(root); const c = configured(source);
   const built = buildProductionIdentity(root, c);

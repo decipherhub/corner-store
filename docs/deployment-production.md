@@ -356,7 +356,11 @@ and runtime copies preserve and verify the same source/build commitments.
 
 Git provenance is explicit: `clean`, `dirty`, `source-only` or `unavailable`.
 Staged, unstaged, untracked and recursive submodule changes participate in its
-commitment. A bundle without Git metadata is source-only even if its config
+commitment. Every captured input must also match its HEAD blob, including inputs
+under committed submodule gitlinks. This comparison reads raw blob and working
+bytes without filters or index flags, so `assume-unchanged`, `skip-worktree` and
+ignored inputs missing from HEAD cannot grant clean provenance. A bundle without
+Git metadata is source-only even if its config
 claims an upstream commit. Only the reviewed clean Git-backed source can authorize
 broadcast. Diagnostics and unsigned exports may represent the other states.
 Changing provenance changes evidenceId even when source/build hashes agree.
@@ -436,20 +440,29 @@ verification path, without acquiring version 2 guarantees retroactively.
 
 Production deployment rejects an occupied final path and exclusively reserves
 its destination before signing or broadcast. Each operation uses a unique sibling
-staging directory and durable immutable journal events. The Solidity script
+0700 staging directory and durable immutable journal events. Staging must remain
+owned by the current uid, without group/world write permissions or symlinked
+ancestry; a changed staging directory identity is rejected. The Solidity script
 writes only `deployments/production-core.candidate.json` in the captured workspace.
 Production bypasses the shared reference runtime cleanup path.
 
-The complete envelope is validated privately, exclusively written and fsynced,
-then closed before an exclusive hard link publishes the final name. Parent
-fsync, staging-link removal and another fsync complete publication. Replacing
+The complete envelope is exclusively created with no-follow semantics and mode
+0600, then fsynced. Publication opens it without following symlinks and validates
+bytes read from that descriptor, keeping the descriptor open across the exclusive
+hard link. The final entry must be a regular file with the descriptor's device,
+inode and size. A mismatch removes the created entry only if its identity still
+matches the observed entry, syncs the parent and fails. Parent fsync, staging-link
+removal and another fsync complete successful publication. Replacing
 rename is forbidden. Unsupported hard-link/fsync semantics fail closed. Proposal,
 Safe, onboarding, policy and production plan exports use the same publisher;
 imported signed bytes are preserved exactly by the raw-byte Toolkit publisher.
 
-A failure before linking leaves no final artifact. A crash after linking may
-leave a complete final envelope. Existing files and application symlinks are
-never replaced. Inspect the printed operation journal path after a failure:
+A failure before linking leaves no final artifact. A crash after linking leaves
+the journal for revalidation; recovery never trusts a final name alone. A staged
+envelope must remain available until the complete journal event is durable.
+Recovery refuses symlinks and mismatched file identities and never replaces an
+occupied final, even when its bytes match. Existing files and application symlinks
+are never replaced. Inspect the printed operation journal path after a failure:
 
 ```sh
 corner-store production-recover corner-store.production.json \

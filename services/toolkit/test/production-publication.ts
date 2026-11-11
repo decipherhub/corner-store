@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {execFileSync, spawnSync} from "node:child_process";
-import {existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {after, test} from "node:test";
@@ -126,4 +126,84 @@ test("an asynchronous validator cannot silently bypass publication validation", 
   operation.prepare(bytes, validate);
   assert.throws(() => operation.publish(async () => {}), /synchronous/);
   assert(!existsSync(second));
+});
+
+test("a staged symlink swapped inside linkSync fails closed and removes the created final", () => {
+  const fs = require("node:fs"); const original = fs.linkSync;
+  const output = target(); const operation = ProductionPublication.reserve(output);
+  operation.prepare(bytes, validate);
+  const foreign = target(); writeFileSync(foreign, "unvalidated");
+  try {
+    fs.linkSync = (source: string, destination: string) => {
+      if (destination === output) { unlinkSync(source); symlinkSync(foreign, source); }
+      return original(source, destination);
+    };
+    assert.throws(() => operation.publish(validate), /publication.*(identity|inode|changed|mismatch)/i);
+    assert.throws(() => lstatSync(output), {code: "ENOENT"});
+    assert.equal(readFileSync(foreign, "utf8"), "unvalidated");
+  } finally { fs.linkSync = original; }
+  assert.throws(() => ProductionPublication.resume(operation.directory).publish(validate));
+});
+
+test("a staging parent swapped inside linkSync fails closed with no misleading final", () => {
+  const fs = require("node:fs"); const original = fs.linkSync;
+  const output = target(); const operation = ProductionPublication.reserve(output);
+  operation.prepare(bytes, validate);
+  const staged = readdirSync(operation.directory).find((name) => name.startsWith("envelope-"))!;
+  const moved = `${operation.directory}.original`;
+  try {
+    fs.linkSync = (source: string, destination: string) => {
+      if (destination === output) {
+        renameSync(operation.directory, moved); mkdirSync(operation.directory, {mode: 0o700});
+        writeFileSync(join(operation.directory, staged), "unvalidated");
+      }
+      return original(source, destination);
+    };
+    assert.throws(() => operation.publish(validate), /publication.*(identity|inode|changed|mismatch)/i);
+    assert.throws(() => lstatSync(output), {code: "ENOENT"});
+    assert.deepEqual(readFileSync(join(moved, staged)), bytes);
+  } finally { fs.linkSync = original; }
+});
+
+test("publication rejects staging directories with unsafe mode or ownership before linking", () => {
+  const fs = require("node:fs"); const original = fs.lstatSync;
+  for (const kind of ["mode", "owner"]) {
+    const output = target(); const operation = ProductionPublication.reserve(output);
+    assert.equal(lstatSync(operation.directory).mode & 0o777, 0o700);
+    operation.prepare(bytes, validate);
+    try {
+      if (kind === "mode") chmodSync(operation.directory, 0o770);
+      else fs.lstatSync = (path: string, ...args: any[]) => {
+        const stat = original(path, ...args);
+        if (path === operation.directory) stat.uid = (process.getuid?.() ?? 0) + 1;
+        return stat;
+      };
+      assert.throws(() => operation.publish(validate), /publication.*(owner|private|permission|mode)/i);
+      assert(!existsSync(output));
+      assert.throws(() => ProductionPublication.resume(operation.directory), /publication.*(owner|private|permission|mode)/i);
+    } finally { fs.lstatSync = original; chmodSync(operation.directory, 0o700); }
+  }
+});
+
+test("mismatch cleanup preserves a final entry replaced by another writer", () => {
+  const fs = require("node:fs"); const originalLink = fs.linkSync; const originalStat = fs.lstatSync;
+  const output = target(); const operation = ProductionPublication.reserve(output);
+  operation.prepare(bytes, validate);
+  const foreign = target(); writeFileSync(foreign, "unvalidated");
+  let linked = false; let observations = 0;
+  try {
+    fs.linkSync = (source: string, destination: string) => {
+      if (destination === output) { unlinkSync(source); symlinkSync(foreign, source); }
+      originalLink(source, destination);
+      if (destination === output) linked = true;
+    };
+    fs.lstatSync = (path: string, ...args: any[]) => {
+      if (path === output && linked && ++observations === 2) {
+        unlinkSync(output); writeFileSync(output, "another writer");
+      }
+      return originalStat(path, ...args);
+    };
+    assert.throws(() => operation.publish(validate), /publication.*mismatch/i);
+    assert.equal(readFileSync(output, "utf8"), "another writer");
+  } finally { fs.linkSync = originalLink; fs.lstatSync = originalStat; }
 });
