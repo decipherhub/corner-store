@@ -9,6 +9,42 @@ host every repository component.
 | RFQ TypeScript SDK | only for RFQ operators | quote shape, EIP-712 binding and replaceable module contracts |
 | reference apps and deployment exports | optional | local demo backend, CLI, dashboard and Docker Compose example |
 
+## Opt-in identity evidence (DATA-004)
+
+Existing deployments and recipes retain A-04-v1. New identity policies opt into
+separate `IdentityUniquenessV2` / `A-04-v2`, production onboarding schema 7 and
+an exact Recipe version. `RegD506cRecipeV4` replaces only A-04-v1 in Reg D v3;
+it retains C-01-v2 and cannot use AMM.
+
+1. Register the new Element and Recipe, then explicitly select the reviewed
+   version in a REQUIRED_BLOCKING Manifest binding with BLOCK enforcement.
+2. Set `recipes[].identityPolicy` to
+   `{track: "RFQ", kycTopology: "DIRECT"}` (or track `TSV`, also DIRECT).
+   RFQ has no default. Missing, unknown and MEMBER values fail closed. Commit
+   the exact `encodeIdentityPolicyParameters` output in `policyConfig` for each
+   A-04-v2 binding; schema 7 retains schema 6 context/activation verification.
+3. In compliance-data, load one local env/file HMAC key and inject the returned
+   hashing capability into a v2 provider, coordinator and store. Require explicit
+   operator acceptance and strict audit, then use `identityEvidenceAcceptanceV2`
+   to export unsigned acceptance calldata. Operator-api never receives the key.
+4. Bind the wallet/identity and configure trusted issuer/basis on-chain before
+   submitting acceptance calldata through the existing authorized operator.
+   Binding alone creates no accepted evidence. Enable
+   `setEnforceCounterparty(true)` when bilateral RFQ evidence is required.
+5. Use Toolkit's `encodeAcceptIdentityEvidenceV2` /
+   `decodeAcceptIdentityEvidenceV2` for public acceptance fields only. Never
+   include raw provider evidence or LEI in calldata or policy artifacts. LEI
+   is optional off-chain evidence, independent of eligibility and sanctions.
+6. Run the repository gate, both legacy Anvil profiles, context-provenance E2E
+   and `scripts/e2e-identity-evidence.sh` before activating the opt-in policy.
+
+The provenance contract and examples are in
+[`identity-evidence-v2.md`](./product-specs/identity-evidence-v2.md) and the
+[Compliance Data README](../services/compliance-data/README.md). Migration is
+specified in [`sdk-versioning.md`](./sdk-versioning.md). The four
+[November P2 PR slots](./product-specs/identity-p2-schedule.md) remain
+unimplemented, including venue pseudonyms required before any TSV launch.
+
 ## Unified CLI Workflow
 
 The external CLI workflow is:

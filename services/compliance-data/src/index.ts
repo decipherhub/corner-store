@@ -4,3 +4,4 @@ export * from "./audit";
 export * from "./state";
 export * from "./kyc-spi";
 export * from "./kyc";
+export * from "./identity-v2";

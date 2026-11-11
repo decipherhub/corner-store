@@ -14,6 +14,22 @@ tags: [requirement-spec, A-01, sanctions, ofac, always-on, R-XJ]
 
 # A-01 Sanctions Screening — 요구사항 명세서
 
+## DATA-004 boundary and scheduled sanctions v2
+
+Issue #159 decision 29 / D036 schedules jurisdictional sanctions bundles in a
+separate November P2 PR. A-01-v1 below still uses one `currentListVersion`; this
+release changes neither its claims nor its list invalidation behavior.
+
+The planned opt-in A-01-v2 will use recipe-selected bundles of `(listId, version)`
+entries. Each list update must independently invalidate its stale claims; missing
+required-list claims must fail closed. TSV bundles must include OFAC, rejecting
+both initial omission and later removal. A local SDN-file import is sufficient;
+on-chain oracle/vendor integration is optional. Wallet sanctions remain required
+in both DIRECT and future MEMBER modes. These are planned acceptance requirements,
+not capabilities of the current contract. See the
+[P2 schedule](../../product-specs/identity-p2-schedule.md). No legal conclusion or
+TSV launch readiness follows from this implementation boundary.
+
 본 문서는 컴플라이언스 부품 A-01(제재 스크리닝)의 요구사항 명세서이다. **제1부**는 본 부품이 강제하는 규율의 법적 근거와 그 도출 과정을, **제2부**는 이를 구현한 명세를 규정한다.
 
 본 부품의 법적 실질은 보경 변호사가 검토·작성한 walkthrough에 의하며(부록 참조), 제2부는 레포에 실장된 컨트랙트 `Sanctions.sol`(A-01-v1)을 기준으로 한다. 즉 제2부의 인터페이스·상태·reason code는 제안이 아니라 현재 구현된 계약이다. 시스템 공유 개념은 `SPEC.md`에 의한다.

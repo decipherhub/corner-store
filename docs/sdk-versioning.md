@@ -126,6 +126,50 @@ contains `ManifestPolicyConfig` parameters or when exporting a semantic UPDATE.
 Do not change only the schema number: v5 deliberately fails closed when lifecycle
 or Element capability data is absent.
 
+### Opt-in identity evidence / onboarding schema 7 migration
+
+DATA-004 adds explicit versions without publishing a package. npm versions stay
+`0.1.0`; package SemVer, provider SPI, onboarding schema, Element and Recipe
+versions are independent.
+
+| Boundary | Preserved path | Explicit identity opt-in |
+| --- | --- | --- |
+| Identity Element | A-04-v1, five-field KycClaim ABI and seeded legacy claims | Separately deployed A-04-v2 with `IIdentityEvidenceV2` evidence and issuer trust |
+| Provider SPI / records | SPI 1.0.0, v1 hashes and persisted records | SPI 2.0.0, schema 2 records, HMAC v2 domains, provenance and optional LEI |
+| Compliance-data imports | Root v1 names, `/spi`, `/demo`, `/conformance` | Explicit v2 names at root or `/v2`, `/spi-v2`, `/demo-v2`, `/conformance-v2` |
+| Onboarding | Schemas 1-6 retain their meanings | Schema 7, per-recipe identityPolicy, required exact A-04-v2 parameters; inherits schema 6 context checks |
+| Recipe | Existing versions, including Reg D v3 / A-04-v1 | Reg D family 1 version 4 / A-04-v2; REQUIRED_BLOCKING and BLOCK |
+| Acceptance calldata | Legacy setters remain unchanged | Separate `acceptEvidence` selector `0x9b3e5df6` and explicit Toolkit v2 codecs |
+| RFQ quote / public demo | Existing RFQ v2/v3 schemas and Monad v2 deployment | No new quote schema or public deployment required by DATA-004 |
+
+1. Preserve v1 stores, deployments, recipes and artifacts. Do not relabel a v1
+   hash/record as v2: the store validators reject the other record shape. Refresh
+   from the provider under SPI 2.0.0 with explicit operator acceptance.
+2. Load exactly one local key using `CORNER_STORE_KYC_HMAC_KEY` or
+   `CORNER_STORE_KYC_HMAC_KEY_FILE` in compliance-data. Inject its hashing
+   capability into adapters/coordinator/store/translator. There is no unkeyed
+   fallback, operator-api key dependency or automatic key rotation.
+3. Register the separate Element/Recipe and prepare schema 7 with explicit
+   RFQ/TSV track and DIRECT topology. Schemas 1-6 cannot select A-04-v2;
+   schema 7 identity recipes cannot substitute A-04-v1. Commit the 64-byte
+   parameter encoding in the existing ManifestPolicyConfig and audit artifact.
+4. Use normal REGISTER or delayed UPDATE proposal/activation and read-only
+   verification. Bind wallets, configure issuer trust, export and submit new
+   acceptance calldata. Never infer accepted evidence from an identity binding.
+   Configure bilateral evidence explicitly when required.
+5. Run all DATA-004 gates in `testing.md`. Obtain fresh policy-bound RFQ quotes
+   after activation; registering a newer Recipe alone changes no active policy.
+   Rollback uses reviewed routing and the existing policy lifecycle, never
+   rewriting v2 records, downgrading hashes or silently changing a Manifest.
+
+Current trust-basis equality is checked on every trade. Removing/changing issuer
+trust invalidates evidence; restoring the exact basis can re-enable an unexpired
+record. Revoke individual records explicitly when reinstatement is unwanted.
+The reference store is in-process; production must preserve its conflict and
+monotonic revocation semantics transactionally. Key management, multisig and
+custody remain deferred. See the [P2 schedule](./product-specs/identity-p2-schedule.md)
+for MEMBER, pseudonyms, cards and jurisdictional sanctions bundles.
+
 ### Opt-in execution context / RFQ v3 migration
 
 EXEC-002 adds new exports and deployments without changing legacy defaults.

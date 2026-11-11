@@ -16,3 +16,7 @@ export * from "./templates";
 export * from "./production-onboarding";
 
 export * from "./venue-context";
+
+export * from "./identity-policy";
+
+export * from "./identity-evidence";

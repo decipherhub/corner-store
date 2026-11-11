@@ -21,6 +21,7 @@ import {
 } from "../types/ComplianceTypes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Events} from "../libraries/Events.sol";
+import {IdentityPolicy} from "../compliance/libraries/IdentityPolicy.sol";
 
 /// @title TokenPolicyRegistry
 /// @notice Manifest store + lifecycle state machine. Manifest recipe bindings are
@@ -498,7 +499,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         CompiledElementRule[] memory rules = new CompiledElementRule[](required.length);
         bytes[] memory parameters = new bytes[](required.length);
         for (uint256 i = 0; i < required.length; i++) {
-            (rules[i], parameters[i]) = _compileElement(overrides_, config, bindingIndex, required[i]);
+            (rules[i], parameters[i]) = _compileElement(overrides_, config, bindingIndex, required[i], binding.mode);
         }
         _rejectUnusedOrDuplicateOverrides(overrides_, bindingIndex, required);
         _rejectUnknownParameters(config, bindingIndex, required);
@@ -528,7 +529,8 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         ElementEnforcementOverride[] memory overrides_,
         ManifestPolicyConfig memory config,
         uint256 bindingIndex,
-        bytes32 elementId
+        bytes32 elementId,
+        RecipeBindingMode bindingMode
     ) internal view returns (CompiledElementRule memory rule, bytes memory parameters) {
         if (elementReg.elementOf(elementId) == address(0)) {
             revert Errors.ElementNotRegistered(elementId);
@@ -537,6 +539,13 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
             elementId, _compiledAction(overrides_, bindingIndex, elementId, elementReg.defaultActionOf(elementId))
         );
         parameters = _parameterFor(config, bindingIndex, elementId, elementReg.metadataOf(elementId));
+        if (elementId == IdentityPolicy.ELEMENT_ID) {
+            if (bindingMode != RecipeBindingMode.REQUIRED_BLOCKING) revert Errors.InvalidRecipeBinding();
+            if (rule.action != EnforcementAction.BLOCK) revert Errors.LooseningForbidden();
+            if (!IdentityPolicy.valid(parameters)) {
+                revert Errors.InvalidPolicyParameter(bindingIndex, elementId);
+            }
+        }
     }
 
     function _pushCompiled(

@@ -14,6 +14,38 @@ tags: [requirement-spec, A-04, identity-dedup, kyc, bsa, foundation]
 
 # A-04 Identity Uniqueness — 요구사항 명세서
 
+## DATA-004 version boundary (D031-D035)
+
+The v1 contract and Part II below retain their original ABI, automatically seeded
+legacy claims, reason codes and existing Recipe bindings. New identity policies
+explicitly select a separate `IdentityUniquenessV2` / `A-04-v2`; no v1 record is
+reinterpreted as accepted v2 evidence.
+
+A-04-v2 requires exact DIRECT track/topology parameters, REQUIRED_BLOCKING binding
+and BLOCK enforcement. Onboarding schema 7 requires explicit RFQ/TSV and DIRECT;
+RFQ has no default and TSV is fixed to DIRECT. Unset, unknown and MEMBER values
+fail closed pending a separate P2 PR. A-04-v2 binds a separate evidence record to
+wallet, identity, asset and binding generation. Binding creates no evidence.
+
+Evidence contains issuer ID, issuedAt, expiry, trust-basis commitment, attestation
+type and HMAC commitment. Current operator-managed issuer trust is evaluated on
+every trade. This is a decision based on evidence the operator accepted; external
+attestations do not replace acceptance. Unbind/rebind requires fresh acceptance.
+Restoring an identical trusted basis can restore unexpired evidence; individual
+revocation is available when reinstatement is unwanted. Counterparty screening
+requires explicit operator enablement.
+
+SPI 2.0.0, separate record domains and unsigned acceptance codecs preserve v1
+compatibility. One locally stored env/file HMAC key belongs to compliance-data;
+operator-api never receives it. Optional format/checksum-validated LEI stays
+private off-chain, participates in commitments and is never required by policy.
+Eligibility and sanctions remain independent. See the authoritative
+[topology](../../product-specs/identity-policy-topology.md),
+[evidence fields, ABI and reasons](../../product-specs/identity-evidence-v2.md),
+[settlement proof](../../product-specs/identity-settlement-binding.md) and
+[P2 schedule](../../product-specs/identity-p2-schedule.md). Venue pseudonyms and
+private wallet mapping remain scheduled before any TSV launch.
+
 본 문서는 컴플라이언스 부품 A-04(신원 중복)의 요구사항 명세서이다. **제1부**는 법적 근거와 논증을, **제2부**는 실장 명세를 규정한다. 법적 실질은 보경 변호사가 검토·작성한 walkthrough에 의하며, 제2부는 레포에 실장된 컨트랙트 `IdentityUniqueness.sol`(A-04-v1)을 기준으로 한다. 시스템 공유 개념은 `SPEC.md`에 의한다.
 
 본 부품은 지갑 뒤의 사람을 확정하고 같은 사람을 하나의 신원으로 유지하는 신원 기반층으로서, 다른 거의 모든 부품의 공통 전제가 된다.
