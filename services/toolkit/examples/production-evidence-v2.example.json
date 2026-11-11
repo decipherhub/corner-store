@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 2,
+  "configHash": "sha256:cf0cc7d642bdb929ab70593a9211fb749dec3a8864881979b28a3a81b22e51c1",
+  "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "contractsHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "dryRun": {
+    "passed": true,
+    "chainId": 1
+  },
+  "forkSimulation": {
+    "passed": true,
+    "chainId": 1,
+    "blockNumber": 20000000
+  },
+  "reviewedAt": "2026-11-11T00:00:00.000Z",
+  "identity": {
+    "schemaVersion": 2,
+    "sourceHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "buildHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "provenance": {
+      "state": "source-only",
+      "head": null,
+      "changesHash": null,
+      "submodulesHash": null
+    },
+    "configHash": "sha256:cf0cc7d642bdb929ab70593a9211fb749dec3a8864881979b28a3a81b22e51c1",
+    "deploymentId": "mainnet-core-1",
+    "chainId": 1,
+    "wiring": {
+      "deployer": "0x4444444444444444444444444444444444444444",
+      "governance": "0x8888888888888888888888888888888888888888",
+      "operator": "0x5555555555555555555555555555555555555555",
+      "amm": true,
+      "rfq": true
+    },
+    "evidenceId": "sha256:29d1c0dfeb886c37fa2cb3cf38bcb3482625f117f86abbe20df07114b01b390a"
+  },
+  "evidenceId": "sha256:29d1c0dfeb886c37fa2cb3cf38bcb3482625f117f86abbe20df07114b01b390a"
+}

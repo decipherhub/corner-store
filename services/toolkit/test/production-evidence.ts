@@ -48,6 +48,16 @@ function git(root: string, ...args: string[]): string {
   return execFileSync("git", ["-C", root, ...args], {encoding: "utf8", env: {...process.env, GIT_CONFIG_NOSYSTEM: "1"}}).trim();
 }
 
+test("legacy review example stays readable and version 2 diagnostic example cannot authorize broadcast", () => {
+  const examples = join(repo, "services/toolkit/examples");
+  const legacy = JSON.parse(readFileSync(join(examples, "production-evidence.example.json"), "utf8"));
+  assert.equal(validateProductionDeploymentEvidence(legacy, config).schemaVersion, 1);
+  const diagnostic = JSON.parse(readFileSync(join(examples, "production-evidence-v2.example.json"), "utf8"));
+  assert.equal(validateProductionDeploymentEvidence(diagnostic, config).schemaVersion, 2);
+  assert.equal(diagnostic.identity.provenance.state, "source-only");
+  assert.throws(() => createProductionDeploymentPlan(config, {kind: "account", name: "fixture"}, true, diagnostic.identity), /clean Git/);
+});
+
 test("canonical commitments sort keys, preserve bytes and separate domains", () => {
   assert.equal(canonicalProductionJson({b: 1, a: [2, 3]}), '{"a":[2,3],"b":1}');
   assert.equal(productionDigest("a", {b: 1, a: 2}), productionDigest("a", {a: 2, b: 1}));

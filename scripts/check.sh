@@ -108,6 +108,9 @@ echo "==> Running read-only Operator API smoke test"
   npm test
 )
 
+echo "==> Checking legacy public artifact readability and byte preservation"
+node --test scripts/test-production-legacy-artifacts.mjs
+
 echo "==> Running local Deployment Studio build + smoke test"
 (
   cd services/deployment-studio

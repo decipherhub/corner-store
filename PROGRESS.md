@@ -1,5 +1,82 @@
 # Progress
 
+## 2026-11-11 Session: DEPLOY-004 Step 3 Release Finalization
+
+DEPLOY-004 is passing after all required release gates. Scope: issue #154 step 3,
+D037-D039 (adopted defaults, team-to-confirm), deployment/testing documentation,
+versioned example, public-artifact compatibility and full verification. Out of
+scope: deployed contracts, protected demo paths, custody/key management/multisig
+expansion, vendors, commits/pushes and external publication.
+
+Steps 1-2 are committed as c38d9d5 and 652cc70. Their slice notes are transferred
+to the runbook, decisions, feature and execution plan; SLICE_NOTES.md is removed.
+The remote main sequencing check (`git ls-remote origin refs/heads/main`) exited
+0 and still returned 7893021ecc001041cdf6ee44f22de0d88909c932. Prerequisite merges
+remain a release constraint; this work follows the user's explicit stacked-slice
+instruction. Public records retain their original schema and exact bytes.
+
+Tests first: added two public-artifact compatibility cases, both passing against
+existing CLI/Operator API readers. The v2 example regression first failed to
+compile due to an incorrect test signer field, corrected from account to name;
+then it failed as expected with ENOENT for the absent v2 example (0 passed,
+1 failed, 15 name-filter skips). Added a source-only diagnostic v2 example,
+retaining the original v1 example. This example cannot authorize broadcast.
+
+All service/script commands below used Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`; Foundry is 1.7.1.
+Logs are under `/private/tmp/w154-step3-`, with the suffixes in the table.
+The exact shell redirection after each wrapped command was
+`> /private/tmp/w154-step3-<suffix> 2>&1`, substituting the listed suffix.
+
+| Exact command inside the Node wrapper | Actual result | Log suffix |
+| --- | --- | --- |
+| `npm run build --prefix services/cli && npm test --prefix services/operator-api && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; CLI build, Operator API smoke and 2/2 public compatibility tests passed before integration | `legacy.log` |
+| `npm run build --prefix services/toolkit && node --test --test-name-pattern="legacy review example" services/toolkit/dist/test/production-evidence.js` | First exit 2 on the test signer field; corrected run exit 1 with ENOENT, 0 passed/1 failed/15 skipped before adding the v2 example | `example-red.log` (corrected run) |
+| `npm test --prefix services/toolkit && npm test --prefix services/cli && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; Toolkit smoke + 58/58 named tests, CLI smoke + 17/17 named tests, public compatibility 2/2; zero failed/skipped | `focused.log` |
+| `scripts/check.sh` | Exit 0, first run; 1,171/1,171 Foundry tests across 70 suites; fmt/high-severity lint/build; RFQ/host/Toolkit/CLI/compliance-data 30/24/58/17/25 named tests, zero failed/skipped; all service smokes/provider conformance; two external adapter consumers 4/4 Foundry tests each; packed version assertions 6/6; packed production assertions 50/50 (10 commitments + 40 live cases, including real production dry-run/fork and 28-transaction deployment); public compatibility 2/2; showcase plan; deploy-v3 10/10 | `check.log` |
+| `scripts/e2e-anvil.sh` | Exit 0, first run; BUIDL-like 7/7 scenarios plus backend/CLI/Router, repeated buys/sells, negative cases and temporal runtime flow | `buidl.log` |
+| `scripts/e2e-anvil.sh --profile reg-d` | Exit 0, first run; Reg D 7/7 scenarios plus backend/CLI/Router and runtime checks | `regd.log` |
+| `scripts/e2e-context-provenance.sh` | Exit 0, first run; 12/12 live cases, zero failures | `context.log` |
+| `scripts/e2e-identity-evidence.sh` | Exit 0, first run; 40/40 live cases, zero failures, normal EIP-170 limits | `identity.log` |
+| `node --version && yarn --version` | Exit 0; v20.20.2 and 1.22.22 | terminal |
+
+New coverage: two named public-artifact tests plus one Toolkit legacy/v2 example
+regression. The public gate enumerates tracked records, pins the published Monad
+SHA-256 `c43cef9e5857a8887d8e8648cbdc7e48e52bd28f4dd685c528a5fa13906e1263`,
+reads each exact file through CLI and Operator API and checks listing/hashes/bytes
+afterward. No live-chain readiness is used as a compatibility oracle. The original
+v1 review example is unchanged. No RFQ flake or full-gate rerun occurred.
+
+Changed files in step 3:
+
+- `FEATURES.md`, `DECISIONS.md`, `PROGRESS.md`
+- `docs/deployment-production.md`, `docs/testing.md`
+- `docs/exec-plans/completed/DEPLOY-004-append-only-production-evidence.md`
+- `scripts/check.sh`, `scripts/test-production-legacy-artifacts.mjs`
+- `services/toolkit/test/production-evidence.ts`
+- `services/toolkit/examples/production-evidence-v2.example.json`
+
+`SLICE_NOTES.md` was an untracked input and has been removed. The active-plan
+index returns to its original no-active-plan state. No production runtime source
+or deployed contract changed in step 3.
+
+Final `git diff --check`,
+`git diff --exit-code feat/159-identity-decisions -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`,
+`git diff --exit-code HEAD -- services/toolkit/examples/production-evidence.example.json`,
+`sh -n scripts/check.sh` and
+`node --check scripts/test-production-legacy-artifacts.mjs` exited 0.
+Relative documentation link targets exist; added lines/new files contain no em
+dash; no active feature or slice-note file remains. Packed consumer and E2E
+runners performed normal cleanup of their temporary processes/keys/artifacts.
+
+UNVERIFIED: real production networks, Ledger/hardware/interactive signer behavior,
+actual power-loss durability and filesystems other than this local host. Docker
+container smoke was not rerun because no image/container contract changed.
+Passing the tooling does not establish production deployment readiness. No
+production-chain/public Monad mutation, commit, push or external publication was
+performed. Next: user reviews the working tree, confirms D037-D039 defaults and
+merges prerequisites in the approved order before release.
+
 ## 2026-11-11 Session: DATA-004 Assessment Reference Collision Fix
 
 DATA-004 is passing. Scope: the confirmed P2 HTTP v2 assessment-reference

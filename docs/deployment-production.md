@@ -124,8 +124,9 @@ Safe verification:
 
 Signer verification:
 
-- deployment and governance signing must use an external signer, hardware
-  wallet, HSM or approved remote signing boundary
+- core deployment uses the existing local Foundry account outside the browser;
+  governance execution uses the configured existing Safe. Key management,
+  custody and multisig expansion remain deferred
 - browser applications must not receive private keys and must not broadcast
   production transactions
 - RFQ quote signing must be separated from maker settlement inventory when RFQ
@@ -298,10 +299,10 @@ change that fail-closed boundary.
    broadcast.
 6. Run fork simulation with the frozen config, expected Safe and expected
    existing contract state.
-7. Record a production evidence file containing the current plan `configHash`,
-   release `sourceCommit` and `contractsHash`, successful dry-run chain ID, successful fork
-   simulation chain ID/block and review timestamp. `production-deploy` rejects
-   missing, stale or mismatched evidence.
+7. Record version 2 reviewed evidence containing the exact plan `identity` and
+   `evidenceId`, `configHash`, release `sourceCommit`/`contractsHash`, successful
+   dry-run chain ID, fork chain ID/block and review timestamp. Rebuild and compare
+   the evidence before signing. Production broadcast requires clean Git provenance.
 8. Generate immutable onboarding Safe drafts with `production-onboarding-plan`;
    review target addresses, calldata, stage dependencies, chain ID, Safe address,
    operator executor, required approvals, deterministic proposal IDs, config hash,
@@ -309,9 +310,10 @@ change that fail-closed boundary.
 9. Execute the core deployment through an external Foundry signer. The script's
    final deployment phase hands all governed contracts to the preflighted Safe;
    it activates no asset or venue.
-10. Verify bytecode, owners, roles and complete Router/Engine bindings against
-    the production artifact. Verification compares each deployed runtime
-    bytecode hash with the hash written by the reviewed deployment script.
+10. Before publication, verify successful canonical receipts, receipt-derived
+    addresses, transaction inputs/order, compiled creation/runtime bytecode,
+    owners/operators, Safe and complete Router/Engine bindings. Independently
+    retain the printed `recordDigest` for subsequent `production-verify` calls.
 11. Execute the reviewed Safe/operator onboarding transactions in order:
     Element/Recipe registration, Manifest registration, Manifest approval, policy
     audit checkpoint, venue
@@ -329,26 +331,138 @@ Every later Manifest suspend/resume/update/retire operation must be followed by
 checkpoint is an operations incident and blocks readiness claims; the event does
 not replace the underlying Manifest lifecycle authority.
 
-The evidence file has this minimum shape:
+### Version 2 source, build and provenance contract
 
-```json
-{
-  "schemaVersion": 1,
-  "configHash": "sha256:<production-plan output>",
-  "sourceCommit": "<40-character lowercase git commit>",
-  "contractsHash": "sha256:<production-source-hash output>",
-  "dryRun": {"passed": true, "chainId": 42161},
-  "forkSimulation": {"passed": true, "chainId": 42161, "blockNumber": 123456789},
-  "reviewedAt": "2026-07-31T00:00:00.000Z"
-}
+New production deployments require evidence version 2. The production config
+schema remains version 1; it is distinct from the evidence/envelope version.
+`production-source-hash` resolves the production entry point's actual offline
+compiler inputs, including `script/ProductionCoreDeployer.sol` and all transitive
+Solidity sources. It requires the pinned Forge/Solc toolchain, even for diagnostics.
+
+The source manifest binds normalized relative paths, exact byte lengths/hashes,
+`foundry.toml`, explicit remappings, CLI/Toolkit/RFQ orchestration sources,
+package preparation, service manifests/lockfiles/tsconfigs and compiler Standard
+JSON input. Missing/duplicate paths, symlinks, escaping imports/remappings and
+unsupported compiler profiles fail closed. Only the explicit default Foundry
+profile and pinned Solc are supported; inherited build overrides, dotenv, global
+Foundry configuration and automatic remappings are excluded.
+
+The build commitment records Forge, Solc, Node and TypeScript versions and
+executable/package hashes, installed runtime dependency bytes, executed JavaScript,
+compiler settings (optimizer, via-IR, EVM, metadata and libraries) and creation/
+runtime bytecode templates with link/immutable references. Compilation uses a
+captured isolated workspace; the manifest is rechecked before execution. Package
+and runtime copies preserve and verify the same source/build commitments.
+
+Git provenance is explicit: `clean`, `dirty`, `source-only` or `unavailable`.
+Staged, unstaged, untracked and recursive submodule changes participate in its
+commitment. A bundle without Git metadata is source-only even if its config
+claims an upstream commit. Only the reviewed clean Git-backed source can authorize
+broadcast. Diagnostics and unsigned exports may represent the other states.
+Changing provenance changes evidenceId even when source/build hashes agree.
+
+One domain-separated canonical SHA-256 `evidenceId` binds source/build/provenance,
+canonical config, deployment ID, chain and deployer/governance/operator/venue
+wiring. The final envelope additionally carries the complete source/build
+commitments, original script artifact, its `artifactDigest`, transaction inputs
+and receipts. `recordDigest` binds that record without circular self-hashing.
+These commitments establish input identity, not policy approval.
+
+### Reviewed evidence and operator commands
+
+Keep the source release clean and the consumer config/evidence outside that
+source tree. Set `release.sourceCommit` and `release.contractsHash` from the
+source-hash result, then generate the plan and unsigned export using the same
+Node/Forge/Solc/dependency environment:
+
+```sh
+corner-store production-source-hash --contracts /path/to/clean-release
+corner-store production-plan corner-store.production.json \
+  --contracts /path/to/clean-release --out unsigned-core.json
+corner-store production-preflight corner-store.production.json
 ```
 
-[`services/toolkit/examples/production-evidence.example.json`](../services/toolkit/examples/production-evidence.example.json)
-is illustrative only. Replace its commit, block, timestamp and config hash with
-reviewed evidence from the exact release. `production-source-hash` computes the
-deterministic hash of the Foundry source bundle, and `production-plan` prints
-the required config hash. `production-deploy` recomputes the source bundle hash
-and rejects a different RPC provider host, source tree or evidence file.
+Run the printed signer-free plan command from the clean contract source root
+using the pinned default profile/toolchain, against the approved RPC and a
+reviewed fork. Record the actual successful runs. Construct the reviewed file by
+copying the exact plan fields, without editing its identity:
+
+```js
+const review = {
+  schemaVersion: 2,
+  configHash: plan.configHash,
+  sourceCommit: config.release.sourceCommit,
+  contractsHash: config.release.contractsHash,
+  identity: plan.identity,
+  evidenceId: plan.evidenceId,
+  dryRun: {passed: true, chainId: config.network.chainId},
+  forkSimulation: {passed: true, chainId: config.network.chainId, blockNumber},
+  reviewedAt: new Date().toISOString()
+};
+```
+
+The example
+[`production-evidence-v2.example.json`](../services/toolkit/examples/production-evidence-v2.example.json)
+is illustrative source-only evidence with placeholder commitments. Its shape is
+readable but it cannot authorize broadcast. Replace it with actual reviewed plan
+fields and execution results. The original
+[`production-evidence.example.json`](../services/toolkit/examples/production-evidence.example.json)
+remains a legacy version 1 example; it cannot authorize a new deployment.
+
+Use the existing locally stored Foundry account. Key management, custody and
+multisig expansion remain deferred; no vendor is required. Existing Safe owner,
+threshold and singleton checks still apply. Hardware signer support is not part
+of the verified release evidence.
+
+```sh
+corner-store production-deploy corner-store.production.json \
+  --contracts /path/to/clean-release --account release-deployer \
+  --password-file /path/to/local-password-file --confirm production-deploy
+corner-store production-verify corner-store.production.json \
+  --contracts /path/to/clean-release \
+  --expected-record-digest 'sha256:<independently-retained-record-digest>'
+```
+
+Treat the digest placeholder as a value to replace and quote for the shell.
+Retain the deployment/review digest independently; copying a digest from an
+untrusted artifact provides no trusted expected identity. Verification rebuilds
+local commitments, compares reviewed evidence, checks the record/artifact digests
+and validates chain/addresses/receipts/bytecode/wiring. Missing or mismatched
+inputs fail closed. Supplying a version 2 digest cannot downgrade verification
+to the legacy path. Legacy artifact readers retain their original schema and
+verification path, without acquiring version 2 guarantees retroactively.
+
+### Exclusive publication and recovery
+
+Production deployment rejects an occupied final path and exclusively reserves
+its destination before signing or broadcast. Each operation uses a unique sibling
+staging directory and durable immutable journal events. The Solidity script
+writes only `deployments/production-core.candidate.json` in the captured workspace.
+Production bypasses the shared reference runtime cleanup path.
+
+The complete envelope is validated privately, exclusively written and fsynced,
+then closed before an exclusive hard link publishes the final name. Parent
+fsync, staging-link removal and another fsync complete publication. Replacing
+rename is forbidden. Unsupported hard-link/fsync semantics fail closed. Proposal,
+Safe, onboarding, policy and production plan exports use the same publisher;
+imported signed bytes are preserved exactly by the raw-byte Toolkit publisher.
+
+A failure before linking leaves no final artifact. A crash after linking may
+leave a complete final envelope. Existing files and application symlinks are
+never replaced. Inspect the printed operation journal path after a failure:
+
+```sh
+corner-store production-recover corner-store.production.json \
+  --contracts /path/to/clean-release --operation /path/to/retained-operation
+```
+
+Recovery rebuilds reviewed commitments and revalidates staged evidence, receipts
+and current chain state. It may retrieve missing receipt snapshots by recorded
+transaction hash. It publishes or completes cleanup only after verification;
+it never signs, automatically rebroadcasts or rewrites a final. Incomplete or
+unavailable evidence leaves the operation unresolved. Retain the journal and
+captured workspace for investigation. Local crash/fault tests do not establish
+power-loss durability on other filesystems.
 
 ## What An Operator Enters
 

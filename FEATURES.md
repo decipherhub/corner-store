@@ -9,6 +9,55 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DEPLOY-004: Complete and Append-Only Production Evidence
+
+### Behavior
+
+- Evidence version 2 binds resolved compiler inputs, the production deployer,
+  orchestration, exact tool/dependency identities, compiler settings and bytecode
+  templates through canonical domain-separated SHA-256 commitments.
+- Plans, unsigned exports, reviewed evidence and deployment records share one
+  evidenceId over source/build/provenance, configuration, chain and wiring.
+  Clean Git provenance is required for broadcast. Dirty, source-only and
+  unavailable provenance supports diagnostics only.
+- Production artifacts and signable exports reserve destinations and publish
+  complete validated envelopes exclusively through fsync and hard-link creation.
+  Receipts, reconstructed runtime bytecode, owners/operators and wiring must
+  verify before deployment publication. Recovery revalidates without rebroadcast.
+- Version 2 verification requires the independently trusted recordDigest and
+  reviewed evidence identity. Legacy artifacts/review files remain readable;
+  legacy review evidence cannot authorize new deployments. Public Monad records,
+  contracts and demo runtime remain unchanged.
+
+### Verification
+
+- Toolkit/CLI source/build/provenance mutation, package/runtime equivalence,
+  publication failure/concurrency/SIGKILL/recovery and chain tampering tests.
+- Packed clean Git-backed consumer: real production dry-run/fork, export,
+  deployment and verification with one evidenceId; source-only broadcast denial.
+- Existing public artifact listing, pinned hash, CLI/Operator API reads and
+  exact byte preservation without live-chain readiness checks.
+- `scripts/check.sh`, both `scripts/e2e-anvil.sh` profiles,
+  `scripts/e2e-context-provenance.sh`, `scripts/e2e-identity-evidence.sh`,
+  whitespace and protected-path comparisons.
+
+### State
+
+passing
+
+### Notes
+
+- Issue #154; D037-D039 defaults adopted, team-to-confirm.
+- Final gates passed on 2026-11-11: 1,171 Foundry tests, 58 Toolkit/17 CLI
+  named tests, 50 packed production assertions and two public compatibility
+  cases. Legacy profiles passed 7/7 each; context 12/12; identity 40/40.
+  Full repository check passed first run with no RFQ flake. See PROGRESS.
+- Plan: `docs/exec-plans/completed/DEPLOY-004-append-only-production-evidence.md`.
+- Main remains at 7893021 as of the step 3 sequencing check. Prerequisite PRs
+  must merge before release; this authorized work proceeds on the supplied stack.
+- Key management, custody and multisig expansion remain deferred. No external
+  vendor, production-chain broadcast or public deployment is part of this work.
+
 ## DATA-004: Operator-Accepted Identity Evidence and Topology Guards
 
 ### Behavior
