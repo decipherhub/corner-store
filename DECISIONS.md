@@ -1823,11 +1823,29 @@ candidate inside its captured workspace. Validate successful canonical receipts,
 receipt-derived addresses, exact transaction inputs/order, reconstructed runtime
 bytecode, ownership/operator/wiring and Safe state before publication.
 
-Use a private uid-owned staging directory without symlinked ancestry and reject
-group/world write permissions. Publish by exclusive no-follow creation and file
-fsync, validate through a no-follow descriptor held across the no-replacement
+Require the staging/output directories and every ancestor to be owned by the
+current uid or root. Reject group/world write permissions on staging/output;
+allow writable ancestors only with the sticky bit, which protects operator-owned
+entries from other users. Reject foreign ownership even on sticky ancestors and
+reject application symlinked ancestry. The existing macOS `/tmp` and `/var`
+system aliases have their `/private` target ancestry checked too. Check existing
+output ancestry before creating directories, then check the output directory
+before reserving anything. Check staging on creation and recheck both paths at
+publication/recovery, naming the offending path on failure.
+
+This StrictModes-like precondition is the filesystem trust boundary: publication
+is safe against other local principals, with root trusted. Concurrent operator
+uid processes are out of scope because they already hold the operator's signing
+material. Node has no fd-based `linkat`/`unlinkat`; path checks cannot eliminate
+replacement races against writers within that trust boundary.
+
+Publish by exclusive no-follow creation and file fsync, validate through a
+no-follow descriptor held across the no-replacement
 hard link, then verify the final regular file's device, inode and size. On mismatch,
-remove only the created entry after rechecking its identity and fail closed.
+attempt cleanup only after verifying the output directory/ancestry again and
+rechecking the observed entry's identity. Cleanup and its parent fsync are best
+effort, preserving the original publication error. The separate identity check
+and unlink do not protect against same-uid replacement immediately before unlink.
 Parent fsync, staging-link cleanup and another fsync complete publication. Never
 use a replacing rename; unsupported semantics fail closed. Apply the same
 publisher to signable exports. The raw-byte publisher preserves imported signed

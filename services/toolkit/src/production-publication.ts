@@ -33,13 +33,31 @@ function syncDirectory(path: string): void {
   const fd = openSync(path, "r");
   try { fsyncSync(fd); } finally { closeSync(fd); }
 }
-function privateDirectory(path: string): Stats {
-  safePath(path);
-  const stat = lstatSync(path);
-  if (!stat.isDirectory() || !process.getuid || stat.uid !== process.getuid() || (stat.mode & 0o022) !== 0) {
-    throw new Error("publication staging directory must be private and owned by the current uid");
+function trustedDirectory(path: string, allowMissing = false, ancestor = false): void {
+  const parent = dirname(path);
+  if (parent !== path) trustedDirectory(parent, allowMissing, true);
+  let stat: Stats;
+  try { stat = lstatSync(path); } catch (error: any) {
+    if (allowMissing && error.code === "ENOENT") return;
+    throw error;
   }
-  return stat;
+  if (stat.isSymbolicLink()) {
+    if (process.platform === "darwin" && ["/var", "/tmp"].includes(path) && realpathSync(path) === `/private${path}`) {
+      trustedDirectory(realpathSync(path), false, ancestor); return;
+    }
+    throw new Error(`publication symlink rejected: ${path}`);
+  }
+  if (!stat.isDirectory()) throw new Error(`publication directory required: ${path}`);
+  if (!process.getuid || (stat.uid !== process.getuid() && stat.uid !== 0)) {
+    throw new Error(`publication directory ownership must be current uid or root: ${path}`);
+  }
+  if ((stat.mode & 0o022) !== 0 && !(ancestor && (stat.mode & 0o1000) !== 0)) {
+    throw new Error(`publication directory permissions allow group or world writes: ${path}`);
+  }
+}
+function privateDirectory(path: string): Stats {
+  trustedDirectory(path);
+  return lstatSync(path);
 }
 function sameInode(a: Stats, b: Stats): boolean { return a.dev === b.dev && a.ino === b.ino; }
 function durableFile(path: string, bytes: Buffer | string, boundary?: (phase: PublicationBoundary) => void): void {
@@ -63,6 +81,7 @@ export class ProductionPublication {
 
   static assertVacant(output: string): void {
     output = resolve(output);
+    trustedDirectory(dirname(output), true);
     safePath(output);
     if (present(output)) throw new Error(`production destination occupied: ${output}`);
     if (present(`${output}.reservation`)) throw new Error(`production destination reserved; recover the operation: ${output}`);
@@ -72,6 +91,7 @@ export class ProductionPublication {
     output = resolve(output);
     ProductionPublication.assertVacant(output);
     mkdirSync(dirname(output), {recursive: true});
+    trustedDirectory(dirname(output));
     safePath(output);
     const reservation = `${output}.reservation`;
     mkdirSync(reservation, {mode: 0o700});
@@ -113,6 +133,7 @@ export class ProductionPublication {
   }
 
   private assertDirectory(): void {
+    trustedDirectory(dirname(this.output));
     if (!sameInode(privateDirectory(this.directory), this.directoryIdentity)) throw new Error("publication staging directory identity changed");
   }
 
@@ -188,9 +209,12 @@ export class ProductionPublication {
           if (!created.isFile() || !sameInode(validated, created) || created.size !== validated.size) throw new Error("publication final inode or size mismatch");
           this.assertDirectory(); safePath(this.output);
         } catch (error) {
-          // Remove only the entry observed after our successful no-replace link.
-          if (present(this.output) && sameInode(created, lstatSync(this.output))) unlinkSync(this.output);
-          syncDirectory(dirname(this.output));
+          // Cleanup is best effort within a trusted directory; preserve the publication error.
+          try {
+            trustedDirectory(dirname(this.output));
+            if (present(this.output) && sameInode(created, lstatSync(this.output))) unlinkSync(this.output);
+            syncDirectory(dirname(this.output));
+          } catch {}
           throw error;
         }
         this.boundary?.("after-link");

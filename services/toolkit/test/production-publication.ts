@@ -13,6 +13,91 @@ function target(): string { return join(root, `${counter++}.json`); }
 const bytes = Buffer.from('{"signed":"exact bytes"}\n');
 const validate = (value: Buffer) => assert.deepEqual(value, bytes);
 
+for (const kind of ["group-writable ancestor", "world-writable non-sticky ancestor", "foreign-owned ancestor", "foreign-owned output directory"]) {
+  test(`publication rejects a ${kind} before reservation`, () => {
+    const fs = require("node:fs"); const original = fs.lstatSync;
+    const ancestor = mkdtempSync(join(root, "unsafe-"));
+    const directory = join(ancestor, "output"); mkdirSync(directory);
+    const offending = kind.includes("output directory") ? directory : ancestor;
+    const output = join(directory, "final.json");
+    const before = readdirSync(directory);
+    try {
+      if (kind.startsWith("group")) chmodSync(offending, 0o770);
+      else if (kind.startsWith("world")) chmodSync(offending, 0o777);
+      else fs.lstatSync = (path: string, ...args: any[]) => {
+        const stat = original(path, ...args);
+        if (path === offending) stat.uid = (process.getuid?.() ?? 0) + 1;
+        return stat;
+      };
+      assert.throws(() => ProductionPublication.reserve(output), (error: any) => {
+        assert.match(error.message, /publication.*(owner|permission|writ|mode)/i);
+        assert(error.message.includes(offending));
+        return true;
+      });
+      assert.deepEqual(readdirSync(directory), before);
+      assert(!existsSync(`${output}.reservation`));
+    } finally { fs.lstatSync = original; chmodSync(offending, 0o700); }
+  });
+}
+
+test("publication accepts a sticky world-writable ancestor with private operator directories", () => {
+  const ancestor = mkdtempSync(join(root, "sticky-")); chmodSync(ancestor, 0o1777);
+  const directory = join(ancestor, "operator"); mkdirSync(directory, {mode: 0o700});
+  const output = join(directory, "final.json");
+  publishProductionBytes(output, bytes, validate);
+  assert.deepEqual(readFileSync(output), bytes);
+});
+
+test("publication rejects writable output directories even with the sticky bit", () => {
+  for (const mode of [0o770, 0o777, 0o1777]) {
+    const directory = mkdtempSync(join(root, "output-mode-")); chmodSync(directory, mode);
+    const output = join(directory, "final.json");
+    assert.throws(() => ProductionPublication.reserve(output), (error: any) => {
+      assert(error.message.includes(directory)); return true;
+    });
+    assert.deepEqual(readdirSync(directory), []);
+  }
+});
+
+test("publication rechecks ancestor trust after validation and before linking", () => {
+  const ancestor = mkdtempSync(join(root, "changed-"));
+  const directory = join(ancestor, "output"); mkdirSync(directory);
+  const output = join(directory, "final.json");
+  const operation = ProductionPublication.reserve(output, (phase) => {
+    if (phase === "before-link") chmodSync(ancestor, 0o777);
+  });
+  operation.prepare(bytes, validate);
+  try {
+    assert.throws(() => operation.publish(validate), (error: any) => {
+      assert(error.message.includes(ancestor)); return true;
+    });
+    assert(!existsSync(output));
+    assert.throws(() => ProductionPublication.resume(operation.directory));
+  } finally { chmodSync(ancestor, 0o700); }
+});
+
+test("mismatch cleanup refuses an untrusted output directory and preserves the original error", () => {
+  const fs = require("node:fs"); const originalLink = fs.linkSync; const originalUnlink = fs.unlinkSync;
+  const directory = mkdtempSync(join(root, "cleanup-trust-"));
+  const output = join(directory, "final.json"); const operation = ProductionPublication.reserve(output);
+  operation.prepare(bytes, validate);
+  let cleanupAttempted = false;
+  try {
+    fs.linkSync = (source: string, destination: string) => {
+      if (destination === output) { unlinkSync(source); writeFileSync(source, "unvalidated"); }
+      originalLink(source, destination);
+      if (destination === output) chmodSync(directory, 0o777);
+    };
+    fs.unlinkSync = (path: string) => {
+      if (path === output) { cleanupAttempted = true; throw Error("unsafe cleanup attempted"); }
+      originalUnlink(path);
+    };
+    assert.throws(() => operation.publish(validate), /publication.*mismatch/i);
+    assert.equal(cleanupAttempted, false);
+    assert.equal(readFileSync(output, "utf8"), "unvalidated");
+  } finally { fs.linkSync = originalLink; fs.unlinkSync = originalUnlink; chmodSync(directory, 0o700); }
+});
+
 test("exclusive publisher preserves exact imported bytes and refuses existing files and symlinks", () => {
   const output = target();
   publishProductionBytes(output, bytes, validate);

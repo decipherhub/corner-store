@@ -440,19 +440,39 @@ verification path, without acquiring version 2 guarantees retroactively.
 
 Production deployment rejects an occupied final path and exclusively reserves
 its destination before signing or broadcast. Each operation uses a unique sibling
-0700 staging directory and durable immutable journal events. Staging must remain
-owned by the current uid, without group/world write permissions or symlinked
-ancestry; a changed staging directory identity is rejected. The Solidity script
-writes only `deployments/production-core.candidate.json` in the captured workspace.
+0700 staging directory and durable immutable journal events. Before reservation,
+the output directory and every existing ancestor must be owned by the current
+uid or root. Neither the output nor staging directory may be group- or
+world-writable. Ancestors may have these write bits only with the sticky bit set,
+as on `/tmp`, which prevents other users from renaming/deleting operator-owned
+entries. Foreign ownership is rejected even with the sticky bit. Missing output
+directories are checked again after creation and before reservation. The same
+checks cover staging ancestry and run again before publication and recovery;
+errors name the offending path. Application symlinked ancestry stays rejected;
+the existing macOS `/tmp` and `/var` system aliases also have their `/private`
+target ancestry checked. A changed staging directory identity is rejected. The
+Solidity script writes only `deployments/production-core.candidate.json` in the
+captured workspace.
 Production bypasses the shared reference runtime cleanup path.
+
+This is an explicit filesystem trust boundary similar to OpenSSH StrictModes.
+Publication is safe against other local principals under these owner/mode
+preconditions, with root trusted. Concurrent processes running as the operator's
+own uid are outside the threat model because they already hold the operator's
+signing material. Node has no fd-based `linkat`/`unlinkat`; inode checks alone
+cannot make path-based operations safe against writers within that trust boundary.
 
 The complete envelope is exclusively created with no-follow semantics and mode
 0600, then fsynced. Publication opens it without following symlinks and validates
 bytes read from that descriptor, keeping the descriptor open across the exclusive
 hard link. The final entry must be a regular file with the descriptor's device,
 inode and size. A mismatch removes the created entry only if its identity still
-matches the observed entry, syncs the parent and fails. Parent fsync, staging-link
-removal and another fsync complete successful publication. Replacing
+matches the observed entry and the output directory and its ancestry pass the
+trust checks again. This cleanup and its parent fsync are best effort; failure
+preserves the original publication error and may leave an entry for investigation.
+The identity observation and unlink are separate path operations, so cleanup does
+not protect against same-uid replacement immediately before unlink. Parent fsync,
+staging-link removal and another fsync complete successful publication. Replacing
 rename is forbidden. Unsupported hard-link/fsync semantics fail closed. Proposal,
 Safe, onboarding, policy and production plan exports use the same publisher;
 imported signed bytes are preserved exactly by the raw-byte Toolkit publisher.

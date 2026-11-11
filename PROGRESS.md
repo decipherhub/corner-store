@@ -1,5 +1,48 @@
 # Progress
 
+## 2026-11-11 Session: DEPLOY-004 Publication Trust Boundary
+
+DEPLOY-004 is passing. Scope: remaining publication findings from
+`../out-review-154-fix.md`, trust preconditions, best-effort mismatch cleanup,
+tests and D038/runbook evidence. This supersedes the earlier publication safety
+claim: inode checks alone do not prevent ancestor substitution or cleanup races.
+
+`services/toolkit/src/production-publication.ts:36` checks staging/output ancestry
+through the root for current-uid/root ownership and safe modes. Only ancestors
+may be writable with the sticky bit. Output trust is checked before reservation;
+both paths are rechecked at publication/recovery. Inode pinning remains, and
+`:211` limits mismatch cleanup to verified output ancestry, preserving the
+original error on cleanup failure. D038 and the runbook explicitly trust root
+and exclude concurrent operator-uid processes, which already hold signing material.
+
+Tests first: seven new rejection/cleanup cases failed against the prior source;
+the sticky acceptance case and all 12 existing publication cases passed. All
+20 now pass. New cases at `services/toolkit/test/production-publication.ts:16`
+cover group-writable, world-writable non-sticky and foreign-owned ancestors,
+foreign-owned/writable output directories, sticky ancestor acceptance, trust
+rechecks before linking/recovery and refusing cleanup in an untrusted output
+directory. Ownership uses injected `stat.uid`; mode/sticky tests use real modes.
+
+All Node commands below used
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'` with Node 20.20.2,
+Yarn 1.22.22 and Foundry 1.7.1. Logs use `/private/tmp/w154-trust-`.
+
+| Command inside the wrapper | Actual result | Log suffix |
+| --- | --- | --- |
+| `npm run build --prefix services/toolkit && node --test services/toolkit/dist/test/production-publication.js` before implementation | Exit 1; 13 passed, seven new cases failed | `red.log` |
+| `npm test --prefix services/toolkit && npm test --prefix services/cli && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; smokes, Toolkit 74/74, CLI 19/19, legacy 2/2, zero failures/skips | `focused-stable.log` |
+| `scripts/check.sh` | Exit 0; 1,171 Foundry tests, all service checks, 50 packed production assertions including live 28-transaction Anvil deployment/recovery, legacy 2/2 and deploy-v3 10/10 | `check.log` |
+
+Intermediate runs failed on ownership error wording and an in-flight tracked-doc
+edit caught by the CLI provenance guard. Corrected wording and held the working
+tree unchanged for both successful runs. The full gate passed on its first run;
+the known RFQ flake did not occur. Separate legacy profile/context/identity E2E
+scripts were not repeated for this filesystem-only change; packed live production
+deployment/recovery supplied runtime coverage. Whitespace and protected-path
+comparisons against HEAD pass. No contract/public/demo changes, commit, push or
+external publication. Next: user reviews the working tree. Same-uid concurrency
+and other filesystems/power-loss durability remain outside verified guarantees.
+
 ## 2026-11-11 Session: DEPLOY-004 Confirmed Review Fixes
 
 DEPLOY-004 is passing. Scope: F1 publication path replacement and F2 hidden Git
