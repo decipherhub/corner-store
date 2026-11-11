@@ -1,5 +1,49 @@
 # Progress
 
+## 2026-11-12 Session: OPS-004 Explicit Production Compiler
+
+Fixed CI run 43045358878's packed production compiler lookup failure.
+`services/toolkit/src/production-evidence.ts:346` selects `FOUNDRY_SOLC` before
+home-based lookup and verifies its exact compiler version. Missing, empty,
+non-executable and wrong-version overrides fail closed without fallback.
+Unset-variable SVM/system behavior is unchanged. The packed consumer uses the
+selected compiler and checks its binary SHA-256 commitment. D041 records the
+consequence; evidence formats, legacy readers and protected demo paths are
+unchanged. OPS-004 remains the sole active feature.
+
+Toolkit/CLI regressions cover an empty HOME with a valid 0.8.17 binary, its
+committed hash, invalid overrides despite valid SVM fallback, and unset-variable
+lookup. Toolkit checks all three existing SVM locations and rejects 0.8.170.
+Before implementation, Toolkit had two expected failures and one passing fallback
+test; CLI had one expected failure. The empty-HOME packed run reproduced
+`AssertionError: pinned Solc is required`. All targeted cases pass after the fix.
+An initial CLI green attempt stopped at TypeScript environment-type inference;
+an explicit `NodeJS.ProcessEnv` annotation fixed it before the passing rerun.
+
+Commands use `source scripts/assurance/env.sh` with local Node 20.20.2 and
+Foundry 1.7.1, except the repository command which loads it through BASH_ENV.
+
+| Command | Actual result |
+| --- | --- |
+| Both service builds plus `node --test --test-name-pattern="FOUNDRY_SOLC"` on their compiled production-evidence tests, before fix | Expected exit 1 each; Toolkit 2 failed/1 passed, CLI 1 failed |
+| Same targeted commands, after fix | Exit 0 each; Toolkit 3/3, CLI 1/1 selected tests |
+| Empty-HOME `npm run test:production-package --prefix services/cli`, before fix | Expected exit 1; reproduced the CI assertion after 10 commitment assertions |
+| `npm test --prefix services/toolkit` | Exit 0; smoke and 77/77 named tests |
+| `npm test --prefix services/cli` | Exit 0; smoke and 21/21 named tests |
+| `node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; 2/2, exact artifact bytes preserved |
+| `python3 -m unittest discover -s scripts/assurance -p 'test_*.py'` | Exit 0; 27/27 |
+| `HOME="$fixture_home" BASH_ENV="$PWD/scripts/assurance/env.sh" scripts/check.sh --repository-only` | Exit 0, first attempt; 1,200/1,200 Foundry tests, all service/package checks, 10 packed commitment plus 41 live assertions, legacy 2/2 and deploy-v3 10/10 |
+| `git diff --check` and protected-path `git diff --exit-code` | Exit 0 |
+
+`fixture_home` was freshly created under `.assurance/tmp/check-home.xzpSgJ`.
+No inherited XDG/Foundry-home or Git identity overrides were present, and none
+were injected. No additional home-state dependency was found. Logs are retained
+under `/private/tmp/w156-solc-*.log`, including `w156-solc-empty-home-check.log`.
+Separate E2E scripts, coverage/Slither/mutation and container gates were not rerun;
+hosted Linux CI and prior pending OPS-004 acceptance items remain UNVERIFIED.
+Next: review the working tree and rerun hosted CI. No commit, push, branch change
+or external publication was performed.
+
 ## 2026-11-11 Session: OPS-004 Nested Bash Environment Guard
 
 Fixed the confirmed CI run 43039507031 environment reapplication defect in

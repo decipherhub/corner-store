@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
-import {cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {createHash} from "node:crypto";
+import {cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
-import {dirname, join, resolve} from "node:path";
+import {delimiter, dirname, join, resolve} from "node:path";
 import {after, test} from "node:test";
 import {
   assertProductionBroadcastIdentity, buildProductionIdentity, canonicalProductionJson, createProductionIdentity,
@@ -47,6 +48,60 @@ function configured(source: ReturnType<typeof captureProductionSource>) {
 function git(root: string, ...args: string[]): string {
   return execFileSync("git", ["-C", root, ...args], {encoding: "utf8", env: {...process.env, GIT_CONFIG_NOSYSTEM: "1"}}).trim();
 }
+
+const pinnedSolc = process.env.FOUNDRY_SOLC ?? join(repo, ".assurance/tools/solc/solc");
+function compilerEnvironment(home: string, solc: string | undefined, fn: () => void): void {
+  const previous = {HOME: process.env.HOME, FOUNDRY_SOLC: process.env.FOUNDRY_SOLC, PATH: process.env.PATH};
+  const tools = mkdir(temp(), "tools");
+  writeFileSync(join(tools, "solc"), '#!/bin/sh\nprintf "Version: 0.8.18+fixture\\n"\n', {mode: 0o755});
+  try {
+    process.env.HOME = home;
+    process.env.PATH = `${tools}${delimiter}${previous.PATH}`;
+    if (solc === undefined) delete process.env.FOUNDRY_SOLC; else process.env.FOUNDRY_SOLC = solc;
+    fn();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+}
+
+test("FOUNDRY_SOLC builds with an empty HOME and commits the selected compiler bytes", () => {
+  const root = fixture(); const home = temp(); const solc = join(temp(), "pinned-solc");
+  cpSync(pinnedSolc, solc);
+  compilerEnvironment(home, solc, () => {
+    const source = captureProductionSource(root);
+    const built = buildProductionIdentity(root, configured(source));
+    assert.equal(built.solcPath, realpathSync(solc));
+    assert.equal(built.build.tools.solc.sha256, `sha256:${createHash("sha256").update(readFileSync(solc)).digest("hex")}`);
+    assert.match(built.build.tools.solc.version, /Version: 0\.8\.17\+/);
+  });
+});
+
+test("invalid FOUNDRY_SOLC fails closed even when a valid svm compiler exists", () => {
+  const root = fixture(); const home = temp();
+  const fallback = join(mkdir(home, ".svm/0.8.17"), "solc-0.8.17"); cpSync(pinnedSolc, fallback);
+  const wrong = join(temp(), "wrong-solc");
+  for (const version of ["0.8.18", "0.8.170"]) {
+    writeFileSync(wrong, `#!/bin/sh\nprintf "Version: ${version}+fixture\\n"\n`, {mode: 0o755});
+    compilerEnvironment(home, wrong, () => assert.throws(() => captureProductionSource(root), /FOUNDRY_SOLC.*0\.8\.17/));
+  }
+  for (const solc of [join(home, "missing-solc"), ""]) {
+    compilerEnvironment(home, solc, () => assert.throws(() => captureProductionSource(root), /FOUNDRY_SOLC/));
+  }
+});
+
+test("unset FOUNDRY_SOLC preserves each existing svm lookup", () => {
+  const root = fixture();
+  for (const path of [".svm", ".local/share/svm", "Library/Application Support/svm"]) {
+    const home = temp(); const solc = join(mkdir(home, `${path}/0.8.17`), "solc-0.8.17"); cpSync(pinnedSolc, solc);
+    compilerEnvironment(home, undefined, () => {
+      const source = captureProductionSource(root);
+      const built = buildProductionIdentity(root, configured(source));
+      assert.equal(built.solcPath, realpathSync(solc));
+    });
+  }
+});
 
 test("legacy review example stays readable and version 2 diagnostic example cannot authorize broadcast", () => {
   const examples = join(repo, "services/toolkit/examples");

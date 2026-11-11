@@ -2345,6 +2345,8 @@ active
 - Sole active feature. D040-D042 are adopted defaults, team-to-confirm.
 - The assurance environment applies once per resolved worktree root across
   nested Bash processes, preserving caller PATH and exported-variable overrides.
+- Production evidence honors the exact-version-checked `FOUNDRY_SOLC` override
+  without requiring a user-home SVM installation; invalid overrides fail closed.
 - Active plan: `docs/exec-plans/active/OPS-004-production-assurance-gates.md`.
 - Local results and remaining UNVERIFIED checks are recorded in `PROGRESS.md`.
   Reporter/prerequisite reconciliation, hosted CI and unavailable Docker checks

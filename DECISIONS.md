@@ -2016,6 +2016,13 @@ external audit. Hosted provisioning/upload budgets and required branch/release
 settings require separate verification. Runner patch levels are hosting state.
 All defaults and human suppression review remain team-to-confirm.
 
+Production evidence and its packed consumer use `FOUNDRY_SOLC` when set,
+requiring `--version` to report the exact pinned Solc 0.8.17. Missing,
+non-executable, empty or wrong-version overrides fail closed without SVM
+fallback. With the variable unset, existing SVM/system lookup is unchanged.
+The selected compiler remains explicitly passed to Forge and committed by its
+binary SHA-256; evidence formats and legacy readers are unchanged.
+
 ### Related Files
 
 - `assurance/`, `scripts/assurance/` and `scripts/check.sh`
