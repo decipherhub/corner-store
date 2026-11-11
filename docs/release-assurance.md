@@ -74,7 +74,7 @@ daemon. A local Docker failure is missing container evidence, not an exemption.
 | Evidence | Required review |
 | --- | --- |
 | Repository and package checks | Build, format/lint, Foundry and services, packed consumers, legacy artifact byte preservation and vendored deploy-v3 |
-| Stateful invariants | Eight implemented properties, five real-engine suites, explicit handler selectors, independent ghost models and successful-action counters; Reporter remains pending #161 |
+| Stateful invariants | Eight implemented properties, five real-engine suites, explicit handler selectors, independent ghost models and successful-action counters; settlement includes commit-failure rollback and same-request retry for all three venues in both directions; Reporter remains pending #161 |
 | PR profile | 64 runs x 32 depth per property, fixed seed `0x156`, check after every call, unexpected handler reverts fail |
 | Scheduled/manual profile | 1,024 x 128, rotating retained 256-bit seed, counterexamples and named replay regressions |
 | Mutation | All reviewed compiling non-equivalent sentinels killed, unchanged mapped baselines pass; compiler errors, timeouts and infrastructure failures are failures |

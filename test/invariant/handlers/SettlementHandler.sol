@@ -6,6 +6,8 @@ import {ExecutionRequest} from "../../../src/types/ExecutionTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 
 contract SettlementHandler is AssuranceFixture {
+    uint256[3] public commitFailureRejections;
+
     constructor() {
         _deployAssurance();
     }
@@ -41,6 +43,18 @@ contract SettlementHandler is AssuranceFixture {
         assertFalse(kind == 1 ? rfqV2.usedQuoteNonce(actors[2], nonce) : rfqV3.usedQuoteNonce(actors[2], nonce));
         vm.prank(actors[2]);
         rwaToken.approve(spender, type(uint256).max);
+        _fill(kind, req, nonce);
+    }
+
+    function commitFailureThenRetry(uint8 kind, bool sell, uint96 rawAmount) public {
+        kind %= 3;
+        uint256 nonce = ++serial;
+        ExecutionRequest memory req = _request(kind, 0, 0, sell, bound(rawAmount, 1, 100 ether), nonce, nonce);
+        // Evaluation still passes; only the post-settlement onTransfer hook rejects.
+        surveillance.setEngine(address(0));
+        _reject(kind, req, Errors.NotAuthorized.selector);
+        ++commitFailureRejections[kind];
+        surveillance.setEngine(address(engine));
         _fill(kind, req, nonce);
     }
 

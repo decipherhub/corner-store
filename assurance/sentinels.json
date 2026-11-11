@@ -46,6 +46,20 @@
       "runner": "forge"
     },
     {
+      "id": "router-commit-swallow",
+      "path": "src/execution/ExecutionRouterBase.sol",
+      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "before": "settledContext.amountOut = realizedAmountOut;\n        engine.commit(settledContext);",
+      "after": "settledContext.amountOut = realizedAmountOut;\n        try engine.commit(settledContext) {} catch {}",
+      "tests": [
+        "invariant_atomicSettlementCommit"
+      ],
+      "match_path": "test/invariant/Settlement.invariant.t.sol",
+      "review": "A post-settlement commit failure must roll back both token legs and replay nonces; the invariant requires real commit-failure rejections and same-request retries for every venue.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
       "id": "governance-delay",
       "path": "src/registry/OperatorRegistry.sol",
       "sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",

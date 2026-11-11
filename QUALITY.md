@@ -9,7 +9,7 @@
 | Compliance data SDK | A- | Provider-neutral acquisition, audit, person-group state and TA/KYC evidence coordinator have smoke/conformance coverage with PII-free fail-closed behavior | Replace reference in-memory KYC store with operator transactional HA/WORM storage and audited provider adapters |
 | RFQ reference service / host | A- | EIP-712 SDK, module conformance, local demo HTTP API/CLI, durable coordinator/reference file store와 별도 production host hardening smoke가 존재함 | HA transactional coordinator store, production signer custody, shared limiter/WORM audit/TLS 운영 통합 필요 |
 | `tools/deploy-v3` | B | profile 단위 테스트와 pinned core artifact integration 존재 | unified production deployment orchestration 추가 |
-| CI / static analysis | B | Pinned local Slither with separate reviewed suppressions, 14/20 sentinel sets, production coverage floors and isolated E2E workflow jobs | Verify hosted clean-checkout budgets/required checks and Docker jobs; human suppression confirmation pending |
+| CI / static analysis | B | Pinned local Slither with separate reviewed suppressions, 15/21 sentinel sets including commit-error swallowing, production coverage floors and isolated E2E workflow jobs | Verify hosted clean-checkout budgets/required checks and Docker jobs; human suppression confirmation pending |
 | Security documentation | A- | Trust boundaries and versioned release evidence separate automated gates, independent audit and chain recovery | Audit owner/reviewer TBD; actual audit/retest and recovery/sign-off MISSING, release BLOCKED |
 
 ## Grade Guide

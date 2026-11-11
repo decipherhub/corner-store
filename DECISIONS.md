@@ -1967,7 +1967,7 @@ single-site patches in disposable copies. Require unchanged mapped baselines
 and 100% kills for all reviewed compiling non-equivalent sentinels. Only mapped
 assertion failures count; compilation, missing/skipped tests, infrastructure
 errors and timeouts fail separately. Keep patches, mappings, logs, survivors and
-justified exclusions. PR and expanded sets currently contain 14 and 20 sentinels.
+justified exclusions. PR and expanded sets currently contain 15 and 21 sentinels.
 Reporter redaction remains a tracked prerequisite exclusion, not tested coverage.
 
 Pin Python 3.12.12, Slither 0.11.6, Foundry 1.7.1, Solc 0.8.17, Node 20.20.2 and

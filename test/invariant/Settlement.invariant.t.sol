@@ -14,15 +14,19 @@ contract SettlementInvariantTest is Test {
             handler.trade(kind, false, false, false, 1 ether);
             handler.trade(kind, true, true, true, 1 ether);
             handler.rejectThenRetry(kind, false, 1 ether);
+            // Missing witnesses fail the atomic invariant's counters, keeping mutation failures mapped to that property.
+            try handler.commitFailureThenRetry(kind, false, 1 ether) {} catch {}
+            try handler.commitFailureThenRetry(kind, true, 1 ether) {} catch {}
         }
         handler.lateTokenFailure(0, 1 ether);
         handler.lateTokenFailure(1, 1 ether);
-        bytes4[] memory selectors = new bytes4[](5);
+        bytes4[] memory selectors = new bytes4[](6);
         selectors[0] = handler.trade.selector;
         selectors[1] = handler.rejectThenRetry.selector;
         selectors[2] = handler.lateTokenFailure.selector;
         selectors[3] = handler.donate.selector;
         selectors[4] = handler.mintOrBurn.selector;
+        selectors[5] = handler.commitFailureThenRetry.selector;
         targetContract(address(handler));
         targetSelector(FuzzSelector(address(handler), selectors));
     }
@@ -37,16 +41,18 @@ contract SettlementInvariantTest is Test {
 
     function invariant_atomicSettlementCommit() public view {
         handler.assertState();
-        assertGe(handler.successes(), 11);
-        assertGe(handler.rejections(), 5);
+        assertGe(handler.successes(), 17);
+        assertGe(handler.rejections(), 11);
         for (uint256 i; i < 3; ++i) {
-            assertGe(handler.fills(i), 3);
+            assertGe(handler.fills(i), 5);
+            assertGe(handler.commitFailureRejections(i), 2);
         }
     }
 
     function testFuzz_exactAmountsAndRollback(uint96 amount, uint8 kind, bool sell) public {
         handler.trade(kind, false, false, sell, amount);
         handler.rejectThenRetry(kind, sell, amount);
+        handler.commitFailureThenRetry(kind, sell, amount);
         handler.assertState();
     }
 }

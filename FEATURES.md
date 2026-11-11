@@ -2306,6 +2306,8 @@ passing
   AMM and RFQ v2/v3 with independent ghost models, exact failures and successful
   witnesses. Eight implemented invariant properties and six parameterized fuzz
   functions cover settlement, replay, governance, binding, context and identity.
+  Settlement witnesses include commit-failure rollback and same-request retry
+  for AMM and RFQ v2/v3 in both directions.
 - Fixed PR 64 x 32 and rotating nightly 1,024 x 128 profiles retain failures/seeds.
 - Source-hash-checked mutations require passing baselines and 100% assertion
   kills for reviewed compiling sentinels. Errors/timeouts fail separately.
@@ -2321,10 +2323,10 @@ passing
 ### Verification
 
 - `scripts/check.sh` including 25 gate-harness regressions, repository checks,
-  coverage, Slither and all 14 PR mutation sentinels.
+  coverage, Slither and all 15 PR mutation sentinels.
 - `scripts/assurance/run.sh invariants --deep` and
   `scripts/assurance/run.sh mutation --deep` for 1,024 x 128 invariants and all
-  20 expanded sentinels, with actual seeds and reports retained.
+  21 expanded sentinels, with actual seeds and reports retained.
 - Isolated `scripts/assurance/run.sh e2e-buidl`, `e2e-reg-d`, `e2e-context` and
   `e2e-identity`, plus both existing container smoke scripts.
 - Frozen-commit hosted CI results, required-check configuration and 15-minute

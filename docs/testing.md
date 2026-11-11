@@ -504,7 +504,7 @@ scripts/assurance/run.sh e2e-context
 scripts/assurance/run.sh e2e-identity
 ```
 
-Mutation requires 100% assertion kills for 14 PR or 20 expanded reviewed compiling
+Mutation requires 100% assertion kills for 15 PR or 21 expanded reviewed compiling
 sentinels, with passing mapped baselines. Analyzer baseline membership grants no
 suppression; all 78 current medium/high findings have individual Codex-reviewed
 rationales, human confirmation pending, with exclusive expiry 2026-12-11.

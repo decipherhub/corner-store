@@ -1,5 +1,63 @@
 # Progress
 
+## 2026-11-11 Session: OPS-004 F1 Commit-Failure Rollback Coverage
+
+Fixed the confirmed F1 assurance gap only. OPS-004 remains the sole active
+feature. Production source, deployment scripts, public demo artifacts and
+`test/integration/Invariants.t.sol` are unchanged. No product boundary or
+decision policy changed.
+
+`test/invariant/handlers/SettlementHandler.sol:49` adds
+`commitFailureThenRetry`: temporarily revoke the real surveillance Element's
+engine authorization, reject through `_reject`, restore authorization and retry
+the identical request. `_reject` checks exact revert, balance/state digest,
+Router/RFQ nonces and surveillance count. The per-venue counter advances only
+after rejection; the complete action must also pass its retry and ghost model.
+`test/invariant/Settlement.invariant.t.sol:10` seeds both directions for AMM and
+RFQ v2/v3, targets the new selector and requires two commit-failure rejections
+per venue in `invariant_atomicSettlementCommit`. The existing
+`testFuzz_exactAmountsAndRollback` also exercises the new action.
+
+`assurance/sentinels.json:49` adds PR sentinel `router-commit-swallow`, mapped
+only to the atomic invariant. Its match includes the preceding assignment to
+keep a distinct, unique site; the production source hash is unchanged. Current
+sets are 15 PR / 21 expanded; current count references in D041, testing, feature
+and quality documentation match. Historical 14/20 results below remain historical.
+
+All commands use Bash with `source scripts/assurance/env.sh`, the pinned local
+Foundry 1.7.1, Node 20.20.2 and other assurance tools. Logs are retained under
+`/private/tmp/w156-f1-*.log` and ignored `.assurance/reports/f1-*/`.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0 |
+| `forge test --offline --match-path test/invariant/Settlement.invariant.t.sol` | Exit 0; 4/4, including three 64 x 32 invariants and 256 fuzz cases |
+| `forge test --offline` | Exit 0; 1,200/1,200 across 75 suites, zero failed/skipped; the full gate repeated this on the final setup code |
+| `python3 -m unittest discover -s scripts/assurance -p 'test_*.py'` | Exit 0; 25/25 |
+| `python scripts/assurance/mutation.py --only router-commit-swallow --output .assurance/reports/f1-red` | Expected exit 1; pre-fix mapped baseline and mutant pass, 0/1 killed, mutant survives |
+| `forge test --offline --json --match-path 'test/invariant/*.t.sol'` in disposable pre-fix baseline/mutant workspaces | Both exit 0; 15/15 in five suites each, confirming the full pre-fix invariant suite survives; hashed logs in `f1-red-full-invariants/` |
+| `python scripts/assurance/mutation.py --only router-commit-swallow --output .assurance/reports/f1-green-final` | Exit 0; baseline passes, mutant killed by the named atomic invariant assertion, 1/1 killed, zero survivors; diagnostic subset, not a release verdict |
+| `forge test --offline --match-path test/invariant/Settlement.invariant.t.sol --match-test testFuzz_exactAmountsAndRollback --fuzz-runs 1 -vvvvv` | Exit 0; 1/1. Inspected all six deterministic traces: both Transfer events precede `commit` and the real `onTransfer` authorization revert |
+| `scripts/check.sh` | Exit 0, first run; 1,200/1,200 Foundry tests, all service/packed checks, legacy 2/2, deploy-v3 10/10, and all three assurance gates below |
+| `scripts/assurance/run.sh coverage` (inside check.sh) | Exit 0; primary 1,199/1,199, production EIP-170 1/1, supplemental 5/5; all floors passed with unchanged production scope measurements; 567.222 seconds |
+| `scripts/assurance/run.sh slither` (inside check.sh) | Exit 0; complete normalized baseline, 179 findings and all 102 detectors; 28.618 seconds |
+| `scripts/assurance/run.sh mutation` (inside check.sh) | Exit 0; 15/15 PR sentinels killed, 15 passing baselines, zero survivors, 100%; 104.508 seconds |
+| `python .assurance/reports/documentation/verify-f1.py` | Exit 0; nine text files, 12 local links, current 15/21 counts, sole active feature, nine hashed result sets, diagnostic red/green and full pre-fix invariant log hashes verified |
+| `git diff --check` and protected-path `git diff --exit-code` | Exit 0; no whitespace or protected production/demo/#160 path changes |
+
+The first post-fix mutation attempt failed closed on unmapped `setUp()` output.
+Setup now catches only the new witness calls, leaving missing counts to fail
+the atomic invariant before fuzzing. The successful rerun reports the mapped
+property's assertion failure. The mutation runner and its strict classifier
+are unchanged. The final-code full gate's atomic property exercised the new
+action 344 times with zero handler reverts (64 runs / 2,048 calls total).
+
+Separate four-profile live E2Es, the full nightly 1,024 x 128 campaign and the
+21-sentinel expanded campaign were not rerun for this test-only fix. Prior
+results below do not verify the new action at nightly depth. Hosted/container
+checks and prerequisite/Reporter integration remain UNVERIFIED or pending as
+previously recorded. No commit, push or external publication was performed.
+
 ## 2026-11-11 Session: OPS-004 Release Evidence and Full Verification
 
 OPS-004 is the sole active feature and is not passing. Scope: approved #156
