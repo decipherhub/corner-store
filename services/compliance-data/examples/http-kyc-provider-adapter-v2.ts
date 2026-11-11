@@ -112,11 +112,12 @@ export class HttpKycProviderAdapterV2 implements ProviderKycAdapterV2 {
       accreditedInvestor: vendor.checks.accredited === undefined ? undefined : CHECK.get(vendor.checks.accredited)
     };
     const status = STATUS.get(vendor.decision)!;
+    const sourceEvidenceHash = this.deps.commitments.hash("source", ["example-http.v2", providerId, vendor.caseId, vendor.reviewedAt, vendor.expiresAt, status, facts.kyc, facts.sanctions, facts.accreditedInvestor ?? null, subject, identity, asset, this.provenance, vendor.lei ?? null]);
     return {
       providerId,
       providerSchemaVersion,
-      assessmentRefHash: this.deps.commitments.hash("assessment", ["example-http.v2", providerId, vendor.caseId, vendor.reviewedAt]),
-      sourceEvidenceHash: this.deps.commitments.hash("source", ["example-http.v2", providerId, vendor.caseId, vendor.reviewedAt, vendor.expiresAt, status, facts.kyc, facts.sanctions, facts.accreditedInvestor ?? null, subject, identity, asset, this.provenance, vendor.lei ?? null]),
+      assessmentRefHash: this.deps.commitments.hash("assessment", ["example-http.v2", providerId, sourceEvidenceHash]),
+      sourceEvidenceHash,
       subject,
       identity,
       asset,

@@ -47,7 +47,8 @@ export async function runKycProviderConformanceV2(
     ? pass("environment-guard", metadata.environment === "production" ? "production adapter is accepted in production mode" : "demo adapter is refused in production mode")
     : fail("environment-guard", ownEnvironment ? "production mode did not enforce the declared environment" : "coordinator refused the adapter in its declared environment"));
 
-  const eligible = await refresh(adapter, metadata.environment, fixture, fixture.eligibleRequest);
+  const store = new InMemoryKycEvidenceStoreV2(fixture.commitments);
+  const eligible = await refresh(adapter, metadata.environment, fixture, fixture.eligibleRequest, store);
   if (!eligible) {
     checks.push(fail("eligible-evidence", "coordinator could not run the eligible refresh"));
   } else if (!eligible.eligible) {
@@ -58,7 +59,7 @@ export async function runKycProviderConformanceV2(
       : fail("eligible-evidence", "eligible evidence does not match the declared provider or schema"));
   }
 
-  const ineligible = await refresh(adapter, metadata.environment, fixture, fixture.ineligibleRequest);
+  const ineligible = await refresh(adapter, metadata.environment, fixture, fixture.ineligibleRequest, store);
   if (!ineligible) {
     checks.push(fail("fail-closed-evidence", "coordinator could not run the ineligible refresh"));
   } else if (ineligible.eligible) {
@@ -95,10 +96,11 @@ async function refresh(
   adapter: ProviderKycAdapterV2,
   mode: KycProviderEnvironment,
   fixture: KycProviderConformanceFixtureV2,
-  request: ProviderKycRequestV2
+  request: ProviderKycRequestV2,
+  store: InMemoryKycEvidenceStoreV2
 ): Promise<KycRefreshResultV2 | undefined> {
   try {
-    const coordinator = new KycEvidenceCoordinatorV2(adapter, new InMemoryKycEvidenceStoreV2(fixture.commitments), {
+    const coordinator = new KycEvidenceCoordinatorV2(adapter, store, {
       commitments: fixture.commitments,
       accept: async () => true,
       mode,

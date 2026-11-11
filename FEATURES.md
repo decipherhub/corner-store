@@ -38,6 +38,9 @@
   256-run full-word parameter fuzzing, v1 compatibility and deployed-size tests.
 - Compliance-data v1/v2 provider conformance, HMAC/replay/conflict/audit/expiry
   and optional LEI tests; Toolkit schema 7/codec/verifier and CLI tests.
+- HTTP v2 same-case revocation, acceptance-export rejection, stale approval
+  replay and independent per-asset materialization; shared-store conformance
+  detects reused references while identical-reference conflicts remain rejected.
 - 42 named settlement-binding tests plus recipe, missing-evidence and size
   regressions; isolated `scripts/e2e-identity-evidence.sh` (40 live cases).
 - `scripts/check.sh`, both `scripts/e2e-anvil.sh` profiles,
@@ -49,6 +52,9 @@ passing
 
 ### Notes
 
+- Confirmed P2 assessment-reference collision fix: three regressions failed
+  before the fix; all 25 compliance-data and 30 Toolkit tests, the full check
+  and identity E2E (40/40) passed afterward. See PROGRESS for commands/results.
 - Final release gates passed on 2026-11-11: 1,171 Foundry tests; both legacy
   profiles 7/7 scenarios plus runtime flows; context 12/12; identity 40/40.
   The full check passed after updating the stale packed schema-6 assertion.

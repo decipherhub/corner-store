@@ -9,7 +9,8 @@ import {createKycCommitmentsV2, loadLocalKycCommitmentsV2, validateLei} from "..
 import {KycEvidenceCoordinatorV2, InMemoryKycEvidenceStoreV2, kycEvidenceHashV2, validateKycEvidenceV2} from "../src/kyc-v2";
 import {DemoKycProviderAdapterV2} from "../src/kyc-demo-v2";
 import {runKycProviderConformanceV2} from "../src/kyc-conformance-v2";
-import {HttpKycProviderAdapterV2} from "../examples/http-kyc-provider-adapter-v2";
+import {ExampleVendorKycResponseV2, HttpKycProviderAdapterV2} from "../examples/http-kyc-provider-adapter-v2";
+import {identityEvidenceAcceptanceV2} from "../src/kyc-calldata-v2";
 import {ProviderKycAssessmentV2, ProviderKycRequestV2} from "../src/kyc-spi-v2";
 import {Hex} from "../src/types";
 
@@ -22,6 +23,8 @@ const demo = () => new DemoKycProviderAdapterV2({commitments, provenance, now: (
 const options = () => ({mode: "demo" as const, commitments, now: () => 1000, accept: async () => true, audit: async () => undefined});
 const assessment = async (): Promise<ProviderKycAssessmentV2> => demo().assess(request);
 const provider = (value: ProviderKycAssessmentV2) => ({metadata: demo().metadata, assess: async () => value});
+const httpBody = (): ExampleVendorKycResponseV2 => ({caseId: "private-case", reviewedAt: 1000, expiresAt: 1900, decision: "approved", checks: {identity: "pass", sanctions: "clear"}, wallet: request.subject, identityId: request.identity, asset: request.asset});
+const httpProvider = (body: () => ExampleVendorKycResponseV2) => new HttpKycProviderAdapterV2({providerId: "http-example", providerSchemaVersion: "example.v2", endpoint: "https://example.invalid/kyc", provenance}, {commitments, credential: async () => "", transport: async () => ({status: 200, json: async () => body()})});
 
 async function success() {
   const result = await new KycEvidenceCoordinatorV2(demo(), new InMemoryKycEvidenceStoreV2(commitments), options()).refresh(request);
@@ -172,6 +175,75 @@ test("v2 HTTP adapter commits source/assessment refs and omits raw evidence, LEI
   const other = new HttpKycProviderAdapterV2({providerId: "http-example", providerSchemaVersion: "example.v2", endpoint: "https://example.invalid/kyc", provenance}, {commitments: createKycCommitmentsV2("cd".repeat(32)), credential: async () => "", transport: async () => ({status: 200, json: async () => body})});
   assert.notEqual((await http.assess(request)).sourceEvidenceHash, (await other.assess(request)).sourceEvidenceHash);
   assert.notEqual((await http.assess(request)).assessmentRefHash, (await other.assess(request)).assessmentRefHash);
+});
+
+test("v2 HTTP same-case revocation persists and blocks acceptance export and stale approval replay", async () => {
+  const body = httpBody();
+  const http = httpProvider(() => body);
+  const store = new InMemoryKycEvidenceStoreV2(commitments);
+  const coordinator = new KycEvidenceCoordinatorV2(http, store, {...options(), mode: "production"});
+  const approved = await coordinator.refresh(request);
+  assert.ok(approved.eligible);
+  if (!approved.eligible) return;
+  assert.equal(identityEvidenceAcceptanceV2(approved.materialization, commitments, 1000).functionName, "acceptEvidence");
+
+  body.decision = "revoked";
+  const revoked = await coordinator.refresh(request);
+  assert.equal(revoked.eligible, false);
+  if (!revoked.eligible) assert.equal(revoked.reason, "REVOKED");
+  const current = await store.current({...request, providerId: http.metadata.providerId});
+  assert.ok(current);
+  assert.equal(current.status, "REVOKED");
+  assert.equal(current.eligible, false);
+  assert.equal(current.operatorAccepted, false);
+  assert.notEqual(current.assessmentRefHash, approved.materialization.assessmentRefHash);
+  assert.throws(() => identityEvidenceAcceptanceV2(current, commitments, 1000), /current operator-accepted evidence is required/);
+
+  body.decision = "approved";
+  const replay = await coordinator.refresh(request);
+  assert.equal(replay.eligible, false);
+  if (!replay.eligible) assert.equal(replay.reason, "STORE_CONFLICT");
+  assert.deepEqual(await store.current({...request, providerId: http.metadata.providerId}), current);
+});
+
+test("v2 HTTP one case materializes independently for two assets", async () => {
+  const body = httpBody();
+  const http = httpProvider(() => body);
+  const store = new InMemoryKycEvidenceStoreV2(commitments);
+  const coordinator = new KycEvidenceCoordinatorV2(http, store, {...options(), mode: "production"});
+  const otherRequest = {...request, asset: `0x${"44".repeat(20)}` as const};
+  const first = await coordinator.refresh(request);
+  body.asset = otherRequest.asset;
+  const second = await coordinator.refresh(otherRequest);
+  assert.ok(first.eligible);
+  assert.ok(second.eligible, JSON.stringify(second));
+  if (!first.eligible || !second.eligible) return;
+  assert.notEqual(first.materialization.assessmentRefHash, second.materialization.assessmentRefHash);
+  assert.notEqual(first.materialization.sourceEvidenceHash, second.materialization.sourceEvidenceHash);
+  assert.notEqual(first.materialization.evidenceHash, second.materialization.evidenceHash);
+  assert.deepEqual(await store.current({...request, providerId: http.metadata.providerId}), first.materialization);
+  assert.deepEqual(await store.current({...otherRequest, providerId: http.metadata.providerId}), second.materialization);
+  assert.equal(identityEvidenceAcceptanceV2(first.materialization, commitments, 1000).asset, request.asset);
+  assert.equal(identityEvidenceAcceptanceV2(second.materialization, commitments, 1000).asset, otherRequest.asset);
+});
+
+test("v2 identical assessment reference still rejects conflicting negative content", async () => {
+  const snapshot = await success();
+  const store = new InMemoryKycEvidenceStoreV2(commitments);
+  await store.replaceCurrent(snapshot);
+  const conflict = {...snapshot, status: "REVOKED" as const, eligible: false, operatorAccepted: false};
+  conflict.evidenceHash = kycEvidenceHashV2(conflict, commitments);
+  await assert.rejects(store.replaceCurrent(conflict), /conflicting assessment evidence/);
+  assert.deepEqual(await store.current(snapshot), snapshot);
+  assert.equal((await store.replaceCurrent(snapshot)).applied, false);
+});
+
+test("v2 conformance rejects assessment references reused across bindings", async () => {
+  const adapter = demo();
+  const colliding = {metadata: adapter.metadata, assess: async (...args: Parameters<typeof adapter.assess>) => ({...await adapter.assess(...args), assessmentRefHash: ref(99)})};
+  const report = await runKycProviderConformanceV2(colliding, {commitments, eligibleRequest: request, ineligibleRequest: {...request, subject: `0x${"33".repeat(20)}`}, now: () => 1000});
+  assert.equal(report.passed, false, JSON.stringify(report));
+  assert.ok(report.checks.some((check) => !check.pass && check.detail.includes("STORE_CONFLICT")));
 });
 
 test("v2 translator revalidates keyed evidence and emits only compact unsigned calldata", async () => {

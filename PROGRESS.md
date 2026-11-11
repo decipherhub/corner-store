@@ -1,5 +1,47 @@
 # Progress
 
+## 2026-11-11 Session: DATA-004 Assessment Reference Collision Fix
+
+DATA-004 is passing. Scope: the confirmed P2 HTTP v2 assessment-reference
+collision, regression tests and conformance coverage. The assessment reference
+now uses the keyed source commitment under the separate assessment domain, so
+identity/wallet/asset binding, status, facts and revision inputs participate.
+Same-case/same-time revocation reaches the existing replacement ordering,
+persists negative evidence, blocks acceptance export and survives stale positive
+replay. The immutable identical-reference conflict guard is unchanged.
+
+The non-example demo v2 adapter already commits binding and source evidence in
+its assessment reference. The v2 conformance runner now shares one store between
+eligible/ineligible checks to detect references reused across bindings.
+No product boundary, v1 adapter, contract or protected public Monad path changed.
+
+Tests first, against unchanged adapter/conformance code: 22 passed, three failed.
+`v2 HTTP same-case revocation persists and blocks acceptance export and stale
+approval replay` returned STORE_CONFLICT instead of REVOKED; `v2 HTTP one case
+materializes independently for two assets` rejected asset B with STORE_CONFLICT;
+`v2 conformance rejects assessment references reused across bindings` incorrectly
+reported passed. `v2 identical assessment reference still rejects conflicting
+negative content` passed both before and after the fix. All four pass afterward.
+
+Commands ran through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'` (Node 20.20.2,
+Foundry 1.7.1). Logs are under `/private/tmp/w159-p2-` with the suffixes below.
+
+| Command | Actual result | Log suffix |
+| --- | --- | --- |
+| `node --version && npm test --prefix services/compliance-data` (before fix) | Exit 1; smoke/provider checks passed, 22 named tests passed, three failed | `before.log` |
+| `npm test --prefix services/compliance-data` | Exit 0; smoke/provider checks and 25/25 named tests passed | `compliance-data.log` |
+| `npm test --prefix services/toolkit` | Exit 0; smoke and 30/30 named tests passed | `toolkit.log` |
+| `scripts/check.sh` | Exit 0, first run; 1,171 Foundry tests, service/packed-consumer checks and 10 deploy-v3 tests passed | `check.log` |
+| `scripts/e2e-identity-evidence.sh` | Exit 0, first run; 40/40 live cases passed | `identity.log` |
+
+`git diff --check` and
+`git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`
+both exited 0 after the final documentation edits. Legacy Anvil profile/context
+E2Es were not rerun for this adapter/conformance-only fix; their passing release
+baseline is recorded below. No commit, push or external publication was performed.
+Next: user reviews the working tree.
+
 ## 2026-11-11 Session: DATA-004 Step 4 Release Finalization
 
 DATA-004 is passing after all required gates. Scope: issue #159 P1 release
