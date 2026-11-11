@@ -2298,6 +2298,63 @@ passing
 - snapshot은 demo/reference checkpoint이며 production indexer나 live RPC provider가 아니다.
 - production Manifest lifecycle mutation과 governance action은 별도 범위다.
 
+## OPS-004: Production Assurance Gates
+
+### Behavior
+
+- Dedicated handlers exercise real Engine/registries/ERC-3643 fixtures through
+  AMM and RFQ v2/v3 with independent ghost models, exact failures and successful
+  witnesses. Eight implemented invariant properties and six parameterized fuzz
+  functions cover settlement, replay, governance, binding, context and identity.
+  Settlement witnesses include commit-failure rollback and same-request retry
+  for AMM and RFQ v2/v3 in both directions.
+- Fixed PR 64 x 32 and rotating nightly 1,024 x 128 profiles retain failures/seeds.
+- Source-hash-checked mutations require passing baselines and 100% assertion
+  kills for reviewed compiling sentinels. Errors/timeouts fail separately.
+- Pinned Slither checks the complete production inventory with individually
+  reviewed expiring suppressions separate from its normalized baseline.
+- Production coverage floors fail closed on missing instrumentation. Coverage
+  compiler adjustments are separate from production compilation.
+- Repository-local checksum/hash-locked tooling and isolated E2Es feed separate
+  CI jobs. Existing container checks and protected demo artifacts remain intact.
+- Versioned release evidence separates automated checks from independent audit
+  and chain-specific recovery artifacts. Missing evidence blocks production.
+
+### Verification
+
+- `scripts/check.sh` including 27 gate-harness regressions, repository checks,
+  coverage, Slither and all 15 PR mutation sentinels.
+- `scripts/assurance/run.sh invariants --deep` and
+  `scripts/assurance/run.sh mutation --deep` for 1,024 x 128 invariants and all
+  21 expanded sentinels, with actual seeds and reports retained.
+- Isolated `scripts/assurance/run.sh e2e-buidl`, `e2e-reg-d`, `e2e-context` and
+  `e2e-identity`, plus both existing container smoke scripts.
+- Frozen-commit hosted CI results, required-check configuration and 15-minute
+  PR-job budget evidence including provisioning/uploads.
+- After #161 integration, real Reporter observational invariant and redaction
+  sentinel, source-bound artifact refresh and complete verification rerun.
+- Protected-path comparison and existing legacy-reader byte-preservation tests;
+  template/link/status consistency and `git diff --check`.
+
+### State
+
+active
+
+### Notes
+
+- Sole active feature. D040-D042 are adopted defaults, team-to-confirm.
+- The assurance environment applies once per resolved worktree root across
+  nested Bash processes, preserving caller PATH and exported-variable overrides.
+- Production evidence honors the exact-version-checked `FOUNDRY_SOLC` override
+  without requiring a user-home SVM installation; invalid overrides fail closed.
+- Active plan: `docs/exec-plans/active/OPS-004-production-assurance-gates.md`.
+- Local results and remaining UNVERIFIED checks are recorded in `PROGRESS.md`.
+  Reporter/prerequisite reconciliation, hosted CI and unavailable Docker checks
+  prevent a passing claim. The public demo and #160's invariant test are untouched.
+- Release contract: `docs/release-assurance.md` and
+  `docs/release-evidence.v1.template.json`. Actual external audit and recovery
+  artifacts remain MISSING; the template is not completed production evidence.
+
 ## DEMO-003 — Role-aware RFQ Compliance Walkthrough
 
 ### Behavior

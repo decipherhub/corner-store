@@ -344,6 +344,19 @@ export function copyProductionSource(root: string, target: string, source = capt
 }
 
 function solcExecutable(version: string): string {
+  const configured = process.env.FOUNDRY_SOLC;
+  if (configured !== undefined) {
+    let path: string; let output: string;
+    try {
+      if (!configured) throw new Error("empty compiler path");
+      path = realpathSync(resolve(configured));
+      output = execFileSync(path, ["--version"], {encoding: "utf8", stdio: ["ignore", "pipe", "pipe"]});
+    } catch {
+      throw new Error(`FOUNDRY_SOLC must point to an executable solc ${version}: ${configured || "(empty)"}`);
+    }
+    if (output.match(/^Version: (\d+\.\d+\.\d+)\+/m)?.[1] !== version) throw new Error(`FOUNDRY_SOLC must report exactly solc ${version}: ${configured}`);
+    return path;
+  }
   const homes = [join(homedir(), ".svm"), join(homedir(), ".local/share/svm"), join(homedir(), "Library/Application Support/svm")];
   for (const home of homes) {
     const path = join(home, version, `solc-${version}`);

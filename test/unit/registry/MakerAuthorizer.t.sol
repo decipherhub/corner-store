@@ -88,4 +88,31 @@ contract MakerAuthorizerTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, quoteHash);
         return abi.encodePacked(r, s, v);
     }
+
+    function test_pendingCancellationAndDuplicateSchedulesFailClosed() public {
+        vm.expectRevert(Errors.PendingActionNotFound.selector);
+        authorizer.cancelDelegateAuthorization(maker, delegate);
+        authorizer.scheduleDelegate(maker, delegate, bytes32("rotation"));
+        vm.expectRevert(Errors.PendingActionExists.selector);
+        authorizer.scheduleDelegate(maker, delegate, bytes32("duplicate"));
+        authorizer.cancelDelegateAuthorization(maker, delegate);
+        assertEq(authorizer.pendingDelegateReadyAt(maker, delegate), 0);
+        vm.expectRevert(Errors.PendingActionNotFound.selector);
+        authorizer.executeDelegateAuthorization(maker, delegate);
+    }
+
+    function test_authorizedDuplicateAndInvalidPairsReject() public {
+        _authorizeDelegate();
+        vm.expectRevert(Errors.InvalidAuthorizationState.selector);
+        authorizer.scheduleDelegate(maker, delegate, bytes32("duplicate"));
+        vm.expectRevert(Errors.InvalidAuthorizationState.selector);
+        authorizer.revokeDelegate(maker, address(99), bytes32("unknown"));
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        authorizer.scheduleDelegate(address(0), delegate, bytes32(0));
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        authorizer.scheduleDelegate(maker, address(0), bytes32(0));
+        vm.expectRevert(Errors.InvalidAuthorizationState.selector);
+        authorizer.scheduleDelegate(maker, maker, bytes32(0));
+        assertFalse(authorizer.isAuthorizedSigner(address(0), quoteHash, _sign(MAKER_PK)));
+    }
 }

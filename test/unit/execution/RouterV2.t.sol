@@ -306,4 +306,10 @@ contract RouterV2Test is Test {
         _execute();
         assertEq(engine.commitCount(), 1);
     }
+
+    function test_constructorRejectsMissingPolicyRegistryCode() public {
+        ContextEngine missing = new ContextEngine(address(0));
+        vm.expectRevert(Errors.InvalidContextEvidence.selector);
+        new ExecutionRouterV2(missing, venues, selector, operators);
+    }
 }

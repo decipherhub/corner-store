@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "path": "script/DeployProductionCore.s.sol",
+  "sha256": "076300e91339d4ea65b2774e0b2b189a40456c32abe3f306c3261af4313f4ca5",
+  "justification": "Slither 0.11.6 cannot resolve overloaded Vm.serializeBytes32 for codehash on struct fields. Explicit bytes32 casts preserve the Solidity type/value and are applied only in the disposable analysis input. Original and analysis input hashes and patches are retained. Partial analysis is forbidden.",
+  "tracking_issue": "#156",
+  "patches": [
+    {
+      "before": "deployed.ammAdapter.codehash",
+      "after": "bytes32(deployed.ammAdapter.codehash)"
+    },
+    {
+      "before": "deployed.elementReg.codehash",
+      "after": "bytes32(deployed.elementReg.codehash)"
+    },
+    {
+      "before": "deployed.engine.codehash",
+      "after": "bytes32(deployed.engine.codehash)"
+    },
+    {
+      "before": "deployed.makerAuthorizer.codehash",
+      "after": "bytes32(deployed.makerAuthorizer.codehash)"
+    },
+    {
+      "before": "deployed.operatorReg.codehash",
+      "after": "bytes32(deployed.operatorReg.codehash)"
+    },
+    {
+      "before": "deployed.policyReg.codehash",
+      "after": "bytes32(deployed.policyReg.codehash)"
+    },
+    {
+      "before": "deployed.recipeReg.codehash",
+      "after": "bytes32(deployed.recipeReg.codehash)"
+    },
+    {
+      "before": "deployed.rfqAdapter.codehash",
+      "after": "bytes32(deployed.rfqAdapter.codehash)"
+    },
+    {
+      "before": "deployed.router.codehash",
+      "after": "bytes32(deployed.router.codehash)"
+    },
+    {
+      "before": "deployed.selector.codehash",
+      "after": "bytes32(deployed.selector.codehash)"
+    },
+    {
+      "before": "deployed.venueReg.codehash",
+      "after": "bytes32(deployed.venueReg.codehash)"
+    }
+  ]
+}

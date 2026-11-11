@@ -10,10 +10,11 @@ forge lint --severity high --deny warnings src
 forge build
 ```
 
-Foundry high-severity production lint를 fail-closed gate로 사용한다. medium/low
-warning budget과 별도 보안 분석기는 후속 범위다. CI는 재현 가능한 lint/build/test
-의미를 위해 Foundry v1.7.1을 고정한다. Foundry upgrade는 새 lint rule과 formatter
-변경을 별도 PR에서 검토하고 전체 check를 통과한 뒤 반영한다.
+Foundry high-severity production lint is a fail-closed gate. OPS-004 also adds
+pinned Slither analysis with separately reviewed suppressions, mutation and
+coverage gates, described below. Medium/low lint budgeting remains separate.
+CI pins Foundry v1.7.1. Review new lint rules and formatter changes in a separate
+Foundry upgrade PR and require the full check before adoption.
 
 ### Unit Tests
 
@@ -359,13 +360,12 @@ mutation, primary authority, evidence lifecycle, cancellation/replay, cross-doma
 rejection, registration/configuration drift and atomic rollback. The dedicated
 live fixture is intentionally narrower than those suites.
 
-All three live Anvil commands are **manual delivery/release gates**:
-`scripts/e2e-anvil.sh`, `scripts/e2e-anvil.sh --profile reg-d` and
-`scripts/e2e-context-provenance.sh`. `.github/workflows/ci.yml` runs
-`scripts/check.sh` and separate container smokes, and currently runs none of the
-live scripts. Keep that CI boundary to avoid a further deployment in every PR;
-record all three manual results before accepting EXEC-002 or promoting v3.
-Public Monad remains RFQ v2 and is not redeployed by these gates.
+OPS-004 adds `.github/workflows/assurance.yml`: PRs run isolated BUIDL, context
+and identity E2Es; scheduled/manual runs also require Reg D and deeper campaigns.
+These invoke the existing scripts through `scripts/assurance/run.sh` in separate
+workspaces/ports. `.github/workflows/ci.yml` keeps repository and container checks.
+All four live results remain required delivery/release evidence. Public Monad
+remains RFQ v2 and is not redeployed by these gates.
 
 ### Isolated identity evidence v2 E2E (DATA-004)
 
@@ -373,7 +373,7 @@ Public Monad remains RFQ v2 and is not redeployed by these gates.
 npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/e2e-identity-evidence.sh'
 ```
 
-This separate manual gate starts chain 31337 on loopback port 8548, builds
+This separate gate starts chain 31337 on loopback port 8548, builds
 compliance-data/Toolkit/RFQ, deploys the opt-in Reg D v4 fixture under normal
 EIP-170 limits and removes its temporary artifact/process on exit. An alternate
 port is available through `--port`. It never upgrades a public deployment.
@@ -395,7 +395,7 @@ are not covered by this gate. See the
 
 DATA-004 requires the repository check, both legacy Anvil profiles, the context
 gate above, this identity gate and protected-path/whitespace checks before
-`passing`. Existing manual/CI boundaries stay as documented above. The four
+`passing`. OPS-004's automated/manual workflow split is documented above. The four
 [P2 PR slots](./product-specs/identity-p2-schedule.md) are scheduled, not implemented.
 
 ### Append-only production evidence (DEPLOY-004)
@@ -457,12 +457,13 @@ remain unverified. See the [production runbook](./deployment-production.md).
 scripts/check.sh
 ```
 
-이 명령은 현재 저장소에서 지원하는 format, lint, build와 test를 순서대로 실행한다.
-현재 포함 범위는 Foundry fmt/lint/build/test, RFQ SDK·demo backend·CLI·Toolkit,
-generated standalone consumer smoke, Compliance Data SDK,
-Deployment Studio, Operator API/dashboard smoke, vendored deploy-v3 test와 whitespace check다. GitHub
-Actions도 동일한 스크립트를 실행한다. Node 서비스는 lockfile 기반 `npm ci`를
-사용하고, vendored deploy-v3는 `yarn.lock` 기반 설치 후 테스트한다.
+This command provisions checksum/hash-locked local tools, runs 27 assurance
+harness regressions, format/lint/build/Foundry tests, service and packed-consumer
+checks, legacy artifact checks, deploy-v3 and whitespace checks, then coverage,
+Slither and PR mutations. CI uses `--repository-only` with those three independent
+gates in separate required jobs. That option is not a complete assurance verdict.
+Node services install with committed npm lockfiles; deploy-v3 uses yarn.lock.
+Both container smoke scripts remain separate required checks with Docker.
 
 RFQ SDK smoke는 reference와 custom pricing/risk/signer/nonce 세트에 동일
 conformance contract를 적용한다. 이 suite는 capability, base-unit quote,
@@ -471,6 +472,61 @@ maker-scoped monotonic nonce를 검사한다. Toolkit smoke는 두 scaffold mode
 overwrite 거부, environment-name-only manifest와 secret-free `.env.example`을
 검증한다. Fresh directory integration check는 vendored SDK에 prebuilt `dist`가
 없는 상태에서 두 scaffold의 `npm install && npm test`를 실행한다.
+
+### Stateful and independent production assurance (OPS-004)
+
+Use Bash and `source scripts/assurance/env.sh` after
+`python3 scripts/assurance/install.py`; all analysis tools/caches remain inside
+ignored `.assurance/`. Missing tools fail closed. Pinned versions, offline
+provisioning, report layouts and failure handling are in
+[`assurance/README.md`](../assurance/README.md).
+
+Five suites in `test/invariant/` use explicit handler selectors and real
+Engine/registry/ERC-3643 fixtures. Eight properties model balances/settlement,
+custody, atomic commit, nonce namespaces, governance authorization, exact version
+binding, RFQ context/domain and identity lifecycle. Models account for explicit
+mint/burn/donations, expected failure rollback and original trust-basis
+restoration. Successful-action witnesses/counters prevent vacuity; unexpected
+handler reverts fail. Six parameterized fuzz functions vary amount, time,
+version and malformed/signed context. External #160's integration test is intact.
+Real Reporter observation/redaction remains pending #161; no substitute counts.
+
+PR profile: 64 x 32, seed `0x156`. Scheduled/manual profile: 1,024 x 128 with a
+rotating retained seed. Check every call. Run:
+
+```sh
+scripts/assurance/run.sh invariants
+scripts/assurance/run.sh invariants --deep
+scripts/assurance/run.sh mutation --deep
+scripts/assurance/run.sh e2e-buidl
+scripts/assurance/run.sh e2e-reg-d
+scripts/assurance/run.sh e2e-context
+scripts/assurance/run.sh e2e-identity
+```
+
+Mutation requires 100% assertion kills for 15 PR or 21 expanded reviewed compiling
+sentinels, with passing mapped baselines. Analyzer baseline membership grants no
+suppression; all 78 current medium/high findings have individual Codex-reviewed
+rationales, human confirmation pending, with exclusive expiry 2026-12-11.
+Source drift, new/upgraded findings, invalid/expired review and incomplete
+analysis fail. All production sources/deployment entry points and 102 Slither
+detectors are required. Retain raw/normalized reports and compatibility casts.
+
+Coverage floors (line/branch) are execution 95/90, registry 95/90, compliance
+90/85, auth/libraries/factory each 90/80 and the two-file production deployment
+allowlist 90/80. Missing instrumentation fails. `--ir-minimum` is coverage-only;
+the production EIP-170 assertion runs separately. PredicateValidation's assembly
+source-map issue uses one exact-source unoptimized non-IR supplemental record,
+with both raw reports retained. Five hash-bound non-executable-file exemptions
+do not exclude executable logic. Coverage is not a security proof.
+
+PR jobs target 15 minutes; deep jobs allow 60 minutes. Hosted budgets, required
+checks and container execution need actual evidence before OPS-004 is passing.
+Retain commands, commit/dirty status, versions, seeds, counterexamples, results,
+elapsed times and hashes for 30 days; archive release artifacts durably before
+CI expiry. See [release assurance](./release-assurance.md) for the versioned
+template and separate external audit/recovery obligations. All adopted defaults
+are team-to-confirm; no audit or drill completion is claimed.
 
 ## Manual Verification
 

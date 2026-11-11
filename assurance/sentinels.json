@@ -1,0 +1,323 @@
+{
+  "schemaVersion": 1,
+  "review_status": "implemented defaults, team-to-confirm",
+  "sentinels": [
+    {
+      "id": "router-input-delta",
+      "path": "src/execution/ExecutionRouterBase.sol",
+      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "before": "realizedAmountIn != req.context.amountIn",
+      "after": "false && realizedAmountIn != req.context.amountIn",
+      "tests": [
+        "test_revert_whenRealizedTokenInDiffersFromApprovedAmount"
+      ],
+      "match_path": "test/unit/execution/Router.t.sol",
+      "review": "Removing the payer input delta guard permits execution inconsistent with the authorized input.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "router-nonce",
+      "path": "src/execution/ExecutionRouterBase.sol",
+      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "before": "usedNonce[msg.sender][req.nonce] = true;",
+      "after": "usedNonce[msg.sender][req.nonce] = false;",
+      "tests": [
+        "test_execute_happyPath",
+        "test_revert_nonceUsed"
+      ],
+      "match_path": "test/unit/execution/Router.t.sol",
+      "review": "A successful settlement must consume the caller nonce exactly once.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "router-commit",
+      "path": "src/execution/ExecutionRouterBase.sol",
+      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "before": "engine.commit(settledContext);",
+      "after": "",
+      "tests": [
+        "test_verifiedExecutionMeasuresCommitsAndEmits"
+      ],
+      "match_path": "test/unit/execution/RouterV2.t.sol",
+      "review": "Settlement must commit measured quantities exactly once; observer counter detects omission.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "router-commit-swallow",
+      "path": "src/execution/ExecutionRouterBase.sol",
+      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "before": "settledContext.amountOut = realizedAmountOut;\n        engine.commit(settledContext);",
+      "after": "settledContext.amountOut = realizedAmountOut;\n        try engine.commit(settledContext) {} catch {}",
+      "tests": [
+        "invariant_atomicSettlementCommit"
+      ],
+      "match_path": "test/invariant/Settlement.invariant.t.sol",
+      "review": "A post-settlement commit failure must roll back both token legs and replay nonces; the invariant requires real commit-failure rejections and same-request retries for every venue.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "governance-delay",
+      "path": "src/registry/OperatorRegistry.sol",
+      "sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",
+      "before": "if (block.timestamp < readyAt) revert Errors.TimelockNotReady(readyAt);",
+      "after": "",
+      "tests": [
+        "test_globalUnpause_requiresOwnerScheduleAndDelay"
+      ],
+      "match_path": "test/unit/registry/OperatorRegistry.t.sol",
+      "review": "A scheduled global recovery must reject before the owner delay elapses.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "immutable-element",
+      "path": "src/registry/ElementRegistry.sol",
+      "sha256": "371dcdef992a99572e9aeb5b56e5e33ff28281a11da34e043c6569df9cd41da9",
+      "before": "if (_elements[elementId] != address(0)) revert Errors.ElementAlreadyRegistered(elementId);",
+      "after": "",
+      "tests": [
+        "test_registerElement_is_immutable_and_stores_default_action"
+      ],
+      "match_path": "test/unit/registry/ElementRegistry.t.sol",
+      "review": "An existing Element ID must reject replacement even by its owner.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "rfq-v2-policy",
+      "path": "src/execution/adapters/rfq/RFQAdapter.sol",
+      "sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
+      "before": "quote.policyId != decision.policyId",
+      "after": "false",
+      "tests": [
+        "test_revert_quotePolicyDoesNotMatchFreshSettlementDecision"
+      ],
+      "match_path": "test/unit/execution/RFQAdapter.t.sol",
+      "review": "Signed quote policy must equal the fresh settlement decision.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "rfq-v2-domain",
+      "path": "src/execution/adapters/rfq/RFQAdapter.sol",
+      "sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
+      "before": "EIP712(\"CornerStoreRFQ\", \"2\")",
+      "after": "EIP712(\"CornerStoreRFQ\", \"1\")",
+      "tests": [
+        "test_v2DomainUsesVersionChainAndAdapter"
+      ],
+      "match_path": "test/unit/execution/RFQAdapter.t.sol",
+      "review": "Version 2 is an explicit signature namespace; a v1 domain cannot produce the v2 digest.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "rfq-v3-domain",
+      "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
+      "sha256": "cff8d262ad1dd4b92d3476f836910f1c17110445b6d274e66cfa17d9cb69a460",
+      "before": "EIP712(\"CornerStoreRFQ\", \"3\")",
+      "after": "EIP712(\"CornerStoreRFQ\", \"2\")",
+      "tests": [
+        "test_v3DomainAndTypeExactVector"
+      ],
+      "match_path": "test/unit/execution/RFQAdapterV3.t.sol",
+      "review": "V3 must use its own signed type and domain version, independent of v2.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "rfq-v3-a06",
+      "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
+      "sha256": "cff8d262ad1dd4b92d3476f836910f1c17110445b6d274e66cfa17d9cb69a460",
+      "before": "quote.affiliateEvidenceHash\n                    != ContextEvidence.affiliateEvidenceHash(req.context, policyReg, affiliateSource)",
+      "after": "false",
+      "tests": [
+        "test_evidenceRefreshImmediatelyInvalidatesQuote"
+      ],
+      "match_path": "test/unit/execution/RFQAdapterV3.t.sol",
+      "review": "A refreshed A-06 revision invalidates an old quote before settlement.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "identity-generation",
+      "path": "src/compliance/elements/IdentityUniquenessV2.sol",
+      "sha256": "5be7a92a068bc787ae9ab2cebdbc33897f689d4edb284ef6d96c8b8292c297af",
+      "before": "++bindingGeneration[wallet];",
+      "after": "",
+      "tests": [
+        "test_identityWalletAssetBindingAndRebindingCannotReplayEvidence"
+      ],
+      "match_path": "test/unit/compliance/elements/IdentityEvidenceV2.t.sol",
+      "review": "Unbind/rebind must invalidate evidence under the earlier binding generation.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "identity-trust",
+      "path": "src/compliance/elements/IdentityUniquenessV2.sol",
+      "sha256": "5be7a92a068bc787ae9ab2cebdbc33897f689d4edb284ef6d96c8b8292c297af",
+      "before": "trustedIssuerBasis[evidence.issuerId] != evidence.trustBasisHash) {",
+      "after": "false) {",
+      "tests": [
+        "test_currentIssuerRemovalAndBasisChangeInvalidateAcceptedEvidence"
+      ],
+      "match_path": "test/unit/compliance/elements/IdentityEvidenceV2.t.sol",
+      "review": "Accepted evidence must remain bound to the current issuer trust basis.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "identity-expiry",
+      "path": "src/compliance/elements/IdentityUniquenessV2.sol",
+      "sha256": "5be7a92a068bc787ae9ab2cebdbc33897f689d4edb284ef6d96c8b8292c297af",
+      "before": "block.timestamp >= evidence.expiresAt",
+      "after": "false",
+      "tests": [
+        "test_allSupportedTypesAndExpiryBoundary"
+      ],
+      "match_path": "test/unit/compliance/elements/IdentityEvidenceV2.t.sol",
+      "review": "Evidence is invalid at the exclusive expiry boundary.",
+      "tier": "pr",
+      "runner": "forge"
+    },
+    {
+      "id": "rfq-v3-flow",
+      "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
+      "sha256": "cff8d262ad1dd4b92d3476f836910f1c17110445b6d274e66cfa17d9cb69a460",
+      "before": "quote.flowType != uint8(req.context.flowType)",
+      "after": "false",
+      "tests": [
+        "test_contextMutationsRejectBeforeEvaluation"
+      ],
+      "match_path": "test/unit/execution/RFQAdapterV3.t.sol",
+      "review": "The caller cannot substitute a flow that differs from the signed quote.",
+      "tier": "expanded",
+      "runner": "forge"
+    },
+    {
+      "id": "rfq-v3-policy",
+      "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
+      "sha256": "cff8d262ad1dd4b92d3476f836910f1c17110445b6d274e66cfa17d9cb69a460",
+      "before": "if (quote.policyId != decision.policyId) revert Errors.RFQQuoteMismatch();",
+      "after": "",
+      "tests": [
+        "test_policyMismatchRollsBack"
+      ],
+      "match_path": "test/unit/execution/RFQAdapterV3.t.sol",
+      "review": "The v3 settlement repeats fresh policy binding after preflight.",
+      "tier": "expanded",
+      "runner": "forge"
+    },
+    {
+      "id": "rfq-v2-context",
+      "path": "src/execution/adapters/rfq/RFQAdapter.sol",
+      "sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
+      "before": "quote.amountIn != req.context.amountIn",
+      "after": "false",
+      "tests": [
+        "test_revert_tokenAmountOrVenueMismatch"
+      ],
+      "match_path": "test/unit/execution/RFQAdapter.t.sol",
+      "review": "The signed input amount must equal the Router request.",
+      "tier": "expanded",
+      "runner": "forge"
+    },
+    {
+      "id": "router-output-delta",
+      "path": "src/execution/ExecutionRouterBase.sol",
+      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "before": "realizedAmountOut != req.context.amountOut",
+      "after": "false",
+      "tests": [
+        "test_revert_whenRealizedTokenOutExceedsApprovedAmount"
+      ],
+      "match_path": "test/unit/execution/Router.t.sol",
+      "review": "Output deltas must match the preauthorized exact fill.",
+      "tier": "expanded",
+      "runner": "forge"
+    },
+    {
+      "id": "deployment-overwrite",
+      "path": "services/toolkit/src/production-publication.ts",
+      "sha256": "b76859bb87dd78c7fbbd2e42e6fc71b9b79d62eed255aba8f2f7e057ab8e7510",
+      "before": "    if (present(output)) throw new Error(`production destination occupied: ${output}`);\n    if (present(`${output}.reservation`))",
+      "after": "    if (present(`${output}.reservation`))",
+      "tests": [
+        "occupied production destination rejects before evidence, signer or RPC work"
+      ],
+      "review": "Removing the early occupied destination refusal reaches evidence/signing work; a later guard is insufficient.",
+      "tier": "pr",
+      "runner": "node",
+      "build": [
+        "npm",
+        "run",
+        "build",
+        "--prefix",
+        "services/cli"
+      ],
+      "test_file": "services/cli/dist/cli/test/production-evidence.js"
+    },
+    {
+      "id": "recovery-rebroadcast",
+      "path": "services/cli/src/commands.ts",
+      "sha256": "b1ebaaea55aec65edb7f882d76e67d705e51ebda45f32601ef050d250b83d470",
+      "before": "    const execution = events.find((event) => event.phase === \"executing\");",
+      "after": "    execFileSync(\"forge\", [\"script\", \"script/DeployProductionCore.s.sol\", \"--broadcast\"]);\n    const execution = events.find((event) => event.phase === \"executing\");",
+      "tests": [
+        "production recovery without execution evidence never invokes a signing subprocess"
+      ],
+      "review": "Recovery must never launch a signing subprocess, including when execution evidence is missing.",
+      "tier": "pr",
+      "runner": "node",
+      "build": [
+        "npm",
+        "run",
+        "build",
+        "--prefix",
+        "services/cli"
+      ],
+      "test_file": "services/cli/dist/cli/test/assurance.js"
+    },
+    {
+      "id": "immutable-recipe",
+      "path": "src/registry/RecipeRegistry.sol",
+      "sha256": "025055c34cf0a7458d9d573f0cd048d5981fb829aae481328bfa4c7db5a92f35",
+      "before": "if (_recipes[recipeKey][version] != address(0)) revert Errors.RecipeAlreadyRegistered(recipeKey, version);",
+      "after": "",
+      "tests": [
+        "test_canonical_alias_registration_and_collision_guards"
+      ],
+      "match_path": "test/unit/registry/RecipeRegistry.t.sol",
+      "review": "An exact canonical Recipe key/version is immutable even for the registry owner.",
+      "tier": "expanded",
+      "runner": "forge"
+    },
+    {
+      "id": "manifest-recovery-delay",
+      "path": "src/registry/TokenPolicyRegistry.sol",
+      "sha256": "79c2f117c4de7984f0c6e3e8d943db808bcf22c101bd9e6ee569a3bb4e563d91",
+      "before": "if (block.timestamp < readyAt) revert Errors.TimelockNotReady(readyAt);",
+      "after": "",
+      "tests": [
+        "test_resume_requiresScheduleAndDelay"
+      ],
+      "match_path": "test/unit/registry/TokenPolicyRegistry.t.sol",
+      "review": "A suspended Manifest cannot resume before the scheduled owner delay.",
+      "tier": "expanded",
+      "runner": "forge"
+    }
+  ],
+  "exclusions": [
+    {
+      "id": "reporter-redaction",
+      "reason": "ComplianceReporter is absent from this stacked checkout. Add its sentinel and observational suite after prerequisite #161 merges. No stand-in counts as coverage.",
+      "tracking_issue": "#156 / #161",
+      "status": "BLOCKED-prerequisite"
+    }
+  ]
+}

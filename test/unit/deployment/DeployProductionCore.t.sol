@@ -78,6 +78,48 @@ contract DeployProductionCoreTest is Test {
         script.deployCore(governance, operator, false, false);
     }
 
+    function testRunSerializesCoreArtifactWithoutChangingExistingCandidate() external {
+        string memory path = "deployments/production-core.candidate.json";
+        bool existed = vm.exists(path);
+        bytes memory previous = existed ? vm.readFileBinary(path) : bytes("");
+        vm.setEnv("CORNER_STORE_DEPLOYER", vm.toString(address(this)));
+        vm.setEnv("CORNER_STORE_GOVERNANCE", vm.toString(governance));
+        vm.setEnv("CORNER_STORE_OPERATOR", vm.toString(operator));
+        vm.setEnv("CORNER_STORE_ENABLE_AMM", "true");
+        vm.setEnv("CORNER_STORE_ENABLE_RFQ", "true");
+        vm.setEnv("CORNER_STORE_DEPLOYMENT_ID", "assurance-fixture");
+        vm.setEnv("CORNER_STORE_SOURCE_COMMIT", "assurance-source");
+        vm.setEnv("CORNER_STORE_CONTRACTS_HASH", "assurance-contracts");
+        DeployProductionCore.Deployment memory deployed;
+        try script.run() returns (DeployProductionCore.Deployment memory result) {
+            deployed = result;
+        } catch (bytes memory reason) {
+            _restoreCandidate(path, existed, previous);
+            assembly {
+                revert(add(reason, 32), mload(reason))
+            }
+        }
+        string memory json = vm.readFile(path);
+        _restoreCandidate(path, existed, previous);
+        assertEq(vm.parseJsonUint(json, ".schemaVersion"), 1);
+        assertEq(vm.parseJsonUint(json, ".chainId"), block.chainid);
+        assertEq(vm.parseJsonString(json, ".deploymentId"), "assurance-fixture");
+        assertEq(vm.parseJsonString(json, ".sourceCommit"), "assurance-source");
+        assertEq(vm.parseJsonString(json, ".contractsHash"), "assurance-contracts");
+        assertEq(vm.parseJsonAddress(json, ".governance"), governance);
+        assertEq(vm.parseJsonAddress(json, ".operator"), operator);
+        assertEq(vm.parseJsonAddress(json, ".router"), deployed.router);
+        assertEq(vm.parseJsonBytes32(json, ".engineCodeHash"), deployed.engine.codehash);
+        assertEq(vm.parseJsonBytes32(json, ".rfqAdapterCodeHash"), deployed.rfqAdapter.codehash);
+        _assertOwner(deployed.router);
+        assertEq(ComplianceEngine(deployed.engine).router(), deployed.router);
+    }
+
+    function _restoreCandidate(string memory path, bool existed, bytes memory previous) internal {
+        if (existed) vm.writeFileBinary(path, previous);
+        else if (vm.exists(path)) vm.removeFile(path);
+    }
+
     function _assertOwner(address governed) internal view {
         assertEq(Governed(governed).owner(), governance);
     }

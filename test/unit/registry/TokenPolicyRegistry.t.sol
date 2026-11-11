@@ -935,4 +935,36 @@ contract TokenPolicyRegistryTest is Test {
         vm.expectRevert(Errors.InvalidManifestTransition.selector);
         reg.setFact(token, 0x0F);
     }
+
+    function test_semanticUpdatesRequireLiveStatusAndCannotReplacePendingApproval() public {
+        ManifestCore memory next = _manifest();
+        next.fullManifestHash = keccak256("next");
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
+        _scheduleManifestUpdate(token, next, bytes32("update"));
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
+        reg.activateManifestUpdate(token);
+        _activate(token);
+        _scheduleManifestUpdate(token, next, bytes32("reviewed"));
+        vm.expectRevert(Errors.PendingActionExists.selector);
+        _scheduleManifestUpdate(token, next, bytes32("replacement"));
+        reg.cancelManifestUpdate(token);
+        vm.prank(operator);
+        reg.suspendManifest(token, bytes32("halt"));
+        reg.scheduleManifestResume(token, bytes32("reviewed"));
+        vm.expectRevert(Errors.PendingActionExists.selector);
+        reg.scheduleManifestResume(token, bytes32("replacement"));
+        assertEq(uint8(reg.statusOf(token)), uint8(PolicyStatus.SUSPENDED));
+    }
+
+    function test_bindingsRejectZeroVersionAndUnexpectedPathGroup() public {
+        RecipeBinding[] memory bindings = _bindings();
+        bindings[0].recipeVersion = 0;
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+        bindings[0].recipeVersion = 1;
+        bindings[0].pathGroupId = 1;
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+        assertEq(uint8(reg.statusOf(token)), uint8(PolicyStatus.UNKNOWN));
+    }
 }

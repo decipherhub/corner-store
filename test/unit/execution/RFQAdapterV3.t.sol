@@ -253,7 +253,8 @@ contract RFQAdapterV3Test is Test {
             if (i == 7) req.context.venueType = VenueType.AMM;
             if (i == 8) req.context.flowType = FlowType.PRIMARY_DISTRIBUTION;
             if (i == 9) req.context.sellerIsAffiliate = true;
-            vm.expectRevert();
+            if (i == 8) vm.expectRevert(Errors.RFQQuoteMismatch.selector);
+            else vm.expectRevert();
             _execute(req);
             _rollback();
         }
@@ -354,6 +355,15 @@ contract RFQAdapterV3Test is Test {
         (ExecutionRequest memory req,) = _request(false);
         adapter.cancelQuoteNonce(7);
         adapter.validateContext(req, cfg);
+        _cancelMakerBatch();
+        _beforeEvaluation();
+        vm.expectRevert(Errors.RFQQuoteUsed.selector);
+        _execute(req);
+        assertTrue(adapter.usedQuoteNonce(maker, 7));
+        assertFalse(router.usedNonce(TAKER, 1));
+    }
+
+    function _cancelMakerBatch() internal {
         uint256[] memory nonces = new uint256[](2);
         nonces[0] = 7;
         nonces[1] = 8;
@@ -361,11 +371,6 @@ contract RFQAdapterV3Test is Test {
         adapter.cancelQuoteNonces(nonces);
         vm.prank(maker);
         adapter.cancelQuoteNonce(7);
-        _beforeEvaluation();
-        vm.expectRevert(Errors.RFQQuoteUsed.selector);
-        _execute(req);
-        assertTrue(adapter.usedQuoteNonce(maker, 7));
-        assertFalse(router.usedNonce(TAKER, 1));
     }
 
     function test_quoteReplayWithNewRouterNonce() public {
@@ -692,6 +697,26 @@ contract RFQAdapterV3Test is Test {
         vm.etch(address(authorizer), hex"00");
         _beforeEvaluation();
         vm.expectRevert(Errors.InvalidContextEvidence.selector);
+        _execute(req);
+        _rollback();
+    }
+
+    function test_constructorRejectsMissingAffiliateSource() public {
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        new RFQAdapterV3(authorizer, venues, ITokenPolicyRegistry(address(policy)), address(0));
+    }
+
+    function test_primaryRejectsMismatchedRuleAndParameterLengths() public {
+        (ExecutionRequest memory req, RFQQuoteV3 memory q) = _request(false);
+        req = _primary(req, q);
+        _distributors(maker, address(0));
+        bytes[] memory missing = new bytes[](0);
+        vm.mockCall(
+            address(policy),
+            abi.encodeWithSelector(policy.compiledParametersOf.selector, address(tokenOut), uint256(0)),
+            abi.encode(missing)
+        );
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
         _execute(req);
         _rollback();
     }

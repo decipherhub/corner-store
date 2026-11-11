@@ -1907,3 +1907,168 @@ unchanged. Legacy readability does not imply version 2 verification guarantees.
 - `services/cli/src/commands.ts`
 - `services/toolkit/examples/production-evidence.example.json`
 - `services/toolkit/examples/production-evidence-v2.example.json`
+
+## D040: Stateful production invariant models and bounded profiles
+
+Date: 2026-11-11. Issue #156. Status: implemented default, team-to-confirm.
+
+### Context
+
+Example tests and parameterized fuzzing do not exercise arbitrary sequences of
+settlement, cancellation, pause/recovery, policy updates and identity changes.
+
+### Decision
+
+Use dedicated explicit-selector handlers with the real Engine, registries and
+ERC-3643/ONCHAINID fixtures. Eight implemented properties cover value
+conservation, settlement-created zero custody, atomic settlement/commit, nonce
+namespaces, pause/resume authorization, immutable exact version binding, RFQ
+domain/context and identity evidence lifecycle. Exercise RFQ v2/v3 and a C-01-free
+AMM fixture. Independent ghost models track balances, explicit mint/burn and
+donations, nonce/commit effects, governance/history and evidence generations.
+Pending compiled plans are registration snapshots, not an independent compiler.
+
+Expected rejections assert exact errors and unchanged state; unexpected handler
+reverts fail. Deterministic successful-action witnesses and counters prevent
+vacuous passes. Binding alone grants no identity eligibility. Unbind/rebind
+invalidates old generations; restoring the original issuer trust basis may
+restore still-current evidence. Context freshness has its own model.
+
+PRs use 64 runs x 32 depth, fixed seed 0x156, fail_on_revert=true and
+check_interval=1. Scheduled/manual runs use 1,024 x 128 with retained rotating
+256-bit seeds. Retain minimized failures and turn confirmed production
+counterexamples into named replay regressions.
+
+### Consequences
+
+The ninth planned property, real Reporter observation/redaction, remains pending
+prerequisite #161. No mock substitutes for it. Prerequisite integration and fresh
+verification remain required; OPS-004 is active. External PR #160 owns
+test/integration/Invariants.t.sol, which this work leaves unchanged.
+
+### Related Files
+
+- `test/invariant/` and `foundry.toml`
+- `docs/release-assurance.md`
+
+## D041: Mutation, Slither, coverage and reproducible assurance gates
+
+Date: 2026-11-11. Issue #156. Status: implemented default, team-to-confirm.
+
+### Context
+
+A passing suite needs evidence that selected critical business-rule defects are
+detected, with independent analysis and measurable production instrumentation.
+
+### Decision
+
+Use an in-repo Python standard-library mutation harness with source-hash-checked,
+single-site patches in disposable copies. Require unchanged mapped baselines
+and 100% kills for all reviewed compiling non-equivalent sentinels. Only mapped
+assertion failures count; compilation, missing/skipped tests, infrastructure
+errors and timeouts fail separately. Keep patches, mappings, logs, survivors and
+justified exclusions. PR and expanded sets currently contain 15 and 21 sentinels.
+Reporter redaction remains a tracked prerequisite exclusion, not tested coverage.
+
+Pin Python 3.12.12, Slither 0.11.6, Foundry 1.7.1, Solc 0.8.17, Node 20.20.2 and
+Yarn 1.22.22 with checksummed archives and 47 hash-locked Python packages. Install
+tools, caches, wheels and venvs only inside ignored .assurance/. Require offline
+provisioning after downloads; missing tools fail closed. No global analysis or
+mutation installation is required.
+
+Analyze all production Solidity and the two production deployment entry points
+with all 102 shipped Slither detectors, retaining dependencies and validating
+inventory/completeness. Separate normalized baseline from individually reviewed
+suppressions. Baseline membership grants no approval. New/upgraded medium/high
+findings, source/function fingerprint or severity drift, expired, duplicate,
+stale or incomplete suppressions and analyzer errors fail. Initial baseline:
+179 results, including 5 high and 73 medium; each of those 78 has its own rationale.
+Reviewer is Codex, with human team confirmation pending. Adopt the proposed
+30-day initial review window, exclusive expiry 2026-12-11. Keep lower results
+visible. The documented Slither overload workaround uses hash-checked bytes32
+identity casts only in disposable analysis inputs, retaining both source hashes.
+
+Require line/branch floors: execution 95/90, registry 95/90, compliance 90/85,
+auth, libraries and factory each 90/80, and explicit production deployment
+allowlist 90/80. Missing files/empty instrumentation fail. Five hash-bound
+non-executable-file exemptions cover Errors, Events, RFQ v2/v3 types and the
+empty legacy Router forwarding constructor. Exempt no executable logic.
+Coverage-only --ir-minimum avoids stack-too-deep; the production EIP-170 size
+assertion remains separately required with the production compiler. Replace only
+PredicateValidation's minimal-IR assembly source-map record with its unchanged
+library/test measurement under unoptimized non-IR compilation, retaining both
+raw reports. No production compiler or threshold change follows from coverage.
+
+Keep repository and both container jobs. check.sh adds all three assurance gates;
+its explicit --repository-only mode is incomplete without independent CI jobs.
+PR CI adds coverage, Slither, bounded mutation and isolated BUIDL/context/identity
+E2Es. Scheduled/manual CI adds deep invariants, expanded mutations and Reg D.
+Pin actions by SHA and runner family ubuntu-24.04. Target 15-minute PR jobs and
+60-minute deep jobs, with 14/55-minute local command limits. Retain versions,
+commands, commit/dirty state, seeds, elapsed/exit results and hashed reports for
+30 days. Isolate E2E workspaces and ports; terminate nested process groups on
+timeout/interruption.
+
+### Consequences
+
+Coverage and scanner/mutation success are evidence, not security proofs or an
+external audit. Hosted provisioning/upload budgets and required branch/release
+settings require separate verification. Runner patch levels are hosting state.
+All defaults and human suppression review remain team-to-confirm.
+
+Production evidence and its packed consumer use `FOUNDRY_SOLC` when set,
+requiring `--version` to report the exact pinned Solc 0.8.17. Missing,
+non-executable, empty or wrong-version overrides fail closed without SVM
+fallback. With the variable unset, existing SVM/system lookup is unchanged.
+The selected compiler remains explicitly passed to Forge and committed by its
+binary SHA-256; evidence formats and legacy readers are unchanged.
+
+### Related Files
+
+- `assurance/`, `scripts/assurance/` and `scripts/check.sh`
+- `.github/workflows/assurance.yml` and `.github/workflows/assurance-job.yml`
+- `docs/testing.md` and `docs/release-assurance.md`
+
+## D042: Versioned release evidence, independent audit and recovery cadence
+
+Date: 2026-11-11. Issue #156. Status: implemented default, team-to-confirm.
+
+### Context
+
+Green automated checks do not supply an independent audit or prove operators
+can safely pause, reconcile funds and resume the selected deployment.
+
+### Decision
+
+Use a version 1 release-assurance envelope binding the clean frozen commit,
+tool versions, chain/configuration, deployment evidence version 2 evidenceId and
+independently trusted recordDigest, exact report hashes, seeds and workflow
+results. This is a manual evidence contract, not a new CLI authorization format.
+Keep missing artifacts explicitly MISSING and overall release BLOCKED. Failed,
+stale, unverified or mismatched evidence cannot be treated as passing. Export
+reviewed release artifacts to operator-controlled durable storage before CI's
+30-day expiry; production retention/access rules need team confirmation.
+
+Require an independent external audit before first production release. Default
+owner and reviewer/vendor are TBD before that release; no vendor integration is
+required now. Collect scope/exclusions, audited commit, report, findings,
+remediation commits, release diff review and retest/sign-off artifacts.
+
+Require a chain-specific operator recovery drill before first launch, quarterly,
+and after material changes. Bind operators/scenario/timestamps, deployment and
+policy state, pause/recovery transactions and finality, fund reconciliation and
+safe-resumption evidence to the deployment. Local Anvil tests and publication
+journal recovery alone do not satisfy this drill. Missing audit or drill evidence
+blocks production release; no completed audit or drill is claimed.
+
+### Consequences
+
+Automated, audit and recovery evidence remain separate review obligations.
+Key management, multisig and custody expansion stay deferred. This work adds no
+external vendor or signing authority, changes no deployed contract/artifact and
+makes no legal conclusion. OPS-004 tooling status cannot authorize a launch.
+
+### Related Files
+
+- `docs/release-assurance.md` and `docs/release-evidence.v1.template.json`
+- `docs/deployment-production.md`, `docs/security.md` and `QUALITY.md`

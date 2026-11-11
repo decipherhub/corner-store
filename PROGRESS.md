@@ -1,5 +1,284 @@
 # Progress
 
+## 2026-11-12 Session: OPS-004 Explicit Production Compiler
+
+Fixed CI run 43045358878's packed production compiler lookup failure.
+`services/toolkit/src/production-evidence.ts:346` selects `FOUNDRY_SOLC` before
+home-based lookup and verifies its exact compiler version. Missing, empty,
+non-executable and wrong-version overrides fail closed without fallback.
+Unset-variable SVM/system behavior is unchanged. The packed consumer uses the
+selected compiler and checks its binary SHA-256 commitment. D041 records the
+consequence; evidence formats, legacy readers and protected demo paths are
+unchanged. OPS-004 remains the sole active feature.
+
+Toolkit/CLI regressions cover an empty HOME with a valid 0.8.17 binary, its
+committed hash, invalid overrides despite valid SVM fallback, and unset-variable
+lookup. Toolkit checks all three existing SVM locations and rejects 0.8.170.
+Before implementation, Toolkit had two expected failures and one passing fallback
+test; CLI had one expected failure. The empty-HOME packed run reproduced
+`AssertionError: pinned Solc is required`. All targeted cases pass after the fix.
+An initial CLI green attempt stopped at TypeScript environment-type inference;
+an explicit `NodeJS.ProcessEnv` annotation fixed it before the passing rerun.
+
+Commands use `source scripts/assurance/env.sh` with local Node 20.20.2 and
+Foundry 1.7.1, except the repository command which loads it through BASH_ENV.
+
+| Command | Actual result |
+| --- | --- |
+| Both service builds plus `node --test --test-name-pattern="FOUNDRY_SOLC"` on their compiled production-evidence tests, before fix | Expected exit 1 each; Toolkit 2 failed/1 passed, CLI 1 failed |
+| Same targeted commands, after fix | Exit 0 each; Toolkit 3/3, CLI 1/1 selected tests |
+| Empty-HOME `npm run test:production-package --prefix services/cli`, before fix | Expected exit 1; reproduced the CI assertion after 10 commitment assertions |
+| `npm test --prefix services/toolkit` | Exit 0; smoke and 77/77 named tests |
+| `npm test --prefix services/cli` | Exit 0; smoke and 21/21 named tests |
+| `node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; 2/2, exact artifact bytes preserved |
+| `python3 -m unittest discover -s scripts/assurance -p 'test_*.py'` | Exit 0; 27/27 |
+| `HOME="$fixture_home" BASH_ENV="$PWD/scripts/assurance/env.sh" scripts/check.sh --repository-only` | Exit 0, first attempt; 1,200/1,200 Foundry tests, all service/package checks, 10 packed commitment plus 41 live assertions, legacy 2/2 and deploy-v3 10/10 |
+| `git diff --check` and protected-path `git diff --exit-code` | Exit 0 |
+
+`fixture_home` was freshly created under `.assurance/tmp/check-home.xzpSgJ`.
+No inherited XDG/Foundry-home or Git identity overrides were present, and none
+were injected. No additional home-state dependency was found. Logs are retained
+under `/private/tmp/w156-solc-*.log`, including `w156-solc-empty-home-check.log`.
+Separate E2E scripts, coverage/Slither/mutation and container gates were not rerun;
+hosted Linux CI and prior pending OPS-004 acceptance items remain UNVERIFIED.
+Next: review the working tree and rerun hosted CI. No commit, push, branch change
+or external publication was performed.
+
+## 2026-11-11 Session: OPS-004 Nested Bash Environment Guard
+
+Fixed the confirmed CI run 43039507031 environment reapplication defect in
+`scripts/assurance/env.sh:3`. An exported guard binds successful initialization
+to the physically resolved repository root. Re-sourcing through BASH_ENV or an
+explicit source in the same worktree preserves PATH and exported overrides;
+another worktree still applies its own tools. Both `ci.yml` and
+`assurance-job.yml` use this shared script and retain BASH_ENV unchanged.
+Pre-existing deployment-wrapper tests are unchanged. No product boundary or
+decision policy changed. OPS-004 remains the sole active feature.
+
+`scripts/assurance/test_gates.py:14` adds isolated fake-worktree regressions for
+nested Bash stub precedence, exported overrides, repeat sourcing and switching
+worktrees. Before the fix, the preservation regression failed with pinned forge
+selected instead of the stub; the worktree-switch regression passed. After the
+fix, both pass.
+
+| Command | Actual result |
+| --- | --- |
+| `python3 -m unittest discover -s scripts/assurance -p 'test_gates.py' -k EnvironmentTests` before fix | Expected exit 1; 1 failed, 1 passed |
+| Same targeted command after fix | Exit 0; 2/2 |
+| `python3 -m unittest discover -s scripts/assurance -p 'test_*.py'` | Exit 0; 27/27 |
+| `BASH_ENV=$PWD/scripts/assurance/env.sh bash scripts/test-deploy-testnet-rfq.sh` | Exit 0; argument tests passed |
+| `BASH_ENV=$PWD/scripts/assurance/env.sh scripts/check.sh --repository-only` first attempt | Exit 1 after 1,200/1,200 Foundry tests; only the documented RFQ initial-store race flake failed |
+| Same repository command, single unchanged rerun | Exit 0; 1,200/1,200 Foundry tests, all repository/service/packed-consumer checks, deployment-wrapper arguments, legacy readers and deploy-v3 tests passed |
+| `git diff --check` | Exit 0 |
+
+Logs are retained in
+`/private/tmp/w156-env-repository-check.log` and
+`/private/tmp/w156-env-repository-check-rerun.log`. Separate live E2Es, assurance
+analysis/deep campaigns and container smoke checks are not rerun for this shell
+fix. Hosted CI is UNVERIFIED locally; prior pending acceptance items remain.
+No commit, push, branch change or external publication was performed.
+
+## 2026-11-11 Session: OPS-004 F1 Commit-Failure Rollback Coverage
+
+Fixed the confirmed F1 assurance gap only. OPS-004 remains the sole active
+feature. Production source, deployment scripts, public demo artifacts and
+`test/integration/Invariants.t.sol` are unchanged. No product boundary or
+decision policy changed.
+
+`test/invariant/handlers/SettlementHandler.sol:49` adds
+`commitFailureThenRetry`: temporarily revoke the real surveillance Element's
+engine authorization, reject through `_reject`, restore authorization and retry
+the identical request. `_reject` checks exact revert, balance/state digest,
+Router/RFQ nonces and surveillance count. The per-venue counter advances only
+after rejection; the complete action must also pass its retry and ghost model.
+`test/invariant/Settlement.invariant.t.sol:10` seeds both directions for AMM and
+RFQ v2/v3, targets the new selector and requires two commit-failure rejections
+per venue in `invariant_atomicSettlementCommit`. The existing
+`testFuzz_exactAmountsAndRollback` also exercises the new action.
+
+`assurance/sentinels.json:49` adds PR sentinel `router-commit-swallow`, mapped
+only to the atomic invariant. Its match includes the preceding assignment to
+keep a distinct, unique site; the production source hash is unchanged. Current
+sets are 15 PR / 21 expanded; current count references in D041, testing, feature
+and quality documentation match. Historical 14/20 results below remain historical.
+
+All commands use Bash with `source scripts/assurance/env.sh`, the pinned local
+Foundry 1.7.1, Node 20.20.2 and other assurance tools. Logs are retained under
+`/private/tmp/w156-f1-*.log` and ignored `.assurance/reports/f1-*/`.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0 |
+| `forge test --offline --match-path test/invariant/Settlement.invariant.t.sol` | Exit 0; 4/4, including three 64 x 32 invariants and 256 fuzz cases |
+| `forge test --offline` | Exit 0; 1,200/1,200 across 75 suites, zero failed/skipped; the full gate repeated this on the final setup code |
+| `python3 -m unittest discover -s scripts/assurance -p 'test_*.py'` | Exit 0; 25/25 |
+| `python scripts/assurance/mutation.py --only router-commit-swallow --output .assurance/reports/f1-red` | Expected exit 1; pre-fix mapped baseline and mutant pass, 0/1 killed, mutant survives |
+| `forge test --offline --json --match-path 'test/invariant/*.t.sol'` in disposable pre-fix baseline/mutant workspaces | Both exit 0; 15/15 in five suites each, confirming the full pre-fix invariant suite survives; hashed logs in `f1-red-full-invariants/` |
+| `python scripts/assurance/mutation.py --only router-commit-swallow --output .assurance/reports/f1-green-final` | Exit 0; baseline passes, mutant killed by the named atomic invariant assertion, 1/1 killed, zero survivors; diagnostic subset, not a release verdict |
+| `forge test --offline --match-path test/invariant/Settlement.invariant.t.sol --match-test testFuzz_exactAmountsAndRollback --fuzz-runs 1 -vvvvv` | Exit 0; 1/1. Inspected all six deterministic traces: both Transfer events precede `commit` and the real `onTransfer` authorization revert |
+| `scripts/check.sh` | Exit 0, first run; 1,200/1,200 Foundry tests, all service/packed checks, legacy 2/2, deploy-v3 10/10, and all three assurance gates below |
+| `scripts/assurance/run.sh coverage` (inside check.sh) | Exit 0; primary 1,199/1,199, production EIP-170 1/1, supplemental 5/5; all floors passed with unchanged production scope measurements; 567.222 seconds |
+| `scripts/assurance/run.sh slither` (inside check.sh) | Exit 0; complete normalized baseline, 179 findings and all 102 detectors; 28.618 seconds |
+| `scripts/assurance/run.sh mutation` (inside check.sh) | Exit 0; 15/15 PR sentinels killed, 15 passing baselines, zero survivors, 100%; 104.508 seconds |
+| `python .assurance/reports/documentation/verify-f1.py` | Exit 0; nine text files, 12 local links, current 15/21 counts, sole active feature, nine hashed result sets, diagnostic red/green and full pre-fix invariant log hashes verified |
+| `git diff --check` and protected-path `git diff --exit-code` | Exit 0; no whitespace or protected production/demo/#160 path changes |
+
+The first post-fix mutation attempt failed closed on unmapped `setUp()` output.
+Setup now catches only the new witness calls, leaving missing counts to fail
+the atomic invariant before fuzzing. The successful rerun reports the mapped
+property's assertion failure. The mutation runner and its strict classifier
+are unchanged. The final-code full gate's atomic property exercised the new
+action 344 times with zero handler reverts (64 runs / 2,048 calls total).
+
+Separate four-profile live E2Es, the full nightly 1,024 x 128 campaign and the
+21-sentinel expanded campaign were not rerun for this test-only fix. Prior
+results below do not verify the new action at nightly depth. Hosted/container
+checks and prerequisite/Reporter integration remain UNVERIFIED or pending as
+previously recorded. No commit, push or external publication was performed.
+
+## 2026-11-11 Session: OPS-004 Release Evidence and Full Verification
+
+OPS-004 is the sole active feature and is not passing. Scope: approved #156
+step 3, canonical release evidence/template, D040-D042 and fresh full/local E2E
+verification. Steps 1 and 2 are committed as 51cebdb and bb23c12. No production
+source, deployed artifact, protected public demo path or external #160 test was
+changed. No adjacent runtime work, custody/key/multisig expansion or vendor
+integration was added. All defaults are adopted as team-to-confirm.
+
+Added `docs/release-assurance.md` and `docs/release-evidence.v1.template.json`.
+The versioned manual review record binds clean frozen commit, tools, chain/config,
+deployment evidence version 2 evidenceId/trusted recordDigest, exact report
+hashes, seeds and workflow results. It is separate from CLI authorization.
+External audit owner/reviewer remain TBD before first production release. Audit
+scope/report/remediation/retest and chain recovery transactions/fund reconciliation/
+safe-resumption/sign-off remain MISSING. Proposed drill cadence is before first
+launch, quarterly and after material changes. Production release stays BLOCKED.
+The active execution plan records the unmet checks rather than claiming completion.
+
+Migrated durable slice decisions and verification into canonical documents and
+removed SLICE_NOTES.md. Updated FEATURES, DECISIONS, QUALITY, testing/security,
+production deployment, tooling and document indexes. Corrected the former manual
+E2E-only description to match separate PR and scheduled/manual assurance jobs.
+There is no new test code in this documentation slice. Existing 25 gate-harness
+regressions ran before documentation edits; a retained local validation script checks
+template/status/tool/inventory bindings, links, new text and report hashes.
+
+### Fresh step 3 commands and results
+
+All checks used repository-local pinned Node 20.20.2/Yarn 1.22.22, Foundry 1.7.1,
+Solc 0.8.17, Python 3.12.12 and Slither 0.11.6. For commands below, the shared Bash
+wrapper is `bash -c 'source scripts/assurance/env.sh && <command>'`; run.sh also
+sources that environment internally. This uses the exact checksum-pinned Node
+and Yarn archives instead of an unpinned npx download. Logs are under
+`/private/tmp/w156-step3-*.log`; hashed job reports are in ignored
+`.assurance/reports/<task>/`.
+
+| Command inside the wrapper | Actual result |
+| --- | --- |
+| `scripts/check.sh` | Exit 0; 1,200/1,200 Foundry tests in 75 suites, all service/packed checks, legacy 2/2, deploy-v3 10/10, plus all three independent gates below |
+| `scripts/assurance/run.sh coverage` (invoked by check.sh) | Exit 0; primary 1,199/1,199 in 75 suites, production EIP-170 1/1, supplemental 5/5; every floor passed; 592.966 seconds |
+| `scripts/assurance/run.sh slither` (invoked by check.sh) | Exit 0; 179 complete normalized findings, all 102 detectors; 29.229 seconds |
+| `scripts/assurance/run.sh mutation` (invoked by check.sh) | Exit 0; 14/14 PR sentinels killed, 14 passing baselines, zero survivors, 100%; 77.220 seconds |
+| `scripts/assurance/run.sh e2e-buidl` | Exit 0; 7/7 chain scenarios plus runtime RFQ/UI/CLI checks; 26.405 seconds |
+| `scripts/assurance/run.sh e2e-reg-d` | Exit 0; 7/7 chain scenarios plus runtime RFQ/UI/CLI checks; 22.281 seconds |
+| `scripts/assurance/run.sh e2e-context` | Exit 0; 12/12 live cases; 14.095 seconds |
+| `scripts/assurance/run.sh e2e-identity` | Exit 0; 40/40 live cases; 22.989 seconds |
+| `python -m unittest discover -s scripts/assurance -p "test_*.py"` | Exit 0; 25/25, zero failures; 1.574 seconds |
+| `scripts/production-container-smoke.sh` | Exit 1; Docker daemon unavailable, no image/runtime pass |
+| `scripts/hackathon-monad-container-smoke.sh` | Exit 1; Docker daemon unavailable, no image/runtime pass |
+| `python .assurance/reports/documentation/verify-step3.py` | Exit 0 on final check; 13 text files, 60 local links, sole active feature, unique decisions, template/tool/sentinel bindings and nine hashed result sets |
+| `git diff --exit-code feat/154-append-only-deploy-evidence -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad test/integration/Invariants.t.sol src script && git diff --check` | Exit 0 on final check; no protected-path, production-source or whitespace differences |
+
+The full check started before documentation edits. No implementation or test
+changed during it. Its repository provenance-sensitive tests ran while tracked
+files were held steady. These remain dirty development results rather than
+frozen clean-release evidence. The known RFQ race did not occur in the completed
+30/30 RFQ stage. No rerun was needed. Both E2E profiles ran with distinct
+workspace/port pairs. The final check log ends with `All checks passed.`
+Service named tests: RFQ 30/30, RFQ host 24/24, Toolkit 74/74, CLI 20/20 and
+compliance-data 25/25; all other service/dashboard/rehearsal smokes passed.
+Packed consumers passed 50 production assertions (10 commitments plus 40 live
+28-transaction deployment/verification/tamper/recovery checks), eight Solidity
+adapter assertions and six RFQ v3/onboarding assertions. The full gate includes
+25/25 harness regressions. New-gate runs used seed `0x156`.
+
+Fresh coverage used seed `0x156`; its primary compile took 507.14 seconds and
+tests took 79.15 seconds. Production-only scope measurements:
+
+| Scope | Measured line | Measured branch | Required line/branch |
+| --- | --- | --- | --- |
+| execution | 332/336, 98.81% | 74/82, 90.24% | 95/90 |
+| registry | 558/570, 97.89% | 106/116, 91.38% | 95/90 |
+| compliance | 1396/1461, 95.55% | 331/384, 86.20% | 90/85 |
+| auth | 5/5, 100% | 1/1, 100% | 90/80 |
+| libraries | 58/58, 100% | 9/9, 100% | 90/80 |
+| factory | 49/49, 100% | 2/2, 100% | 90/80 |
+| production deployment | 101/101, 100% | 10/10, 100% | 90/80 |
+
+The independent analyzer's fresh output is complete: 5 high, 73 medium, 76 low,
+24 informational and one optimization result. It matches the committed baseline;
+all 78 medium/high suppressions remain separately reviewed and source-bound.
+Codex is the initial reviewer, with human confirmation pending. This is not an
+external audit completion claim.
+
+Documentation validation initially rejected inherited em dash characters in
+historical DECISIONS text, then caught an incorrect draft count of PR sentinels.
+Restricted character checking to added text and corrected the documentation to
+the actual manifest: 14 PR and 20 expanded. No gate or production source changed.
+The corrected checker passed on all then-changed files and six retained report
+sets; final cleanup validation covers 13 files, 60 links and nine hashed sets.
+Retained the validation script under ignored reports and removed the slice's
+draft directory. SLICE_NOTES.md is absent; HEAD remains bb23c12.
+
+### Prior-slice evidence verified again, not rerun claims
+
+Step 2 full nightly `scripts/assurance/run.sh invariants --deep`: 15/15 tests in
+five suites, eight invariants at 1,024 x 128, 131,072 calls per property and
+1,048,576 calls total, zero handler reverts; six fuzz functions at 256 cases and
+one named suspended-activation regression. Seed:
+`0x0b07357560d4c55e29d488f321fc6053a98a8f020377b2d80f3ae47469dcfb06`.
+Runner: 2,165.782 seconds. Checked actual final log and all three run-record hashes;
+copied unchanged to `.assurance/reports/step2-invariants/` before any new runs.
+Old development counterexamples with changed target selectors were ignored by
+Foundry, as its log records; they are not new production failures.
+
+Step 2 expanded `scripts/assurance/run.sh mutation --deep`: 20/20 compiling
+sentinels killed with 20 unchanged passing baselines, zero survivors, 226.532
+seconds. Seed:
+`0xfa2d243831ee6fc90952adf4caf3c9c3f007071aec96614aae00809752b1e93c`.
+Checked all 66 recorded artifact hashes; retained unchanged in
+`.assurance/reports/step2-mutation/`. Earlier assertion-classifier tightening
+reclassified 40 result streams, not a second mutation campaign.
+
+Step 2 coverage passed 1,199 primary tests plus the separate production size test
+1/1 and supplemental assembly tests 5/5. Minimal-IR was needed after actual
+stack-too-deep/Yul failures; production size assertions use production bytecode.
+Meaningful public-input/lifecycle/authorization regressions filled gaps without
+executable-source exemptions or lowered floors. Step 3's fresh measurement
+belongs in the final result below, rather than being inferred from these notes.
+
+Prior offline proof installed all 47 hash-locked packages into a previously
+absent local venv from retained wheels with `--no-index --require-hashes
+--only-binary=:all: --no-deps`, then passed pip check. Source-bound Slither input
+casts address an actual overload-resolution failure; partial analyzer output was
+never accepted. Initial normalization: 179 findings, 5 high/73 medium individually
+reviewed by Codex, human confirmation pending, exclusive expiry 2026-12-11.
+
+### Remaining verification and next action
+
+UNVERIFIED: hosted Linux clean-checkout CI, 15-minute PR budgets including tool
+provisioning/uploads, required branch/release-check settings and both Docker
+container jobs. Prerequisites #161/#162 and inherited-stack merge reconciliation
+remain pending; origin/main is still locally recorded as 7893021. The real
+Reporter observational invariant/redaction sentinel cannot be added against
+absent source and no mock counts. The #160-owned test is untouched. Refresh
+source-bound inventories/baselines/suppressions/mutations after integration and
+rerun full gates. Do not mark OPS-004 passing or move its plan to completed yet.
+
+External audit and chain-specific recovery artifacts are MISSING; no production
+network, legal conclusion, audit or drill completion is claimed. User reviews
+the working tree. No commit, push, GitHub comment/review or external publication.
+
 ## 2026-11-11 Session: DEPLOY-004 Publication Trust Boundary
 
 DEPLOY-004 is passing. Scope: remaining publication findings from

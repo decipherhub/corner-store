@@ -289,6 +289,13 @@ change that fail-closed boundary.
 
 ## Deployment Flow
 
+Before production release, complete the separate
+[release-assurance evidence contract](./release-assurance.md). Its
+[version 1 template](./release-evidence.v1.template.json) binds the clean frozen
+commit/toolchain and workflow/report hashes to this runbook's deployment evidence
+version 2 `evidenceId` and trusted `recordDigest`. It is a manual review record,
+not a CLI authorization format. Missing/failed evidence blocks release.
+
 1. Freeze release commit, artifacts and production configuration.
 2. Verify Safe address, expected `M` owners, threshold `N`, deployer signer and
    operator roles.
@@ -579,8 +586,13 @@ The repository workflow is complete when:
 
 An individual production deployment is complete only after its chain-specific
 transaction, Safe proposal, legal package, onboarding, fork simulation,
-monitoring and finality evidence exists. Passing repository tooling does not
-claim that any mainnet deployment has passed.
+monitoring and finality evidence exists, together with successful matching
+automated assurance, independent external audit/remediation/retest and
+chain-specific recovery-drill/sign-off artifacts. Audit owner/reviewer are TBD
+before first production release; drill cadence is before first launch, quarterly
+and after material changes (adopted defaults, team-to-confirm). Those manual
+artifacts are currently MISSING and production release remains BLOCKED. Passing
+repository tooling does not claim that any mainnet deployment has passed.
 
 ## Remaining Production Integrations
 
