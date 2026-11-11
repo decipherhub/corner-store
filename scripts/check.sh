@@ -60,6 +60,14 @@ echo "==> Running production RFQ host hardening smoke test"
   npm test
 )
 
+echo "==> Installing CLI dependencies required by Toolkit production evidence tests"
+(
+  cd services/cli
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+)
+
 echo "==> Running Toolkit config build + smoke test"
 (
   cd services/toolkit
@@ -72,9 +80,6 @@ echo "==> Running Toolkit config build + smoke test"
 echo "==> Running CLI build + smoke test"
 (
   cd services/cli
-  if [ ! -x node_modules/.bin/tsc ]; then
-    npm ci
-  fi
   npm test
 )
 
