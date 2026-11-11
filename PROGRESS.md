@@ -1,5 +1,148 @@
 # Progress
 
+## 2026-11-11 Session: OPS-004 Release Evidence and Full Verification
+
+OPS-004 is the sole active feature and is not passing. Scope: approved #156
+step 3, canonical release evidence/template, D040-D042 and fresh full/local E2E
+verification. Steps 1 and 2 are committed as 51cebdb and bb23c12. No production
+source, deployed artifact, protected public demo path or external #160 test was
+changed. No adjacent runtime work, custody/key/multisig expansion or vendor
+integration was added. All defaults are adopted as team-to-confirm.
+
+Added `docs/release-assurance.md` and `docs/release-evidence.v1.template.json`.
+The versioned manual review record binds clean frozen commit, tools, chain/config,
+deployment evidence version 2 evidenceId/trusted recordDigest, exact report
+hashes, seeds and workflow results. It is separate from CLI authorization.
+External audit owner/reviewer remain TBD before first production release. Audit
+scope/report/remediation/retest and chain recovery transactions/fund reconciliation/
+safe-resumption/sign-off remain MISSING. Proposed drill cadence is before first
+launch, quarterly and after material changes. Production release stays BLOCKED.
+The active execution plan records the unmet checks rather than claiming completion.
+
+Migrated durable slice decisions and verification into canonical documents and
+removed SLICE_NOTES.md. Updated FEATURES, DECISIONS, QUALITY, testing/security,
+production deployment, tooling and document indexes. Corrected the former manual
+E2E-only description to match separate PR and scheduled/manual assurance jobs.
+There is no new test code in this documentation slice. Existing 25 gate-harness
+regressions ran before documentation edits; a retained local validation script checks
+template/status/tool/inventory bindings, links, new text and report hashes.
+
+### Fresh step 3 commands and results
+
+All checks used repository-local pinned Node 20.20.2/Yarn 1.22.22, Foundry 1.7.1,
+Solc 0.8.17, Python 3.12.12 and Slither 0.11.6. For commands below, the shared Bash
+wrapper is `bash -c 'source scripts/assurance/env.sh && <command>'`; run.sh also
+sources that environment internally. This uses the exact checksum-pinned Node
+and Yarn archives instead of an unpinned npx download. Logs are under
+`/private/tmp/w156-step3-*.log`; hashed job reports are in ignored
+`.assurance/reports/<task>/`.
+
+| Command inside the wrapper | Actual result |
+| --- | --- |
+| `scripts/check.sh` | Exit 0; 1,200/1,200 Foundry tests in 75 suites, all service/packed checks, legacy 2/2, deploy-v3 10/10, plus all three independent gates below |
+| `scripts/assurance/run.sh coverage` (invoked by check.sh) | Exit 0; primary 1,199/1,199 in 75 suites, production EIP-170 1/1, supplemental 5/5; every floor passed; 592.966 seconds |
+| `scripts/assurance/run.sh slither` (invoked by check.sh) | Exit 0; 179 complete normalized findings, all 102 detectors; 29.229 seconds |
+| `scripts/assurance/run.sh mutation` (invoked by check.sh) | Exit 0; 14/14 PR sentinels killed, 14 passing baselines, zero survivors, 100%; 77.220 seconds |
+| `scripts/assurance/run.sh e2e-buidl` | Exit 0; 7/7 chain scenarios plus runtime RFQ/UI/CLI checks; 26.405 seconds |
+| `scripts/assurance/run.sh e2e-reg-d` | Exit 0; 7/7 chain scenarios plus runtime RFQ/UI/CLI checks; 22.281 seconds |
+| `scripts/assurance/run.sh e2e-context` | Exit 0; 12/12 live cases; 14.095 seconds |
+| `scripts/assurance/run.sh e2e-identity` | Exit 0; 40/40 live cases; 22.989 seconds |
+| `python -m unittest discover -s scripts/assurance -p "test_*.py"` | Exit 0; 25/25, zero failures; 1.574 seconds |
+| `scripts/production-container-smoke.sh` | Exit 1; Docker daemon unavailable, no image/runtime pass |
+| `scripts/hackathon-monad-container-smoke.sh` | Exit 1; Docker daemon unavailable, no image/runtime pass |
+| `python .assurance/reports/documentation/verify-step3.py` | Exit 0 on final check; 13 text files, 60 local links, sole active feature, unique decisions, template/tool/sentinel bindings and nine hashed result sets |
+| `git diff --exit-code feat/154-append-only-deploy-evidence -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad test/integration/Invariants.t.sol src script && git diff --check` | Exit 0 on final check; no protected-path, production-source or whitespace differences |
+
+The full check started before documentation edits. No implementation or test
+changed during it. Its repository provenance-sensitive tests ran while tracked
+files were held steady. These remain dirty development results rather than
+frozen clean-release evidence. The known RFQ race did not occur in the completed
+30/30 RFQ stage. No rerun was needed. Both E2E profiles ran with distinct
+workspace/port pairs. The final check log ends with `All checks passed.`
+Service named tests: RFQ 30/30, RFQ host 24/24, Toolkit 74/74, CLI 20/20 and
+compliance-data 25/25; all other service/dashboard/rehearsal smokes passed.
+Packed consumers passed 50 production assertions (10 commitments plus 40 live
+28-transaction deployment/verification/tamper/recovery checks), eight Solidity
+adapter assertions and six RFQ v3/onboarding assertions. The full gate includes
+25/25 harness regressions. New-gate runs used seed `0x156`.
+
+Fresh coverage used seed `0x156`; its primary compile took 507.14 seconds and
+tests took 79.15 seconds. Production-only scope measurements:
+
+| Scope | Measured line | Measured branch | Required line/branch |
+| --- | --- | --- | --- |
+| execution | 332/336, 98.81% | 74/82, 90.24% | 95/90 |
+| registry | 558/570, 97.89% | 106/116, 91.38% | 95/90 |
+| compliance | 1396/1461, 95.55% | 331/384, 86.20% | 90/85 |
+| auth | 5/5, 100% | 1/1, 100% | 90/80 |
+| libraries | 58/58, 100% | 9/9, 100% | 90/80 |
+| factory | 49/49, 100% | 2/2, 100% | 90/80 |
+| production deployment | 101/101, 100% | 10/10, 100% | 90/80 |
+
+The independent analyzer's fresh output is complete: 5 high, 73 medium, 76 low,
+24 informational and one optimization result. It matches the committed baseline;
+all 78 medium/high suppressions remain separately reviewed and source-bound.
+Codex is the initial reviewer, with human confirmation pending. This is not an
+external audit completion claim.
+
+Documentation validation initially rejected inherited em dash characters in
+historical DECISIONS text, then caught an incorrect draft count of PR sentinels.
+Restricted character checking to added text and corrected the documentation to
+the actual manifest: 14 PR and 20 expanded. No gate or production source changed.
+The corrected checker passed on all then-changed files and six retained report
+sets; final cleanup validation covers 13 files, 60 links and nine hashed sets.
+Retained the validation script under ignored reports and removed the slice's
+draft directory. SLICE_NOTES.md is absent; HEAD remains bb23c12.
+
+### Prior-slice evidence verified again, not rerun claims
+
+Step 2 full nightly `scripts/assurance/run.sh invariants --deep`: 15/15 tests in
+five suites, eight invariants at 1,024 x 128, 131,072 calls per property and
+1,048,576 calls total, zero handler reverts; six fuzz functions at 256 cases and
+one named suspended-activation regression. Seed:
+`0x0b07357560d4c55e29d488f321fc6053a98a8f020377b2d80f3ae47469dcfb06`.
+Runner: 2,165.782 seconds. Checked actual final log and all three run-record hashes;
+copied unchanged to `.assurance/reports/step2-invariants/` before any new runs.
+Old development counterexamples with changed target selectors were ignored by
+Foundry, as its log records; they are not new production failures.
+
+Step 2 expanded `scripts/assurance/run.sh mutation --deep`: 20/20 compiling
+sentinels killed with 20 unchanged passing baselines, zero survivors, 226.532
+seconds. Seed:
+`0xfa2d243831ee6fc90952adf4caf3c9c3f007071aec96614aae00809752b1e93c`.
+Checked all 66 recorded artifact hashes; retained unchanged in
+`.assurance/reports/step2-mutation/`. Earlier assertion-classifier tightening
+reclassified 40 result streams, not a second mutation campaign.
+
+Step 2 coverage passed 1,199 primary tests plus the separate production size test
+1/1 and supplemental assembly tests 5/5. Minimal-IR was needed after actual
+stack-too-deep/Yul failures; production size assertions use production bytecode.
+Meaningful public-input/lifecycle/authorization regressions filled gaps without
+executable-source exemptions or lowered floors. Step 3's fresh measurement
+belongs in the final result below, rather than being inferred from these notes.
+
+Prior offline proof installed all 47 hash-locked packages into a previously
+absent local venv from retained wheels with `--no-index --require-hashes
+--only-binary=:all: --no-deps`, then passed pip check. Source-bound Slither input
+casts address an actual overload-resolution failure; partial analyzer output was
+never accepted. Initial normalization: 179 findings, 5 high/73 medium individually
+reviewed by Codex, human confirmation pending, exclusive expiry 2026-12-11.
+
+### Remaining verification and next action
+
+UNVERIFIED: hosted Linux clean-checkout CI, 15-minute PR budgets including tool
+provisioning/uploads, required branch/release-check settings and both Docker
+container jobs. Prerequisites #161/#162 and inherited-stack merge reconciliation
+remain pending; origin/main is still locally recorded as 7893021. The real
+Reporter observational invariant/redaction sentinel cannot be added against
+absent source and no mock counts. The #160-owned test is untouched. Refresh
+source-bound inventories/baselines/suppressions/mutations after integration and
+rerun full gates. Do not mark OPS-004 passing or move its plan to completed yet.
+
+External audit and chain-specific recovery artifacts are MISSING; no production
+network, legal conclusion, audit or drill completion is claimed. User reviews
+the working tree. No commit, push, GitHub comment/review or external publication.
+
 ## 2026-11-11 Session: DEPLOY-004 Publication Trust Boundary
 
 DEPLOY-004 is passing. Scope: remaining publication findings from

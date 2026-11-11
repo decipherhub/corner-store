@@ -14,6 +14,8 @@
 | [`architecture/README.md`](./architecture/README.md) | 책임 레이어와 경계 인덱스     | Current    |
 | [`ROADMAP.md`](./ROADMAP.md)                         | 구현 순서, 완료 조건, blocker | Current    |
 | [`testing.md`](./testing.md)                         | 테스트와 완료 기준            | Current    |
+| [`release-assurance.md`](./release-assurance.md) | Automated, external audit and recovery evidence gates | Current |
+| [`release-evidence.v1.template.json`](./release-evidence.v1.template.json) | Versioned manual release evidence template, initially BLOCKED | Template |
 | [`demo.md`](./demo.md)                               | live Anvil E2E / demo runbook | Current    |
 | [`rfq-demo-guide.md`](./rfq-demo-guide.md)           | RFQ-first MVP presenter guide | Current    |
 | [`showcase-runbook.md`](./showcase-runbook.md)       | production-core → local DEX handoff | Current |
@@ -47,6 +49,8 @@ Uniswap v3 배포 도구의 실제 포함 범위와 의존성은
 - vendored 배포 도구의 구성: `tools/deploy-v3/CORNER_STORE_PROFILE.md`
 - production deployment sequence, Safe/external signer, ERC-3643 onboarding and
   activation evidence: `deployment-production.md`
+- Production release assurance, automated report bindings, external audit and
+  chain-specific recovery evidence: `release-assurance.md`
 - feature 상태와 세션 진행: `FEATURES.md`, `PROGRESS.md`
 - 결정 이유와 품질 상태: `DECISIONS.md`, `QUALITY.md`
 - 정책 parameter·immutable version·실행 binding·감사 결정:

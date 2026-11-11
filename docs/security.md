@@ -322,6 +322,25 @@ bypass, Manifest/Recipe evaluation과 RFQ quote mismatch path를 Foundry tests�
 - ERC-20 safe transfer behavior와 callback-origin validation test
 - signed order/decision 도입 시 chain/domain/nonce/expiry replay test
 
+## Production Release Assurance
+
+Production releases also require the evidence contract in
+[`release-assurance.md`](./release-assurance.md) and its
+[version 1 template](./release-evidence.v1.template.json). Automated checks bind
+the frozen commit, tool versions, deployment evidenceId/recordDigest, seeds,
+report hashes and workflow results. Slither suppressions require individual,
+source-bound, expiring review separate from the baseline; Codex's initial review
+still needs human confirmation. Neither scanner output nor coverage is an audit.
+
+An independent external audit must supply scope, frozen commit, report,
+remediation and retest/sign-off before first production release. Owner/reviewer
+are TBD before that release. A chain-specific recovery drill must supply pause
+and recovery transactions, finality, fund reconciliation and safe-resumption
+evidence before first launch, quarterly and after material changes. Defaults
+are team-to-confirm. Missing artifacts remain MISSING and production release
+BLOCKED. No external audit, drill or new key/custody/multisig system is supplied
+by this documentation. Reporter coverage remains pending prerequisite #161.
+
 ## Reference Security Inputs
 
 - ERC-3643 official documentation: permissioned tokens provide identity-backed

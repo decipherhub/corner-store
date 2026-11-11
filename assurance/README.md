@@ -1,8 +1,10 @@
-# Production assurance tooling (OPS-004, step 2)
+# Production assurance tooling (OPS-004)
 
 These are implemented defaults, team-to-confirm. A passing automated gate does
 not replace independent review, external audit evidence or an operator recovery
-drill. Canonical release documentation and feature status are deferred to step 3.
+drill. The canonical [release contract](../docs/release-assurance.md) and
+[versioned template](../docs/release-evidence.v1.template.json) keep missing
+evidence explicit. OPS-004 remains active pending the checks in FEATURES.md.
 
 Provision the supported Linux x86_64 or macOS ARM64 host without a global install:
 

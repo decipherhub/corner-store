@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "kind": "corner-store-release-assurance",
+  "status": "BLOCKED",
+  "defaultsStatus": "team-to-confirm",
+  "release": {
+    "repository": "decipherhub/corner-store",
+    "commit": "MISSING",
+    "provenance": "MISSING",
+    "chainId": "MISSING",
+    "network": "MISSING",
+    "configHash": "MISSING",
+    "reviewer": "TBD",
+    "reviewedAtUtc": "MISSING"
+  },
+  "deployment": {
+    "status": "MISSING",
+    "evidenceVersion": 2,
+    "evidenceId": "MISSING",
+    "recordDigest": "MISSING",
+    "trustedDigestSource": "MISSING",
+    "record": {"location": "MISSING", "sha256": "MISSING"},
+    "verification": {"location": "MISSING", "sha256": "MISSING"}
+  },
+  "toolchain": {
+    "status": "MISSING",
+    "expected": {
+      "python": "3.12.12",
+      "slither-analyzer": "0.11.6",
+      "foundry": "1.7.1",
+      "solc": "0.8.17",
+      "node": "20.20.2",
+      "yarn": "1.22.22"
+    },
+    "observedVersions": {"location": "MISSING", "sha256": "MISSING"},
+    "toolchainManifest": {"location": "assurance/toolchain.json", "sha256": "MISSING"},
+    "pythonLock": {"location": "assurance/requirements.lock", "sha256": "MISSING"},
+    "offlineProvisioning": {"location": "MISSING", "sha256": "MISSING"}
+  },
+  "automated": {
+    "status": "MISSING",
+    "requiredGates": [
+      "repository", "coverage", "slither", "mutation-pr", "mutation-expanded",
+      "invariants-pr", "invariants-nightly", "e2e-buidl", "e2e-reg-d",
+      "e2e-context", "e2e-identity", "production-container", "monad-container",
+      "protected-path-preservation", "reporter-observational", "reporter-redaction"
+    ],
+    "results": [
+      {
+        "gate": "MISSING",
+        "status": "MISSING",
+        "commit": "MISSING",
+        "dirty": "MISSING",
+        "command": "MISSING",
+        "exitCode": "MISSING",
+        "startedAtUtc": "MISSING",
+        "finishedAtUtc": "MISSING",
+        "seconds": "MISSING",
+        "seed": "MISSING",
+        "runs": "MISSING",
+        "depth": "MISSING",
+        "counts": "MISSING",
+        "workflow": {"url": "MISSING", "job": "MISSING", "result": "MISSING"},
+        "runRecord": {"location": "MISSING", "sha256": "MISSING"},
+        "reports": [{"location": "MISSING", "sha256": "MISSING"}]
+      }
+    ],
+    "requiredChecksConfiguration": {"location": "MISSING", "sha256": "MISSING"},
+    "hostedJobBudgetEvidence": {"location": "MISSING", "sha256": "MISSING"},
+    "humanSuppressionReview": {"location": "MISSING", "sha256": "MISSING"},
+    "prerequisiteIntegration": {"location": "MISSING", "sha256": "MISSING"}
+  },
+  "externalAudit": {
+    "status": "MISSING",
+    "owner": "TBD before first production release",
+    "reviewerOrVendor": "TBD before first production release",
+    "scope": "MISSING",
+    "exclusions": "MISSING",
+    "frozenCommit": "MISSING",
+    "reportDateUtc": "MISSING",
+    "report": {"location": "MISSING", "sha256": "MISSING"},
+    "findingDispositions": {"location": "MISSING", "sha256": "MISSING"},
+    "remediationCommits": ["MISSING"],
+    "releaseDiffReview": {"location": "MISSING", "sha256": "MISSING"},
+    "retest": {"location": "MISSING", "sha256": "MISSING"},
+    "signOff": {"location": "MISSING", "sha256": "MISSING"}
+  },
+  "recoveryDrill": {
+    "status": "MISSING",
+    "cadence": "before first launch, quarterly, and after material changes",
+    "chainId": "MISSING",
+    "networkAndEnvironment": "MISSING",
+    "forkHeightIfApplicable": "MISSING",
+    "evidenceId": "MISSING",
+    "recordDigest": "MISSING",
+    "deploymentAndPolicySnapshot": {"location": "MISSING", "sha256": "MISSING"},
+    "operators": ["TBD"],
+    "reviewer": "TBD",
+    "scenario": "MISSING",
+    "assumptions": "MISSING",
+    "startedAtUtc": "MISSING",
+    "finishedAtUtc": "MISSING",
+    "pauseTransactions": [{"hash": "MISSING", "block": "MISSING", "receiptSha256": "MISSING"}],
+    "recoveryTransactions": [{"hash": "MISSING", "block": "MISSING", "receiptSha256": "MISSING"}],
+    "finalityEvidence": {"location": "MISSING", "sha256": "MISSING"},
+    "fundReconciliation": {"location": "MISSING", "sha256": "MISSING"},
+    "safeResumption": {"location": "MISSING", "sha256": "MISSING"},
+    "report": {"location": "MISSING", "sha256": "MISSING"},
+    "signOff": {"location": "MISSING", "sha256": "MISSING"},
+    "nextDueAtUtc": "MISSING"
+  },
+  "releaseDecision": {
+    "status": "BLOCKED",
+    "reviewer": "TBD",
+    "decidedAtUtc": "MISSING",
+    "durableEvidenceArchive": {"location": "MISSING", "sha256": "MISSING"},
+    "blockers": [
+      "Frozen clean release commit and matching successful automated/hosted evidence MISSING",
+      "Reporter suite/redaction sentinel and prerequisite reconciliation MISSING",
+      "Named human suppression/release review MISSING",
+      "External audit, remediation and independent retest/sign-off MISSING",
+      "Chain-specific recovery drill, fund reconciliation and sign-off MISSING"
+    ]
+  }
+}
