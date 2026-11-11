@@ -2322,7 +2322,7 @@ passing
 
 ### Verification
 
-- `scripts/check.sh` including 25 gate-harness regressions, repository checks,
+- `scripts/check.sh` including 27 gate-harness regressions, repository checks,
   coverage, Slither and all 15 PR mutation sentinels.
 - `scripts/assurance/run.sh invariants --deep` and
   `scripts/assurance/run.sh mutation --deep` for 1,024 x 128 invariants and all
@@ -2343,6 +2343,8 @@ active
 ### Notes
 
 - Sole active feature. D040-D042 are adopted defaults, team-to-confirm.
+- The assurance environment applies once per resolved worktree root across
+  nested Bash processes, preserving caller PATH and exported-variable overrides.
 - Active plan: `docs/exec-plans/active/OPS-004-production-assurance-gates.md`.
 - Local results and remaining UNVERIFIED checks are recorded in `PROGRESS.md`.
   Reporter/prerequisite reconciliation, hosted CI and unavailable Docker checks

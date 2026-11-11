@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Source this after provisioning to use only the worktree-local pinned tools.
-ASSURANCE_ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+ASSURANCE_ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
+if [ "${ASSURANCE_ENV_ROOT:-}" = "$ASSURANCE_ROOT" ]; then
+  return 0
+fi
 case $(uname -m) in
   arm64) ASSURANCE_NODE_ARCH=arm64 ;;
   x86_64) ASSURANCE_NODE_ARCH=x64 ;;
@@ -22,3 +25,4 @@ export PIP_DISABLE_PIP_VERSION_CHECK=1
 export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export TMPDIR="$ASSURANCE_ROOT/.assurance/tmp"
+export ASSURANCE_ENV_ROOT="$ASSURANCE_ROOT"

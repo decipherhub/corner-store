@@ -1,12 +1,64 @@
 import copy
 import datetime
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
 from gates import GateError, coverage_gate, normalize_slither, review_slither, replace_coverage_source
 from mutation import apply_mutation, classify_forge, classify_node, validate_manifest
+
+
+class EnvironmentTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+
+    def environment_script(self, name):
+        root = self.root / name
+        script = root / 'scripts/assurance/env.sh'
+        script.parent.mkdir(parents=True)
+        script.write_text((Path(__file__).parent / 'env.sh').read_text())
+        forge = root / '.assurance/tools/foundry/forge'
+        forge.parent.mkdir(parents=True)
+        forge.write_text('#!/bin/sh\necho pinned\n')
+        forge.chmod(0o755)
+        return script
+
+    def run_bash(self, script, command, *args):
+        env = dict(os.environ, BASH_ENV=str(script))
+        result = subprocess.run(['bash', '-eu', '-c', command, 'test', *map(str, args)],
+                                env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.splitlines()
+
+    def test_nested_bash_preserves_path_override_and_exported_variables(self):
+        script = self.environment_script('first')
+        stub = self.root / 'stub/forge'
+        stub.parent.mkdir()
+        stub.write_text('#!/bin/sh\necho stub\n')
+        stub.chmod(0o755)
+        output = self.run_bash(script, '''
+export PATH="$1:$PATH"
+export FOUNDRY_OFFLINE=overridden TMPDIR="$1"
+bash -eu -c 'source "$BASH_ENV"; command -v forge; forge; printf "%s\\n" "$FOUNDRY_OFFLINE" "$TMPDIR" "$PATH"'
+printf '%s\\n' "$PATH"
+''', stub.parent)
+        self.assertEqual(output[:4], [str(stub), 'stub', 'overridden', str(stub.parent)])
+        self.assertEqual(output[4], output[5])
+
+    def test_nested_bash_applies_different_worktree_environment(self):
+        first = self.environment_script('first')
+        second = self.environment_script('second')
+        output = self.run_bash(first, '''
+export BASH_ENV="$1"
+bash -eu -c 'command -v forge; printf "%s\\n" "$FOUNDRY_SOLC"'
+''', second)
+        tools = second.parents[2] / '.assurance/tools'
+        self.assertEqual(output, [str(tools / 'foundry/forge'), str(tools / 'solc/solc')])
 
 
 class CoverageTests(unittest.TestCase):

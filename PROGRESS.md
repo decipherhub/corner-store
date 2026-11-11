@@ -1,5 +1,39 @@
 # Progress
 
+## 2026-11-11 Session: OPS-004 Nested Bash Environment Guard
+
+Fixed the confirmed CI run 43039507031 environment reapplication defect in
+`scripts/assurance/env.sh:3`. An exported guard binds successful initialization
+to the physically resolved repository root. Re-sourcing through BASH_ENV or an
+explicit source in the same worktree preserves PATH and exported overrides;
+another worktree still applies its own tools. Both `ci.yml` and
+`assurance-job.yml` use this shared script and retain BASH_ENV unchanged.
+Pre-existing deployment-wrapper tests are unchanged. No product boundary or
+decision policy changed. OPS-004 remains the sole active feature.
+
+`scripts/assurance/test_gates.py:14` adds isolated fake-worktree regressions for
+nested Bash stub precedence, exported overrides, repeat sourcing and switching
+worktrees. Before the fix, the preservation regression failed with pinned forge
+selected instead of the stub; the worktree-switch regression passed. After the
+fix, both pass.
+
+| Command | Actual result |
+| --- | --- |
+| `python3 -m unittest discover -s scripts/assurance -p 'test_gates.py' -k EnvironmentTests` before fix | Expected exit 1; 1 failed, 1 passed |
+| Same targeted command after fix | Exit 0; 2/2 |
+| `python3 -m unittest discover -s scripts/assurance -p 'test_*.py'` | Exit 0; 27/27 |
+| `BASH_ENV=$PWD/scripts/assurance/env.sh bash scripts/test-deploy-testnet-rfq.sh` | Exit 0; argument tests passed |
+| `BASH_ENV=$PWD/scripts/assurance/env.sh scripts/check.sh --repository-only` first attempt | Exit 1 after 1,200/1,200 Foundry tests; only the documented RFQ initial-store race flake failed |
+| Same repository command, single unchanged rerun | Exit 0; 1,200/1,200 Foundry tests, all repository/service/packed-consumer checks, deployment-wrapper arguments, legacy readers and deploy-v3 tests passed |
+| `git diff --check` | Exit 0 |
+
+Logs are retained in
+`/private/tmp/w156-env-repository-check.log` and
+`/private/tmp/w156-env-repository-check-rerun.log`. Separate live E2Es, assurance
+analysis/deep campaigns and container smoke checks are not rerun for this shell
+fix. Hosted CI is UNVERIFIED locally; prior pending acceptance items remain.
+No commit, push, branch change or external publication was performed.
+
 ## 2026-11-11 Session: OPS-004 F1 Commit-Failure Rollback Coverage
 
 Fixed the confirmed F1 assurance gap only. OPS-004 remains the sole active

@@ -457,7 +457,7 @@ remain unverified. See the [production runbook](./deployment-production.md).
 scripts/check.sh
 ```
 
-This command provisions checksum/hash-locked local tools, runs 25 assurance
+This command provisions checksum/hash-locked local tools, runs 27 assurance
 harness regressions, format/lint/build/Foundry tests, service and packed-consumer
 checks, legacy artifact checks, deploy-v3 and whitespace checks, then coverage,
 Slither and PR mutations. CI uses `--repository-only` with those three independent
