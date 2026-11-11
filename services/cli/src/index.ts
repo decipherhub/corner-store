@@ -153,6 +153,7 @@ program
   .command("production-plan")
   .description("render a signer-free production deployment plan")
   .argument("[path]", "production config JSON path", "corner-store.production.json")
+  .option("--out <file>", "write the versioned unsigned deployment plan")
   .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
   .action(run((path, opts, command) => cmd.cmdProductionPlan(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
 

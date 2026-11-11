@@ -28,7 +28,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
-    "test": "npm run build && node dist/test/smoke.js && node --test dist/test/provenance.js dist/test/topology.js dist/test/identity-evidence.js"
+    "test": "npm run build && node dist/test/smoke.js && node --test dist/test/provenance.js dist/test/topology.js dist/test/identity-evidence.js dist/test/production-evidence.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

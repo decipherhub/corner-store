@@ -278,10 +278,10 @@ validateProductionDeploymentEvidence({
   forkSimulation: {passed: true, chainId: 1, blockNumber: 20_000_000},
   reviewedAt: "2026-07-31T00:00:00.000Z"
 }, productionConfig);
-if (!createProductionDeploymentPlan(productionConfig, {kind: "ledger"}, true).command.includes("--ledger")) {
+if (!createProductionDeploymentPlan(productionConfig, {kind: "ledger"}).command.includes("--ledger")) {
   throw new Error("production ledger deploy plan regression");
 }
-if (!createProductionDeploymentPlan(productionConfig, {kind: "account", name: "prod-safe-deployer"}, true).command.includes("--account prod-safe-deployer")) {
+if (!createProductionDeploymentPlan(productionConfig, {kind: "account", name: "prod-safe-deployer"}).command.includes("--account prod-safe-deployer")) {
   throw new Error("production account deploy plan regression");
 }
 try {

@@ -20,3 +20,5 @@ export * from "./venue-context";
 export * from "./identity-policy";
 
 export * from "./identity-evidence";
+
+export * from "./production-evidence";

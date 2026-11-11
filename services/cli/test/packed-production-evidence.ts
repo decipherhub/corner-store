@@ -1,0 +1,42 @@
+import assert from "node:assert/strict";
+import {execFileSync} from "node:child_process";
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join, resolve} from "node:path";
+
+const repo = resolve(__dirname, "../../../../..");
+const root = mkdtempSync(join(tmpdir(), "corner-production-packed-"));
+const env = {...process.env, npm_config_cache: join(root, "npm-cache")};
+const run = (cmd: string, args: string[], cwd = root) => execFileSync(cmd, args, {cwd, env, encoding: "utf8", maxBuffer: 128 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"]}).trim();
+try {
+  const pack = join(root, "packages"); mkdirSync(pack);
+  const cliPackage = run("npm", ["pack", "./services/cli", "--pack-destination", pack, "--silent"], repo).split("\n").pop()!;
+  const toolkitPackage = run("npm", ["pack", "./services/toolkit", "--pack-destination", pack, "--silent"], repo).split("\n").pop()!;
+  writeFileSync(join(root, "package.json"), JSON.stringify({private: true, dependencies: {"@corner-store/cli": `file:${join(pack, cliPackage)}`, "@corner-store/toolkit": `file:${join(pack, toolkitPackage)}`}}));
+  run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"]);
+  const localCli = join(repo, "services/cli/dist/cli/src/index.js");
+  const packedCli = join(root, "node_modules/@corner-store/cli/dist/cli/src/index.js");
+  const bundled = join(root, "node_modules/@corner-store/cli/bundle/contracts");
+  const source = JSON.parse(run(process.execPath, [localCli, "production-source-hash", "--contracts", repo]));
+  const packed = JSON.parse(run(process.execPath, [packedCli, "production-source-hash"]));
+  assert.equal(source.contractsHash, packed.contractsHash);
+  assert.equal(packed.provenance.state, "source-only");
+  const config = JSON.parse(readFileSync(join(repo, "services/toolkit/examples/corner-store.production.json"), "utf8"));
+  config.release = {sourceCommit: source.sourceCommit, contractsHash: source.contractsHash};
+  const configPath = join(root, "production.json"); writeFileSync(configPath, JSON.stringify(config));
+  const original = JSON.parse(run(process.execPath, [localCli, "production-plan", configPath, "--contracts", repo]));
+  const packaged = JSON.parse(run(process.execPath, [packedCli, "production-plan", configPath]));
+  assert.equal(original.build.buildHash, packaged.build.buildHash);
+  assert.equal(original.identity.sourceHash, packaged.identity.sourceHash);
+  assert.equal(packaged.identity.provenance.state, "source-only");
+  assert.notEqual(original.evidenceId, packaged.evidenceId);
+  const toolkit = require(join(root, "node_modules/@corner-store/toolkit"));
+  const product = require(join(root, "node_modules/@corner-store/cli/dist/cli/src/product.js"));
+  const runtime = product.prepareDeploymentRuntime(root, bundled);
+  const copied = toolkit.buildProductionIdentity(runtime, config);
+  assert.equal(copied.build.buildHash, packaged.build.buildHash);
+  assert.equal(copied.identity.evidenceId, packaged.evidenceId);
+  assert.equal(copied.source.sourceHash, source.contractsHash);
+  assert.throws(() => toolkit.assertProductionBroadcastIdentity(copied.identity, config), /clean Git/);
+  console.log("Packed production evidence: 10 assertions passed (repository/package/runtime commitments and source-only broadcast rejection).");
+} finally { rmSync(root, {recursive: true, force: true}); }

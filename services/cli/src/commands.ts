@@ -5,12 +5,10 @@ import {
   existsSync,
   openSync,
   closeSync,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
-  readlinkSync,
   rmSync,
   writeFileSync
 } from "fs";
@@ -34,6 +32,10 @@ import {
   loadProductionDeploymentEvidence,
   validateProductionConfig
 } from "../../toolkit/src/production";
+import {
+  ProductionRecord, assertProductionBroadcastIdentity, bindProductionRecord, buildProductionIdentity,
+  captureProductionSource, verifyProductionManifest, verifyProductionRecord
+} from "../../toolkit/src/production-evidence";
 import {scaffoldRFQIntegration} from "../../toolkit/src/scaffold";
 import {ProjectTemplateId} from "../../toolkit/src/project-templates";
 import {RFQIntegrationMode} from "../../toolkit/src/integration";
@@ -420,10 +422,18 @@ export async function cmdProductionPolicyUpdatePreActivation(path = "corner-stor
   }
 }
 
-export function cmdProductionPlan(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string}): void {
+export function cmdProductionPlan(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string; out?: string}): void {
   rejectProductionRawKey(opts);
   const config = productionConfigWithRuntimeOverrides(path, opts);
-  const plan = createProductionDeploymentPlan(config);
+  const source = productionContractSource(findRepoRoot(process.cwd()), opts.contracts);
+  if (!source) throw new CliError("Corner Store production contract bundle not found");
+  const captured = buildProductionIdentity(source, config);
+  const plan = {...createProductionDeploymentPlan(config, {kind: "none"}, false, captured.identity), source: captured.source, build: captured.build};
+  if (opts.out) {
+    const output = resolve(opts.out);
+    mkdirSync(dirname(output), {recursive: true});
+    writeFileSync(output, `${JSON.stringify(plan, null, 2)}\n`, {flag: "wx"});
+  }
   console.log(JSON.stringify(plan, null, 2));
 }
 
@@ -431,10 +441,13 @@ export function cmdProductionSourceHash(opts: GlobalOpts): void {
   const repoRoot = findRepoRoot(process.cwd());
   const contractSource = productionContractSource(repoRoot, opts.contracts);
   if (!contractSource) throw new CliError("Corner Store contract bundle not found; reinstall the CLI or set CORNER_STORE_CONTRACTS_ROOT");
+  const source = captureProductionSource(contractSource);
   console.log(JSON.stringify({
     contractsRoot: contractSource,
-    sourceCommit: productionSourceCommit(contractSource),
-    contractsHash: productionContractsHash(contractSource)
+    sourceCommit: source.provenance.head,
+    contractsHash: source.sourceHash,
+    provenance: source.provenance,
+    source
   }, null, 2));
 }
 
@@ -459,18 +472,6 @@ export async function cmdProductionDeploy(
   const repoRoot = findRepoRoot(process.cwd());
   const contractSource = productionContractSource(repoRoot, opts.contracts);
   if (!contractSource) throw new CliError("Corner Store contract bundle not found; reinstall the CLI or set CORNER_STORE_CONTRACTS_ROOT");
-  const contractsHash = productionContractsHash(contractSource);
-  if (contractsHash !== config.release.contractsHash) {
-    throw new CliError(
-      `contract source hash mismatch: config=${config.release.contractsHash}, actual=${contractsHash}; regenerate review evidence`
-    );
-  }
-  const actualSourceCommit = productionSourceCommit(contractSource);
-  if (actualSourceCommit && actualSourceCommit !== config.release.sourceCommit) {
-    throw new CliError(
-      `source commit mismatch: config=${config.release.sourceCommit}, actual=${actualSourceCommit}; review the intended release`
-    );
-  }
   const evidencePath = resolve(process.cwd(), config.deployment.evidence);
   let deploymentEvidence;
   try {
@@ -478,53 +479,51 @@ export async function cmdProductionDeploy(
   } catch (err: any) {
     throw new CliError(err.message);
   }
-  const preflight = await productionPreflight(config);
-  if (!preflight.ready) {
-    console.log(JSON.stringify(preflight, null, 2));
-    throw new CliError(`production preflight failed: ${preflight.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
-  }
-  const plan = createProductionDeploymentPlan(config, signer, true);
-  console.log(JSON.stringify({...plan, preflight, deploymentEvidence, evidencePath, contractsHash}, null, 2));
-  const projectRoot = process.cwd();
-  const deploymentRoot = repoRoot === projectRoot
-    ? repoRoot
-    : prepareDeploymentRuntime(projectRoot, contractSource);
-  const args = [
-    "script",
-    plan.script,
-    "--rpc-url",
-    config.network.rpcUrl,
-    "--chain-id",
-    String(config.network.chainId),
-    "--sender",
-    config.deployer,
-    "--broadcast"
-  ];
-  if (signer.kind === "ledger") args.push("--ledger");
-  if (signer.kind === "account") args.push("--account", signer.name);
-  execFileSync("forge", args, {
-    env: {
-      ...process.env,
-      CORNER_STORE_DEPLOYER: config.deployer,
-      CORNER_STORE_GOVERNANCE: config.safe.address,
-      CORNER_STORE_OPERATOR: config.operator,
-      CORNER_STORE_ENABLE_AMM: config.venues.amm ? "1" : "0",
-      CORNER_STORE_ENABLE_RFQ: config.venues.rfq ? "1" : "0",
-      CORNER_STORE_DEPLOYMENT_ID: config.deploymentId,
-      CORNER_STORE_SOURCE_COMMIT: config.release.sourceCommit,
-      CORNER_STORE_CONTRACTS_HASH: config.release.contractsHash,
-      CORNER_STORE_ARTIFACT: config.deployment.artifact
-    },
-    cwd: deploymentRoot,
-    stdio: "inherit"
-  });
-  if (deploymentRoot !== projectRoot) {
-    const source = resolve(deploymentRoot, config.deployment.artifact);
-    const output = resolve(projectRoot, config.deployment.artifact);
+  if (deploymentEvidence.schemaVersion !== 2 || !deploymentEvidence.identity) throw new CliError("new production deployments require evidence version 2");
+  const captured = buildProductionIdentity(contractSource, config, {keepWorkspace: true});
+  try {
+    assertProductionBroadcastIdentity(captured.identity, config);
+    if (deploymentEvidence.evidenceId !== captured.identity.evidenceId) throw new CliError("reviewed production evidence identity mismatch");
+    const preflight = await productionPreflight(config);
+    if (!preflight.ready) {
+      console.log(JSON.stringify(preflight, null, 2));
+      throw new CliError(`production preflight failed: ${preflight.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
+    }
+    const plan = createProductionDeploymentPlan(config, signer, true, captured.identity);
+    console.log(JSON.stringify({...plan, preflight, deploymentEvidence, evidencePath}, null, 2));
+    const args = ["script", plan.script, "--root", captured.workspace, "--offline", "--use", captured.solcPath,
+      "--rpc-url", config.network.rpcUrl, "--chain-id", String(config.network.chainId), "--sender", config.deployer, "--broadcast"];
+    if (signer.kind === "ledger") args.push("--ledger");
+    if (signer.kind === "account") args.push("--keystore", resolve(process.env.HOME ?? "", ".foundry/keystores", signer.name));
+    verifyProductionManifest(captured.workspace, captured.source);
+    const current = buildProductionIdentity(contractSource, config);
+    if (current.identity.evidenceId !== captured.identity.evidenceId) throw new CliError("production inputs changed before execution");
+    execFileSync(captured.forgePath, args, {
+      env: {
+        ...captured.env,
+        CORNER_STORE_DEPLOYER: config.deployer,
+        CORNER_STORE_GOVERNANCE: config.safe.address,
+        CORNER_STORE_OPERATOR: config.operator,
+        CORNER_STORE_ENABLE_AMM: config.venues.amm ? "1" : "0",
+        CORNER_STORE_ENABLE_RFQ: config.venues.rfq ? "1" : "0",
+        CORNER_STORE_DEPLOYMENT_ID: config.deploymentId,
+        CORNER_STORE_SOURCE_COMMIT: config.release.sourceCommit,
+        CORNER_STORE_CONTRACTS_HASH: config.release.contractsHash,
+        CORNER_STORE_ARTIFACT: config.deployment.artifact
+      },
+      cwd: captured.workspace,
+      stdio: "inherit"
+    });
+    const artifact = JSON.parse(readFileSync(resolve(captured.workspace, config.deployment.artifact), "utf8"));
+    const broadcastPath = resolve(captured.workspace, "broadcast/DeployProductionCore.s.sol", String(config.network.chainId), "run-latest.json");
+    const broadcast = JSON.parse(readFileSync(broadcastPath, "utf8"));
+    if (!Array.isArray(broadcast.transactions) || !broadcast.transactions.length || !Array.isArray(broadcast.receipts) || !broadcast.receipts.length) throw new CliError("production transaction inputs and receipts are required");
+    const record = bindProductionRecord(captured.identity, artifact, broadcast.transactions, broadcast.receipts, {source: captured.source, build: captured.build});
+    const output = resolve(process.cwd(), config.deployment.artifact);
     mkdirSync(dirname(output), {recursive: true});
-    copyFileSync(source, output);
-    console.log(`production deployment artifact copied to ${output}`);
-  }
+    writeFileSync(output, `${JSON.stringify(record, null, 2)}\n`);
+    console.log(`production deployment artifact written to ${output}`);
+  } finally { captured.dispose(); }
 }
 
 export async function cmdProductionVerify(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string}): Promise<void> {
@@ -536,6 +535,17 @@ export async function cmdProductionVerify(path = "corner-store.production.json",
     artifact = JSON.parse(readFileSync(artifactPath, "utf8")) as Record<string, unknown>;
   } catch (err: any) {
     throw new CliError(`invalid production artifact ${artifactPath}: ${err.message}`);
+  }
+  if (artifact.schemaVersion === 2) {
+    const record = artifact as unknown as ProductionRecord;
+    verifyProductionRecord(record, record.evidenceId);
+    const source = productionContractSource(findRepoRoot(process.cwd()), opts.contracts);
+    if (!source) throw new CliError("production verification requires captured contract inputs");
+    const rebuilt = buildProductionIdentity(source, config);
+    const reviewed = loadProductionDeploymentEvidence(resolve(config.deployment.evidence), config);
+    if (reviewed.schemaVersion !== 2 || reviewed.evidenceId !== rebuilt.identity.evidenceId) throw new CliError("production reviewed evidence identity mismatch");
+    verifyProductionRecord(record, rebuilt.identity.evidenceId);
+    artifact = record.artifact;
   }
   const result = await productionVerify(config, artifact);
   console.log(JSON.stringify({...result, artifact: artifactPath}, null, 2));
@@ -605,6 +615,7 @@ function productionSigner(opts: {ledger?: boolean; account?: string}): Productio
   if (opts.ledger) return {kind: "ledger"};
   if (opts.account) {
     if (/^0x[0-9a-fA-F]{64}$/.test(opts.account)) throw new CliError("production --account must be a Foundry account name, not a raw private key");
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(opts.account)) throw new CliError("production --account must be a conservative keystore name");
     return {kind: "account", name: opts.account};
   }
   return {kind: "none"};
@@ -929,51 +940,12 @@ function artifactValue(artifact: Record<string, unknown>, paths: string[]): unkn
   return undefined;
 }
 
-function productionContractsHash(root: string): string {
-  const hasher = createHash("sha256");
-  const inputs = ["foundry.toml", "remappings.txt", "src", "lib", "script/DeployProductionCore.s.sol"];
-  const ignored = new Set([".git", "node_modules", "out", "cache", "broadcast", "deployments"]);
-  const visit = (absolutePath: string, relativePath: string): void => {
-    const stat = lstatSync(absolutePath);
-    if (stat.isSymbolicLink()) {
-      hasher.update(`L\0${relativePath}\0${readlinkSync(absolutePath)}\0`);
-      return;
-    }
-    if (stat.isDirectory()) {
-      const entries = readdirSync(absolutePath).filter((name) => !ignored.has(name)).sort();
-      for (const entry of entries) visit(resolve(absolutePath, entry), `${relativePath}/${entry}`);
-      return;
-    }
-    if (stat.isFile()) {
-      hasher.update(`F\0${relativePath}\0`);
-      hasher.update(readFileSync(absolutePath));
-      hasher.update("\0");
-    }
-  };
-  for (const input of inputs) {
-    const absolutePath = resolve(root, input);
-    try {
-      visit(absolutePath, input);
-    } catch (err: any) {
-      if (err?.code !== "ENOENT") throw err;
-    }
-  }
-  return `sha256:${hasher.digest("hex")}`;
-}
-
 function productionContractSource(repoRoot?: string, explicit?: string): string | undefined {
-  if (explicit) return resolveContractSource(repoRoot, explicit);
-  if (repoRoot && resolve(repoRoot) === resolve(process.cwd())) return repoRoot;
-  return resolveContractSource(repoRoot);
-}
-
-function productionSourceCommit(root: string): string | undefined {
-  if (!existsSync(resolve(root, ".git"))) return undefined;
-  try {
-    return String(execFileSync("git", ["-C", root, "rev-parse", "HEAD"], {encoding: "utf8"})).trim().toLowerCase();
-  } catch {
-    return undefined;
-  }
+  const selected = explicit ?? process.env.CORNER_STORE_CONTRACTS_ROOT;
+  const source = selected ? resolve(selected)
+    : repoRoot && resolve(repoRoot) === resolve(process.cwd()) ? repoRoot : resolveContractSource(repoRoot);
+  return source && existsSync(resolve(source, "foundry.toml")) && existsSync(resolve(source, "script/DeployProductionCore.s.sol"))
+    ? source : undefined;
 }
 
 export function cmdToolkitScaffoldRFQ(

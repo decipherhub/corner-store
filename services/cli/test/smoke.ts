@@ -1,7 +1,8 @@
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
 import {createServer} from "http";
 import {tmpdir} from "os";
-import {join} from "path";
+import {join, resolve} from "path";
+import {captureProductionSource} from "../../toolkit/src/production-evidence";
 import {AbiCoder, Wallet, verifyTypedData} from "ethers";
 
 import {
@@ -178,6 +179,8 @@ async function main() {
   assert(existsSync(copiedArtifact), "deployment artifact is copied back to the consumer project");
 
   const productionConfigPath = join(consumerRoot, "corner-store.production.json");
+  const productionContracts = resolve(__dirname, "../../../../..");
+  const productionSource = captureProductionSource(productionContracts);
   writeFileSync(productionConfigPath, `${JSON.stringify({
     schemaVersion: 1,
     network: {
@@ -186,7 +189,7 @@ async function main() {
       rpcUrl: "https://rpc.example",
       approvedRpcHosts: ["rpc.example", "secure-rpc.example"]
     },
-    release: {sourceCommit: "a".repeat(40), contractsHash: `sha256:${"b".repeat(64)}`},
+    release: {sourceCommit: productionSource.provenance.head!, contractsHash: productionSource.sourceHash},
     deploymentId: "mainnet-core-1",
     deployer: "0x4444444444444444444444444444444444444444",
     operator: "0x5555555555555555555555555555555555555555",
@@ -213,16 +216,17 @@ async function main() {
     let planOutput = "";
     console.log = (value?: any) => { planOutput += String(value); };
     try {
-      cmdProductionPlan("corner-store.production.json", {rpcUrl: "https://secure-rpc.example"});
+      cmdProductionPlan("corner-store.production.json", {rpcUrl: "https://secure-rpc.example", contracts: productionContracts});
     } finally {
       console.log = previousLog;
     }
-    assert(planOutput.includes("CORNER_STORE_DEPLOYER=0x4444444444444444444444444444444444444444"), "production-plan includes deployer env");
-    assert(planOutput.includes("CORNER_STORE_GOVERNANCE=0x8888888888888888888888888888888888888888"), "production-plan includes Safe env");
-    assert(planOutput.includes("CORNER_STORE_ENABLE_AMM=1") && planOutput.includes("CORNER_STORE_ENABLE_RFQ=1"), "production-plan includes venue env");
-    assert(planOutput.includes("--sender 0x4444444444444444444444444444444444444444"), "production-plan includes explicit sender");
-    assert(planOutput.includes("https://secure-rpc.example"), "production-plan supports explicit RPC runtime override");
-    assert(!planOutput.includes("--ledger") && !planOutput.includes("--account"), "production-plan is signer-free");
+    const productionCommand = JSON.parse(planOutput).command;
+    assert(productionCommand.includes("CORNER_STORE_DEPLOYER=0x4444444444444444444444444444444444444444"), "production-plan includes deployer env");
+    assert(productionCommand.includes("CORNER_STORE_GOVERNANCE=0x8888888888888888888888888888888888888888"), "production-plan includes Safe env");
+    assert(productionCommand.includes("CORNER_STORE_ENABLE_AMM=1") && productionCommand.includes("CORNER_STORE_ENABLE_RFQ=1"), "production-plan includes venue env");
+    assert(productionCommand.includes("--sender 0x4444444444444444444444444444444444444444"), "production-plan includes explicit sender");
+    assert(productionCommand.includes("https://secure-rpc.example"), "production-plan supports explicit RPC runtime override");
+    assert(!productionCommand.includes("--ledger") && !productionCommand.includes("--account"), "production-plan is signer-free");
     assertThrows(() => cmdProductionPlan("corner-store.production.json", {key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"}), "production-plan rejects raw key");
     const onboardingPath = join(consumerRoot, "corner-store.production-onboarding.json");
     writeFileSync(onboardingPath, `${JSON.stringify({
