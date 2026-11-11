@@ -1,6 +1,7 @@
 import {createHash} from "crypto";
 import {readFileSync} from "fs";
 import {isAbsolute, resolve} from "path";
+import {ProductionIdentity, assertProductionBroadcastIdentity, validateProductionIdentity} from "./production-evidence";
 
 export const PRODUCTION_SCHEMA_VERSION = 1;
 export const PRODUCTION_DEPLOY_SCRIPT = "script/DeployProductionCore.s.sol:DeployProductionCore";
@@ -29,6 +30,8 @@ export interface ProductionDeploymentEvidence {
   configHash: string;
   sourceCommit: string;
   contractsHash: string;
+  evidenceId?: string;
+  identity?: ProductionIdentity;
   dryRun: {passed: boolean; chainId: number};
   forkSimulation: {passed: boolean; chainId: number; blockNumber: number};
   reviewedAt: string;
@@ -40,6 +43,8 @@ export interface ProductionDeploymentPlan {
   rpcUrl: string;
   chainId: number;
   configHash: string;
+  evidenceId?: string;
+  identity?: ProductionIdentity;
   evidence: string;
   broadcast: boolean;
   command: string;
@@ -157,7 +162,11 @@ export function validateProductionDeploymentEvidence(
     throw new Error("production evidence must be an object");
   }
   const evidence = value as Partial<ProductionDeploymentEvidence>;
-  if (evidence.schemaVersion !== 1) throw new Error("production evidence schemaVersion must be 1");
+  if (evidence.schemaVersion !== 1 && evidence.schemaVersion !== 2) throw new Error("production evidence schemaVersion must be 1 or 2");
+  if (evidence.schemaVersion === 2) {
+    if (!evidence.identity || evidence.evidenceId !== evidence.identity.evidenceId) throw new Error("production evidence identity is required");
+    validateProductionIdentity(evidence.identity, config);
+  }
   const expectedHash = productionConfigHash(config);
   if (evidence.configHash !== expectedHash || !SHA256.test(evidence.configHash ?? "")) {
     throw new Error(`production evidence configHash must match ${expectedHash}`);
@@ -190,9 +199,13 @@ export function loadProductionDeploymentEvidence(
 export function createProductionDeploymentPlan(
   config: ProductionConfig,
   signer: ProductionSigner = {kind: "none"},
-  broadcast = false
+  broadcast = false,
+  identity?: ProductionIdentity
 ): ProductionDeploymentPlan {
   const selected = validateProductionConfig(config);
+  if (broadcast && !identity) throw new Error("production broadcast plan requires evidence version 2 identity");
+  if (identity) validateProductionIdentity(identity, selected);
+  if (broadcast && identity) assertProductionBroadcastIdentity(identity, selected);
   const env = [
     ["CORNER_STORE_DEPLOYER", selected.deployer],
     ["CORNER_STORE_GOVERNANCE", selected.safe.address],
@@ -202,8 +215,9 @@ export function createProductionDeploymentPlan(
     ["CORNER_STORE_DEPLOYMENT_ID", selected.deploymentId],
     ["CORNER_STORE_SOURCE_COMMIT", selected.release.sourceCommit],
     ["CORNER_STORE_CONTRACTS_HASH", selected.release.contractsHash],
-    ["CORNER_STORE_ARTIFACT", selected.deployment.artifact]
+    ["CORNER_STORE_CANDIDATE", "deployments/production-core.candidate.json"]
   ];
+  if (identity) env.push(["CORNER_STORE_EVIDENCE_ID", identity.evidenceId]);
   const args = [
     "forge",
     "script",
@@ -215,7 +229,7 @@ export function createProductionDeploymentPlan(
     "--sender",
     selected.deployer
   ];
-  if (broadcast) args.push("--broadcast");
+  if (broadcast) args.push("--broadcast", "--slow");
   if (signer.kind === "ledger") args.push("--ledger");
   if (signer.kind === "account") args.push("--account", signer.name);
   return {
@@ -224,6 +238,7 @@ export function createProductionDeploymentPlan(
     rpcUrl: selected.network.rpcUrl,
     chainId: selected.network.chainId,
     configHash: productionConfigHash(selected),
+    ...(identity ? {evidenceId: identity.evidenceId, identity} : {}),
     evidence: selected.deployment.evidence,
     broadcast,
     command: `${env.map(([key, value]) => `${key}=${shellQuote(value)}`).join(" ")} ${args.map(shellQuote).join(" ")}`,

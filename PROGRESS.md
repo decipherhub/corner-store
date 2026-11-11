@@ -1,5 +1,171 @@
 # Progress
 
+## 2026-11-11 Session: DEPLOY-004 Publication Trust Boundary
+
+DEPLOY-004 is passing. Scope: remaining publication findings from
+`../out-review-154-fix.md`, trust preconditions, best-effort mismatch cleanup,
+tests and D038/runbook evidence. This supersedes the earlier publication safety
+claim: inode checks alone do not prevent ancestor substitution or cleanup races.
+
+`services/toolkit/src/production-publication.ts:36` checks staging/output ancestry
+through the root for current-uid/root ownership and safe modes. Only ancestors
+may be writable with the sticky bit. Output trust is checked before reservation;
+both paths are rechecked at publication/recovery. Inode pinning remains, and
+`:211` limits mismatch cleanup to verified output ancestry, preserving the
+original error on cleanup failure. D038 and the runbook explicitly trust root
+and exclude concurrent operator-uid processes, which already hold signing material.
+
+Tests first: seven new rejection/cleanup cases failed against the prior source;
+the sticky acceptance case and all 12 existing publication cases passed. All
+20 now pass. New cases at `services/toolkit/test/production-publication.ts:16`
+cover group-writable, world-writable non-sticky and foreign-owned ancestors,
+foreign-owned/writable output directories, sticky ancestor acceptance, trust
+rechecks before linking/recovery and refusing cleanup in an untrusted output
+directory. Ownership uses injected `stat.uid`; mode/sticky tests use real modes.
+
+All Node commands below used
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'` with Node 20.20.2,
+Yarn 1.22.22 and Foundry 1.7.1. Logs use `/private/tmp/w154-trust-`.
+
+| Command inside the wrapper | Actual result | Log suffix |
+| --- | --- | --- |
+| `npm run build --prefix services/toolkit && node --test services/toolkit/dist/test/production-publication.js` before implementation | Exit 1; 13 passed, seven new cases failed | `red.log` |
+| `npm test --prefix services/toolkit && npm test --prefix services/cli && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; smokes, Toolkit 74/74, CLI 19/19, legacy 2/2, zero failures/skips | `focused-stable.log` |
+| `scripts/check.sh` | Exit 0; 1,171 Foundry tests, all service checks, 50 packed production assertions including live 28-transaction Anvil deployment/recovery, legacy 2/2 and deploy-v3 10/10 | `check.log` |
+
+Intermediate runs failed on ownership error wording and an in-flight tracked-doc
+edit caught by the CLI provenance guard. Corrected wording and held the working
+tree unchanged for both successful runs. The full gate passed on its first run;
+the known RFQ flake did not occur. Separate legacy profile/context/identity E2E
+scripts were not repeated for this filesystem-only change; packed live production
+deployment/recovery supplied runtime coverage. Whitespace and protected-path
+comparisons against HEAD pass. No contract/public/demo changes, commit, push or
+external publication. Next: user reviews the working tree. Same-uid concurrency
+and other filesystems/power-loss durability remain outside verified guarantees.
+
+## 2026-11-11 Session: DEPLOY-004 Confirmed Review Fixes
+
+DEPLOY-004 is passing. Scope: F1 publication path replacement and F2 hidden Git
+input edits from `../out-review-154.md`, regression tests and related evidence
+wording. No contract, legacy artifact, public/demo path, custody or signing change.
+
+F1: `services/toolkit/src/production-publication.ts:160` holds a no-follow file
+descriptor across validation/linking, verifies final regular-file device/inode/size,
+and rechecks the created entry before mismatch cleanup and directory fsync.
+Staging ownership, permissions, ancestry and directory identity are checked.
+Missing staging before completion fails closed; recovery never overwrites finals.
+F2: `services/toolkit/src/production-evidence.ts:105` compares every captured
+input's raw bytes with HEAD blobs through committed submodule gitlinks, independent
+of index flags. Missing/different blobs cannot grant clean provenance or broadcast.
+
+Tests first: six targeted Toolkit cases failed against the original implementation
+(three publication cases and three provenance cases); both CLI index-flag cases
+failed by reaching RPC preflight instead of refusing provenance. Added cleanup
+replacement and missing-HEAD guards afterward. All ten new cases now pass, plus
+existing interruption/SIGKILL/recovery cases. Test names and locations:
+`services/toolkit/test/production-publication.ts:131`,
+`services/toolkit/test/production-evidence.ts:144` and
+`services/cli/test/production-evidence.ts:145`.
+
+All Node commands used `npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`
+(Node 20.20.2, Yarn 1.22.22); Foundry 1.7.1. Logs use `/private/tmp/w154-review-`.
+
+| Command inside the wrapper | Actual result | Log suffix |
+| --- | --- | --- |
+| `npm test --prefix services/toolkit && npm test --prefix services/cli && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; smokes, Toolkit 66/66, CLI 19/19, legacy 2/2, zero failures/skips | `focused-catfile.log` |
+| `scripts/check.sh` | Exit 0; 1,171 Foundry tests, all service checks, 50 packed production assertions including 28-transaction deployment/recovery, legacy 2/2 and deploy-v3 10/10 | `check-final.log` |
+| `scripts/e2e-anvil.sh && scripts/e2e-anvil.sh --profile reg-d && scripts/e2e-context-provenance.sh && scripts/e2e-identity-evidence.sh` | Exit 0; both profiles 7/7 plus runtime flows, context 12/12, identity 40/40 | `e2e.log` |
+| `npm test --prefix services/rfq` | Exit 0; smoke and 30/30 named tests after the unrelated assertion failure below | `rfq-rerun.log` |
+
+Earlier attempts are not passes: stdin-based Git hashing stalled full-source
+capture, so those runs were interrupted and replaced by direct HEAD-blob reads.
+The next full check failed at RFQ's unchanged concurrent nonce-order assertion
+(`check-catfile.log`), also present on origin/main; isolated RFQ and the complete
+rerun passed. No RFQ source was changed. Red logs: `red.log`, `cli-red.log`.
+
+D037/D038 and the production runbook clarify the enforced behavior. Whitespace,
+protected-path comparisons against `feat/159-identity-decisions` and original v1
+example preservation pass. No commit, push or external publication. Next: user
+reviews this working tree. Other filesystems and power-loss durability remain
+unverified, as before.
+
+## 2026-11-11 Session: DEPLOY-004 Step 3 Release Finalization
+
+DEPLOY-004 is passing after all required release gates. Scope: issue #154 step 3,
+D037-D039 (adopted defaults, team-to-confirm), deployment/testing documentation,
+versioned example, public-artifact compatibility and full verification. Out of
+scope: deployed contracts, protected demo paths, custody/key management/multisig
+expansion, vendors, commits/pushes and external publication.
+
+Steps 1-2 are committed as c38d9d5 and 652cc70. Their slice notes are transferred
+to the runbook, decisions, feature and execution plan; SLICE_NOTES.md is removed.
+The remote main sequencing check (`git ls-remote origin refs/heads/main`) exited
+0 and still returned 7893021ecc001041cdf6ee44f22de0d88909c932. Prerequisite merges
+remain a release constraint; this work follows the user's explicit stacked-slice
+instruction. Public records retain their original schema and exact bytes.
+
+Tests first: added two public-artifact compatibility cases, both passing against
+existing CLI/Operator API readers. The v2 example regression first failed to
+compile due to an incorrect test signer field, corrected from account to name;
+then it failed as expected with ENOENT for the absent v2 example (0 passed,
+1 failed, 15 name-filter skips). Added a source-only diagnostic v2 example,
+retaining the original v1 example. This example cannot authorize broadcast.
+
+All service/script commands below used Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`; Foundry is 1.7.1.
+Logs are under `/private/tmp/w154-step3-`, with the suffixes in the table.
+The exact shell redirection after each wrapped command was
+`> /private/tmp/w154-step3-<suffix> 2>&1`, substituting the listed suffix.
+
+| Exact command inside the Node wrapper | Actual result | Log suffix |
+| --- | --- | --- |
+| `npm run build --prefix services/cli && npm test --prefix services/operator-api && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; CLI build, Operator API smoke and 2/2 public compatibility tests passed before integration | `legacy.log` |
+| `npm run build --prefix services/toolkit && node --test --test-name-pattern="legacy review example" services/toolkit/dist/test/production-evidence.js` | First exit 2 on the test signer field; corrected run exit 1 with ENOENT, 0 passed/1 failed/15 skipped before adding the v2 example | `example-red.log` (corrected run) |
+| `npm test --prefix services/toolkit && npm test --prefix services/cli && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; Toolkit smoke + 58/58 named tests, CLI smoke + 17/17 named tests, public compatibility 2/2; zero failed/skipped | `focused.log` |
+| `scripts/check.sh` | Exit 0, first run; 1,171/1,171 Foundry tests across 70 suites; fmt/high-severity lint/build; RFQ/host/Toolkit/CLI/compliance-data 30/24/58/17/25 named tests, zero failed/skipped; all service smokes/provider conformance; two external adapter consumers 4/4 Foundry tests each; packed version assertions 6/6; packed production assertions 50/50 (10 commitments + 40 live cases, including real production dry-run/fork and 28-transaction deployment); public compatibility 2/2; showcase plan; deploy-v3 10/10 | `check.log` |
+| `scripts/e2e-anvil.sh` | Exit 0, first run; BUIDL-like 7/7 scenarios plus backend/CLI/Router, repeated buys/sells, negative cases and temporal runtime flow | `buidl.log` |
+| `scripts/e2e-anvil.sh --profile reg-d` | Exit 0, first run; Reg D 7/7 scenarios plus backend/CLI/Router and runtime checks | `regd.log` |
+| `scripts/e2e-context-provenance.sh` | Exit 0, first run; 12/12 live cases, zero failures | `context.log` |
+| `scripts/e2e-identity-evidence.sh` | Exit 0, first run; 40/40 live cases, zero failures, normal EIP-170 limits | `identity.log` |
+| `node --version && yarn --version` | Exit 0; v20.20.2 and 1.22.22 | terminal |
+
+New coverage: two named public-artifact tests plus one Toolkit legacy/v2 example
+regression. The public gate enumerates tracked records, pins the published Monad
+SHA-256 `c43cef9e5857a8887d8e8648cbdc7e48e52bd28f4dd685c528a5fa13906e1263`,
+reads each exact file through CLI and Operator API and checks listing/hashes/bytes
+afterward. No live-chain readiness is used as a compatibility oracle. The original
+v1 review example is unchanged. No RFQ flake or full-gate rerun occurred.
+
+Changed files in step 3:
+
+- `FEATURES.md`, `DECISIONS.md`, `PROGRESS.md`
+- `docs/deployment-production.md`, `docs/testing.md`
+- `docs/exec-plans/completed/DEPLOY-004-append-only-production-evidence.md`
+- `scripts/check.sh`, `scripts/test-production-legacy-artifacts.mjs`
+- `services/toolkit/test/production-evidence.ts`
+- `services/toolkit/examples/production-evidence-v2.example.json`
+
+`SLICE_NOTES.md` was an untracked input and has been removed. The active-plan
+index returns to its original no-active-plan state. No production runtime source
+or deployed contract changed in step 3.
+
+Final `git diff --check`,
+`git diff --exit-code feat/159-identity-decisions -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`,
+`git diff --exit-code HEAD -- services/toolkit/examples/production-evidence.example.json`,
+`sh -n scripts/check.sh` and
+`node --check scripts/test-production-legacy-artifacts.mjs` exited 0.
+Relative documentation link targets exist; added lines/new files contain no em
+dash; no active feature or slice-note file remains. Packed consumer and E2E
+runners performed normal cleanup of their temporary processes/keys/artifacts.
+
+UNVERIFIED: real production networks, Ledger/hardware/interactive signer behavior,
+actual power-loss durability and filesystems other than this local host. Docker
+container smoke was not rerun because no image/container contract changed.
+Passing the tooling does not establish production deployment readiness. No
+production-chain/public Monad mutation, commit, push or external publication was
+performed. Next: user reviews the working tree, confirms D037-D039 defaults and
+merges prerequisites in the approved order before release.
+
 ## 2026-11-11 Session: DATA-004 Assessment Reference Collision Fix
 
 DATA-004 is passing. Scope: the confirmed P2 HTTP v2 assessment-reference

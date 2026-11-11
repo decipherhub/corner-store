@@ -9,6 +9,70 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DEPLOY-004: Complete and Append-Only Production Evidence
+
+### Behavior
+
+- Evidence version 2 binds resolved compiler inputs, the production deployer,
+  orchestration, exact tool/dependency identities, compiler settings and bytecode
+  templates through canonical domain-separated SHA-256 commitments.
+- Plans, unsigned exports, reviewed evidence and deployment records share one
+  evidenceId over source/build/provenance, configuration, chain and wiring.
+  Clean Git provenance is required for broadcast. Dirty, source-only and
+  unavailable provenance supports diagnostics only.
+- Production artifacts and signable exports reserve destinations and publish
+  complete validated envelopes exclusively through fsync and hard-link creation.
+  Receipts, reconstructed runtime bytecode, owners/operators and wiring must
+  verify before deployment publication. Recovery revalidates without rebroadcast.
+- Publication requires current-uid/root-owned staging/output directories and
+  ancestry, without group/world writes except sticky ancestors. Trust is checked
+  before reservation and again at publication; mismatch cleanup is best effort
+  inside verified output ancestry. Same-uid concurrency is outside this boundary.
+- Version 2 verification requires the independently trusted recordDigest and
+  reviewed evidence identity. Legacy artifacts/review files remain readable;
+  legacy review evidence cannot authorize new deployments. Public Monad records,
+  contracts and demo runtime remain unchanged.
+
+### Verification
+
+- Toolkit/CLI source/build/provenance mutation, package/runtime equivalence,
+  publication failure/concurrency/SIGKILL/recovery and chain tampering tests.
+- Review regressions replace staged entries/parents during linking, reject
+  unsafe staging ownership/permissions, preserve another writer's final, and
+  block hidden index-flag edits, submodule edits and missing HEAD blobs.
+- Trust-boundary regressions reject writable/foreign-owned ancestry and output
+  directories before reservation, accept sticky ancestors, recheck before linking
+  and skip mismatch cleanup in untrusted output directories.
+- Packed clean Git-backed consumer: real production dry-run/fork, export,
+  deployment and verification with one evidenceId; source-only broadcast denial.
+- Existing public artifact listing, pinned hash, CLI/Operator API reads and
+  exact byte preservation without live-chain readiness checks.
+- `scripts/check.sh`, both `scripts/e2e-anvil.sh` profiles,
+  `scripts/e2e-context-provenance.sh`, `scripts/e2e-identity-evidence.sh`,
+  whitespace and protected-path comparisons.
+
+### State
+
+passing
+
+### Notes
+
+- Issue #154; D037-D039 defaults adopted, team-to-confirm.
+- Publication trust-boundary recheck verified on 2026-11-11: seven new guards
+  failed before implementation; all 20 publication cases now pass. Toolkit 74/74,
+  CLI 19/19, legacy 2/2 and the full gate passed, including 50 packed production
+  assertions and live Anvil deployment/recovery. See the latest PROGRESS entry.
+- Review fixes verified on 2026-11-11: 1,171 Foundry tests, 66 Toolkit/19 CLI
+  named tests, 50 packed production assertions and two public compatibility
+  cases. Legacy profiles passed 7/7 each; context 12/12; identity 40/40.
+  An unrelated RFQ nonce-order assertion failed once; isolated RFQ and the full
+  rerun passed. See PROGRESS for attempts and logs.
+- Plan: `docs/exec-plans/completed/DEPLOY-004-append-only-production-evidence.md`.
+- Main remains at 7893021 as of the step 3 sequencing check. Prerequisite PRs
+  must merge before release; this authorized work proceeds on the supplied stack.
+- Key management, custody and multisig expansion remain deferred. No external
+  vendor, production-chain broadcast or public deployment is part of this work.
+
 ## DATA-004: Operator-Accepted Identity Evidence and Topology Guards
 
 ### Behavior

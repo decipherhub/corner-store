@@ -153,6 +153,7 @@ program
   .command("production-plan")
   .description("render a signer-free production deployment plan")
   .argument("[path]", "production config JSON path", "corner-store.production.json")
+  .option("--out <file>", "write the versioned unsigned deployment plan")
   .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
   .action(run((path, opts, command) => cmd.cmdProductionPlan(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
 
@@ -223,15 +224,25 @@ program
   .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
   .option("--ledger", "use Foundry Ledger signer")
   .option("--account <name>", "use a Foundry keystore/account signer")
+  .option("--password-file <path>", "local Foundry keystore password file")
   .requiredOption("--confirm <text>", "must equal production-deploy")
-  .action(run((path, opts, command) => cmd.cmdProductionDeploy(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl, ledger: opts.ledger, account: opts.account, confirm: opts.confirm})));
+  .action(run((path, opts, command) => cmd.cmdProductionDeploy(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl, ledger: opts.ledger, account: opts.account ?? command.optsWithGlobals().account, passwordFile: opts.passwordFile, confirm: opts.confirm})));
+
+program
+  .command("production-recover")
+  .description("revalidate and publish a staged production operation without rebroadcasting")
+  .argument("[path]", "production config JSON path", "corner-store.production.json")
+  .requiredOption("--operation <directory>", "retained operation journal directory")
+  .option("--rpc-url <url>", "runtime RPC URL override")
+  .action(run((path, opts, command) => cmd.cmdProductionRecover(path, {...command.optsWithGlobals(), operation: opts.operation, rpcUrl: opts.rpcUrl})));
 
 program
   .command("production-verify")
   .description("verify production deployment artifact and on-chain core bindings")
+  .option("--expected-record-digest <digest>", "trusted version 2 record digest from deployment or review")
   .argument("[path]", "production config JSON path", "corner-store.production.json")
   .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
-  .action(run((path, opts, command) => cmd.cmdProductionVerify(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
+  .action(run((path, opts, command) => cmd.cmdProductionVerify(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl, expectedRecordDigest: opts.expectedRecordDigest})));
 
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.

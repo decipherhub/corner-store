@@ -3,6 +3,7 @@ import {spawnSync} from "child_process";
 import {dirname, resolve} from "path";
 
 import {assertRFQModuleConformance} from "../../rfq/src";
+import {captureProductionSource, copyProductionSource} from "../../toolkit/src/production-evidence";
 import {loadConfig} from "../../toolkit/src/config";
 import {ProjectTemplateId, validateProjectDescriptor} from "../../toolkit/src/project-templates";
 
@@ -53,6 +54,9 @@ export function prepareDeploymentRuntime(
   rmSync(runtime, {recursive: true, force: true});
   mkdirSync(runtime, {recursive: true});
   copyRequiredContractSources(contractSource, runtime);
+  if (existsSync(resolve(contractSource, "production-source.json"))) {
+    copyProductionSource(contractSource, runtime, captureProductionSource(contractSource));
+  }
 
   const scenario = resolve(projectRoot, scenarioPath);
   if (existsSync(scenario)) {

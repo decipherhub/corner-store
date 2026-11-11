@@ -1761,3 +1761,149 @@ Dates and assignees for the four P2 PR slots remain for team confirmation.
 - `docs/product-specs/identity-p2-schedule.md`
 - `docs/compliance/spec-sheets/A-01_sanctions.spec.md`
 - `docs/ROADMAP.md`
+
+## D037: Versioned complete production commitments require clean Git for broadcast
+
+Date: 2026-11-11. Issue #154. Status: implemented default, team-to-confirm.
+
+### Context
+
+A manual source list omitted the imported production deployer. HEAD alone could
+not distinguish changed sources or a copied source-only bundle from a clean
+release, and did not commit the compiler/build/orchestration inputs.
+
+### Decision
+
+Production evidence version 2 uses canonical domain-separated SHA-256 source,
+build and evidence identities. Resolve compiler inputs from the production entry
+point; include the deployer, transitive contracts, exact configuration/remappings,
+orchestration, lockfiles, tool/dependency identities, compiler settings and
+creation/runtime bytecode commitments. Compile a captured isolated workspace,
+exclude inherited build overrides and verify copied bytes before execution.
+
+Record HEAD plus explicit clean/dirty/source-only/unavailable provenance, with
+staged, unstaged, untracked and recursive submodule evidence. Dirty, unavailable
+and source-only provenance permits diagnostics but blocks production broadcast.
+Before granting clean provenance, compare captured bytes with HEAD blobs,
+following committed submodule gitlinks independently of index visibility flags.
+Bind canonical configuration, deployment ID, chain and wiring into evidenceId;
+plans, unsigned exports, review evidence and deployment records must agree.
+
+### Consequences
+
+Offline source hashing requires the pinned Forge/Solc toolchain. Repository,
+package and runtime copies preserve source/build commitments, but a source-only
+package cannot claim clean Git through an upstream commit string. New broadcast
+requires independently reviewed clean Git-backed inputs. Exact tool/runtime
+changes require a new identity and review. Key management, custody and multisig
+expansion remain deferred; the existing local Foundry account needs no vendor.
+
+### Related Files
+
+- `services/toolkit/src/production-evidence.ts`
+- `services/toolkit/src/production.ts`
+- `services/cli/scripts/prepare-package.mjs`
+- `docs/deployment-production.md`
+
+## D038: Production envelopes publish exclusively after validation
+
+Date: 2026-11-11. Issue #154. Status: implemented default, team-to-confirm.
+
+### Context
+
+Overwriting copies could replace reviewed artifacts, and exclusive writes alone
+could expose incomplete files. Interruption after broadcast needs a recovery
+path that preserves evidence without repeating transactions.
+
+### Decision
+
+Reserve a vacant destination before signing/broadcast. Generate in a unique
+sibling operation directory; the production Solidity script writes only a
+candidate inside its captured workspace. Validate successful canonical receipts,
+receipt-derived addresses, exact transaction inputs/order, reconstructed runtime
+bytecode, ownership/operator/wiring and Safe state before publication.
+
+Require the staging/output directories and every ancestor to be owned by the
+current uid or root. Reject group/world write permissions on staging/output;
+allow writable ancestors only with the sticky bit, which protects operator-owned
+entries from other users. Reject foreign ownership even on sticky ancestors and
+reject application symlinked ancestry. The existing macOS `/tmp` and `/var`
+system aliases have their `/private` target ancestry checked too. Check existing
+output ancestry before creating directories, then check the output directory
+before reserving anything. Check staging on creation and recheck both paths at
+publication/recovery, naming the offending path on failure.
+
+This StrictModes-like precondition is the filesystem trust boundary: publication
+is safe against other local principals, with root trusted. Concurrent operator
+uid processes are out of scope because they already hold the operator's signing
+material. Node has no fd-based `linkat`/`unlinkat`; path checks cannot eliminate
+replacement races against writers within that trust boundary.
+
+Publish by exclusive no-follow creation and file fsync, validate through a
+no-follow descriptor held across the no-replacement
+hard link, then verify the final regular file's device, inode and size. On mismatch,
+attempt cleanup only after verifying the output directory/ancestry again and
+rechecking the observed entry's identity. Cleanup and its parent fsync are best
+effort, preserving the original publication error. The separate identity check
+and unlink do not protect against same-uid replacement immediately before unlink.
+Parent fsync, staging-link cleanup and another fsync complete publication. Never
+use a replacing rename; unsupported semantics fail closed. Apply the same
+publisher to signable exports. The raw-byte publisher preserves imported signed
+bytes without reserialization.
+
+Persist immutable journal events. Recovery rebuilds and revalidates staged
+commitments, receipts and chain state before publication/cleanup. It never
+signs, automatically rebroadcasts or overwrites an existing final artifact.
+
+### Consequences
+
+Pre-link failure leaves no final. Post-link interruption may leave a complete
+final, which recovery verifies before cleanup. Failed broadcast/verification
+retains the captured workspace and journal. Missing evidence/RPC access blocks
+recovery. Broadcast uses Foundry --slow to preserve transaction/hash association.
+Local SIGKILL and injected I/O tests do not establish power-loss durability or
+support for untested filesystems.
+
+### Related Files
+
+- `services/toolkit/src/production-publication.ts`
+- `services/toolkit/src/production-chain.ts`
+- `services/cli/src/commands.ts`
+- `script/DeployProductionCore.s.sol`
+
+## D039: Preserve legacy readers and require version 2 for new production releases
+
+Date: 2026-11-11. Issue #154. Status: implemented default, team-to-confirm.
+
+### Context
+
+Existing public-testnet records and consumers must remain usable while stronger
+production evidence becomes mandatory for new deployments.
+
+### Decision
+
+Keep legacy artifacts and review files in their original schema and readable
+through existing readers. Do not rewrite or upgrade published records. New
+production deployments require evidence version 2. Version 1 review evidence
+cannot authorize a new production deployment.
+
+Version 2 verification requires the reviewed evidenceId, rebuilt local
+source/build/configuration commitments and an independently trusted expected
+recordDigest. The record binds the script artifact digest, transaction inputs,
+receipts and evidence identity without circular hashes. A version 2 expectation
+cannot fall back to legacy verification.
+
+### Consequences
+
+Compatibility tests enumerate existing public records, pin the published Monad
+record hash, read exact files through the CLI and read-only Operator API and
+compare bytes afterward. No live-chain readiness is needed to prove readability.
+Public Monad runtime, deployment infrastructure and deployed contracts remain
+unchanged. Legacy readability does not imply version 2 verification guarantees.
+
+### Related Files
+
+- `scripts/test-production-legacy-artifacts.mjs`
+- `services/cli/src/commands.ts`
+- `services/toolkit/examples/production-evidence.example.json`
+- `services/toolkit/examples/production-evidence-v2.example.json`

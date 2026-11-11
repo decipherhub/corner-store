@@ -398,6 +398,59 @@ gate above, this identity gate and protected-path/whitespace checks before
 `passing`. Existing manual/CI boundaries stay as documented above. The four
 [P2 PR slots](./product-specs/identity-p2-schedule.md) are scheduled, not implemented.
 
+### Append-only production evidence (DEPLOY-004)
+
+Run focused suites under the pinned Node 20 environment:
+
+```sh
+npx --yes -p node@20 -p yarn@1.22.22 -c 'npm test --prefix services/toolkit && npm test --prefix services/cli'
+npx --yes -p node@20 -p yarn@1.22.22 -c 'npm run test:production-package --prefix services/cli'
+forge test --offline --match-path test/unit/deployment/DeployProductionCore.t.sol
+```
+
+Toolkit/CLI tests mutate source manifests (including the imported production
+deployer), compiler settings, tool/dependency/orchestration identities, Git states,
+configuration and wiring. They cover package/runtime commitment equality,
+source-only broadcast refusal, exclusive destination reservation, unchanged
+occupied files/symlinks, competing publishers, disk/write/fsync/link failures,
+SIGKILL at publication boundaries and recovery before/after linking. Chain tests
+independently tamper receipts, transaction/hash associations, addresses, chain,
+fees/gas, immutable reconstruction and bytecode. Unavailable evidence fails closed.
+The legacy review example remains readable; the new version 2 source-only example
+is deliberately unable to authorize broadcast.
+
+`scripts/sdk-product-smoke.sh`, included in `scripts/check.sh`, runs the packed
+CLI/Toolkit consumer in a temporary clean Git-backed contracts fixture. Two
+isolated Anvil nodes exercise the real production script dry-run/fork and a
+28-transaction deployment through an encrypted local fixture account. Plan,
+unsigned export, deployment and verification share evidenceId. The gate rejects
+independent tampering/rebound records and chain drift; recovery preserves bytes
+and deployer nonce, including missing receipt retrieval without rebroadcast.
+Source-only package/runtime copies are tested separately and cannot report clean.
+Temporary processes, keys and consumer directories are cleaned on normal exit.
+
+After the CLI and Operator API builds, the compatibility gate can run alone:
+
+```sh
+npx --yes -p node@20 -p yarn@1.22.22 -c 'node --test scripts/test-production-legacy-artifacts.mjs'
+```
+
+It enumerates every tracked `deployments/public` JSON file, checks the pinned
+published Monad SHA-256, reads the exact files through CLI and Operator API,
+and checks the full listing, hashes and bytes afterward. It contacts no public
+RPC. `scripts/check.sh` includes it after building those readers. Preserve
+`deployments/public`, `services/testnet-rfq-demo` and `deploy/hackathon-monad`
+against the branch base as an independent release check.
+
+DEPLOY-004 requires the full repository check, both legacy Anvil profiles, context
+and identity E2Es above, whitespace and protected-path checks before passing.
+All commands use Node 20/Yarn 1.22.22 through the wrapper above and Foundry 1.7.1.
+Rerun the full check once only if its sole failure is the documented intermittent
+RFQ multi-process initial-store creation test. Docker container smoke is outside
+this slice because no image/container contract changes. Real production networks,
+Ledger/hardware signing, actual power-loss durability and other filesystems
+remain unverified. See the [production runbook](./deployment-production.md).
+
 ### Integrated Check
 
 ```sh

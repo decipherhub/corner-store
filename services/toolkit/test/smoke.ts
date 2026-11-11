@@ -258,7 +258,7 @@ if (
   !productionPlan.command.includes("CORNER_STORE_ENABLE_AMM=1") ||
   !productionPlan.command.includes("CORNER_STORE_ENABLE_RFQ=0") ||
   !productionPlan.command.includes("CORNER_STORE_DEPLOYMENT_ID=mainnet-core-1") ||
-  !productionPlan.command.includes("CORNER_STORE_ARTIFACT=deployments/production-core.json") ||
+  !productionPlan.command.includes("CORNER_STORE_CANDIDATE=deployments/production-core.candidate.json") ||
   !productionPlan.command.includes("script/DeployProductionCore.s.sol:DeployProductionCore") ||
   !productionPlan.command.includes("--sender 0x4444444444444444444444444444444444444444") ||
   productionPlan.command.includes("--ledger") ||
@@ -278,10 +278,10 @@ validateProductionDeploymentEvidence({
   forkSimulation: {passed: true, chainId: 1, blockNumber: 20_000_000},
   reviewedAt: "2026-07-31T00:00:00.000Z"
 }, productionConfig);
-if (!createProductionDeploymentPlan(productionConfig, {kind: "ledger"}, true).command.includes("--ledger")) {
+if (!createProductionDeploymentPlan(productionConfig, {kind: "ledger"}).command.includes("--ledger")) {
   throw new Error("production ledger deploy plan regression");
 }
-if (!createProductionDeploymentPlan(productionConfig, {kind: "account", name: "prod-safe-deployer"}, true).command.includes("--account prod-safe-deployer")) {
+if (!createProductionDeploymentPlan(productionConfig, {kind: "account", name: "prod-safe-deployer"}).command.includes("--account prod-safe-deployer")) {
   throw new Error("production account deploy plan regression");
 }
 try {
