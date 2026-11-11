@@ -238,4 +238,16 @@ contract ElementRegistryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(Errors.InvalidElementMetadata.selector, ELEMENT_ID));
         reg.registerElement(ELEMENT_ID, address(invalidElement));
     }
+
+    function test_missingElementCommitmentsNeverReturnDefaultValues() public {
+        bytes32 missing = bytes32("missing");
+        vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, missing));
+        reg.metadataHashOf(missing);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, missing));
+        reg.versionHashOf(missing);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, missing));
+        reg.runtimeCodeHashOf(missing);
+        vm.expectRevert(abi.encodeWithSelector(Errors.ElementNotRegistered.selector, missing));
+        reg.defaultActionOf(missing);
+    }
 }

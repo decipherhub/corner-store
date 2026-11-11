@@ -88,4 +88,11 @@ contract PredicateValidationTest is Test {
         assertFalse(duplicate);
         assertFalse(malformed);
     }
+
+    function test_timestampWindowRejectsTruncatedAndTrailingEncoding() public view {
+        (bool truncated,,,) = harness.timestampWindow(hex"00", 10);
+        (bool trailing,,,) = harness.timestampWindow(bytes.concat(abi.encode(uint64(1), uint64(20)), hex"00"), 10);
+        assertFalse(truncated);
+        assertFalse(trailing);
+    }
 }

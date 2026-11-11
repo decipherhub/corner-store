@@ -1,10 +1,22 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 export npm_config_cache=${npm_config_cache:-"${TMPDIR:-/tmp}/corner-store-npm-cache"}
 
 cd "$ROOT_DIR"
+
+ASSURANCE_GATES=1
+if [ "${1:-}" = "--repository-only" ] && [ "$#" -eq 1 ]; then
+  ASSURANCE_GATES=0
+elif [ "$#" -ne 0 ]; then
+  echo 'Usage: scripts/check.sh [--repository-only]' >&2
+  exit 2
+fi
+python3 scripts/assurance/install.py
+source scripts/assurance/env.sh
+python scripts/assurance/verify_tools.py
+python -m unittest discover -s scripts/assurance -p 'test_*.py'
 
 echo "==> Checking opt-in wave-3 element registration policies"
 scripts/check-wave3-element-policies.sh
@@ -158,4 +170,16 @@ echo "==> Running vendored deploy-v3 tests"
 echo "==> Checking whitespace errors"
 git diff --check
 
-echo "All checks passed."
+if [ "$ASSURANCE_GATES" -eq 1 ]; then
+  for gate in coverage slither mutation; do
+    scripts/assurance/run.sh "$gate"
+  done
+else
+  echo 'Repository checks only; independent assurance jobs are required separately.'
+fi
+
+if [ "$ASSURANCE_GATES" -eq 1 ]; then
+  echo 'All checks passed.'
+else
+  echo 'Repository checks passed.'
+fi

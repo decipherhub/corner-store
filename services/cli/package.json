@@ -24,7 +24,7 @@
     "test:production-package": "npm run build && node dist/cli/test/packed-production-evidence.js",
     "prepack": "npm run build && node scripts/prepare-package.mjs",
     "start": "node dist/cli/src/index.js",
-    "test": "npm run build && node dist/cli/test/smoke.js && node --test dist/cli/test/provenance.js dist/cli/test/topology.js dist/cli/test/production-evidence.js"
+    "test": "npm run build && node dist/cli/test/smoke.js && node --test dist/cli/test/provenance.js dist/cli/test/topology.js dist/cli/test/production-evidence.js dist/cli/test/assurance.js"
   },
   "dependencies": {
     "commander": "^12.1.0",

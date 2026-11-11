@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "status": "proposed-defaults-team-to-confirm",
+  "scopes": [
+    {
+      "name": "execution",
+      "patterns": [
+        "src/execution/**"
+      ],
+      "line": 95,
+      "branch": 90
+    },
+    {
+      "name": "registry",
+      "patterns": [
+        "src/registry/**"
+      ],
+      "line": 95,
+      "branch": 90
+    },
+    {
+      "name": "compliance",
+      "patterns": [
+        "src/compliance/**"
+      ],
+      "line": 90,
+      "branch": 85
+    },
+    {
+      "name": "auth",
+      "patterns": [
+        "src/auth/**"
+      ],
+      "line": 90,
+      "branch": 80
+    },
+    {
+      "name": "libraries",
+      "patterns": [
+        "src/libraries/**"
+      ],
+      "line": 90,
+      "branch": 80
+    },
+    {
+      "name": "factory",
+      "patterns": [
+        "src/factory/**"
+      ],
+      "line": 90,
+      "branch": 80
+    },
+    {
+      "name": "production-deployment",
+      "patterns": [
+        "script/DeployProductionCore.s.sol",
+        "script/ProductionCoreDeployer.sol"
+      ],
+      "line": 90,
+      "branch": 80
+    }
+  ],
+  "instrumentation_exemptions": [
+    {
+      "path": "src/libraries/Errors.sol",
+      "sha256": "7c9085f7fa3c30168c8b5b948916889c01cca919038d92273c2e0cf77a4e8760",
+      "reason": "Custom error declarations only; no executable Solidity statements."
+    },
+    {
+      "path": "src/libraries/Events.sol",
+      "sha256": "a54d9ff3be7904533f9c6a7ea2bba4e0c6f149287db1787f4d631236ff9b7f77",
+      "reason": "Event declarations only; no executable Solidity statements."
+    },
+    {
+      "path": "src/execution/adapters/rfq/RFQTypes.sol",
+      "sha256": "28a20ba88c8b5c1faa586aec302983139b93a85bc7571c4bd961c5aa1dffd099",
+      "reason": "RFQ v2 struct declaration only; no executable Solidity statements."
+    },
+    {
+      "path": "src/execution/adapters/rfq/RFQV3Types.sol",
+      "sha256": "286666926bfe656a31b27a5716c3a9a047d8614d05d03432cbdca3dc0020e43e",
+      "reason": "RFQ v3 struct declaration only; no executable Solidity statements."
+    },
+    {
+      "path": "src/execution/ExecutionRouter.sol",
+      "sha256": "3e7291bb398ac0bed83a97aa8409333629443e6c1336191db63ecb5f8d750d40",
+      "reason": "Legacy derived Router has only an empty constructor forwarding to ExecutionRouterBase; all executable settlement logic is instrumented and gated in ExecutionRouterBase.sol."
+    }
+  ]
+}
