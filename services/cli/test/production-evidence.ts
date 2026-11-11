@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {spawnSync} from "node:child_process";
 import {cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join, resolve} from "node:path";
@@ -98,4 +99,44 @@ test("runtime copying retains and validates the packaged production manifest", (
   assert.equal(captureProductionSource(runtime).sourceHash, source.sourceHash);
   put(join(bundle, "script/ProductionCoreDeployer.sol"), "tampered");
   assert.throws(() => prepareDeploymentRuntime(consumer, bundle), /manifest|mismatch|Compiler/);
+});
+
+test("occupied production destination rejects before evidence, signer or RPC work", async () => {
+  const cwd = process.cwd(); process.chdir(consumer);
+  try {
+    const output = join(consumer, config.deployment.artifact);
+    put(output, "original evidence bytes\n");
+    await assert.rejects(cmdProductionDeploy("production.json", {contracts, account: "fixture", confirm: "production-deploy"}), /occupied|exist/i);
+    assert.equal(readFileSync(output, "utf8"), "original evidence bytes\n");
+    rmSync(output);
+  } finally { process.chdir(cwd); }
+});
+
+test("versioned verification requires a trusted expected record digest before RPC", async () => {
+  const cwd = process.cwd(); process.chdir(consumer);
+  try {
+    const plan = output(() => cmdProductionPlan("production.json", {contracts}));
+    const record = bindProductionRecord(plan.identity, {schemaVersion: 1}, [], [], {source: plan.source, build: plan.build});
+    put(join(consumer, config.deployment.artifact), JSON.stringify(record));
+    await assert.rejects(cmdProductionVerify("production.json", {contracts}), /expected.*digest/i);
+  } finally { process.chdir(cwd); }
+});
+
+
+test("trusted versioned verification cannot downgrade to the legacy artifact path", async () => {
+  const cwd = process.cwd(); process.chdir(consumer);
+  try {
+    put(join(consumer, config.deployment.artifact), JSON.stringify({schemaVersion: 1}));
+    await assert.rejects(cmdProductionVerify("production.json", {contracts, expectedRecordDigest: `sha256:${"0".repeat(64)}`}), /version 2/);
+  } finally { process.chdir(cwd); }
+});
+
+
+test("production CLI retains the Foundry account when Commander parses it as a global option", () => {
+  rmSync(join(consumer, config.deployment.artifact), {force: true});
+  const cli = resolve(__dirname, "../src/index.js");
+  const result = spawnSync(process.execPath, [cli, "production-deploy", "production.json", "--account", "fixture", "--confirm", "production-deploy", "--contracts", contracts], {cwd: consumer, encoding: "utf8"});
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /clean Git/);
+  assert.doesNotMatch(result.stderr, /requires --ledger or --account/);
 });

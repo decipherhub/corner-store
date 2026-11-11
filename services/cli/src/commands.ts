@@ -3,8 +3,6 @@ import {createHash} from "crypto";
 import {
   copyFileSync,
   existsSync,
-  openSync,
-  closeSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -34,8 +32,10 @@ import {
 } from "../../toolkit/src/production";
 import {
   ProductionRecord, assertProductionBroadcastIdentity, bindProductionRecord, buildProductionIdentity,
-  captureProductionSource, verifyProductionManifest, verifyProductionRecord
+  canonicalProductionJson, captureProductionSource, verifyProductionManifest, verifyProductionRecord
 } from "../../toolkit/src/production-evidence";
+import {ProductionPublication, publishProductionBytes} from "../../toolkit/src/production-publication";
+import {verifyProductionChain} from "../../toolkit/src/production-chain";
 import {scaffoldRFQIntegration} from "../../toolkit/src/scaffold";
 import {ProjectTemplateId} from "../../toolkit/src/project-templates";
 import {RFQIntegrationMode} from "../../toolkit/src/integration";
@@ -280,7 +280,7 @@ export function cmdToolkitProposal(opts: {target: string; calldata: string; reas
     requiredApprovals: Number(opts.approvals)
   });
   try {
-    writeFileSync(resolve(process.cwd(), opts.output), `${JSON.stringify(proposal, null, 2)}\n`, {flag: "wx"});
+    writeImmutableJson(resolve(process.cwd(), opts.output), proposal);
   } catch (err: any) {
     throw new CliError(`cannot write immutable proposal: ${err.message}`);
   }
@@ -291,7 +291,7 @@ export function cmdToolkitSafeProposal(opts: {target: string; calldata: string; 
   const proposal = createGovernanceProposal({target: opts.target, value: "0", calldata: opts.calldata, reason: opts.reason, expectedArtifactHash: opts.artifactHash, requiredApprovals: Number(opts.approvals)});
   const draft = toSafeTransactionDraft(proposal, Number(opts.chainId));
   try {
-    writeFileSync(resolve(process.cwd(), opts.output), `${JSON.stringify(draft, null, 2)}\n`, {flag: "wx"});
+    writeImmutableJson(resolve(process.cwd(), opts.output), draft);
   } catch (err: any) {
     throw new CliError(`cannot write immutable Safe proposal: ${err.message}`);
   }
@@ -431,8 +431,7 @@ export function cmdProductionPlan(path = "corner-store.production.json", opts: G
   const plan = {...createProductionDeploymentPlan(config, {kind: "none"}, false, captured.identity), source: captured.source, build: captured.build};
   if (opts.out) {
     const output = resolve(opts.out);
-    mkdirSync(dirname(output), {recursive: true});
-    writeFileSync(output, `${JSON.stringify(plan, null, 2)}\n`, {flag: "wx"});
+    writeImmutableJson(output, plan);
   }
   console.log(JSON.stringify(plan, null, 2));
 }
@@ -460,13 +459,14 @@ export async function cmdProductionPreflight(path = "corner-store.production.jso
 
 export async function cmdProductionDeploy(
   path = "corner-store.production.json",
-  opts: GlobalOpts & {ledger?: boolean; account?: string; confirm?: string; rpcUrl?: string}
+  opts: GlobalOpts & {ledger?: boolean; account?: string; passwordFile?: string; confirm?: string; rpcUrl?: string}
 ): Promise<void> {
   rejectProductionRawKey(opts);
   const config = productionConfigWithRuntimeOverrides(path, opts);
   if (opts.confirm !== "production-deploy") {
     throw new CliError('production-deploy requires --confirm production-deploy');
   }
+  ProductionPublication.assertVacant(resolve(config.deployment.artifact));
   const signer = productionSigner(opts);
   if (signer.kind === "none") throw new CliError("production-deploy requires --ledger or --account <foundry-account>");
   const repoRoot = findRepoRoot(process.cwd());
@@ -480,8 +480,11 @@ export async function cmdProductionDeploy(
     throw new CliError(err.message);
   }
   if (deploymentEvidence.schemaVersion !== 2 || !deploymentEvidence.identity) throw new CliError("new production deployments require evidence version 2");
-  const captured = buildProductionIdentity(contractSource, config, {keepWorkspace: true});
+  const publication = ProductionPublication.reserve(resolve(config.deployment.artifact));
+  let captured: ReturnType<typeof buildProductionIdentity> | undefined;
+  let executing = false;
   try {
+    captured = buildProductionIdentity(contractSource, config, {keepWorkspace: true, workspaceParent: publication.directory});
     assertProductionBroadcastIdentity(captured.identity, config);
     if (deploymentEvidence.evidenceId !== captured.identity.evidenceId) throw new CliError("reviewed production evidence identity mismatch");
     const preflight = await productionPreflight(config);
@@ -491,13 +494,18 @@ export async function cmdProductionDeploy(
     }
     const plan = createProductionDeploymentPlan(config, signer, true, captured.identity);
     console.log(JSON.stringify({...plan, preflight, deploymentEvidence, evidencePath}, null, 2));
-    const args = ["script", plan.script, "--root", captured.workspace, "--offline", "--use", captured.solcPath,
-      "--rpc-url", config.network.rpcUrl, "--chain-id", String(config.network.chainId), "--sender", config.deployer, "--broadcast"];
+    const args = ["script", plan.script, "--root", captured.workspace, "--offline", "--ast", "--use", captured.solcPath,
+      "--rpc-url", config.network.rpcUrl, "--chain-id", String(config.network.chainId), "--sender", config.deployer, "--broadcast", "--slow"];
     if (signer.kind === "ledger") args.push("--ledger");
-    if (signer.kind === "account") args.push("--keystore", resolve(process.env.HOME ?? "", ".foundry/keystores", signer.name));
+    if (signer.kind === "account") {
+      args.push("--keystore", resolve(process.env.HOME ?? "", ".foundry/keystores", signer.name));
+      if (opts.passwordFile) args.push("--password-file", resolve(opts.passwordFile));
+    }
     verifyProductionManifest(captured.workspace, captured.source);
     const current = buildProductionIdentity(contractSource, config);
     if (current.identity.evidenceId !== captured.identity.evidenceId) throw new CliError("production inputs changed before execution");
+    publication.journal("executing", {workspace: relative(publication.directory, captured.workspace), evidenceId: captured.identity.evidenceId});
+    executing = true;
     execFileSync(captured.forgePath, args, {
       env: {
         ...captured.env,
@@ -509,24 +517,90 @@ export async function cmdProductionDeploy(
         CORNER_STORE_DEPLOYMENT_ID: config.deploymentId,
         CORNER_STORE_SOURCE_COMMIT: config.release.sourceCommit,
         CORNER_STORE_CONTRACTS_HASH: config.release.contractsHash,
-        CORNER_STORE_ARTIFACT: config.deployment.artifact
+        CORNER_STORE_CANDIDATE: "deployments/production-core.candidate.json"
       },
       cwd: captured.workspace,
       stdio: "inherit"
     });
-    const artifact = JSON.parse(readFileSync(resolve(captured.workspace, config.deployment.artifact), "utf8"));
-    const broadcastPath = resolve(captured.workspace, "broadcast/DeployProductionCore.s.sol", String(config.network.chainId), "run-latest.json");
-    const broadcast = JSON.parse(readFileSync(broadcastPath, "utf8"));
-    if (!Array.isArray(broadcast.transactions) || !broadcast.transactions.length || !Array.isArray(broadcast.receipts) || !broadcast.receipts.length) throw new CliError("production transaction inputs and receipts are required");
-    const record = bindProductionRecord(captured.identity, artifact, broadcast.transactions, broadcast.receipts, {source: captured.source, build: captured.build});
-    const output = resolve(process.cwd(), config.deployment.artifact);
-    mkdirSync(dirname(output), {recursive: true});
-    writeFileSync(output, `${JSON.stringify(record, null, 2)}\n`);
-    console.log(`production deployment artifact written to ${output}`);
-  } finally { captured.dispose(); }
+    const record = await readProductionCandidate(captured, config);
+    await verifyProductionCandidate(config, record, captured);
+    publication.journal("verified", {evidenceId: record.evidenceId, recordDigest: record.recordDigest, artifactDigest: record.artifactDigest});
+    const bytes = Buffer.from(`${JSON.stringify(record, null, 2)}\n`);
+    const validate = (value: Buffer) => verifyProductionRecord(JSON.parse(value.toString()), captured!.identity.evidenceId);
+    publication.prepare(bytes, validate);
+    publication.publish(validate);
+    captured.dispose();
+    console.log(JSON.stringify({published: publication.output, operation: publication.directory, evidenceId: record.evidenceId, artifactDigest: record.artifactDigest, recordDigest: record.recordDigest}, null, 2));
+  } catch (error: any) {
+    if (!executing) { captured?.dispose(); publication.cancel(); }
+    throw new CliError(`${error.message}; operation journal: ${publication.directory}${executing ? "; recover without rebroadcasting" : ""}`);
+  }
 }
 
-export async function cmdProductionVerify(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string}): Promise<void> {
+async function readProductionCandidate(captured: ReturnType<typeof buildProductionIdentity>, config: ProductionConfig, workspace = captured.workspace): Promise<ProductionRecord> {
+  const artifact = JSON.parse(readFileSync(resolve(workspace, "deployments/production-core.candidate.json"), "utf8"));
+  const broadcastPath = resolve(workspace, "broadcast/DeployProductionCore.s.sol", String(config.network.chainId), "run-latest.json");
+  const broadcast = JSON.parse(readFileSync(broadcastPath, "utf8"));
+  if (!Array.isArray(broadcast.transactions) || !broadcast.transactions.length) throw new CliError("production transaction inputs are required; recovery never rebroadcasts incomplete transactions");
+  if (!Array.isArray(broadcast.receipts) || broadcast.receipts.length !== broadcast.transactions.length) {
+    const provider = new JsonRpcProvider(config.network.rpcUrl);
+    try {
+      broadcast.receipts = await Promise.all(broadcast.transactions.map(async (tx: any) => {
+        if (typeof tx.hash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(tx.hash)) throw new CliError("incomplete transaction hashes; recovery never rebroadcasts");
+        const receipt = await provider.send("eth_getTransactionReceipt", [tx.hash]);
+        if (!receipt) throw new CliError("transaction receipts unavailable; recovery never rebroadcasts");
+        return receipt;
+      }));
+    } finally { provider.destroy(); }
+  }
+  return bindProductionRecord(captured.identity, artifact, broadcast.transactions, broadcast.receipts, {source: captured.source, build: captured.build});
+}
+
+async function verifyProductionCandidate(config: ProductionConfig, record: ProductionRecord, captured: ReturnType<typeof buildProductionIdentity>): Promise<ProductionPreflightResult> {
+  verifyProductionRecord(record, captured.identity.evidenceId);
+  const provider = new JsonRpcProvider(config.network.rpcUrl);
+  try {
+    await verifyProductionChain(record, config, captured.compilerOutput, (method, params) => provider.send(method, params));
+  } finally { provider.destroy(); }
+  const preflight = await productionPreflight(config);
+  const verified = await productionVerify(config, record.artifact);
+  if (!preflight.ready || !verified.ready) throw new CliError(`production candidate verification failed: ${[...preflight.checks, ...verified.checks].filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
+  return verified;
+}
+
+export async function cmdProductionRecover(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string; operation: string}): Promise<void> {
+  rejectProductionRawKey(opts);
+  const config = productionConfigWithRuntimeOverrides(path, opts);
+  const publication = ProductionPublication.resume(opts.operation);
+  if (publication.output !== resolve(config.deployment.artifact)) throw new CliError("recovery destination/config mismatch");
+  const contractSource = productionContractSource(findRepoRoot(process.cwd()), opts.contracts);
+  if (!contractSource) throw new CliError("recovery requires reviewed contract inputs");
+  const captured = buildProductionIdentity(contractSource, config);
+  assertProductionBroadcastIdentity(captured.identity, config);
+  const reviewed = loadProductionDeploymentEvidence(resolve(config.deployment.evidence), config);
+  if (reviewed.schemaVersion !== 2 || reviewed.evidenceId !== captured.identity.evidenceId) throw new CliError("recovery reviewed evidence identity mismatch");
+  const events = publication.events();
+  let record: ProductionRecord;
+  if (events.some((event) => event.phase === "prepared")) {
+    record = JSON.parse(publication.preparedBytes().toString());
+  } else {
+    const execution = events.find((event) => event.phase === "executing");
+    if (!execution || execution.data.evidenceId !== captured.identity.evidenceId || !/^corner-production-build-[a-zA-Z0-9]+$/.test(execution.data.workspace)) throw new CliError("no recoverable production execution; no transactions were submitted by recovery");
+    record = await readProductionCandidate(captured, config, resolve(publication.directory, execution.data.workspace));
+  }
+  await verifyProductionCandidate(config, record, captured);
+  const validate = (bytes: Buffer) => {
+    const candidate = JSON.parse(bytes.toString());
+    verifyProductionRecord(candidate, captured.identity.evidenceId);
+    if (candidate.recordDigest !== record.recordDigest) throw new CliError("recovery record digest changed");
+  };
+  if (!events.some((event) => event.phase === "prepared")) publication.prepare(Buffer.from(`${JSON.stringify(record, null, 2)}\n`), validate);
+  publication.publish(validate);
+  console.log(JSON.stringify({published: publication.output, evidenceId: record.evidenceId, artifactDigest: record.artifactDigest, recordDigest: record.recordDigest, recovered: true}, null, 2));
+}
+
+
+export async function cmdProductionVerify(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string; expectedRecordDigest?: string}): Promise<void> {
   rejectProductionRawKey(opts);
   const config = productionConfigWithRuntimeOverrides(path, opts);
   const artifactPath = opts.artifact ? resolve(process.cwd(), opts.artifact) : resolve(process.cwd(), config.deployment.artifact);
@@ -536,16 +610,19 @@ export async function cmdProductionVerify(path = "corner-store.production.json",
   } catch (err: any) {
     throw new CliError(`invalid production artifact ${artifactPath}: ${err.message}`);
   }
+  if (opts.expectedRecordDigest && artifact.schemaVersion !== 2) throw new CliError("trusted expected record digest requires evidence version 2");
   if (artifact.schemaVersion === 2) {
     const record = artifact as unknown as ProductionRecord;
     verifyProductionRecord(record, record.evidenceId);
+    if (!opts.expectedRecordDigest || record.recordDigest !== opts.expectedRecordDigest) throw new CliError("production verification requires a trusted expected record digest (--expected-record-digest)");
     const source = productionContractSource(findRepoRoot(process.cwd()), opts.contracts);
     if (!source) throw new CliError("production verification requires captured contract inputs");
     const rebuilt = buildProductionIdentity(source, config);
     const reviewed = loadProductionDeploymentEvidence(resolve(config.deployment.evidence), config);
     if (reviewed.schemaVersion !== 2 || reviewed.evidenceId !== rebuilt.identity.evidenceId) throw new CliError("production reviewed evidence identity mismatch");
-    verifyProductionRecord(record, rebuilt.identity.evidenceId);
-    artifact = record.artifact;
+    const result = await verifyProductionCandidate(config, record, rebuilt);
+    console.log(JSON.stringify({...result, artifact: artifactPath, evidenceId: record.evidenceId, recordDigest: record.recordDigest}, null, 2));
+    return;
   }
   const result = await productionVerify(config, artifact);
   console.log(JSON.stringify({...result, artifact: artifactPath}, null, 2));
@@ -580,17 +657,15 @@ class EthersOnboardingReader implements OnboardingReader {
 }
 
 function writeImmutableJson(path: string, value: unknown): void {
-  mkdirSync(dirname(path), {recursive: true});
-  let fd: number | undefined;
   try {
-    fd = openSync(path, "wx");
-    writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`);
-  } catch (err: any) {
-    throw new CliError(`cannot write immutable output ${path}: ${err.message}`);
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
+    const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
+    const expected = canonicalProductionJson(JSON.parse(bytes.toString()));
+    publishProductionBytes(path, bytes, (candidate) => {
+      if (canonicalProductionJson(JSON.parse(candidate.toString())) !== expected) throw new Error("immutable output validation failed");
+    });
+  } catch (err: any) { throw new CliError(`cannot write immutable output ${path}: ${err.message}`); }
 }
+
 function productionConfigWithRuntimeOverrides(path: string, opts: GlobalOpts & {rpcUrl?: string}): ProductionConfig {
   const config = loadProductionConfig(resolve(process.cwd(), path));
   const rpcUrl = opts.rpcUrl ?? explicitlyProvidedGlobalRpc() ?? process.env.CORNER_STORE_RPC_URL;
@@ -622,8 +697,12 @@ function productionSigner(opts: {ledger?: boolean; account?: string}): Productio
 }
 
 async function productionPreflight(config: ProductionConfig): Promise<ProductionPreflightResult> {
+  const provider = makeProvider({rpc: config.network.rpcUrl});
+  try { return await productionPreflightAt(config, provider); } finally { provider.destroy(); }
+}
+
+async function productionPreflightAt(config: ProductionConfig, provider: JsonRpcProvider): Promise<ProductionPreflightResult> {
   const selected = validateProductionConfig(config);
-  const provider = makeProvider({rpc: selected.network.rpcUrl});
   const checks: ProductionCheck[] = [];
   const check = (name: string, pass: boolean, detail: string) => checks.push({name, pass, detail});
   try {
@@ -664,8 +743,12 @@ async function productionPreflight(config: ProductionConfig): Promise<Production
 }
 
 async function productionVerify(config: ProductionConfig, artifact: Record<string, unknown>): Promise<ProductionPreflightResult> {
+  const provider = makeProvider({rpc: config.network.rpcUrl});
+  try { return await productionVerifyAt(config, artifact, provider); } finally { provider.destroy(); }
+}
+
+async function productionVerifyAt(config: ProductionConfig, artifact: Record<string, unknown>, provider: JsonRpcProvider): Promise<ProductionPreflightResult> {
   const selected = validateProductionConfig(config);
-  const provider = makeProvider({rpc: selected.network.rpcUrl});
   const checks: ProductionCheck[] = [];
   const check = (name: string, pass: boolean, detail: string) => checks.push({name, pass, detail});
   const routerAddress = artifactAddress(artifact, ["router", "executionRouter"]);
@@ -679,6 +762,10 @@ async function productionVerify(config: ProductionConfig, artifact: Record<strin
   const selectorAddress = artifactAddress(artifact, ["selector", "venueSelector"]);
   const elementRegAddress = artifactAddress(artifact, ["elementReg", "elementRegistry"]);
   const recipeRegAddress = artifactAddress(artifact, ["recipeReg", "recipeRegistry"]);
+  try {
+    const network = await provider.getNetwork();
+    check("chain-id", network.chainId === BigInt(selected.network.chainId), `rpc=${network.chainId.toString()}, config=${selected.network.chainId}`);
+  } catch (error: any) { check("chain-id", false, `cannot read RPC chainId: ${error.message}`); }
   const governed = [
     ["element-registry", elementRegAddress],
     ["recipe-registry", recipeRegAddress],

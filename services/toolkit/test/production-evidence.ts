@@ -264,6 +264,7 @@ test("a clean Git fixture can create the versioned broadcast plan without execut
   const plan = createProductionDeploymentPlan(c, {kind: "account", name: "fixture"}, true, built.identity);
   assert.equal(plan.evidenceId, built.identity.evidenceId);
   assert(plan.command.includes("--broadcast"));
+  assert(plan.command.includes("--slow"));
   assert(plan.command.includes(`CORNER_STORE_EVIDENCE_ID=${built.identity.evidenceId}`));
 });
 

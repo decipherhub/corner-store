@@ -215,7 +215,7 @@ export function createProductionDeploymentPlan(
     ["CORNER_STORE_DEPLOYMENT_ID", selected.deploymentId],
     ["CORNER_STORE_SOURCE_COMMIT", selected.release.sourceCommit],
     ["CORNER_STORE_CONTRACTS_HASH", selected.release.contractsHash],
-    ["CORNER_STORE_ARTIFACT", selected.deployment.artifact]
+    ["CORNER_STORE_CANDIDATE", "deployments/production-core.candidate.json"]
   ];
   if (identity) env.push(["CORNER_STORE_EVIDENCE_ID", identity.evidenceId]);
   const args = [
@@ -229,7 +229,7 @@ export function createProductionDeploymentPlan(
     "--sender",
     selected.deployer
   ];
-  if (broadcast) args.push("--broadcast");
+  if (broadcast) args.push("--broadcast", "--slow");
   if (signer.kind === "ledger") args.push("--ledger");
   if (signer.kind === "account") args.push("--account", signer.name);
   return {

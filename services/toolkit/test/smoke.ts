@@ -258,7 +258,7 @@ if (
   !productionPlan.command.includes("CORNER_STORE_ENABLE_AMM=1") ||
   !productionPlan.command.includes("CORNER_STORE_ENABLE_RFQ=0") ||
   !productionPlan.command.includes("CORNER_STORE_DEPLOYMENT_ID=mainnet-core-1") ||
-  !productionPlan.command.includes("CORNER_STORE_ARTIFACT=deployments/production-core.json") ||
+  !productionPlan.command.includes("CORNER_STORE_CANDIDATE=deployments/production-core.candidate.json") ||
   !productionPlan.command.includes("script/DeployProductionCore.s.sol:DeployProductionCore") ||
   !productionPlan.command.includes("--sender 0x4444444444444444444444444444444444444444") ||
   productionPlan.command.includes("--ledger") ||

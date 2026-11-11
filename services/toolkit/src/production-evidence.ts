@@ -263,7 +263,7 @@ export function captureProductionSource(root: string): ProductionSource {
       const target = mapping.slice(mapping.indexOf("=") + 1);
       if (isAbsolute(target) || target.split("/").includes("..") || target.includes("\\")) throw new Error("production remapping escapes captured bundle");
     }
-    run(forge, ["build", ENTRY.split(":")[0], "--root", workspace, "--offline", "--use", solcExecutable(config.solc),
+    run(forge, ["build", ENTRY.split(":")[0], "--root", workspace, "--offline", "--ast", "--use", solcExecutable(config.solc),
       "--build-info", "--build-info-path", "build-info"], workspace, compilerEnv(env));
     const infos = readdirSync(join(workspace, "build-info")).filter((path) => path.endsWith(".json"));
     if (infos.length !== 1) throw new Error("production capture requires one compiler input");
@@ -382,9 +382,9 @@ function executionInputs(): Record<string, string> {
   return result;
 }
 
-export function buildProductionIdentity(root: string, config: ProductionConfig, options: {keepWorkspace?: boolean} = {}) {
+export function buildProductionIdentity(root: string, config: ProductionConfig, options: {keepWorkspace?: boolean; workspaceParent?: string} = {}) {
   const source = captureProductionSource(root);
-  const workspace = mkdtempSync(join(tmpdir(), "corner-production-build-"));
+  const workspace = mkdtempSync(join(options.workspaceParent ?? tmpdir(), "corner-production-build-"));
   const dispose = () => rmSync(workspace, {recursive: true, force: true});
   try {
     copyProductionSource(root, workspace, source);
@@ -394,7 +394,7 @@ export function buildProductionIdentity(root: string, config: ProductionConfig, 
     const tools = {forge: toolIdentity(forgePath, workspace, env), solc: toolIdentity(solcPath, workspace, env),
       node: {version: process.version, sha256: bytesHash(readFileSync(process.execPath))}, typescript: source.orchestrationTools.typescript};
     const runtimeDependencies = dependencies();
-    run(forgePath, ["build", ENTRY.split(":")[0], "--root", workspace, "--offline", "--use", solcPath, "--build-info", "--build-info-path", "build-info"], workspace, compilerEnv(env));
+    run(forgePath, ["build", ENTRY.split(":")[0], "--root", workspace, "--offline", "--ast", "--use", solcPath, "--build-info", "--build-info-path", "build-info"], workspace, compilerEnv(env));
     const infos = readdirSync(join(workspace, "build-info")).filter((path) => path.endsWith(".json"));
     if (infos.length !== 1) throw new Error("production build requires one compiler input");
     const info = JSON.parse(readFileSync(join(workspace, "build-info", infos[0]), "utf8"));
@@ -417,7 +417,7 @@ export function buildProductionIdentity(root: string, config: ProductionConfig, 
     verifyProductionManifest(workspace, source);
     verifyProductionManifest(root, source);
     if (canonicalProductionJson(readProductionProvenance(root)) !== canonicalProductionJson(source.provenance)) throw new Error("production Git provenance changed during build");
-    const result = {source, build, identity, workspace, forgePath, solcPath, env: compilerEnv(env), dispose};
+    const result = {source, build, identity, compilerOutput: info.output as JsonObject, workspace, forgePath, solcPath, env: compilerEnv(env), dispose};
     if (!options.keepWorkspace) dispose();
     return result;
   } catch (error) { dispose(); throw error; }
