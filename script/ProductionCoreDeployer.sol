@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {ElementRegistry} from "../src/registry/ElementRegistry.sol";
+import {ProductionElementRegistry} from "../src/registry/ProductionElementRegistry.sol";
 import {RecipeRegistry} from "../src/registry/RecipeRegistry.sol";
 import {TokenPolicyRegistry} from "../src/registry/TokenPolicyRegistry.sol";
 import {OperatorRegistry} from "../src/registry/OperatorRegistry.sol";
@@ -46,7 +47,7 @@ abstract contract ProductionCoreDeployer {
         if (operator == address(0)) revert InvalidOperator();
         if (!enableAmm && !enableRfq) revert NoVenueEnabled();
 
-        deployed.elementReg = address(new ElementRegistry());
+        deployed.elementReg = address(_deployElementRegistry());
         deployed.recipeReg = address(new RecipeRegistry());
         deployed.policyReg =
             address(new TokenPolicyRegistry(RecipeRegistry(deployed.recipeReg), ElementRegistry(deployed.elementReg)));
@@ -78,6 +79,10 @@ abstract contract ProductionCoreDeployer {
         _wireRouter(deployed, enableAmm, enableRfq);
         _configureOperators(deployed, operator, enableRfq);
         _handoffOwnership(deployed, governance, enableAmm, enableRfq);
+    }
+
+    function _deployElementRegistry() internal virtual returns (ElementRegistry) {
+        return new ProductionElementRegistry();
     }
 
     function _configureOperators(Deployment memory deployed, address operator, bool enableRfq) private {

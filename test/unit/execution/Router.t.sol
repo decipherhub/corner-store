@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {ExecutionRouter} from "../../../src/execution/ExecutionRouter.sol";
 import {VenueRegistry} from "../../../src/execution/VenueRegistry.sol";
 import {VenueSelector} from "../../../src/execution/VenueSelector.sol";
@@ -17,6 +18,16 @@ import {Errors} from "../../../src/libraries/Errors.sol";
 import {Events} from "../../../src/libraries/Events.sol";
 
 contract RouterTest is Test {
+    event SettlementExecutedV2(
+        bytes32 indexed executionId,
+        address indexed venue,
+        address tokenIn,
+        address tokenOut,
+        bytes32 indexed policyId,
+        uint256 amountIn,
+        uint256 amountOut
+    );
+
     ExecutionRouter internal router;
     VenueRegistry internal venueReg;
     VenueSelector internal selector;
@@ -129,6 +140,54 @@ contract RouterTest is Test {
         router.execute(req);
     }
 
+    function test_execute_emitsSettlementExecutedV2WithFreshPolicy() public {
+        ExecutionRequest memory req = _defaultReq();
+        ComplianceDecision memory decision = engine.evaluate(req.context);
+        decision.policyId = keccak256("fresh-policy");
+        engine.setDecision(decision);
+        bytes32 expectedId = keccak256(abi.encode(req, block.number));
+
+        vm.expectEmit(true, true, false, true, address(router));
+        emit Events.Executed(expectedId, VENUE, req.context.amountOut);
+        vm.expectEmit(true, true, true, true, address(router));
+        emit SettlementExecutedV2(
+            expectedId, VENUE, TOKEN_IN, TOKEN_OUT, decision.policyId, req.context.amountIn, req.context.amountOut
+        );
+        vm.prank(BUYER);
+        router.execute(req);
+
+        assertTrue(engine.committed());
+    }
+
+    function _assertNoSettlementEvents() internal view {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(router)) continue;
+            assertTrue(logs[i].topics[0] != keccak256("Executed(bytes32,address,uint256)"));
+            assertTrue(
+                logs[i].topics[0]
+                    != keccak256("SettlementExecutedV2(bytes32,address,address,address,bytes32,uint256,uint256)")
+            );
+        }
+    }
+
+    function test_revert_commitEmitsNoSettlementEvents() public {
+        ExecutionRequest memory req = _defaultReq();
+        vm.mockCallRevert(address(engine), abi.encodeWithSelector(engine.commit.selector), abi.encode("commit failed"));
+
+        vm.recordLogs();
+        vm.prank(BUYER);
+        vm.expectRevert(abi.encode("commit failed"));
+        router.execute(req);
+
+        _assertNoSettlementEvents();
+        assertFalse(router.usedNonce(BUYER, req.nonce));
+        assertFalse(adapter.called());
+        assertFalse(engine.committed());
+        assertEq(MockERC20(TOKEN_IN).balanceOf(BUYER), 1_000_000 ether);
+        assertEq(MockERC20(TOKEN_OUT).balanceOf(BUYER), 0);
+    }
+
     function test_execute_emitsNonBlockingComplianceFlags() public {
         ComplianceDecision memory decision =
             _decision(true, 1 << uint256(VenueType.AMM), bytes32(0), type(uint256).max, REASON_OK);
@@ -146,9 +205,11 @@ contract RouterTest is Test {
 
     function test_revert_complianceRejected() public {
         engine.setDecision(_decision(false, 1, bytes32(0), type(uint256).max, REASON_BAD));
+        vm.recordLogs();
         vm.prank(BUYER);
         vm.expectRevert(abi.encodeWithSelector(Errors.ComplianceRejected.selector, REASON_BAD));
         router.execute(_defaultReq());
+        _assertNoSettlementEvents();
     }
 
     function test_revert_deadlineExpired() public {
@@ -256,10 +317,12 @@ contract RouterTest is Test {
         uint256 tokenInBefore = MockERC20(TOKEN_IN).balanceOf(BUYER);
         uint256 tokenOutBefore = MockERC20(TOKEN_OUT).balanceOf(BUYER);
 
+        vm.recordLogs();
         vm.prank(BUYER);
         vm.expectRevert(Errors.SettlementAmountMismatch.selector);
         router.execute(req);
 
+        _assertNoSettlementEvents();
         assertFalse(router.usedNonce(BUYER, req.nonce), "settlement mismatch must roll back nonce");
         assertFalse(adapter.called(), "settlement mismatch must roll back adapter state");
         assertFalse(engine.committed(), "settlement mismatch must not commit");

@@ -347,7 +347,9 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
     try {amountOut = toPositiveUintString(priced.amountOut, "amountOut");}
     catch {throw new RFQCoordinatorError("PRICING_FRESHNESS_INVALID", "pricing result invalid");}
     const riskDecision = await this.dependency("risk", () => this.config.riskCheck.check(priceRequest, {amountOut}));
-    if (this.config.quoteVersion === 3 && riskDecision?.decision === "rejected") throw new RFQCoordinatorError("RISK_REJECTED", "risk rejected");
+    if (this.config.quoteVersion === 3 && riskDecision?.decision === "rejected") {
+      throw new RFQCoordinatorError("RISK_REJECTED", "risk rejected", undefined, riskDecision.reasonCodes);
+    }
     const productionEvidence = strictPolicy ? validateProductionEvidence(priced, riskDecision, strictPolicy.now ?? now, strictPolicy.futureSkewSeconds ?? DEFAULT_FUTURE_SKEW_SECONDS) : undefined;
 
     const contextEvidence = this.config.quoteVersion === 3 ? await this.resolveContext(normalized, amountOut) : undefined;
@@ -924,7 +926,7 @@ function validateProductionEvidence(price: unknown, risk: void | RFQRiskDecision
   };
   if (risk && typeof risk === "object" && risk.decision === "rejected") {
     // Stable public code only; do not propagate raw operator risk reason.
-    throw new RFQCoordinatorError("RISK_REJECTED", "risk rejected");
+    throw new RFQCoordinatorError("RISK_REJECTED", "risk rejected", undefined, risk.reasonCodes);
   }
   return evidence;
 }

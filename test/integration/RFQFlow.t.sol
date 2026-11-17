@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {IntegrationBase} from "./IntegrationBase.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 import {RFQAdapter} from "../../src/execution/adapters/rfq/RFQAdapter.sol";
 import {MakerAuthorizer} from "../../src/registry/MakerAuthorizer.sol";
@@ -18,6 +19,7 @@ import {
 } from "../../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../../src/types/VenueTypes.sol";
 import {Errors} from "../../src/libraries/Errors.sol";
+import {Events} from "../../src/libraries/Events.sol";
 
 /// @title RFQFlow (integration)
 /// @notice Drives the RFQ venue end-to-end through the PROTECTED router path
@@ -37,6 +39,16 @@ import {Errors} from "../../src/libraries/Errors.sol";
 ///   - settlement is non-custodial + maker<->taker direct: QUOTE taker->maker and
 ///     the REAL ERC-3643 RWA transfer maker->taker (genuine isVerified/canTransfer).
 contract RFQFlowTest is IntegrationBase {
+    event SettlementExecutedV2(
+        bytes32 indexed executionId,
+        address indexed venue,
+        address tokenIn,
+        address tokenOut,
+        bytes32 indexed policyId,
+        uint256 amountIn,
+        uint256 amountOut
+    );
+
     // Mirror of RFQAdapter.RFQFilled for expectEmit.
     event RFQFilled(
         bytes32 indexed quoteHash, address indexed maker, address indexed taker, uint256 amountIn, uint256 amountOut
@@ -180,6 +192,16 @@ contract RFQFlowTest is IntegrationBase {
         req = _buildRfqRequest(q);
     }
 
+    function _expectSettlementEvents(RFQQuote memory q, ExecutionRequest memory req) internal {
+        bytes32 executionId = keccak256(abi.encode(rfqAdapter.hashQuote(q), req.nonce, block.number));
+        bytes32 policyId = engine.evaluate(req.context).policyId;
+        assertTrue(policyId != bytes32(0));
+        vm.expectEmit(true, true, false, true, address(router));
+        emit Events.Executed(executionId, q.venue, q.amountOut);
+        vm.expectEmit(true, true, true, true, address(router));
+        emit SettlementExecutedV2(executionId, q.venue, q.tokenIn, q.tokenOut, policyId, q.amountIn, q.amountOut);
+    }
+
     // --- scenarios --------------------------------------------------------
 
     /// @notice Full protected-path fill: both settlement legs move and the
@@ -189,6 +211,7 @@ contract RFQFlowTest is IntegrationBase {
 
         vm.expectEmit(true, true, true, true, address(rfqAdapter));
         emit RFQFilled(rfqAdapter.hashQuote(q), maker, alice, QUOTE_IN, RWA_OUT);
+        _expectSettlementEvents(q, req);
 
         vm.prank(alice);
         router.execute(req);
@@ -264,6 +287,9 @@ contract RFQFlowTest is IntegrationBase {
         uint256 makerRwaBefore = rwaToken.balanceOf(maker);
         uint256 makerQuoteBefore = quote.balanceOf(maker);
 
+        vm.expectEmit(true, true, true, true, address(rfqAdapter));
+        emit RFQFilled(rfqAdapter.hashQuote(q), maker, alice, RWA_OUT, QUOTE_IN);
+        _expectSettlementEvents(q, req);
         vm.prank(alice);
         router.execute(req);
 
@@ -271,6 +297,32 @@ contract RFQFlowTest is IntegrationBase {
         assertEq(quote.balanceOf(alice), aliceQuoteBefore + QUOTE_IN, "taker received QUOTE");
         assertEq(rwaToken.balanceOf(maker), makerRwaBefore + RWA_OUT, "maker received RWA");
         assertEq(quote.balanceOf(maker), makerQuoteBefore - QUOTE_IN, "maker paid QUOTE");
+    }
+
+    function test_rfqFill_slippageRollbackEmitsNoSettlementEvents() public {
+        (RFQQuote memory q, ExecutionRequest memory req) = _validRequest(20);
+        req.amountOutMin = q.amountOut + 1;
+
+        vm.recordLogs();
+        vm.prank(alice);
+        vm.expectRevert(Errors.SlippageExceeded.selector);
+        router.execute(req);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(router)) continue;
+            assertTrue(logs[i].topics[0] != keccak256("Executed(bytes32,address,uint256)"));
+            assertTrue(
+                logs[i].topics[0]
+                    != keccak256("SettlementExecutedV2(bytes32,address,address,address,bytes32,uint256,uint256)")
+            );
+        }
+        assertFalse(router.usedNonce(alice, req.nonce));
+        assertFalse(rfqAdapter.usedQuoteNonce(maker, q.nonce));
+        assertEq(quote.balanceOf(alice), 1_000 ether);
+        assertEq(quote.balanceOf(maker), 0);
+        assertEq(rwaToken.balanceOf(alice), 0);
+        assertEq(rwaToken.balanceOf(maker), 1_000 ether);
     }
 
     /// @notice An unapproved maker is rejected at settlement even with a valid

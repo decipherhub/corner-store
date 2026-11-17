@@ -14,6 +14,8 @@ import {
   toPositiveUintString
 } from "@corner-store/rfq-service";
 
+import {createRFQRejectionDisclosure} from "./disclosure";
+
 const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
 const DEFAULT_FUTURE_SKEW_SECONDS = 5;
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -130,6 +132,7 @@ export interface ProductionRFQHostConfig {
   requestTimeoutMs?: number;
   headersTimeoutMs?: number;
   publicBindAcknowledged?: boolean;
+  disclosurePolicyFile?: string;
 }
 
 export interface ProductionRFQHost {
@@ -291,8 +294,9 @@ export async function startProductionRFQHost(config: ProductionRFQHostConfig): P
   const now = config.now ?? (() => Math.floor(Date.now() / 1000));
   const rateLimiter = config.rateLimiter ?? new InMemoryRateLimiter();
   const readinessTimeoutMs = normalizePositiveInteger(config.readinessTimeoutMs ?? DEFAULT_READINESS_TIMEOUT_MS, "readinessTimeoutMs");
+  const discloseRejection = createRFQRejectionDisclosure(config.disclosurePolicyFile);
   const server = createServer((req, res) => {
-    void handleRequest(req, res, {...config, host, maxBodyBytes, strictAudit, now, rateLimiter, readinessTimeoutMs});
+    void handleRequest(req, res, {...config, host, maxBodyBytes, strictAudit, now, rateLimiter, readinessTimeoutMs, discloseRejection});
   });
   server.requestTimeout = normalizePositiveInteger(config.requestTimeoutMs ?? 30_000, "requestTimeoutMs");
   server.headersTimeout = normalizePositiveInteger(config.headersTimeoutMs ?? 15_000, "headersTimeoutMs");
@@ -322,6 +326,7 @@ async function handleRequest(
     now: () => number;
     rateLimiter: RateLimiter;
     readinessTimeoutMs: number;
+    discloseRejection: ReturnType<typeof createRFQRejectionDisclosure>;
   }
 ): Promise<void> {
   const started = Date.now();
@@ -332,6 +337,7 @@ async function handleRequest(
   let pricing: RFQModuleFreshnessEvidence | undefined;
   let risk: RFQModuleFreshnessEvidence | undefined;
   let authIncidentSent = false;
+  let disclosureEligible = false;
   try {
     if (req.method === "GET" && req.url === "/health") {
       sendJson(res, 200, {status: "ok", service: "corner-store-rfq-host"});
@@ -410,6 +416,7 @@ async function handleRequest(
         });
       }
     }
+    disclosureEligible = true;
 
     const freshnessPolicy = {now: config.now(), futureSkewSeconds: config.futureSkewSeconds};
     const issued = v3
@@ -455,7 +462,10 @@ async function handleRequest(
       risk
     }));
     if (classified.retryAfterSeconds) res.setHeader("Retry-After", String(classified.retryAfterSeconds));
-    sendJson(res, classified.status, {error: classified.publicError});
+    const disclosure = disclosureEligible && error instanceof RFQCoordinatorError && error.code === "RISK_REJECTED"
+      ? config.discloseRejection(error.reasonCodes)
+      : undefined;
+    sendJson(res, classified.status, {error: classified.publicError, ...(disclosure ? {disclosure} : {})});
     metric(config, "rfq_host_http_requests_total", {route: "quote", outcome: classified.publicError});
   } finally {
     timing(config, "rfq_host_quote_duration_ms", Date.now() - started, {route: req.url === "/rfq/quote" ? "quote" : "other"});

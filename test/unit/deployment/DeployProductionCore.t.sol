@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 import {Test} from "forge-std/Test.sol";
 import {DeployProductionCore} from "../../../script/DeployProductionCore.s.sol";
 import {ProductionCoreDeployer} from "../../../script/ProductionCoreDeployer.sol";
+import {DeployStack} from "../../../script/DeployStack.s.sol";
 import {Governed} from "../../../src/auth/Governed.sol";
 import {ComplianceEngine} from "../../../src/compliance/ComplianceEngine.sol";
 import {ExecutionRouter} from "../../../src/execution/ExecutionRouter.sol";
@@ -12,6 +13,10 @@ import {RFQAdapter} from "../../../src/execution/adapters/rfq/RFQAdapter.sol";
 import {TokenPolicyRegistry} from "../../../src/registry/TokenPolicyRegistry.sol";
 import {OperatorRegistry} from "../../../src/registry/OperatorRegistry.sol";
 import {MakerAuthorizer} from "../../../src/registry/MakerAuthorizer.sol";
+import {ElementRegistry} from "../../../src/registry/ElementRegistry.sol";
+import {RedFlagKnowledgeBarV2} from "../../../src/compliance/elements/RedFlagKnowledgeBarV2.sol";
+import {MinimumTradeAmount} from "../../../src/compliance/elements/MinimumTradeAmount.sol";
+import {EnforcementAction} from "../../../src/types/ComplianceTypes.sol";
 import {PolicyStatus} from "../../../src/types/ComplianceTypes.sol";
 
 contract DeployProductionCoreTest is Test {
@@ -118,6 +123,37 @@ contract DeployProductionCoreTest is Test {
     function _restoreCandidate(string memory path, bool existed, bytes memory previous) internal {
         if (existed) vm.writeFileBinary(path, previous);
         else if (vm.exists(path)) vm.removeFile(path);
+    }
+
+    function testProductionRegistryRejectsReferenceOnlyRedFlagBothOverloads() external {
+        DeployProductionCore.Deployment memory d = script.deployCore(governance, operator, false, true);
+        RedFlagKnowledgeBarV2 element = new RedFlagKnowledgeBarV2();
+        bytes memory rejection = abi.encodeWithSignature("ReferenceOnlyElement(bytes32)", bytes32("A-12-v2"));
+
+        vm.startPrank(governance);
+        vm.expectRevert(rejection);
+        ElementRegistry(d.elementReg).registerElement("A-12-v2", address(element));
+        vm.expectRevert(rejection);
+        ElementRegistry(d.elementReg).registerElement("A-12-v2", address(element), EnforcementAction.FLAG_ONLY);
+        vm.stopPrank();
+        assertEq(ElementRegistry(d.elementReg).elementOf("A-12-v2"), address(0));
+    }
+
+    function testProductionRegistryStillAcceptsOtherElements() external {
+        DeployProductionCore.Deployment memory d = script.deployCore(governance, operator, false, true);
+        MinimumTradeAmount element = new MinimumTradeAmount();
+        vm.prank(governance);
+        ElementRegistry(d.elementReg).registerElement("MIN-AMOUNT-v1", address(element));
+        assertEq(ElementRegistry(d.elementReg).elementOf("MIN-AMOUNT-v1"), address(element));
+    }
+
+    function testLocalReferenceDeployerStillAllowsRedFlag() external {
+        DeployStack referenceScript = new DeployStack();
+        ProductionCoreDeployer.Deployment memory d = referenceScript.deployCore(governance, operator, false, true);
+        RedFlagKnowledgeBarV2 element = new RedFlagKnowledgeBarV2();
+        vm.prank(governance);
+        ElementRegistry(d.elementReg).registerElement("A-12-v2", address(element), EnforcementAction.FLAG_ONLY);
+        assertEq(ElementRegistry(d.elementReg).elementOf("A-12-v2"), address(element));
     }
 
     function _assertOwner(address governed) internal view {

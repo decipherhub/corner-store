@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "reference-v1",
+  "reasons": {
+    "INVENTORY_LIMIT_EXCEEDED": {
+      "tier": "detailed",
+      "message": "Requested quote exceeds available inventory."
+    },
+    "RISK_LIMIT_EXCEEDED": {
+      "tier": "action_only",
+      "message": "Request a smaller quote or contact the operator."
+    },
+    "PRICING_OUTSIDE_LIMITS": {
+      "tier": "generic",
+      "message": "Quote request cannot be fulfilled."
+    }
+  }
+}

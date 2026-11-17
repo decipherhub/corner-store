@@ -136,6 +136,15 @@ abstract contract ExecutionRouterBase is IExecutionRouter, Governed, ReentrancyG
 
         // 9. emit + return
         emit Events.Executed(r.executionId, req.context.venue, r.amountOut);
+        emit Events.SettlementExecutedV2(
+            r.executionId,
+            settledContext.venue,
+            settledContext.tokenIn,
+            settledContext.tokenOut,
+            d.policyId,
+            settledContext.amountIn,
+            settledContext.amountOut
+        );
         return r;
     }
 

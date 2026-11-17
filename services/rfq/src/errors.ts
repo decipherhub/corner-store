@@ -1,3 +1,5 @@
+import {RFQ_REJECTION_REASON_CODES, RFQRejectionReasonCode} from "./types";
+
 export type RFQCoordinatorErrorCode =
   | "INVALID_REQUEST"
   | "PRODUCT_UNAUTHORIZED"
@@ -15,9 +17,24 @@ export type RFQCoordinatorErrorCode =
   | "SIGNER_SIGNATURE_INVALID";
 
 export class RFQCoordinatorError extends Error {
-  constructor(readonly code: RFQCoordinatorErrorCode, message: string, readonly cause?: unknown) {
+  readonly reasonCodes?: readonly RFQRejectionReasonCode[];
+
+  constructor(
+    readonly code: RFQCoordinatorErrorCode,
+    message: string,
+    readonly cause?: unknown,
+    reasonCodes?: readonly RFQRejectionReasonCode[]
+  ) {
     super(message);
     this.name = "RFQCoordinatorError";
+    if (
+      Array.isArray(reasonCodes) &&
+      reasonCodes.length > 0 &&
+      reasonCodes.length <= 32 &&
+      reasonCodes.every((value) => RFQ_REJECTION_REASON_CODES.includes(value))
+    ) {
+      this.reasonCodes = Object.freeze([...new Set(reasonCodes)]);
+    }
   }
 }
 

@@ -28,7 +28,7 @@ export interface Artifact {
   rfqV3Adapter?: string;
   rfqV3Venue?: string;
   affiliateSource?: string;
-  assetProfile?: "buidl-like" | "reg-d";
+  assetProfile?: "buidl-like" | "reg-d" | "reg-d-v5";
   ammAdapter: string;
   deployer: string;
   elementReg: string;
