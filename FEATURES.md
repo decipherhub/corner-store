@@ -53,8 +53,8 @@
 
 ### Verification
 
-- `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'`: passed all 23
-  stages, including Foundry 1,006/1,006 across 63 suites (0 failed, 0 skipped),
+- `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'`: passed the full
+  gate, including Foundry 1,211/1,211 across 73 suites (0 failed, 0 skipped),
   all 10 service smoke suites, two generated adapter conformance runs at 4/4
   each, clean packaged-consumer checks and deploy-v3 10/10.
 - `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'`: passed BUIDL-like 7/7
@@ -73,12 +73,12 @@ passing
 
 ### Notes
 
-- PR #161 review fixes: production deployment/registry tests passed 7/7; existing
-  Registry/Recipe/A-12/v5 suites passed 27/27. Node 20 Toolkit, CLI and RFQ smoke
-  passed, including 20 production export and two verification rejection checks.
-  RFQ host full smoke failed its existing mismatched Content-Length test (400 vs
-  expected 413); a diagnostic run excluding that scenario passed the other 19.
-  Production activation remains prohibited; PR #161 remains draft.
+- PR #161 review fixes preserve the existing A-04-v2 meaning of immutable Reg D
+  v4 and move the A-12 reference composition to v5. Production deployment and
+  bytecode verification now agree on `ProductionElementRegistry`; the packed
+  28-transaction deployment, verification, tampering and recovery suite passes.
+  RFQ host 30/30, Toolkit 78/78 and CLI 19/19 pass under Node 20. Production
+  activation of A-12 remains prohibited pending D044.
 - Integrated and verified on 2026-11-10 with Foundry 1.7.1 and Node 20 after
   frozen-lockfile deploy-v3 installation and `npm ci` in all nine gate services
   with lockfiles. The initial gate failed its stale A-12-v1 source assertion;

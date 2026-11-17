@@ -1,5 +1,27 @@
 # Progress
 
+## 2026-11-18 Session: CORE-015 Main Integration Review
+
+CORE-015 remains passing after integrating current main and resolving two
+cross-feature conflicts in PR #161. Reg D v4 already identifies the A-04-v2
+identity-evidence composition, so the separate A-12 reference composition now
+uses immutable family 1/version 5 and the `reg-d-v5` local profile. V4 retains its
+existing meaning and production onboarding rejects only the reference-only v5.
+
+The integrated Router emits `SettlementExecutedV2` from the shared execution
+base after measured settlement and commit. RFQ operational disclosure now carries
+only validated reason identifiers and is enabled only after authentication,
+taker binding, limiting, product authorization and readiness. The first full gate
+also found that production chain verification still expected the generic
+`ElementRegistry`; it now verifies the deployed `ProductionElementRegistry`.
+
+Fresh verification passed `scripts/check.sh` with Foundry 1,211/1,211 across 73
+suites, RFQ service 35/35, RFQ host 30/30, Toolkit 78/78, CLI 19/19, both clean
+adapter conformance projects at 4/4, packed 28-transaction production deployment,
+verification/tampering/recovery and deploy-v3 10/10. Protected public-demo paths
+are unchanged. Remaining decisions are D044 and the broader compliance disclosure
+taxonomy; neither is silently selected by this integration.
+
 ## 2026-11-17 Session: DEPLOY-004 Reservation Review Hardening
 
 DEPLOY-004 remains passing after fixing PR #166's pre-execution reservation
