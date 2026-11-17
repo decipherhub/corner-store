@@ -13,7 +13,7 @@ import {ProductionCoreDeployer} from "./ProductionCoreDeployer.sol";
 ///      the external signer (`--ledger` or `--account`); secrets are never read
 ///      from Corner Store configuration.
 contract DeployProductionCore is Script, ProductionCoreDeployer {
-    string internal constant DEFAULT_ARTIFACT_PATH = "deployments/production-core.json";
+    string internal constant CANDIDATE_ARTIFACT_PATH = "deployments/production-core.candidate.json";
 
     function run() external returns (Deployment memory deployed) {
         address deployer = vm.envAddress("CORNER_STORE_DEPLOYER");
@@ -24,7 +24,7 @@ contract DeployProductionCore is Script, ProductionCoreDeployer {
         string memory deploymentId = vm.envOr("CORNER_STORE_DEPLOYMENT_ID", string("production-core"));
         string memory sourceCommit = vm.envString("CORNER_STORE_SOURCE_COMMIT");
         string memory contractsHash = vm.envString("CORNER_STORE_CONTRACTS_HASH");
-        string memory artifactPath = vm.envOr("CORNER_STORE_ARTIFACT", string(DEFAULT_ARTIFACT_PATH));
+        string memory artifactPath = CANDIDATE_ARTIFACT_PATH;
 
         vm.startBroadcast();
         deployed = deployCore(governance, operator, enableAmm, enableRfq);

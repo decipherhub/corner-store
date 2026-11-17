@@ -48,6 +48,14 @@ echo "==> Running production RFQ host hardening smoke test"
   npm test
 )
 
+echo "==> Installing CLI dependencies required by Toolkit production evidence tests"
+(
+  cd services/cli
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+)
+
 echo "==> Running Toolkit config build + smoke test"
 (
   cd services/toolkit
@@ -60,9 +68,6 @@ echo "==> Running Toolkit config build + smoke test"
 echo "==> Running CLI build + smoke test"
 (
   cd services/cli
-  if [ ! -x node_modules/.bin/tsc ]; then
-    npm ci
-  fi
   npm test
 )
 
@@ -107,6 +112,9 @@ echo "==> Running read-only Operator API smoke test"
   fi
   npm test
 )
+
+echo "==> Checking legacy public artifact readability and byte preservation"
+node --test scripts/test-production-legacy-artifacts.mjs
 
 echo "==> Running local Deployment Studio build + smoke test"
 (

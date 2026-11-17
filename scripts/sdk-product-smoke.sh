@@ -177,4 +177,6 @@ if ! forge build --offline --root "$CLI_PACKAGE/bundle/contracts" >"$WORK_DIR/fo
   exit 1
 fi
 
+node "$ROOT_DIR/services/cli/dist/cli/test/packed-production-evidence.js"
+
 echo "Corner Store standalone SDK product smoke passed."
