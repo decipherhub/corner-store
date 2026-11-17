@@ -14,6 +14,23 @@ tags: [requirement-spec, A-11, claim-freshness, 506c, qp, cascade]
 
 # A-11 Claim Freshness — 요구사항 명세서
 
+## DATA-004 evidence freshness boundary
+
+Issue #159 leaves `ClaimFreshness` / A-11-v1 unchanged. Its effective expiry is
+the earlier of `verifiedAt + cap` and a nonzero, earlier issuer expiry. It fails
+only when `block.timestamp > effectiveExpiry`; equality remains valid. Existing
+AI/QP caps and unknown-type rejection retain their meaning.
+
+A-04-v2 has a separate accepted-evidence window: `issuedAt <= now < expiresAt`.
+The compliance-data translator caps expiry at the earlier of assessment validity
+and provenance expiry. This does not replace or extend A-11's independent cap
+or issuer-expiry checks. Current issuer-trust removal and evidence revocation can
+invalidate A-04-v2 before that window ends. Optional LEI does not alter any clock
+or eligibility/sanctions requirement. This is a decision based on evidence the
+operator accepted, with ERC-3643/ONCHAINID remaining external trust boundaries.
+See [identity evidence v2](../../product-specs/identity-evidence-v2.md) and
+[D032/D035](../../../DECISIONS.md). No A-11 version or ABI migration is introduced.
+
 본 문서는 컴플라이언스 부품 A-11(증명 유효기간)의 요구사항 명세서이다. **제1부**는 법적 근거와 논증을, **제2부**는 실장 명세를 규정한다. 법적 실질은 보경 변호사가 검토·작성한 walkthrough에 의하며, 제2부는 레포에 실장된 컨트랙트 `ClaimFreshness.sol`(A-11-v1)을 기준으로 한다. 시스템 공유 개념은 `SPEC.md`에 의한다.
 
 본 부품은 자격의 실체(누가 적격투자자인가·적격구매자인가)를 판정하지 아니하고, 이미 발급된 자격 증명이 거래 시점에도 유효기간 내에 있는지의 시간축만을 본다.

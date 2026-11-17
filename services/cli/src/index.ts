@@ -195,7 +195,7 @@ program
 
 program
   .command("production-onboarding-plan")
-  .description("render unsigned production ERC-3643 REGISTER/UPDATE plan and Safe drafts")
+  .description("render unsigned production ERC-3643 REGISTER/UPDATE plan and Safe drafts (schema 7 identity policies opt-in)")
   .argument("[path]", "production onboarding config JSON path", "corner-store.production-onboarding.json")
   .option("--out <path>", "immutable output JSON path")
   .option("--audit-artifact <path>", "reviewed canonical policy audit artifact (required by schema v4)")

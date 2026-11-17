@@ -350,7 +350,7 @@ effective status and rejects the old signed commitment. Every rejection checks
 the exact static-call error, a mined status-0 receipt and unchanged actor/custody
 balances plus Router/quote nonces. A fresh host quote then settles exact token
 deltas with nonce consumption and zero Router/adapter custody. The runner prints
-10 PASS cases and exits nonzero on any failed assertion.
+12 PASS cases and exits nonzero on any failed assertion.
 
 `scripts/check.sh` already includes RouterV2, ContextEvidence, RFQAdapterV3,
 real ERC-3643 and canonical Uniswap RouterV2 integration tests, four service
@@ -366,6 +366,37 @@ All three live Anvil commands are **manual delivery/release gates**:
 live scripts. Keep that CI boundary to avoid a further deployment in every PR;
 record all three manual results before accepting EXEC-002 or promoting v3.
 Public Monad remains RFQ v2 and is not redeployed by these gates.
+
+### Isolated identity evidence v2 E2E (DATA-004)
+
+```sh
+npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/e2e-identity-evidence.sh'
+```
+
+This separate manual gate starts chain 31337 on loopback port 8548, builds
+compliance-data/Toolkit/RFQ, deploys the opt-in Reg D v4 fixture under normal
+EIP-170 limits and removes its temporary artifact/process on exit. An alternate
+port is available through `--port`. It never upgrades a public deployment.
+
+The gate checks 40 cases: one Manifest/parameter assertion, two provider evidence
+acceptances, 32 mined RFQ v2/v3 rejections, four exact buys/sells and one privacy
+assertion. Rejections preserve balances/nonces/surveillance; restored evidence
+permits the same signed quote to settle once. Acceptance uses one ephemeral local
+env-source HMAC key inside compliance-data and explicit operator acceptance/strict
+audit. Public calldata, events, artifact and audits exclude key/raw evidence/LEI.
+
+`scripts/check.sh` includes 42 named settlement-binding invariants covering AMM
+and RFQ v2/v3, plus recipe, missing-evidence and deployed-size regressions. The
+identity AMM fixture uses a callback mock and a C-01-free test recipe; existing
+canonical Uniswap tests keep their policy. A-04-v2 with a canonical live pool,
+production providers/durable stores and RFQ-host HTTP integration with this recipe
+are not covered by this gate. See the
+[settlement specification](./product-specs/identity-settlement-binding.md).
+
+DATA-004 requires the repository check, both legacy Anvil profiles, the context
+gate above, this identity gate and protected-path/whitespace checks before
+`passing`. Existing manual/CI boundaries stay as documented above. The four
+[P2 PR slots](./product-specs/identity-p2-schedule.md) are scheduled, not implemented.
 
 ### Integrated Check
 

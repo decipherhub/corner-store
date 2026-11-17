@@ -11,10 +11,11 @@ import {
   validatePolicyAuditArtifactFile
 } from "./policy-audit";
 import {assertRecipeVenueCompatibility} from "./policy-compatibility";
+import {IdentityPolicyInput, validateIdentityPolicies} from "./identity-policy";
 
 import {VenueContextInput, buildVenueContextTransactions, verifyVenueContext} from "./venue-context";
 
-export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 6;
+export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 7;
 export const MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION = 1;
 export const POLICY_STATUS = {UNKNOWN: 0, UNREGULATED: 1, ACTIVE: 2, SUSPENDED: 3, PROPOSED: 4, RETIRED: 5} as const;
 export const VENUE_TYPE = {AMM: 0, ORDER_BOOK: 1, RFQ: 2} as const;
@@ -87,6 +88,7 @@ export interface ElementInput {
 }
 
 export interface RecipeInput {
+  identityPolicy?: IdentityPolicyInput;
   recipeId: number;
   version: number;
   implementation: string;
@@ -368,7 +370,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   if (c.addresses.makerAuthorizer !== undefined && !isAddress(c.addresses.makerAuthorizer)) throw new Error("addresses.makerAuthorizer must be a non-zero address");
   if (isV4Onboarding(c) && !isAddress(c.addresses.complianceEngine)) throw new Error("addresses.complianceEngine is required for schemaVersion 4 onboarding");
   if (schemaVersion < 6 && c.addresses.executionRouter !== undefined) throw new Error("executionRouter requires schemaVersion 6");
-  if (schemaVersion === 6 && (!isAddress(c.addresses.executionRouter) || !isHash32(c.codeHashes?.executionRouter))) throw new Error("schemaVersion 6 requires executionRouter and its code hash");
+  if (schemaVersion >= 6 && (!isAddress(c.addresses.executionRouter) || !isHash32(c.codeHashes?.executionRouter))) throw new Error("schemaVersion 6 requires executionRouter and its code hash");
   validateUniqueAddresses(c.addresses as Record<string, string | undefined>);
   if (c.codeHashes) {
     if (typeof c.codeHashes !== "object" || Array.isArray(c.codeHashes)) throw new Error("codeHashes must be an object");
@@ -426,7 +428,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   const aliasHashes = new Set<string>();
   const recipeKeys = new Set<string>();
   for (const [index, recipe] of c.recipes.entries()) {
-    assertKnownKeys(recipe, ["recipeId", "version", "implementation", "alias", "normalizedAlias", "aliasHash", "recipeKey", "requiredElements", "register"], `recipes[${index}]`);
+    assertKnownKeys(recipe, ["recipeId", "version", "implementation", "alias", "normalizedAlias", "aliasHash", "recipeKey", "requiredElements", "register", "identityPolicy"], `recipes[${index}]`);
     validateUint(recipe?.recipeId, 16, `recipes[${index}].recipeId`);
     validateUint(recipe?.version, 16, `recipes[${index}].version`);
     if (recipe.recipeId === 0 || recipe.version === 0) throw new Error(`recipes[${index}] recipeId/version must be non-zero`);
@@ -484,12 +486,13 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   }
   if (!hasBlocking) throw new Error("recipeBindings must include a blocking REQUIRED_BLOCKING or PATH_OPTION binding");
   validateOverrides(c.enforcementOverrides, c.recipeBindings, c.recipes, c.elements, v2);
-  if (v5) validatePolicyConfig(c.policyConfig, c.recipeBindings, c.recipes, c.elements);
+  if (v5) validatePolicyConfig(c.policyConfig, c.recipeBindings, c.recipes, c.elements, schemaVersion);
+  validateIdentityPolicies(c as ProductionOnboardingConfig);
   if (!Array.isArray(c.venues) || c.venues.length === 0) throw new Error("venues must contain at least one venue");
   const venueSeen = new Set<string>();
   for (const [index, venue] of c.venues.entries()) {
     validateVenue(venue, index, venueSeen);
-    if (schemaVersion === 6) validateVenueContext(c as ProductionOnboardingConfig, venue);
+    if (schemaVersion >= 6) validateVenueContext(c as ProductionOnboardingConfig, venue);
     else if (venue.context !== undefined) throw new Error("venue context requires schemaVersion 6");
   }
   if (!c.venues.some((venue) => venue.active)) throw new Error("venues must contain at least one active venue");
@@ -619,7 +622,7 @@ export function createProductionOnboardingPlan(
   if (v4) {
     txs.push(tx(policyReadyId, "operator", "Record policyId/version/artifact audit checkpoint", selected.addresses.complianceEngine!, POLICY_AUDIT_ENGINE.encodeFunctionData("recordPolicyAuditCheckpoint", [selected.addresses.token]), [activationId], "operator"));
   }
-  if (selected.schemaVersion === 6 && lifecycleAction === "REGISTER") {
+  if (selected.schemaVersion >= 6 && lifecycleAction === "REGISTER") {
     const contextTxs = buildVenueContextTransactions(selected, [policyReadyId]);
     txs.push(...contextTxs);
     ids.venues.push(...contextTxs.filter((t) => t.id.endsWith("-evidence")).map((t) => t.id));
@@ -842,7 +845,7 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
       check(`venue-${index + 1}`, venueMatches(actual, expected), `expected=${JSON.stringify(expected)}; actual=${JSON.stringify(tupleToJson(actual))}`);
       await verifyCallBool(reader, selected.addresses.operatorRegistry, OPERATOR_REGISTRY, "isVenueSuspended", [venue.venue], false, `venue-${index + 1}-suspended`, check);
     } catch (err: any) { check(`venue-${index + 1}`, false, `unavailable: ${err.message}`); }
-    if (selected.schemaVersion === 6) {
+    if (selected.schemaVersion >= 6) {
       const contextChecks = await verifyVenueContext(selected, venue, reader);
       checks.push(...contextChecks.map((entry) => ({...entry, name: `venue-${index + 1}-${entry.name}`})));
     }
@@ -1026,11 +1029,15 @@ function validatePolicyConfig(
   config: ManifestPolicyConfigInput | undefined,
   bindings: RecipeBindingInput[] | undefined,
   recipes: RecipeInput[] | undefined,
-  elements: ElementInput[] | undefined
+  elements: ElementInput[] | undefined,
+  onboardingSchemaVersion: number
 ): void {
   if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("policyConfig is required for schemaVersion 5");
   assertKnownKeys(config, ["schemaVersion", "elementParameters"], "policyConfig");
-  if (config.schemaVersion !== 1) throw new Error("policyConfig.schemaVersion must be 1");
+  const identityTracks = new Set((recipes ?? []).map((recipe) => recipe.identityPolicy?.track).filter(Boolean));
+  if (onboardingSchemaVersion === 7 && identityTracks.size > 1) throw new Error("schemaVersion 7 policyConfig cannot mix RFQ and TSV identity tracks");
+  const expectedSchema = onboardingSchemaVersion === 7 && identityTracks.has("TSV") ? 3 : onboardingSchemaVersion === 7 ? 2 : 1;
+  if (config.schemaVersion !== expectedSchema) throw new Error(`policyConfig.schemaVersion must be ${expectedSchema}`);
   if (!Array.isArray(config.elementParameters) || config.elementParameters.length > MAX_POLICY_PARAMETERS) throw new Error(`policyConfig.elementParameters must contain at most ${MAX_POLICY_PARAMETERS} entries`);
   const byRecipe = new Map((recipes ?? []).map((recipe) => [recipe.recipeId, recipe]));
   const byElement = new Map((elements ?? []).map((element) => [element.elementId.toLowerCase(), element]));
