@@ -127,11 +127,11 @@ async function rejectsUnavailableOrZeroPolicyBeforeSigning(): Promise<void> {
     const ctx = await start(config);
     try {
       const response = await post(ctx.baseUrl, quoteBody(`policy-${name}-a`), GOOD_TOKEN);
-      assert.equal(response.status, 503, name);
-      assert.equal(response.body.error, "dependency_unavailable", name);
+      assert.equal(response.status, name === "zero" ? 500 : 503, name);
+      assert.equal(response.body.error, name === "zero" ? "configuration_invalid" : "dependency_unavailable", name);
       assert.equal(config.signer.signCount, 0, name);
       assert.deepEqual(readRecords(config.storePath), [], name);
-      assert(ctx.incident.incidents.some((event) => event.type === "dependency_unavailable" && event.module === "policy"), name);
+      if (name === "unavailable") assert(ctx.incident.incidents.some((event) => event.type === "dependency_unavailable" && event.module === "policy"), name);
       assert(!JSON.stringify(ctx.audit.events).includes("RPC secret details"), name);
     } finally {
       await ctx.close();
@@ -409,6 +409,7 @@ function baseConfig(overrides: Partial<ProductionRFQHostConfig> & {
     chainId: 31337,
     verifyingContract: ADAPTER,
     maker: MAKER,
+    products: [{maker: MAKER, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, venue: VENUE, policyId: POLICY_ID, capability: "rfq.quote.v2", flowType: 0}],
     signer,
     pricing: {price: () => overrides.pricingResult ?? price()},
     riskCheck: {check: () => overrides.riskDecision ?? risk()},

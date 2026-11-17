@@ -13,7 +13,7 @@ const maker = wallet.address.toLowerCase() as `0x${string}`;
 const body = {idempotencyKey: "v3", taker: addr(2), tokenIn: addr(3), tokenOut: addr(4), amountIn: "10", venue: addr(5), flowType: 0};
 function cfg() {
   const freshness = {snapshotId: "fixture", version: "1", observedAt: 90, validUntil: 200, available: true};
-  return {chainId: 31337, verifyingContract: addr(6), maker, now: () => 100, signer: {signTypedData: async (d: any) => wallet.signTypedData(d.domain, d.types, d.message) as Promise<`0x${string}`>}, pricing: {price: () => ({amountOut: "20", ...freshness})}, riskCheck: {check: () => ({...freshness, decision: "passed" as const})}, store: new LocalFileQuoteCoordinatorStore({filePath: join(mkdtempSync(join(tmpdir(), "host-v3-")), "quotes.json"), inventory: [{maker, token: addr(4), venue: addr(5), available: "1000"}]})};
+  return {products: [2, 3].map((version) => ({maker, tokenIn: addr(3), tokenOut: addr(4), venue: addr(5), policyId: hash("policy"), capability: `rfq.quote.v${version}` as "rfq.quote.v2" | "rfq.quote.v3", flowType: 0 as const})), chainId: 31337, verifyingContract: addr(6), maker, now: () => 100, signer: {signTypedData: async (d: any) => wallet.signTypedData(d.domain, d.types, d.message) as Promise<`0x${string}`>}, pricing: {price: () => ({amountOut: "20", ...freshness})}, riskCheck: {check: () => ({...freshness, decision: "passed" as const})}, store: new LocalFileQuoteCoordinatorStore({filePath: join(mkdtempSync(join(tmpdir(), "host-v3-")), "quotes.json"), inventory: [{maker, token: addr(4), venue: addr(5), available: "1000"}]})};
 }
 async function start(unavailable = false) {
   const config = cfg();

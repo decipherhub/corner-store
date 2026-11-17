@@ -59,6 +59,15 @@ operator implementation and its pinned packages outside this repository, mount
 the bundle read-only, and inject credentials through the platform secret
 manager. Never put credentials in the bootstrap source or image.
 
+RFQ-006 additionally requires the coordinator product catalog and lifetime policy
+in the bootstrap configuration. Both enabled endpoint coordinators must expose
+`assertProductionConfiguration`, `getQuoteLifetimePolicy`, `authorizeProduct` and
+`quoteAuthorizedWithEvidence`; startup rejects incompatible bundles. The runtime
+environment schema remains version 1. See
+[`services/rfq-host/README.md`](../services/rfq-host/README.md) for the exact tuple,
+60s/300s defaults, 3600s tuning ceiling and persisted-record migration. The local
+catalog/TTL gate runs before shared dependency readiness.
+
 The bootstrap readiness probe must report all of these components:
 `audit`, `authentication`, `coordinator`, `policy`, `pricing`, `rate_limit`,
 `risk`, and `signer`. `GET /health` reports process liveness. `GET /ready`

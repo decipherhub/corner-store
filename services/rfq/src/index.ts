@@ -10,3 +10,5 @@ export * from "./validation";
 export * from "./contextEvidence";
 
 export * from "./onchainContext";
+
+export * from "./productAuthorization";
