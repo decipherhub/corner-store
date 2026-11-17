@@ -59,8 +59,8 @@ survivors and exclusions under `.assurance/reports/mutation/`.
 `--only id,...` is diagnostic and always marks its report as a subset, never a
 full verdict. The recovery sentinel deliberately injects a signing subprocess;
 the regression mocks that subprocess before invoking recovery, so the mutant
-cannot broadcast. Reporter redaction remains explicitly blocked until #161's
-real Reporter source exists. It is not represented by a mock or a killed mutant.
+cannot broadcast. Reporter redaction uses the real merged `ComplianceReporter`
+and its stateful observational invariant; no mock or exclusion counts.
 
 ## Independent analysis
 
@@ -80,9 +80,10 @@ The production source file is never edited. Any drift requires explicit review;
 this compatibility adjustment cannot suppress analyzer errors or findings.
 
 Baseline membership grants no suppression. `slither-suppressions.json` separately
-records each reviewed medium/high result, its exact source/function fingerprint,
-severity, rationale, reviewer, issue and expiry. The initial reviewer is Codex;
-human team confirmation remains pending. The proposed initial review window ends
+records each candidate medium/high exception, its exact source/function fingerprint,
+severity, rationale, reviewer, issue and expiry. Every current candidate is marked
+`pending-human-review` and therefore fails the gate until a human reviewer changes
+that exact entry to `approved`. The proposed initial review window ends
 2026-12-11. An expiry is exclusive: the gate fails on that day. New or upgraded
 medium/high findings, changed fingerprints, stale/duplicate suppressions and
 incomplete review records fail closed. Low/informational findings remain visible.

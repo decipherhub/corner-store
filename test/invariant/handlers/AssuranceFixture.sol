@@ -41,16 +41,17 @@ contract AssuranceRecipe {
     }
 
     function requiredElements() external pure returns (bytes32[] memory ids) {
-        ids = new bytes32[](9);
+        ids = new bytes32[](10);
         ids[0] = "A-01-v1";
         ids[1] = "A-02-v1";
         ids[2] = "A-03-v1";
         ids[3] = "A-04-v2";
         ids[4] = "A-05-v1";
-        ids[5] = "B-01-v1";
-        ids[6] = "B-02-v2";
-        ids[7] = "E-01-v1";
-        ids[8] = "F-02-v2";
+        ids[5] = "A-06-v1";
+        ids[6] = "B-01-v1";
+        ids[7] = "B-02-v2";
+        ids[8] = "E-01-v1";
+        ids[9] = "F-02-v2";
     }
 }
 
@@ -91,6 +92,9 @@ abstract contract AssuranceFixture is IntegrationBase {
 
     function _deployAssurance() internal {
         deployStack();
+        affiliate = new Affiliate();
+        affiliate.setTrustedClaimIssuer(address(this), true);
+        elementReg.registerElement("A-06-v1", address(affiliate));
         evidence = new IdentityUniquenessV2();
         evidence.setTrustedIssuer(ISSUER, BASIS);
         evidence.setEnforceCounterparty(true);
@@ -107,8 +111,6 @@ abstract contract AssuranceFixture is IntegrationBase {
         routerV2 = new ExecutionRouterV2(engine, venueReg, selector, operatorReg);
         rfqV2 = new RFQAdapter(new MakerAuthorizer());
         rfqV2.setRouter(address(router));
-        affiliate = new Affiliate();
-        affiliate.setTrustedClaimIssuer(address(this), true);
         rfqV3 = new RFQAdapterV3(new MakerAuthorizer(), venueReg, policyReg, address(affiliate));
         rfqV3.setRouter(address(routerV2));
         venueReg.registerVenue(

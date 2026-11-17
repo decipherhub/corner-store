@@ -483,15 +483,14 @@ ignored `.assurance/`. Missing tools fail closed. Pinned versions, offline
 provisioning, report layouts and failure handling are in
 [`assurance/README.md`](../assurance/README.md).
 
-Five suites in `test/invariant/` use explicit handler selectors and real
-Engine/registry/ERC-3643 fixtures. Eight properties model balances/settlement,
+Six suites in `test/invariant/` use explicit handler selectors and real
+Engine/registry/ERC-3643 fixtures. Nine properties model balances/settlement,
 custody, atomic commit, nonce namespaces, governance authorization, exact version
-binding, RFQ context/domain and identity lifecycle. Models account for explicit
+binding, RFQ context/domain, identity lifecycle and Reporter observation/redaction. Models account for explicit
 mint/burn/donations, expected failure rollback and original trust-basis
 restoration. Successful-action witnesses/counters prevent vacuity; unexpected
-handler reverts fail. Six parameterized fuzz functions vary amount, time,
-version and malformed/signed context. External #160's integration test is intact.
-Real Reporter observation/redaction remains pending #161; no substitute counts.
+handler reverts fail. Seven parameterized fuzz functions vary amount, time,
+version, malformed/signed context and Reporter outcomes. External #160's integration test is intact.
 
 PR profile: 64 x 32, seed `0x156`. Scheduled/manual profile: 1,024 x 128 with a
 rotating retained seed. Check every call. Run:
@@ -506,10 +505,10 @@ scripts/assurance/run.sh e2e-context
 scripts/assurance/run.sh e2e-identity
 ```
 
-Mutation requires 100% assertion kills for 15 PR or 21 expanded reviewed compiling
+Mutation requires 100% assertion kills for 16 PR or 22 expanded reviewed compiling
 sentinels, with passing mapped baselines. Analyzer baseline membership grants no
-suppression; all 78 current medium/high findings have individual Codex-reviewed
-rationales, human confirmation pending, with exclusive expiry 2026-12-11.
+suppression; all 78 current medium/high findings have individual candidate
+rationales but remain `pending-human-review`, with exclusive expiry 2026-12-11.
 Source drift, new/upgraded findings, invalid/expired review and incomplete
 analysis fail. All production sources/deployment entry points and 102 Slither
 detectors are required. Retain raw/normalized reports and compatibility casts.

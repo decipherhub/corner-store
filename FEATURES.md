@@ -86,7 +86,7 @@ passing
 - Decisions D024 through D027 record migration, canonical event selection,
   restricted reporting and RFQ disclosure. Counsel questions remain open; this
   feature does not establish legal adequacy, retention or chain-wide secrecy.
-  PR #161 remains draft; item 12 compliance taxonomy and item 13 are OPEN.
+  PR #161 is merged; item 12 compliance taxonomy and item 13 are OPEN.
 - Specs: [requirement reporting](./docs/product-specs/compliance-reporting.md),
   [settlement reconstruction](./docs/architecture/execution-routing.md),
   [Reg D v5](./docs/compliance/recipes/R1_RegD-506c-Issuance.md),
@@ -2438,8 +2438,10 @@ passing
 
 - Dedicated handlers exercise real Engine/registries/ERC-3643 fixtures through
   AMM and RFQ v2/v3 with independent ghost models, exact failures and successful
-  witnesses. Eight implemented invariant properties and six parameterized fuzz
+  witnesses. Nine implemented invariant properties and seven parameterized fuzz
   functions cover settlement, replay, governance, binding, context and identity.
+  The ninth suite proves that the real Reporter is observational and that A-01,
+  A-12 and F-* outcomes remain opaque across stateful outcome changes.
   Settlement witnesses include commit-failure rollback and same-request retry
   for AMM and RFQ v2/v3 in both directions.
 - Fixed PR 64 x 32 and rotating nightly 1,024 x 128 profiles retain failures/seeds.
@@ -2456,17 +2458,17 @@ passing
 
 ### Verification
 
-- `scripts/check.sh` including 27 gate-harness regressions, repository checks,
-  coverage, Slither and all 15 PR mutation sentinels.
+- `scripts/check.sh` including 31 gate-harness regressions, repository checks,
+  coverage, Slither and all 16 PR mutation sentinels.
 - `scripts/assurance/run.sh invariants --deep` and
   `scripts/assurance/run.sh mutation --deep` for 1,024 x 128 invariants and all
-  21 expanded sentinels, with actual seeds and reports retained.
+  22 expanded sentinels, with actual seeds and reports retained.
 - Isolated `scripts/assurance/run.sh e2e-buidl`, `e2e-reg-d`, `e2e-context` and
   `e2e-identity`, plus both existing container smoke scripts.
 - Frozen-commit hosted CI results, required-check configuration and 15-minute
   PR-job budget evidence including provisioning/uploads.
-- After #161 integration, real Reporter observational invariant and redaction
-  sentinel, source-bound artifact refresh and complete verification rerun.
+- Real Reporter observational invariant and redaction sentinel, source-bound
+  artifact refresh and complete verification rerun.
 - Protected-path comparison and existing legacy-reader byte-preservation tests;
   template/link/status consistency and `git diff --check`.
 
@@ -2483,7 +2485,7 @@ active
   without requiring a user-home SVM installation; invalid overrides fail closed.
 - Active plan: `docs/exec-plans/active/OPS-004-production-assurance-gates.md`.
 - Local results and remaining UNVERIFIED checks are recorded in `PROGRESS.md`.
-  Reporter/prerequisite reconciliation, hosted CI and unavailable Docker checks
+  Human approval of Slither suppressions, hosted CI and unavailable Docker checks
   prevent a passing claim. The public demo and #160's invariant test are untouched.
 - Release contract: `docs/release-assurance.md` and
   `docs/release-evidence.v1.template.json`. Actual external audit and recovery

@@ -1,5 +1,36 @@
 # Progress
 
+## 2026-11-18 Session: OPS-004 Main Reconciliation and Review Hardening
+
+OPS-004 remains the sole active feature after reconciling current `main` and the
+merged #161 Reporter implementation. Added the ninth stateful property in a sixth
+real-engine suite: repeated reports are observational, Engine results retain
+parity, and A-01/A-12/F-* outcomes expose only one aggregate status while public
+rows remain stable. The new PR-tier `reporter-redaction` mutation removes the
+reason-code scrub and is killed by that invariant. #160 and public demo paths are
+unchanged.
+
+Review hardening closes three false-confidence paths. Slither exceptions now need
+an explicit `approved` state; all 78 current candidates remain
+`pending-human-review`, so the analyzer gate fails closed until a human reviews
+them. Cached tool directories are compared to the contents of their checksum-
+pinned archives, not just a writable marker/version string. The exact 47-package
+Python lock now has a license, purpose, upstream, release and maintenance inventory
+that must match the lock and remain inside its review window. Forge's JSON failure
+event stream is parsed without treating a real invariant counterexample as an
+infrastructure error.
+
+Targeted verification passed 31/31 assurance harness tests, the Reporter invariant
+and fuzz suite (2/2; invariant 64 x 32 with zero handler reverts), exact 47-package
+inventory binding and the diagnostic Reporter mutation with its baseline passing
+and mutant killed. Current-main reconciliation also exposed that the Context suite
+was testing affiliate-evidence refresh without an active A-06 consumer; its fixture
+now activates the real A-06 Element, and all six invariant suites pass 17/17.
+Existing source-bound mutation hashes were refreshed only after
+each mutation site remained unique. The full assurance gate is intentionally not
+claimed: pending human Slither approvals now block it, and hosted/Docker evidence,
+external audit and chain recovery artifacts remain missing.
+
 ## 2026-11-18 Session: CORE-015 Main Integration Review
 
 CORE-015 remains passing after integrating current main and resolving two

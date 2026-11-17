@@ -5,7 +5,7 @@
     {
       "id": "router-input-delta",
       "path": "src/execution/ExecutionRouterBase.sol",
-      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
       "before": "realizedAmountIn != req.context.amountIn",
       "after": "false && realizedAmountIn != req.context.amountIn",
       "tests": [
@@ -19,7 +19,7 @@
     {
       "id": "router-nonce",
       "path": "src/execution/ExecutionRouterBase.sol",
-      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
       "before": "usedNonce[msg.sender][req.nonce] = true;",
       "after": "usedNonce[msg.sender][req.nonce] = false;",
       "tests": [
@@ -34,7 +34,7 @@
     {
       "id": "router-commit",
       "path": "src/execution/ExecutionRouterBase.sol",
-      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
       "before": "engine.commit(settledContext);",
       "after": "",
       "tests": [
@@ -48,7 +48,7 @@
     {
       "id": "router-commit-swallow",
       "path": "src/execution/ExecutionRouterBase.sol",
-      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
       "before": "settledContext.amountOut = realizedAmountOut;\n        engine.commit(settledContext);",
       "after": "settledContext.amountOut = realizedAmountOut;\n        try engine.commit(settledContext) {} catch {}",
       "tests": [
@@ -76,7 +76,7 @@
     {
       "id": "immutable-element",
       "path": "src/registry/ElementRegistry.sol",
-      "sha256": "371dcdef992a99572e9aeb5b56e5e33ff28281a11da34e043c6569df9cd41da9",
+      "sha256": "55ae6d25a14dbf135ca28af22152dbe68cd33a54acc23b1387fc7934516ea1eb",
       "before": "if (_elements[elementId] != address(0)) revert Errors.ElementAlreadyRegistered(elementId);",
       "after": "",
       "tests": [
@@ -118,7 +118,7 @@
     {
       "id": "rfq-v3-domain",
       "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
-      "sha256": "cff8d262ad1dd4b92d3476f836910f1c17110445b6d274e66cfa17d9cb69a460",
+      "sha256": "9f1486f4af6a3f3e59f082e9edf3530f75f4413e2e21734657d6e9363bc9ddd6",
       "before": "EIP712(\"CornerStoreRFQ\", \"3\")",
       "after": "EIP712(\"CornerStoreRFQ\", \"2\")",
       "tests": [
@@ -132,7 +132,7 @@
     {
       "id": "rfq-v3-a06",
       "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
-      "sha256": "cff8d262ad1dd4b92d3476f836910f1c17110445b6d274e66cfa17d9cb69a460",
+      "sha256": "9f1486f4af6a3f3e59f082e9edf3530f75f4413e2e21734657d6e9363bc9ddd6",
       "before": "quote.affiliateEvidenceHash\n                    != ContextEvidence.affiliateEvidenceHash(req.context, policyReg, affiliateSource)",
       "after": "false",
       "tests": [
@@ -188,7 +188,7 @@
     {
       "id": "rfq-v3-flow",
       "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
-      "sha256": "cff8d262ad1dd4b92d3476f836910f1c17110445b6d274e66cfa17d9cb69a460",
+      "sha256": "9f1486f4af6a3f3e59f082e9edf3530f75f4413e2e21734657d6e9363bc9ddd6",
       "before": "quote.flowType != uint8(req.context.flowType)",
       "after": "false",
       "tests": [
@@ -202,7 +202,7 @@
     {
       "id": "rfq-v3-policy",
       "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
-      "sha256": "cff8d262ad1dd4b92d3476f836910f1c17110445b6d274e66cfa17d9cb69a460",
+      "sha256": "9f1486f4af6a3f3e59f082e9edf3530f75f4413e2e21734657d6e9363bc9ddd6",
       "before": "if (quote.policyId != decision.policyId) revert Errors.RFQQuoteMismatch();",
       "after": "",
       "tests": [
@@ -230,7 +230,7 @@
     {
       "id": "router-output-delta",
       "path": "src/execution/ExecutionRouterBase.sol",
-      "sha256": "e76860b82cc200e798d441b9409af6696716221138c1b55f7963b923bfa9a4de",
+      "sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
       "before": "realizedAmountOut != req.context.amountOut",
       "after": "false",
       "tests": [
@@ -244,7 +244,7 @@
     {
       "id": "deployment-overwrite",
       "path": "services/toolkit/src/production-publication.ts",
-      "sha256": "b76859bb87dd78c7fbbd2e42e6fc71b9b79d62eed255aba8f2f7e057ab8e7510",
+      "sha256": "dd10944cb703eba430e5b6fce6ef3750832d6fe2ff7e734884569ec7f8432c5a",
       "before": "    if (present(output)) throw new Error(`production destination occupied: ${output}`);\n    if (present(`${output}.reservation`))",
       "after": "    if (present(`${output}.reservation`))",
       "tests": [
@@ -265,7 +265,7 @@
     {
       "id": "recovery-rebroadcast",
       "path": "services/cli/src/commands.ts",
-      "sha256": "b1ebaaea55aec65edb7f882d76e67d705e51ebda45f32601ef050d250b83d470",
+      "sha256": "76849a47eb03e189a3562219e2ebd127224a4255f90dcca51f09d82718b2fc0e",
       "before": "    const execution = events.find((event) => event.phase === \"executing\");",
       "after": "    execFileSync(\"forge\", [\"script\", \"script/DeployProductionCore.s.sol\", \"--broadcast\"]);\n    const execution = events.find((event) => event.phase === \"executing\");",
       "tests": [
@@ -300,7 +300,7 @@
     {
       "id": "manifest-recovery-delay",
       "path": "src/registry/TokenPolicyRegistry.sol",
-      "sha256": "79c2f117c4de7984f0c6e3e8d943db808bcf22c101bd9e6ee569a3bb4e563d91",
+      "sha256": "48286fe482fb835238a4c8afd9df5f0390a6b369090a916506852b8ab55b02e9",
       "before": "if (block.timestamp < readyAt) revert Errors.TimelockNotReady(readyAt);",
       "after": "",
       "tests": [
@@ -310,14 +310,21 @@
       "review": "A suspended Manifest cannot resume before the scheduled owner delay.",
       "tier": "expanded",
       "runner": "forge"
-    }
-  ],
-  "exclusions": [
+    },
     {
       "id": "reporter-redaction",
-      "reason": "ComplianceReporter is absent from this stacked checkout. Add its sentinel and observational suite after prerequisite #161 merges. No stand-in counts as coverage.",
-      "tracking_issue": "#156 / #161",
-      "status": "BLOCKED-prerequisite"
+      "path": "src/compliance/ComplianceReporter.sol",
+      "sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
+      "before": "            r.decision.reasonCode = bytes32(0);\n",
+      "after": "",
+      "tests": [
+        "invariant_reporterRedactsRestrictedFamilies"
+      ],
+      "match_path": "test/invariant/Reporter.invariant.t.sol",
+      "review": "A restricted failure must not expose its Element-level reason through the public decision payload.",
+      "tier": "pr",
+      "runner": "forge"
     }
-  ]
+  ],
+  "exclusions": []
 }

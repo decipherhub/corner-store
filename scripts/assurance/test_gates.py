@@ -12,7 +12,7 @@ import unittest
 
 from gates import GateError, coverage_gate, normalize_slither, review_dependencies, review_slither, replace_coverage_source
 from install import archive_tree_digest, install_archive, installed_tree_digest
-from mutation import apply_mutation, classify_forge, classify_node, validate_manifest
+from mutation import apply_mutation, classify_forge, classify_node, parse_forge_output, validate_manifest
 
 
 class EnvironmentTests(unittest.TestCase):
@@ -241,6 +241,13 @@ class ToolIntegrityTests(unittest.TestCase):
 
 
 class MutationTests(unittest.TestCase):
+    def test_forge_event_stream_selects_test_results(self):
+        event = {'event': 'failure', 'reason': 'assertion failed'}
+        results = {'suite': {'test_results': {'invariant_x()': {'status': 'Failure'}}}}
+        self.assertEqual(parse_forge_output(json.dumps(event) + '\n' + json.dumps(results) + '\n'), results)
+        with self.assertRaises(GateError):
+            parse_forge_output(json.dumps(event))
+
     def test_only_expected_assertions_count_as_kills(self):
         self.assertEqual(classify_forge(1, {'X': {'test_results': {'test_guard()': {
             'status': 'Failure', 'reason': 'next call did not revert as expected'}}}}, ['test_guard']), 'killed')

@@ -12,23 +12,22 @@ PR #160's test/integration/Invariants.t.sol, key management, custody, multisig
 expansion and vendor integration stay outside this task. No commit, push,
 external publication or production broadcast is authorized.
 
-The stack inherits #163-#166 over origin/main 7893021. Prerequisites #161/#162
-are absent from this checkout. No merge or history rewrite was attempted.
-The real Reporter suite and sentinel require #161; no mock can satisfy them.
+The stack now includes merged #161/#162 and current `origin/main`. The real
+Reporter suite and sentinel use the merged source; no mock satisfies them.
 
 ## Sequential implementation
 
 1. Stateful suites, commit 51cebdb: Settlement, Replay, Governance, Context and
    Identity with dedicated explicit-selector handlers, real Engine/registry/
    ERC-3643 fixtures, independent ghost models, non-vacuity counters and six
-   parameterized fuzz tests. Eight of nine planned properties exist. Keep
-   Reporter.invariant.t.sol pending #161. Fixed PR 64 x 32; nightly 1,024 x 128,
+   parameterized fuzz tests. All nine planned properties exist, including the
+   real Reporter observation/redaction suite. Fixed PR 64 x 32; nightly 1,024 x 128,
    check every call, unexpected reverts fail, retain rotating seeds/failures.
 2. Assurance tooling, commit bb23c12: hash-checked isolated mutation harness,
-   14 PR/20 expanded compiling sentinels, Slither 0.11.6 with independent baseline
+   16 PR/22 expanded compiling sentinels, Slither 0.11.6 with independent baseline
    and reviewed suppressions, complete production coverage and unchanged proposed
    floors, checksum/hash-locked worktree-local tools and CI/E2E isolation.
-   Reporter redaction remains explicitly excluded pending its actual source.
+   Reporter redaction is a real compiling sentinel with no prerequisite exclusion.
    Step 2 measured full coverage and the full nightly campaign; their retained
    artifacts were hash-verified again in step 3. See PROGRESS.md for limitations.
 3. Release documentation and full verification: add release-assurance.md and a
@@ -58,7 +57,8 @@ PROGRESS.md, with no missing check represented as passing.
   E2Es and protected-path/link/template checks; counts in PROGRESS.md.
 - [ ] Both container smoke jobs; local Docker daemon is unavailable.
 - [ ] Hosted clean-checkout jobs, 15-minute PR budgets and required-check settings.
-- [ ] Prerequisite reconciliation and real Reporter invariant/redaction sentinel.
+- [x] Prerequisite reconciliation and real Reporter invariant/redaction sentinel.
+- [ ] Human approval of every medium/high Slither suppression candidate.
 
 The release template stays BLOCKED until all required matching frozen-release
 evidence, external audit/retest and chain-specific recovery/sign-off exist.

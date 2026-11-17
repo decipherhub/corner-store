@@ -74,7 +74,7 @@ daemon. A local Docker failure is missing container evidence, not an exemption.
 | Evidence | Required review |
 | --- | --- |
 | Repository and package checks | Build, format/lint, Foundry and services, packed consumers, legacy artifact byte preservation and vendored deploy-v3 |
-| Stateful invariants | Eight implemented properties, five real-engine suites, explicit handler selectors, independent ghost models and successful-action counters; settlement includes commit-failure rollback and same-request retry for all three venues in both directions; Reporter remains pending #161 |
+| Stateful invariants | Nine implemented properties, six real-engine suites, explicit handler selectors, independent ghost models and successful-action counters; settlement includes commit-failure rollback and same-request retry for all three venues in both directions; the real Reporter suite checks observation and restricted-family redaction |
 | PR profile | 64 runs x 32 depth per property, fixed seed `0x156`, check after every call, unexpected handler reverts fail |
 | Scheduled/manual profile | 1,024 x 128, rotating retained 256-bit seed, counterexamples and named replay regressions |
 | Mutation | All reviewed compiling non-equivalent sentinels killed, unchanged mapped baselines pass; compiler errors, timeouts and infrastructure failures are failures |
@@ -116,9 +116,8 @@ release package to operator-controlled durable storage before that expires;
 the team must confirm production retention/access rules before launch.
 
 The Reporter observational invariant and redaction sentinel cannot be satisfied
-by a mock, an exclusion or the other eight invariants. Integrate prerequisite
-#161, implement them against the real Reporter, reconcile #160 without editing
-its owned test in this task, refresh source-bound artifacts and rerun all gates.
+by a mock or exclusion. They now run against #161's real merged Reporter; #160's
+externally owned test remains untouched. Refresh source-bound artifacts and rerun all gates.
 Reporting must remain observational and redact restricted details; aggregate
 diagnostics must not be confused with Engine authorization. The supplied stack
 also requires #162 and inherited PR merge reconciliation before release.
@@ -166,7 +165,7 @@ evidence contract adds no new signing system or production transaction authority
 ## Current evidence boundary
 
 Local development measurements are in [PROGRESS.md](../PROGRESS.md). OPS-004
-remains active while Reporter/prerequisite integration and hosted/container
-verification are pending. The template intentionally remains **BLOCKED** with
+remains active while human suppression approval and hosted/container verification
+are pending. The template intentionally remains **BLOCKED** with
 manual and frozen-release evidence **MISSING**. No external audit, recovery drill,
 hosted required-check configuration or production launch is claimed complete.

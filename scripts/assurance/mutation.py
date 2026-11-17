@@ -87,6 +87,28 @@ def classify_node(returncode, output, expected):
     return 'killed'
 
 
+def parse_forge_output(output):
+    """Select the single Forge test-result object from its JSON event stream."""
+    decoder = json.JSONDecoder()
+    values = []
+    index = 0
+    while index < len(output):
+        while index < len(output) and output[index].isspace():
+            index += 1
+        if index == len(output):
+            break
+        try:
+            value, index = decoder.raw_decode(output, index)
+        except ValueError as error:
+            raise GateError('invalid Forge JSON output') from error
+        values.append(value)
+    results = [value for value in values if isinstance(value, dict)
+               and value and all(isinstance(suite, dict) and 'test_results' in suite for suite in value.values())]
+    if len(results) != 1:
+        raise GateError('missing or duplicate Forge test-result object')
+    return results[0]
+
+
 def run(command, workspace, log, timeout=240):
     with log.open('w') as output:
         return run_command(command, workspace, output, timeout, os.environ.copy())
@@ -116,8 +138,8 @@ def execute_tests(workspace, item, log):
         command = ['forge', 'test', '--root', str(workspace), '--offline', '--json', '--match-path', item['match_path'],
                    '--match-test', '^(' + '|'.join(re.escape(n) for n in item['tests']) + r')(\(.*\))?$']
         code = run(command, workspace, log)
-        try: raw = json.loads(log.read_text())
-        except ValueError: raise GateError('Forge compile/infrastructure failure: ' + str(log))
+        try: raw = parse_forge_output(log.read_text())
+        except GateError as error: raise GateError('Forge compile/infrastructure failure: ' + str(log)) from error
         return classify_forge(code, raw, item['tests'])
     build_log = log.with_suffix('.build.log')
     if run(item['build'], workspace, build_log) != 0:

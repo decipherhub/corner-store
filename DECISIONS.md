@@ -33,7 +33,7 @@ Options requiring a team/legal decision:
   expose only coarse commitments through a separately reviewed version.
 
 Neither option is selected here. Do not record real surveillance data with the
-reference implementation. PR #161 remains draft.
+reference implementation. PR #161 is merged without selecting either option.
 
 ## D024: Reg D v5 adopts immutable nonblocking A-12 v2 by explicit selection
 
@@ -2197,11 +2197,11 @@ settlement, cancellation, pause/recovery, policy updates and identity changes.
 ### Decision
 
 Use dedicated explicit-selector handlers with the real Engine, registries and
-ERC-3643/ONCHAINID fixtures. Eight implemented properties cover value
+ERC-3643/ONCHAINID fixtures. Nine implemented properties cover value
 conservation, settlement-created zero custody, atomic settlement/commit, nonce
 namespaces, pause/resume authorization, immutable exact version binding, RFQ
-domain/context and identity evidence lifecycle. Exercise RFQ v2/v3 and a C-01-free
-AMM fixture. Independent ghost models track balances, explicit mint/burn and
+domain/context, identity evidence lifecycle and Reporter observation/redaction.
+Exercise RFQ v2/v3 and a C-01-free AMM fixture. Independent ghost models track balances, explicit mint/burn and
 donations, nonce/commit effects, governance/history and evidence generations.
 Pending compiled plans are registration snapshots, not an independent compiler.
 
@@ -2218,9 +2218,9 @@ counterexamples into named replay regressions.
 
 ### Consequences
 
-The ninth planned property, real Reporter observation/redaction, remains pending
-prerequisite #161. No mock substitutes for it. Prerequisite integration and fresh
-verification remain required; OPS-004 is active. External PR #160 owns
+The real Reporter property and redaction sentinel use #161's merged implementation;
+no mock or exclusion substitutes for them. Fresh complete verification remains
+required; OPS-004 is active. External PR #160 owns
 test/integration/Invariants.t.sol, which this work leaves unchanged.
 
 ### Related Files
@@ -2244,8 +2244,8 @@ single-site patches in disposable copies. Require unchanged mapped baselines
 and 100% kills for all reviewed compiling non-equivalent sentinels. Only mapped
 assertion failures count; compilation, missing/skipped tests, infrastructure
 errors and timeouts fail separately. Keep patches, mappings, logs, survivors and
-justified exclusions. PR and expanded sets currently contain 15 and 21 sentinels.
-Reporter redaction remains a tracked prerequisite exclusion, not tested coverage.
+justified exclusions. PR and expanded sets currently contain 16 and 22 sentinels,
+including the real Reporter redaction mutation; no prerequisite exclusion remains.
 
 Pin Python 3.12.12, Slither 0.11.6, Foundry 1.7.1, Solc 0.8.17, Node 20.20.2 and
 Yarn 1.22.22 with checksummed archives and 47 hash-locked Python packages. Install
