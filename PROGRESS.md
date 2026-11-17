@@ -27,6 +27,8 @@ Node commands used `npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`:
 - `forge build`: exit 0, compiler/lint warnings remain.
 - `forge test --offline --match-path 'test/**/RFQ*.t.sol'`: exit 0;
   72 passed, 0 failed, 0 skipped across 3 suites.
+- Final main-integration `scripts/check.sh`: exit 0; 1,102 Foundry tests,
+  RFQ 35/35, RFQ host 30/30 and all package/clean-project gates passed.
 - `git diff --check`: exit 0.
 
 Logs: `/private/tmp/w155-typed-*.log`. Runtime checks use real ephemeral loopback
