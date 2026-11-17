@@ -3,17 +3,24 @@ import {test} from "node:test";
 import {mkdtempSync, readFileSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {RFQQuoteCoordinator, RFQQuoteCoordinatorV3, LocalFileQuoteCoordinatorStore, RFQCoordinatorError} from "@corner-store/rfq-service";
+import {RFQQuoteCoordinator, RFQQuoteCoordinatorV3, LocalFileQuoteCoordinatorStore, RFQCoordinatorError, RFQStoreError, RFQStoreErrorCode, ReserveQuoteInput, ReserveQuoteResult} from "@corner-store/rfq-service";
 import {startProductionRFQHost, StaticBearerAuthenticator, MemoryAuditSink, MemoryMetricsSink, MemoryIncidentSink} from "../src/server";
 const addr = (n: number) => `0x${n.toString(16).padStart(40, "0")}` as `0x${string}`;
 const policyId = `0x${"11".repeat(32)}` as const;
 const otherPolicy = `0x${"22".repeat(32)}` as const;
 const body = {idempotencyKey: "host-authorization", taker: addr(2), tokenIn: addr(3), tokenOut: addr(4), amountIn: "10", venue: addr(5), ttlSeconds: 60};
 const product = {maker: addr(1), tokenIn: addr(3), tokenOut: addr(4), venue: addr(5), policyId, flowType: 0 as const};
-async function fixture(mode = "ok", auditFails = false) {
+class AlternateQuoteStore extends LocalFileQuoteCoordinatorStore {
+  constructor(config: ConstructorParameters<typeof LocalFileQuoteCoordinatorStore>[0], private readonly failure?: RFQStoreErrorCode) {super(config);}
+  async reserveOrReturnExisting(input: ReserveQuoteInput): Promise<ReserveQuoteResult> {
+    if (this.failure) throw new RFQStoreError(this.failure, "alternate backend private diagnostic");
+    return super.reserveOrReturnExisting(input);
+  }
+}
+async function fixture(mode = "ok", auditFails = false, storeFailure?: RFQStoreErrorCode) {
   const calls: string[] = [];
   const filePath = join(mkdtempSync(join(tmpdir(), "host-authorization-")), "quotes.json");
-  const store = new LocalFileQuoteCoordinatorStore({filePath, inventory: [{maker: addr(1), token: addr(4), venue: addr(5), available: "1000"}]});
+  const store = new AlternateQuoteStore({filePath, inventory: [{maker: addr(1), token: addr(4), venue: addr(5), available: "1000"}]}, storeFailure);
   const reserve = store.reserveOrReturnExisting.bind(store);
   store.reserveOrReturnExisting = (input) => {calls.push("reservation"); return reserve(input);};
   let now = 100;
@@ -184,6 +191,25 @@ for (const version of [2, 3]) {
       assert.equal((await response.json() as any).quote.expiry, 130);
     } finally {await g.close();}
   });
+  for (const [storeCode, status, error] of [
+    ["IDEMPOTENCY_CONFLICT", 409, "idempotency_conflict"],
+    ["INVENTORY_UNAVAILABLE", 409, "inventory_unavailable"],
+    ["INVENTORY_NOT_CONFIGURED", 500, "configuration_invalid"]
+  ] as const) {
+    test(`v${version} alternate store maps ${storeCode} without parsing its message`, async () => {
+      const f = await fixture("ok", false, storeCode);
+      try {
+        const response = await post(f.baseUrl, path, input);
+        assert.equal(response.status, status);
+        assert.deepEqual(await response.json(), {error});
+        assert.ok(f.calls.includes("reservation"));
+        assert.ok(!f.calls.includes("signer"));
+        assert.deepEqual(f.records(), []);
+        assert.equal(f.audit.events[0].reason, error);
+        assert.ok(!JSON.stringify([f.audit.events, f.metrics, f.incident.incidents]).includes("private"));
+      } finally {await f.close();}
+    });
+  }
   test(`v${version} taxonomy separates terminal product/configuration failures from outages`, async () => {
     for (const [mode, status, error] of [["mismatch", 403, "product_unauthorized"], ["denied", 403, "product_unauthorized"], ["config", 500, "configuration_invalid"], ["resolver", 503, "dependency_unavailable"], ["pricing", 503, "dependency_unavailable"], ["risk", 503, "dependency_unavailable"]] as const) {
       const f = await fixture(mode);

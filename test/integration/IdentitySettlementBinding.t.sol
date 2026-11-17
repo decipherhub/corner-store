@@ -528,4 +528,3 @@ contract IdentitySettlementBindingTest is IntegrationBase {
         _revoked(3, true, true, true);
     }
 }
-

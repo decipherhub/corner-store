@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-11-17 Session: DATA-004 Review Hardening
+
+DATA-004 remains passing after review hardening for PR #165. Active RFQ onboarding
+can no longer omit its required blocking A-04-v2 RFQ policy: Toolkit schema 7
+rejects omission, TSV substitution and mixed tracks, while on-chain
+ManifestPolicyConfig schema 2/3 commits the RFQ/TSV track and checks it against
+the Manifest engine bit and exact Element parameters. The provider-neutral v2
+coordinator now HMAC-wraps every provider-controlled identity, request, source and
+assessment reference before audit, persistence, acceptance or calldata export.
+
+Targeted verification passed: 27/27 compliance-data tests, 32/32 Toolkit tests,
+13/13 IdentityPolicyComposition tests and `forge build --sizes` with
+TokenPolicyRegistry at 24,570 bytes, 6 bytes below EIP-170. `scripts/check.sh`
+then passed with 1,175/1,175 Foundry tests and every service/package gate.
+`scripts/e2e-identity-evidence.sh` initially exposed the stale pre-keyed fixture
+binding, then passed 40/40 live cases after binding the coordinator's public keyed
+identity. Whitespace and protected public-demo path checks also passed.
+
 ## 2026-11-11 Session: DEPLOY-004 Publication Trust Boundary
 
 DEPLOY-004 is passing. Scope: remaining publication findings from
@@ -283,9 +301,9 @@ opened. No item blocks this P1 release.
 
 Material operating constraints: bilateral A-04-v2 screening remains explicit;
 restoring the exact issuer basis can restore unexpired accepted evidence unless
-individually revoked; the reference store is in-process. TokenPolicyRegistry is
-24,536 bytes with the pinned compiler, leaving only 40 bytes of EIP-170 headroom.
-Its deployed-size regression passed; further growth needs explicit size work.
+individually revoked; the reference store is in-process. The later review-hardening
+result above supersedes this release measurement; TokenPolicyRegistry now has only
+6 bytes of EIP-170 headroom and further growth needs explicit size work.
 
 UNVERIFIED: A-04-v2 with a canonical Uniswap pool in live Anvil (named AMM tests
 use a callback mock; existing canonical-pool regressions passed); RFQ-host HTTP
@@ -293,6 +311,42 @@ with the new recipe (context-provenance HTTP passed separately); production
 providers/durable storage, public/external networks and Docker/container runtime.
 No external publication, commit, push or branch operation was performed. Next:
 user reviews the working tree; P2 proceeds as separate November PR work.
+
+## 2026-11-17 Session: RFQ-006 Typed Store Failure Review Fix
+
+Confirmed PR #164's store-message classification finding. Scope: typed store
+failures and coordinator/host mappings only; no contract or product boundary change.
+`QuoteCoordinatorStore` now requires `RFQStoreError` for idempotency conflicts,
+inventory exhaustion and missing inventory configuration. The local store emits
+those codes, the coordinator translates them to bounded coordinator errors, and
+both host versions preserve 409/409/500 responses independently of diagnostic text.
+Untyped store failures remain 503. RFQ-006 remains passing.
+
+Node commands used `npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`:
+
+- `npm ci --prefix services/rfq && npm ci --prefix services/rfq-host`: exit 0.
+- `npm run build --prefix services/rfq && npm run build --prefix services/rfq-host && node --test --test-name-pattern="alternate store|typed store" services/rfq/dist/test/authorization.js services/rfq-host/dist/test/authorization.js`:
+  before mapping fixes, exit 1; 9 failed, 37 skipped. All nine failures reproduced
+  coded terminal errors becoming dependency-unavailable errors with alternate text.
+- Initial `npm test --prefix services/rfq && npm test --prefix services/rfq-host`:
+  exit 1 in RFQ smoke's old inventory-message assertion. Updated that assertion to
+  check `RFQCoordinatorError.code`; the host command was not reached.
+- Final `npm test --prefix services/rfq && npm test --prefix services/rfq-host`:
+  exit 0; RFQ smoke plus 35 named tests and host smoke plus 30 named tests passed,
+  zero failures. Added 11 named regressions covering alternate store messages on
+  both endpoints, local store codes and untyped message lookalikes.
+- `forge fmt --check`: exit 0.
+- `forge build`: exit 0, compiler/lint warnings remain.
+- `forge test --offline --match-path 'test/**/RFQ*.t.sol'`: exit 0;
+  72 passed, 0 failed, 0 skipped across 3 suites.
+- Final main-integration `scripts/check.sh`: exit 0; 1,102 Foundry tests,
+  RFQ 35/35, RFQ host 30/30 and all package/clean-project gates passed.
+- `git diff --check`: exit 0.
+
+Logs: `/private/tmp/w155-typed-*.log`. Runtime checks use real ephemeral loopback
+HTTP servers in both host suites. Anvil E2E and Docker/production integrations
+were not run: this task excludes fixed-port Anvil and changes only failure mapping.
+The review fixes were committed on this branch in `df2e387`.
 
 ## 2026-11-11 Session: RFQ-006 Nested TTL Review Fix
 
@@ -475,6 +529,34 @@ was not changed. No full-gate rerun was needed.
 - Next: user reviews the working tree. No commit, push, GitHub comment, public
   broadcast or publication was performed.
 
+
+## 2026-11-17 Session: EXEC-002 Review Hardening
+
+PR #163 review findings were fixed on the feature branch without changing the
+legacy Router/RFQ v2 or public Monad deployment paths.
+
+- Affiliate evidence is now required only when the active compiled policy
+  actually contains A-06-v1. When present, ElementRegistry must resolve A-06-v1
+  to the source pinned in venue activation evidence; a different registered
+  implementation fails closed.
+- Primary distribution now discovers the authorized distributor by the immutable
+  `corner-store.element.lockup.primary-distributor.v1` parameter schema instead
+  of the exact C-01-v2 Element ID. Compatible future immutable Element versions
+  therefore keep the same authority contract without adapter changes.
+- RFQ on-chain resolution and Toolkit activation verification enforce the same
+  policy/source/schema rules as Solidity. Regression coverage includes policies
+  without A-06, source substitution and a non-C-01-v2 Element using the canonical
+  distributor schema.
+
+Targeted verification: ContextEvidence 24/24, RFQAdapterV3 38/38, RouterV2 19/19,
+ContextProvenance 13/13, RFQ service 13/13 and Toolkit provenance 16/16.
+`scripts/check.sh` passed with 1,102 Foundry tests and all service/package smoke
+gates. Both legacy Anvil profiles completed their 7/7 scenarios and extended
+backend/CLI/Router checks; the isolated context-provenance E2E passed 12/12.
+The local Foundry 1.7.1 formatter changes three pre-existing unrelated main files;
+they were temporarily normalized only for the formatter gate and restored before
+the final diff. `git diff --check` passes and no public deployment was changed.
+
 ## 2026-11-11 Session: EXEC-002 Confirmed Review Fixes
 
 Scope: F1 recipient MM-claim selection and F2 reverse Engine/Router activation
@@ -603,15 +685,15 @@ reference execution contracts와 vendored Uniswap v3 배포 도구를 포함한�
 Element/Recipe/Manifest/Operator 4-Layer와 mode-aware `RecipeBinding[]` 모델을
 source of truth로 사용한다.
 
-## Current Feature
+## Active Feature
 
-`RFQ-006: Bounded Lifetime and Pre-Pricing Product Authorization` (issue #155).
-RFQ-006 is passing after all requested gates. HACK-001 closure is in approved
-upstream PR #162; the historical HACK-001 notes below are retained.
+No feature is active after HACK-001. The public demo is maintained operationally;
+no next feature has been selected.
 
-### Upstream HACK-001 history
+## HACK-001 Completion Record
 
-`HACK-001 — Monad Onchain Finance RFQ Demo` (issue #145)
+`HACK-001: Monad Onchain Finance RFQ Demo` (issue #145), `passing` as of 2026-11-10.
+Historical implementation and verification evidence follows.
 
 - `hackathon/monad-onchain-finance`를 최신 `origin/main`의 별도 worktree에서
   시작했다. 기존 root checkout과 미추적 개인 파일은 변경하지 않았다.
@@ -1401,6 +1483,35 @@ upstream PR #162; the historical HACK-001 notes below are retained.
    finality/recovery 정책을 별도 운영 feature로 구체화한다.
 
 ## Last Session Summary
+
+- 2026-11-10 (issue #145): marked HACK-001 `passing` after the hackathon ended
+  on 2026-10-14, per team decision. Updated only `FEATURES.md` and `PROGRESS.md`,
+  preserving implementation history and recording work not completed before the deadline:
+  judge wallet guide, browser-wallet settlement with `--evidence` rehearsal, and explorer
+  source verification. No feature remains active and no next feature was selected.
+- Live verification used `curl -k` against `https://161.33.155.224`: `/health` returned
+  `{"service":"corner-store-testnet-rfq-demo","status":"ok","blockNumber":78558332}`;
+  `/api/state` returned HTTP 200 with four scenarios, chain ID 10143, source commit
+  `e7345b3a41edaca05e3260c4c39240bf0e2c9e2c`, `verifiedAtStartup=true`,
+  `makerApproved=true` and `manifestActive=true`. All four `/api/precheck` calls used
+  `amountIn=5000000000000000000000000` and returned HTTP 200:
+  success buy `allowed=true`, zero reason and `explanation=null`; qualification buy
+  `allowed=false`, `FAIL_NOT_QP`; investor B sell `allowed=false`,
+  `HOLDING_PERIOD_NOT_ELAPSED`, `availableAt=1822982925`; expired-claim buy
+  `allowed=false`, `FAIL_QP_CLAIM_EXPIRED`, `evidenceExpiredAt=1791360525`.
+  Maker approval, inventory and allowance passed in every response.
+- `cast chain-id` returned 10143. Read-only `cast call acquisitionOf` against
+  `https://testnet-rpc.monad.xyz` confirmed `expiresAt=1796688000`, status `VALID`
+  for maker, investor, eligibleInvestorB, ineligibleInvestor and expiredInvestor;
+  investor B's original `clockStart=1791446925` remains intact. The five 2026-11-10
+  renewal hashes and blocks are recorded in HACK-001's `FEATURES.md` notes from the
+  operator's Foundry broadcast records. QP claims were intentionally untouched.
+- Validation: live HTTP pre-checks and on-chain reads only; no signing or settlement.
+  Build/unit suites and browser-wallet `--evidence` rehearsal were not rerun for this
+  documentation-only closure. `git diff --check` passed.
+  Next operational step: renew acquisition evidence every 30 days using
+  `scripts/refresh-testnet-evidence.sh`, with the next renewal before
+  2026-12-08 00:00 UTC (`1796688000`). Deployment artifacts remain unchanged.
 
 - RFQ maker settlement account와 signer authority를 분리했다. delegate 권한
   추가는 1일 delay, revoke는 즉시 적용하며 direct maker ECDSA와 ERC-1271도

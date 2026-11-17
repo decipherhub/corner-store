@@ -51,6 +51,7 @@ contract RouterV2Test is Test {
         policy = new ContextPolicyRegistry();
         engine = new ContextEngine(address(policy));
         affiliate = new Affiliate();
+        policy.setAffiliateSource(address(affiliate));
         adapter = new MockContextAdapter();
         router = new ExecutionRouterV2(engine, venues, selector, operators);
         adapter.setRouter(address(router));

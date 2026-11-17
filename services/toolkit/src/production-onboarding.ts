@@ -486,7 +486,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   }
   if (!hasBlocking) throw new Error("recipeBindings must include a blocking REQUIRED_BLOCKING or PATH_OPTION binding");
   validateOverrides(c.enforcementOverrides, c.recipeBindings, c.recipes, c.elements, v2);
-  if (v5) validatePolicyConfig(c.policyConfig, c.recipeBindings, c.recipes, c.elements);
+  if (v5) validatePolicyConfig(c.policyConfig, c.recipeBindings, c.recipes, c.elements, schemaVersion);
   validateIdentityPolicies(c as ProductionOnboardingConfig);
   if (!Array.isArray(c.venues) || c.venues.length === 0) throw new Error("venues must contain at least one venue");
   const venueSeen = new Set<string>();
@@ -1029,11 +1029,15 @@ function validatePolicyConfig(
   config: ManifestPolicyConfigInput | undefined,
   bindings: RecipeBindingInput[] | undefined,
   recipes: RecipeInput[] | undefined,
-  elements: ElementInput[] | undefined
+  elements: ElementInput[] | undefined,
+  onboardingSchemaVersion: number
 ): void {
   if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("policyConfig is required for schemaVersion 5");
   assertKnownKeys(config, ["schemaVersion", "elementParameters"], "policyConfig");
-  if (config.schemaVersion !== 1) throw new Error("policyConfig.schemaVersion must be 1");
+  const identityTracks = new Set((recipes ?? []).map((recipe) => recipe.identityPolicy?.track).filter(Boolean));
+  if (onboardingSchemaVersion === 7 && identityTracks.size > 1) throw new Error("schemaVersion 7 policyConfig cannot mix RFQ and TSV identity tracks");
+  const expectedSchema = onboardingSchemaVersion === 7 && identityTracks.has("TSV") ? 3 : onboardingSchemaVersion === 7 ? 2 : 1;
+  if (config.schemaVersion !== expectedSchema) throw new Error(`policyConfig.schemaVersion must be ${expectedSchema}`);
   if (!Array.isArray(config.elementParameters) || config.elementParameters.length > MAX_POLICY_PARAMETERS) throw new Error(`policyConfig.elementParameters must contain at most ${MAX_POLICY_PARAMETERS} entries`);
   const byRecipe = new Map((recipes ?? []).map((recipe) => [recipe.recipeId, recipe]));
   const byElement = new Map((elements ?? []).map((element) => [element.elementId.toLowerCase(), element]));

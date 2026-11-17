@@ -15,6 +15,7 @@ function config(): any {
   c.recipes[0].requiredElements[0] = id;
   c.recipes[0].identityPolicy = {track: "RFQ", kycTopology: "DIRECT"};
   Object.assign(c.elements[0], {elementId: id, parameterSchemaId: schemaId, parameterSchemaVersion: 1, maxParameterBytes: 64, parametersRequired: true});
+  c.policyConfig.schemaVersion = 2;
   c.policyConfig.elementParameters = [{bindingIndex: 0, elementId: id, schemaId, schemaVersion: 1, parameters: AbiCoder.defaultAbiCoder().encode(["uint8", "uint8"], [1, 1])}];
   return c;
 }

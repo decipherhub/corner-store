@@ -34,6 +34,8 @@ export function validateIdentityPolicies(config: ProductionOnboardingConfig): vo
     if (config.recipes.some((recipe) => recipe.identityPolicy !== undefined || hasIdentity(recipe, identityId))) throw new Error("identityPolicy and A-04-v2 require schemaVersion 7");
     return;
   }
+  const rfqEnabled = (config.manifest.supportedEngines & (1 << 2)) !== 0 || config.venues.some((venue) => venue.active && (venue.venueType === "RFQ" || venue.venueType === 2));
+  let hasMandatoryRfqIdentity = false;
   for (const recipe of config.recipes) {
     if (hasIdentity(recipe, legacyId)) throw new Error("schemaVersion 7 identity policies require A-04-v2");
     if (!hasIdentity(recipe, identityId)) {
@@ -49,6 +51,8 @@ export function validateIdentityPolicies(config: ProductionOnboardingConfig): vo
       if (binding.mode !== "REQUIRED_BLOCKING" && binding.mode !== 0) throw new Error("A-04-v2 identity policy must use a REQUIRED_BLOCKING binding");
       const entry = config.policyConfig?.elementParameters.find((entry) => entry.bindingIndex === bindingIndex && entry.elementId.toLowerCase() === identityId);
       if (!entry || entry.parameters.toLowerCase() !== expected.toLowerCase()) throw new Error(`A-04-v2 identity policy parameters must commit the declared DIRECT topology and track at binding ${bindingIndex}`);
+      if (recipe.identityPolicy!.track === "RFQ") hasMandatoryRfqIdentity = true;
     }
   }
+  if (rfqEnabled && !hasMandatoryRfqIdentity) throw new Error("schemaVersion 7 active RFQ support requires an explicit REQUIRED_BLOCKING A-04-v2 RFQ DIRECT policy");
 }

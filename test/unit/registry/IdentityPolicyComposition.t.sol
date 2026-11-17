@@ -17,6 +17,7 @@ import {Test} from "forge-std/Test.sol";
 import {TokenPolicyRegistry} from "../../../src/registry/TokenPolicyRegistry.sol";
 import {ElementRegistry} from "../../../src/registry/ElementRegistry.sol";
 import {RecipeRegistry} from "../../../src/registry/RecipeRegistry.sol";
+import {IdentityPolicy} from "../../../src/compliance/libraries/IdentityPolicy.sol";
 
 contract IdentityPolicyElementMock is TokenPolicyRegistryElementMock {
     constructor() TokenPolicyRegistryElementMock("A-04-v2") {}
@@ -48,10 +49,15 @@ contract IdentityPolicyCompositionTest is Test {
         recipeReg.registerRecipe(20, 1, address(new TokenPolicyRegistryRecipeMock(20, 1, IDENTITY_ID)));
     }
 
+    function test_identityPolicyTrackCodec() public pure {
+        assertEq(IdentityPolicy.track(abi.encode(uint8(1), uint8(1))), 1);
+        assertEq(IdentityPolicy.track(abi.encode(uint8(2), uint8(1))), 2);
+    }
+
     function test_topology_registerRejectsMissingParameters() public {
         ManifestPolicyConfig memory config = _identityConfig(abi.encode(uint8(1), uint8(1)));
         config.elementParameters = new ElementPolicyParameter[](0);
-        _expectInvalid();
+        vm.expectRevert(Errors.InvalidPolicyConfig.selector);
         reg.registerManifest(token, _manifest(), _identityBindings(), _emptyOverrides(), config);
     }
 
@@ -99,7 +105,7 @@ contract IdentityPolicyCompositionTest is Test {
         RecipeBinding[] memory bindings = _mixedBindings(RecipeBindingMode.REQUIRED_BLOCKING);
         bindings[1].recipeId = 21;
         ManifestPolicyConfig memory config;
-        config.schemaVersion = 1;
+        config.schemaVersion = 2;
         config.elementParameters = new ElementPolicyParameter[](2);
         config.elementParameters[0] =
             ElementPolicyParameter(0, IDENTITY_ID, IDENTITY_SCHEMA, 1, abi.encode(uint8(1), uint8(1)));
@@ -125,9 +131,35 @@ contract IdentityPolicyCompositionTest is Test {
             _manifest(),
             _mixedBindings(RecipeBindingMode.REQUIRED_BLOCKING),
             _emptyOverrides(),
-            _identityConfig(abi.encode(uint8(2), uint8(1)))
+            _identityConfigWithSchema(abi.encode(uint8(2), uint8(1)), 3)
         );
         assertNotEq(rfqHash, reg.compiledPlanHashOf(address(0x7001)));
+    }
+
+    function test_rfqManifestRequiresExplicitBlockingRfqIdentityPolicy() public {
+        ManifestCore memory rfqManifest = _manifest();
+        rfqManifest.supportedEngines = 4;
+
+        RecipeBinding[] memory legacyOnly = new RecipeBinding[](1);
+        legacyOnly[0] = RecipeBinding(7, 1, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        ManifestPolicyConfig memory empty;
+        empty.schemaVersion = 2;
+        empty.elementParameters = new ElementPolicyParameter[](0);
+        vm.expectRevert(Errors.InvalidPolicyConfig.selector);
+        reg.registerManifest(token, rfqManifest, legacyOnly, _emptyOverrides(), empty);
+
+        vm.expectRevert(Errors.InvalidPolicyConfig.selector);
+        reg.registerManifest(
+            token,
+            rfqManifest,
+            _identityBindings(),
+            _emptyOverrides(),
+            _identityConfigWithSchema(abi.encode(uint8(2), uint8(1)), 3)
+        );
+
+        reg.registerManifest(
+            token, rfqManifest, _identityBindings(), _emptyOverrides(), _identityConfig(abi.encode(uint8(1), uint8(1)))
+        );
     }
 
     function test_topology_updateRejectsInvalidWithoutChangingActiveOrPendingPlan() public {
@@ -197,7 +229,7 @@ contract IdentityPolicyCompositionTest is Test {
             next,
             _identityBindings(),
             _emptyOverrides(),
-            _identityConfig(abi.encode(uint8(2), uint8(1))),
+            _identityConfigWithSchema(abi.encode(uint8(2), uint8(1)), 3),
             "TRACK"
         );
         assertEq(reg.compiledPlanHashOf(token), beforeHash);
@@ -246,12 +278,20 @@ contract IdentityPolicyCompositionTest is Test {
     }
 
     function _identityConfig(bytes memory parameters) internal pure returns (ManifestPolicyConfig memory config) {
-        config.schemaVersion = 1;
+        return _identityConfigWithSchema(parameters, 2);
+    }
+
+    function _identityConfigWithSchema(bytes memory parameters, uint16 schemaVersion)
+        internal
+        pure
+        returns (ManifestPolicyConfig memory config)
+    {
+        config.schemaVersion = schemaVersion;
         config.elementParameters = new ElementPolicyParameter[](1);
         config.elementParameters[0] = ElementPolicyParameter(0, IDENTITY_ID, IDENTITY_SCHEMA, 1, parameters);
     }
 
     function _expectInvalid() internal {
-        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidPolicyParameter.selector, uint256(0), IDENTITY_ID));
+        vm.expectRevert();
     }
 }

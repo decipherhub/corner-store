@@ -65,13 +65,18 @@ refuses other majors and keeps a frozen validated metadata snapshot. The root
 and v2 entry points do not load either demo adapter or read a key at import time.
 V1 and v2 stores reject each other's record shapes; no automatic migration occurs.
 
-V2 requests require wallet (`subject`), bytes32 identity commitment, asset and a
+V2 requests require wallet (`subject`), bytes32 identity reference, asset and a
 request reference. Assessments add `provenance = {issuerId, issuedAt, expiresAt,
 trustBasisHash, attestationType}` and optional `lei`. Assessment validity must fit
-inside the provenance window. Source and assessment references are keyed at the
-adapter boundary. Raw provider records stay inside the adapter. Request references
-belong to the refresh audit, not to persisted assessment commitments, so retrying
-the same assessment under a new request reference does not create a store conflict.
+inside the provenance window. The coordinator treats identity, request, source and
+assessment references returned or echoed by a provider as provider-controlled
+input and HMAC-wraps each one before audit, persistence, operator acceptance or
+calldata export. This remains required when an adapter already supplies an opaque
+or keyed-looking value; a provider cannot publish an arbitrary raw or unkeyed
+commitment through the public record boundary. Raw provider records and references
+stay inside the adapter/coordinator call. Request commitments belong to the refresh
+audit, not to persisted assessment commitments, so retrying the same assessment
+under a new request reference does not create a store conflict.
 
 `KycEvidenceCoordinatorV2` validates metadata, schema, binding, facts, provenance,
 freshness and status. For positive evidence it requires an explicit operator
@@ -101,7 +106,9 @@ Inject that capability into adapters, coordinator, store and calldata translatio
 never pass it to operator-api. No new host, custody, KMS/HSM or rotation machinery
 is introduced.
 
-`createKycCommitmentsV2` computes HMAC-SHA-256 over canonical JSON
+The coordinator applies this boundary to every provider-controlled reference
+before it becomes public; adapters are not trusted to enforce the public
+commitment boundary. `createKycCommitmentsV2` computes HMAC-SHA-256 over canonical JSON
 `{domain: "corner-store/kyc/<purpose>/v2", value}`, with purposes `identity`,
 `source`, `assessment` and `evidence`. Object keys sort recursively and undefined
 optional fields are omitted. The evidence commitment includes schema 2, normalized

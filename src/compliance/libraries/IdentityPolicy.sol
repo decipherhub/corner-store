@@ -7,8 +7,14 @@ library IdentityPolicy {
 
     function valid(bytes memory parameters) internal pure returns (bool result) {
         assembly {
-            let track := mload(add(parameters, 32))
-            result := and(eq(mload(parameters), 64), and(lt(sub(track, 1), 2), eq(mload(add(parameters, 64)), 1)))
+            let trackValue := mload(add(parameters, 32))
+            result := and(eq(mload(parameters), 64), and(lt(sub(trackValue, 1), 2), eq(mload(add(parameters, 64)), 1)))
+        }
+    }
+
+    function track(bytes memory parameters) internal pure returns (uint256 result) {
+        assembly {
+            result := mload(add(parameters, 32))
         }
     }
 }

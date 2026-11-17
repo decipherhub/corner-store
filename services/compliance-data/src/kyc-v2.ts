@@ -183,79 +183,81 @@ export class KycEvidenceCoordinatorV2 {
 
   async refresh(request: ProviderKycRequestV2): Promise<KycRefreshResultV2> {
     const timestamp = this.now();
-    let normalizedRequest: ProviderKycRequestV2;
+    let providerRequest: ProviderKycRequestV2;
     try {
       validateRequest(request);
-      normalizedRequest = normalizeRequest(request);
+      providerRequest = normalizeRequest(request);
     } catch {
-      return this.fail(request, timestamp, "MALFORMED_PROVIDER_RESULT");
+      return this.fail({}, timestamp, "MALFORMED_PROVIDER_RESULT");
     }
+    const publicRequest = keyRequest(providerRequest, this.commitments);
 
     let providerResult: ProviderKycAssessmentV2;
     const abort = new AbortController();
     try {
       providerResult = await Promise.race([
-        this.provider.assess({...normalizedRequest}, {signal: abort.signal}),
+        this.provider.assess({...providerRequest}, {signal: abort.signal}),
         sleep(this.providerTimeoutMs, undefined, {signal: abort.signal}).then(() => {
           throw PROVIDER_TIMEOUT;
         })
       ]);
     } catch (error) {
-      return this.fail(normalizedRequest, timestamp, providerFailureReason(error));
+      return this.fail(publicRequest, timestamp, providerFailureReason(error));
     } finally {
       abort.abort();
     }
 
-    let assessment: ProviderKycAssessmentV2;
+    let providerAssessment: ProviderKycAssessmentV2;
     try {
-      assessment = sanitizeAssessment(providerResult);
-      validateAssessment(assessment);
+      providerAssessment = sanitizeAssessment(providerResult);
+      validateAssessment(providerAssessment);
     } catch {
-      return this.fail(normalizedRequest, timestamp, "MALFORMED_PROVIDER_RESULT");
+      return this.fail(publicRequest, timestamp, "MALFORMED_PROVIDER_RESULT");
     }
+    const assessment = keyAssessment(providerAssessment, this.commitments);
 
-    if (!matchesMetadata(assessment, this.metadata)) return this.fail(normalizedRequest, timestamp, "PROVIDER_INCOMPATIBLE", assessment);
-    if (!matchesRequest(assessment, normalizedRequest)) return this.fail(normalizedRequest, timestamp, "BINDING_MISMATCH", assessment);
+    if (!matchesMetadata(providerAssessment, this.metadata)) return this.fail(publicRequest, timestamp, "PROVIDER_INCOMPATIBLE", assessment);
+    if (!matchesRequest(providerAssessment, providerRequest)) return this.fail(publicRequest, timestamp, "BINDING_MISMATCH", assessment);
     if (!isFresh(assessment, timestamp, this.maxFutureSkewSeconds, this.freshnessSeconds)) {
-      return this.fail(normalizedRequest, timestamp, "STALE_OR_FUTURE_ASSESSMENT", assessment);
+      return this.fail(publicRequest, timestamp, "STALE_OR_FUTURE_ASSESSMENT", assessment);
     }
 
     let operatorAccepted = false;
     const negative = failClosedEligibilityReason(assessment);
     if (!negative) {
       try { operatorAccepted = await this.accept?.(JSON.parse(JSON.stringify(assessment))) === true; } catch { /* Fail closed. */ }
-      if (!operatorAccepted) return this.fail(normalizedRequest, timestamp, "OPERATOR_NOT_ACCEPTED");
+      if (!operatorAccepted) return this.fail(publicRequest, timestamp, "OPERATOR_NOT_ACCEPTED");
     }
-    if (!isFresh(assessment, this.now(), this.maxFutureSkewSeconds, this.freshnessSeconds)) return this.fail(normalizedRequest, this.now(), "STALE_OR_FUTURE_ASSESSMENT");
+    if (!isFresh(assessment, this.now(), this.maxFutureSkewSeconds, this.freshnessSeconds)) return this.fail(publicRequest, this.now(), "STALE_OR_FUTURE_ASSESSMENT");
     const snapshot = makeEvidence(assessment, this.now(), operatorAccepted, this.commitments);
     const eligibilityReason = failClosedEligibilityReason(snapshot);
     if (eligibilityReason) {
       try {
         const storedRaw = (await this.store.replaceCurrent(cloneEvidence(snapshot))).stored;
         const stored = cloneEvidence(storedRaw);
-        validateStoredSnapshot(stored, snapshot, normalizedRequest, this.now(), this.maxFutureSkewSeconds, this.freshnessSeconds, this.commitments);
+        validateStoredSnapshot(stored, snapshot, publicRequest, this.now(), this.maxFutureSkewSeconds, this.freshnessSeconds, this.commitments);
       } catch {
-        return this.fail(normalizedRequest, timestamp, "STORE_CONFLICT", assessment, snapshot.evidenceHash);
+        return this.fail(publicRequest, timestamp, "STORE_CONFLICT", assessment, snapshot.evidenceHash);
       }
-      return this.fail(normalizedRequest, timestamp, eligibilityReason, assessment, snapshot.evidenceHash);
+      return this.fail(publicRequest, timestamp, eligibilityReason, assessment, snapshot.evidenceHash);
     }
 
-    const audit = makeAudit(normalizedRequest, timestamp, "ELIGIBLE", "OK", snapshot);
-    if (!this.audit) return this.fail(normalizedRequest, timestamp, "AUDIT_UNAVAILABLE", assessment, snapshot.evidenceHash);
+    const audit = makeAudit(publicRequest, timestamp, "ELIGIBLE", "OK", snapshot);
+    if (!this.audit) return this.fail(publicRequest, timestamp, "AUDIT_UNAVAILABLE", assessment, snapshot.evidenceHash);
     try {
       await this.audit(audit);
     } catch {
-      return this.fail(normalizedRequest, timestamp, "AUDIT_UNAVAILABLE", assessment, snapshot.evidenceHash);
+      return this.fail(publicRequest, timestamp, "AUDIT_UNAVAILABLE", assessment, snapshot.evidenceHash);
     }
 
-    if (!isFresh(assessment, this.now(), this.maxFutureSkewSeconds, this.freshnessSeconds)) return this.fail(normalizedRequest, this.now(), "STALE_OR_FUTURE_ASSESSMENT");
+    if (!isFresh(assessment, this.now(), this.maxFutureSkewSeconds, this.freshnessSeconds)) return this.fail(publicRequest, this.now(), "STALE_OR_FUTURE_ASSESSMENT");
     let stored: ProviderNeutralKycEvidenceV2;
     try {
       const storedRaw = (await this.store.replaceCurrent(cloneEvidence(snapshot))).stored;
       stored = cloneEvidence(storedRaw);
-      validateStoredSnapshot(stored, snapshot, normalizedRequest, this.now(), this.maxFutureSkewSeconds, this.freshnessSeconds, this.commitments);
+      validateStoredSnapshot(stored, snapshot, publicRequest, this.now(), this.maxFutureSkewSeconds, this.freshnessSeconds, this.commitments);
     } catch {
-      return this.fail(normalizedRequest, timestamp, "STORE_CONFLICT", assessment, snapshot.evidenceHash);
+      return this.fail(publicRequest, timestamp, "STORE_CONFLICT", assessment, snapshot.evidenceHash);
     }
     return {eligible: true, materialization: stored, audit};
   }
@@ -405,6 +407,57 @@ function normalizeRequest(request: ProviderKycRequestV2): ProviderKycRequestV2 {
     asset: normalizeAddress(request.asset),
     requestRefHash: normalizeHex(request.requestRefHash)
   };
+}
+
+function keyRequest(request: ProviderKycRequestV2, commitments: KycCommitmentsV2): ProviderKycRequestV2 {
+  const identity = keyedIdentity(request.identity, commitments);
+  return {
+    ...request,
+    identity,
+    requestRefHash: commitments.hash("assessment", {
+      kind: "request",
+      requestRef: request.requestRefHash,
+      subject: request.subject,
+      identity,
+      asset: request.asset
+    })
+  };
+}
+
+function keyAssessment(input: ProviderKycAssessmentV2, commitments: KycCommitmentsV2): ProviderKycAssessmentV2 {
+  const assessment = sanitizeAssessment(input);
+  const identity = keyedIdentity(assessment.identity, commitments);
+  const sourceEvidenceHash = commitments.hash("source", {
+    providerId: assessment.providerId,
+    providerSchemaVersion: assessment.providerSchemaVersion,
+    sourceEvidenceRef: assessment.sourceEvidenceHash,
+    subject: assessment.subject,
+    identity,
+    asset: assessment.asset,
+    facts: assessment.facts,
+    observedAt: assessment.observedAt,
+    validUntil: assessment.validUntil,
+    status: assessment.status,
+    provenance: assessment.provenance,
+    lei: assessment.lei
+  });
+  const assessmentRefHash = commitments.hash("assessment", {
+    providerId: assessment.providerId,
+    providerSchemaVersion: assessment.providerSchemaVersion,
+    assessmentRef: assessment.assessmentRefHash,
+    sourceEvidenceHash,
+    subject: assessment.subject,
+    identity,
+    asset: assessment.asset,
+    observedAt: assessment.observedAt,
+    validUntil: assessment.validUntil,
+    status: assessment.status
+  });
+  return {...assessment, identity, sourceEvidenceHash, assessmentRefHash};
+}
+
+function keyedIdentity(identityRef: Hex, commitments: KycCommitmentsV2): Hex {
+  return commitments.hash("identity", {identityRef: normalizeHex(identityRef)});
 }
 
 function sanitizeAssessment(input: ProviderKycAssessmentV2): ProviderKycAssessmentV2 {
