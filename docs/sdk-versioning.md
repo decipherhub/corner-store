@@ -137,7 +137,7 @@ versions are independent.
 | Identity Element | A-04-v1, five-field KycClaim ABI and seeded legacy claims | Separately deployed A-04-v2 with `IIdentityEvidenceV2` evidence and issuer trust |
 | Provider SPI / records | SPI 1.0.0, v1 hashes and persisted records | SPI 2.0.0, schema 2 records, HMAC v2 domains, provenance and optional LEI |
 | Compliance-data imports | Root v1 names, `/spi`, `/demo`, `/conformance` | Explicit v2 names at root or `/v2`, `/spi-v2`, `/demo-v2`, `/conformance-v2` |
-| Onboarding | Schemas 1-6 retain their meanings | Schema 7, per-recipe identityPolicy, required exact A-04-v2 parameters; inherits schema 6 context checks |
+| Onboarding | Schemas 1-6 retain their meanings; policyConfig schema 1 remains legacy | Schema 7, per-recipe identityPolicy, required exact A-04-v2 parameters; policyConfig schema 2 selects RFQ and schema 3 selects TSV; inherits schema 6 context checks |
 | Recipe | Existing versions, including Reg D v3 / A-04-v1 | Reg D family 1 version 4 / A-04-v2; REQUIRED_BLOCKING and BLOCK |
 | Acceptance calldata | Legacy setters remain unchanged | Separate `acceptEvidence` selector `0x9b3e5df6` and explicit Toolkit v2 codecs |
 | RFQ quote / public demo | Existing RFQ v2/v3 schemas and Monad v2 deployment | No new quote schema or public deployment required by DATA-004 |
@@ -153,6 +153,8 @@ versions are independent.
    RFQ/TSV track and DIRECT topology. Schemas 1-6 cannot select A-04-v2;
    schema 7 identity recipes cannot substitute A-04-v1. Commit the 64-byte
    parameter encoding in the existing ManifestPolicyConfig and audit artifact.
+   Use policyConfig schema 2 for RFQ or schema 3 for TSV. Active RFQ support
+   cannot omit or substitute the required blocking RFQ identity policy.
 4. Use normal REGISTER or delayed UPDATE proposal/activation and read-only
    verification. Bind wallets, configure issuer trust, export and submit new
    acceptance calldata. Never infer accepted evidence from an identity binding.

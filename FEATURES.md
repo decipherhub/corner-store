@@ -17,13 +17,16 @@
   DIRECT topology through required, exact A-04-v2 ManifestPolicyConfig bytes.
   Missing/unknown/MEMBER topology, nonblocking bindings and enforcement
   downgrades fail closed at registration and update. Schema 6 context checks
-  remain required; schemas 1-6 retain their original meaning.
+  remain required; schemas 1-6 retain their original meaning. Active RFQ support
+  additionally requires an explicit blocking RFQ identity policy in Toolkit and
+  its matching ManifestPolicyConfig schema 2 marker on-chain.
 - Separate A-04-v2 evidence binds identity, wallet and asset to issuer ID,
   issuedAt, expiry, trust basis, type and keyed commitment. Binding creates no
   accepted evidence. Current operator-managed issuer trust gates every trade.
 - SPI 2.0.0 requires explicit operator acceptance and strict audit. One local
   env/file HMAC key belongs to compliance-data, never operator-api. V2 domains,
-  records, exports and unsigned acceptance codecs remain separate from v1.
+  records, exports and unsigned acceptance codecs remain separate from v1. The
+  coordinator rekeys every provider-controlled public reference before use.
 - Optional format/checksum-validated LEI stays off-chain and participates in
   evidence commitments; no eligibility or sanctions policy requires it.
 - Reg D v4 opts into A-04-v2 while retaining the other v3 elements and the
@@ -66,8 +69,9 @@ passing
 - Counterparty evidence requires explicit operator enablement. Restoring the
   exact issuer trust basis can restore unexpired evidence; revoke individual
   records when reinstatement is unwanted. The reference store is in-process.
-- TokenPolicyRegistry runtime is 24,536 bytes with the pinned compiler, leaving
-  40 bytes below EIP-170. The size regression must remain passing.
+- TokenPolicyRegistry runtime is 24,570 bytes with the pinned compiler, leaving
+  6 bytes below EIP-170. The size regression must remain passing; further growth
+  requires deliberate size reduction.
 - MEMBER, pseudonyms/off-chain wallet mapping before TSV launch, asset cards,
   jurisdictional lists, key management/custody/multisig and external vendors
   remain deferred. Passing this feature does not establish TSV launch readiness.

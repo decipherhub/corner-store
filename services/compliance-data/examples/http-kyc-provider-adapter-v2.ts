@@ -158,4 +158,3 @@ function parseVendorResponse(body: unknown): ExampleVendorKycResponseV2 | undefi
 function isAddress(value: unknown): value is string {
   return typeof value === "string" && ADDRESS_RE.test(value);
 }
-

@@ -19,6 +19,11 @@ rejected. Full MEMBER institution/attestation support is deferred to P2, includi
 wallet-level sanctions screening in both modes. This slice adds no sanctions
 behavior.
 
+An active RFQ engine or venue also requires at least one explicit
+`REQUIRED_BLOCKING` A-04-v2 recipe whose track is RFQ. Schema 7 cannot enable an
+RFQ path while omitting the identity recipe, and a TSV declaration cannot satisfy
+the RFQ requirement.
+
 The declaration must match the binding's existing `ManifestPolicyConfig` entry.
 The shared Manifest and RecipeBinding ABI tuples do not change:
 
@@ -33,6 +38,14 @@ The shared Manifest and RecipeBinding ABI tuples do not change:
 | Track values | `1 = RFQ`, `2 = TSV`; all other values rejected |
 | Topology values | `1 = DIRECT`; `0`, `2 = MEMBER` and all other values rejected |
 
+`ManifestPolicyConfig.schemaVersion` commits the identity track at the on-chain
+registration boundary: `1` remains the legacy configuration, `2` selects RFQ and
+`3` selects TSV. Schema 2 requires a matching RFQ A-04-v2 parameter; schema 3
+requires a matching TSV parameter. A schema 7 onboarding artifact that advertises
+RFQ support must use schema 2; legacy schema 1 Manifests keep their existing
+meaning. An opt-in TSV schema 3 config cannot advertise RFQ engine support. Mixed
+RFQ/TSV tracks in one policy config are rejected.
+
 Decoders check the full words and exact byte length, including dirty high bits
 and trailing bytes. The Toolkit exports `IdentityPolicyInput`,
 `IDENTITY_POLICY_ELEMENT_ID`, `IDENTITY_POLICY_SCHEMA_ID`,
@@ -44,9 +57,10 @@ Every binding that includes A-04-v2 must be `REQUIRED_BLOCKING`, with A-04-v2's
 `BLOCK` enforcement. FLAG_ONLY and PATH_OPTION bindings cannot carry this gate:
 an alternate successful recipe must not bypass the declared identity policy.
 Other recipes may retain their normal composition semantics. The registry
-validates every A-04-v2 parameter at registration and update scheduling, including
-mixed legacy/new binding sets. Invalid input reverts without changing active or
-pending state. Valid updates use the existing timelock and atomic activation.
+validates the config-level track marker and every A-04-v2 parameter at registration
+and update scheduling, including mixed legacy/new binding sets. Invalid input
+reverts without changing active or pending state. Valid updates use the existing
+timelock and atomic activation.
 
 Schema 7 retains every schema 6 execution-context check, activation dependency
 and verifier read. Audit artifacts commit the declaration through exact parameter

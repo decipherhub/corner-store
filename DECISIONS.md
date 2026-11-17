@@ -1561,6 +1561,10 @@ RFQ/TSV and DIRECT. RFQ has no default; TSV is fixed to DIRECT. Reject unset,
 unknown and MEMBER values until the separate P2 implementation. Commit the exact
 64-byte `abi.encode(uint8 track, uint8 topology)` through required A-04-v2
 ManifestPolicyConfig parameters, preserving shared Manifest/RecipeBinding tuples.
+Use ManifestPolicyConfig schema 1 for legacy configurations, schema 2 for RFQ and
+schema 3 for TSV. New schema 7 RFQ onboarding requires schema 2 and at least one
+matching REQUIRED_BLOCKING A-04-v2 RFQ policy; omission, a TSV substitution and
+mixed RFQ/TSV tracks fail closed. Legacy schema 1 Manifests retain their meaning.
 Require REQUIRED_BLOCKING bindings and BLOCK enforcement, including updates and
 mixed legacy/new compositions. Retain every schema 6 context check in schema 7.
 Schemas 1-6 keep their meaning and cannot select A-04-v2; schema 7 identity recipes
@@ -1570,7 +1574,7 @@ cannot substitute A-04-v1.
 
 Full-word decoding rejects noncanonical words, trailing data and malformed lengths.
 The live deployment exposed an EIP-170 size failure; equivalent compact validation
-now leaves TokenPolicyRegistry at 24,536 bytes, only 40 bytes below the limit.
+now leaves TokenPolicyRegistry at 24,570 bytes, only 6 bytes below the limit.
 The deployed-size and composition/fuzz regressions must remain passing. MEMBER
 institution/attestation support and wallet sanctions in both modes are scheduled,
 not implemented. A TSV track declaration alone is not launch readiness.
@@ -1639,6 +1643,9 @@ Use domain-separated HMAC-SHA-256 for v2 identity, source, assessment and eviden
 commitments over canonical JSON. Load exactly one 32-byte hex key from local env
 or file in the compliance-data runtime, and inject only a restricted hashing
 capability into adapters, coordinator, store validation and calldata translation.
+The coordinator rekeys every provider-controlled identity, request, source and
+assessment reference before public audit, persistence, acceptance or calldata
+export, even if the adapter supplied an opaque or keyed-looking value.
 Missing/malformed/unreadable/ambiguous configuration fails startup; no unkeyed
 fallback. Operator-api never receives the key. On-chain acceptance receives only
 public enforcement fields and commitments through unsigned exported calldata.

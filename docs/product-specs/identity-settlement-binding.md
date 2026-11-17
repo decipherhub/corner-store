@@ -91,7 +91,8 @@ The topology guard now runs inside element compilation, with the same validation
 order and errors, and its full-word DIRECT decoder uses compact range checks.
 The new `test_identityPolicyRegistry_fitsEip170` checks the actual deployed
 runtime against 24,576 bytes. Foundry 1.7.1 with the repository's pinned
-Solidity 0.8.17 optimizer settings measures 24,536 bytes, leaving 40 bytes.
+Solidity 0.8.17 optimizer settings measures 24,570 bytes after the review
+hardening, leaving 6 bytes.
 Further registry changes must preserve this gate or address code size separately.
 
 This proof covers self-directed Router-mediated execution. Delegation, transfers

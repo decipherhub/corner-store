@@ -15,6 +15,7 @@ const hash = (s: string) => keccak256(toUtf8Bytes(s));
 function config(): any {
   const c = JSON.parse(readFileSync(join(__dirname, "../../examples/corner-store.production-onboarding-v6.json"), "utf8"));
   c.schemaVersion = 7;
+  c.policyConfig.schemaVersion = 2;
   const oldId = c.elements[0].elementId;
   Object.assign(c.elements[0], {elementId: id, parameterSchemaId: schema, parameterSchemaVersion: 1, maxParameterBytes: 64, parametersRequired: true});
   c.recipes[0].requiredElements = c.recipes[0].requiredElements.map((value: string) => value === oldId ? id : value);
@@ -51,10 +52,8 @@ function addLegacyBinding(c: any): void {
   c.recipeBindings.push({...c.recipeBindings[0], recipeId: 2});
 }
 
-test("schema 7 accepts explicit RFQ and TSV DIRECT and exports exact codec", () => {
+test("schema 7 accepts explicit RFQ DIRECT and exports both exact track codecs", () => {
   assert.equal(toolkit.validateProductionOnboardingConfig(config()).schemaVersion, 7);
-  const tsv = config(); tsv.recipes[0].identityPolicy.track = "TSV"; tsv.policyConfig.elementParameters[0].parameters = parameters(2);
-  assert.equal(toolkit.validateProductionOnboardingConfig(tsv).schemaVersion, 7);
   const api = toolkit as any;
   assert.equal(api.IDENTITY_POLICY_SCHEMA_ID, schema);
   assert.equal(api.IDENTITY_POLICY_ELEMENT_ID, id);
@@ -62,10 +61,24 @@ test("schema 7 accepts explicit RFQ and TSV DIRECT and exports exact codec", () 
   assert.deepEqual(api.decodeIdentityPolicyParameters(parameters(2)), {track: "TSV", kycTopology: "DIRECT"});
 });
 
+test("schema 7 active RFQ support cannot omit or relabel the mandatory identity gate", () => {
+  const omitted = config();
+  delete omitted.recipes[0].identityPolicy;
+  omitted.recipes[0].requiredElements = omitted.recipes[0].requiredElements.filter((value: string) => value !== id);
+  omitted.policyConfig.elementParameters = [];
+  assert.throws(() => toolkit.validateProductionOnboardingConfig(omitted), /active RFQ.*A-04-v2.*RFQ DIRECT/i);
+
+  const tsv = config();
+  tsv.recipes[0].identityPolicy.track = "TSV";
+  tsv.policyConfig.schemaVersion = 3;
+  tsv.policyConfig.elementParameters[0].parameters = parameters(2);
+  assert.throws(() => toolkit.validateProductionOnboardingConfig(tsv), /active RFQ.*A-04-v2.*RFQ DIRECT/i);
+});
+
 test("schema 7 rejects unset unknown MEMBER and malformed declarations", () => {
   for (const policy of [undefined, {}, {track: "RFQ"}, {track: "RFQ", kycTopology: "MEMBER"}, {track: "TSV", kycTopology: "MEMBER"}, {track: "OTHER", kycTopology: "DIRECT"}, {track: "RFQ", kycTopology: "direct"}, {track: "RFQ", kycTopology: "DIRECT", extra: true}]) {
     const c = config(); c.recipes[0].identityPolicy = policy;
-    assert.throws(() => toolkit.validateProductionOnboardingConfig(c), /identityPolicy|kycTopology|track/);
+    assert.throws(() => toolkit.validateProductionOnboardingConfig(c), /identityPolicy|kycTopology|track|policyConfig\.schemaVersion/);
   }
 });
 
@@ -128,7 +141,7 @@ test("schema 7 retains schema 6 context validation and legacy fixtures retain th
     assert.deepEqual(toolkit.validateProductionOnboardingConfig(c), c);
   }
   const c = config(); c.schemaVersion = 6;
-  assert.throws(() => toolkit.validateProductionOnboardingConfig(c), /schemaVersion 7|identityPolicy/);
+  assert.throws(() => toolkit.validateProductionOnboardingConfig(c), /schemaVersion 7|identityPolicy|policyConfig\.schemaVersion/);
 });
 
 test("codec fails closed for missing unknown MEMBER and noncanonical words", () => {
@@ -150,8 +163,8 @@ test("schema 7 planner binds parameters and preserves context activation transac
 
 test("schema 7 artifact verification rejects detached track commitments", () => {
   const c = config(); const audit = evidence(c);
-  c.recipes[0].identityPolicy.track = "TSV"; c.policyConfig.elementParameters[0].parameters = parameters(2);
-  assert.throws(() => toolkit.createProductionOnboardingPlan(c, "2026-11-11T00:00:00.000Z", audit), /compiled plan mismatch/);
+  c.recipes[0].identityPolicy.track = "TSV"; c.policyConfig.schemaVersion = 3; c.policyConfig.elementParameters[0].parameters = parameters(2);
+  assert.throws(() => toolkit.createProductionOnboardingPlan(c, "2026-11-11T00:00:00.000Z", audit), /active RFQ|compiled plan mismatch/);
 });
 
 test("schema 7 verifier reads context and exact compiled parameters and fails closed on drift", async () => {
@@ -171,18 +184,17 @@ test("schema 7 verifier reads context and exact compiled parameters and fails cl
 });
 
 
-test("schema 7 UPDATE export commits topology through the existing delayed config tuple", () => {
+test("schema 7 UPDATE export commits RFQ topology through the existing delayed config tuple", () => {
   const c = config();
   c.lifecycle = {action: "UPDATE", intendedPolicyVersion: "2", previousArtifactHash: `sha256:${"ab".repeat(32)}`, reasonCode: hash("update"), expectedPostStatus: "ACTIVE"};
   c.elements.forEach((e: any) => e.register = false); c.recipes.forEach((r: any) => r.register = false);
-  c.recipes[0].identityPolicy.track = "TSV"; c.policyConfig.elementParameters[0].parameters = parameters(2);
   const audit = evidence(c);
   const plan = toolkit.createProductionOnboardingPlan(c, "2026-11-11T00:00:00.000Z", audit);
   assert.equal(plan.lifecycleAction, "UPDATE");
   const tx = plan.transactions.find((t) => t.id === "manifest-update-schedule")!;
   assert.ok(tx, plan.transactions.map((t) => t.id).join(","));
   const iface = new Interface(["function scheduleManifestUpdate(address,tuple(uint8,uint16,uint16,uint16,uint32,uint8,uint16,uint256,uint256,bytes32,address,address),tuple(uint16,uint16,uint8,uint16,uint8)[],tuple(uint8,bytes32,uint8)[],tuple(uint16,tuple(uint8,bytes32,bytes32,uint16,bytes)[]),bytes32)"]);
-  assert.equal(iface.decodeFunctionData("scheduleManifestUpdate", tx.data)[4][1][0][4], parameters(2));
+  assert.equal(iface.decodeFunctionData("scheduleManifestUpdate", tx.data)[4][1][0][4], parameters());
   assert.ok(plan.transactions.some((t) => t.id === "manifest-update-activate" && t.earliestExecution));
   assert.ok(!plan.transactions.some((t) => t.id.startsWith("context-")));
 });

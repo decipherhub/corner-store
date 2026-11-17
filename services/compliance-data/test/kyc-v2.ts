@@ -25,6 +25,7 @@ const assessment = async (): Promise<ProviderKycAssessmentV2> => demo().assess(r
 const provider = (value: ProviderKycAssessmentV2) => ({metadata: demo().metadata, assess: async () => value});
 const httpBody = (): ExampleVendorKycResponseV2 => ({caseId: "private-case", reviewedAt: 1000, expiresAt: 1900, decision: "approved", checks: {identity: "pass", sanctions: "clear"}, wallet: request.subject, identityId: request.identity, asset: request.asset});
 const httpProvider = (body: () => ExampleVendorKycResponseV2) => new HttpKycProviderAdapterV2({providerId: "http-example", providerSchemaVersion: "example.v2", endpoint: "https://example.invalid/kyc", provenance}, {commitments, credential: async () => "", transport: async () => ({status: 200, json: async () => body()})});
+const publicBinding = (input: ProviderKycRequestV2 = request) => ({...input, identity: commitments.hash("identity", {identityRef: input.identity.toLowerCase()})});
 
 async function success() {
   const result = await new KycEvidenceCoordinatorV2(demo(), new InMemoryKycEvidenceStoreV2(commitments), options()).refresh(request);
@@ -70,13 +71,13 @@ test("v2 evidence requires explicit operator acceptance and strict audit before 
     const result = await new KycEvidenceCoordinatorV2(demo(), store, {...options(), accept: accept as never}).refresh(request);
     assert.equal(result.eligible, false);
     if (!result.eligible) assert.equal(result.reason, "OPERATOR_NOT_ACCEPTED");
-    assert.equal(await store.current({...request, providerId: demo().metadata.providerId}), undefined);
+    assert.equal(await store.current({...publicBinding(), providerId: demo().metadata.providerId}), undefined);
     assert.ok(!JSON.stringify(result).includes("private-detail"));
   }
   const result = await new KycEvidenceCoordinatorV2(demo(), store, {...options(), audit: async () => {throw new Error("audit-secret");}}).refresh(request);
   assert.equal(result.eligible, false);
   if (!result.eligible) assert.equal(result.reason, "AUDIT_UNAVAILABLE");
-  assert.equal(await store.current({...request, providerId: demo().metadata.providerId}), undefined);
+  assert.equal(await store.current({...publicBinding(), providerId: demo().metadata.providerId}), undefined);
 });
 
 test("v2 accepted snapshot round trips LEI and its keyed canonical commitment", async () => {
@@ -85,7 +86,7 @@ test("v2 accepted snapshot round trips LEI and its keyed canonical commitment", 
   const result = await new KycEvidenceCoordinatorV2(provider(value), store, options()).refresh(request);
   assert.ok(result.eligible);
   if (!result.eligible) return;
-  const stored = await store.current({...request, providerId: value.providerId});
+  const stored = await store.current({...publicBinding(), providerId: value.providerId});
   assert.equal(stored?.lei, value.lei);
   assert.deepEqual(JSON.parse(JSON.stringify(stored)), result.materialization);
   assert.notEqual(result.materialization.evidenceHash, (await success()).evidenceHash);
@@ -143,7 +144,7 @@ test("v2 timeout abort, typed failures, revoked and sanctions evidence fail clos
     const store = new InMemoryKycEvidenceStoreV2(commitments);
     const result = await new KycEvidenceCoordinatorV2(provider(input), store, options()).refresh(request);
     assert.equal(result.eligible, false);
-    assert.equal((await store.current({...request, providerId: value.providerId}))?.eligible, false);
+    assert.equal((await store.current({...publicBinding(), providerId: value.providerId}))?.eligible, false);
   }
 });
 
@@ -177,6 +178,37 @@ test("v2 HTTP adapter commits source/assessment refs and omits raw evidence, LEI
   assert.notEqual((await http.assess(request)).assessmentRefHash, (await other.assess(request)).assessmentRefHash);
 });
 
+test("v2 coordinator rekeys every provider-controlled public commitment", async () => {
+  const rawRequest = {...request, identity: ref(91), requestRefHash: ref(92)};
+  const raw = await demo().assess(rawRequest);
+  raw.sourceEvidenceHash = ref(93);
+  raw.assessmentRefHash = ref(94);
+  const records: unknown[] = [];
+  const result = await new KycEvidenceCoordinatorV2(provider(raw), new InMemoryKycEvidenceStoreV2(commitments), {...options(), audit: (record) => {records.push(record);}}).refresh(rawRequest);
+  assert.ok(result.eligible, JSON.stringify(result));
+  if (!result.eligible) return;
+  assert.equal(result.materialization.identity, publicBinding(rawRequest).identity);
+  assert.notEqual(result.materialization.identity, rawRequest.identity);
+  assert.notEqual(result.materialization.sourceEvidenceHash, raw.sourceEvidenceHash);
+  assert.notEqual(result.materialization.assessmentRefHash, raw.assessmentRefHash);
+  const published = JSON.stringify({records, materialization: result.materialization, calldata: identityEvidenceAcceptanceV2(result.materialization, commitments, 1000)});
+  for (const providerControlled of [rawRequest.identity, rawRequest.requestRefHash, raw.sourceEvidenceHash, raw.assessmentRefHash]) assert.ok(!published.includes(providerControlled));
+});
+
+test("v2 malformed requests do not echo unkeyed references into public diagnostics", async () => {
+  const rawIdentity = ref(91);
+  const rawRequestRef = ref(92);
+  const result = await new KycEvidenceCoordinatorV2(demo(), new InMemoryKycEvidenceStoreV2(commitments), options()).refresh({
+    ...request,
+    identity: rawIdentity,
+    requestRefHash: rawRequestRef,
+    fullName: "private-name"
+  } as never);
+  assert.equal(result.eligible, false);
+  assert.equal(JSON.stringify(result.audit).includes(rawIdentity), false);
+  assert.equal(JSON.stringify(result.audit).includes(rawRequestRef), false);
+});
+
 test("v2 HTTP same-case revocation persists and blocks acceptance export and stale approval replay", async () => {
   const body = httpBody();
   const http = httpProvider(() => body);
@@ -191,7 +223,7 @@ test("v2 HTTP same-case revocation persists and blocks acceptance export and sta
   const revoked = await coordinator.refresh(request);
   assert.equal(revoked.eligible, false);
   if (!revoked.eligible) assert.equal(revoked.reason, "REVOKED");
-  const current = await store.current({...request, providerId: http.metadata.providerId});
+  const current = await store.current({...publicBinding(), providerId: http.metadata.providerId});
   assert.ok(current);
   assert.equal(current.status, "REVOKED");
   assert.equal(current.eligible, false);
@@ -203,7 +235,7 @@ test("v2 HTTP same-case revocation persists and blocks acceptance export and sta
   const replay = await coordinator.refresh(request);
   assert.equal(replay.eligible, false);
   if (!replay.eligible) assert.equal(replay.reason, "STORE_CONFLICT");
-  assert.deepEqual(await store.current({...request, providerId: http.metadata.providerId}), current);
+  assert.deepEqual(await store.current({...publicBinding(), providerId: http.metadata.providerId}), current);
 });
 
 test("v2 HTTP one case materializes independently for two assets", async () => {
@@ -221,8 +253,8 @@ test("v2 HTTP one case materializes independently for two assets", async () => {
   assert.notEqual(first.materialization.assessmentRefHash, second.materialization.assessmentRefHash);
   assert.notEqual(first.materialization.sourceEvidenceHash, second.materialization.sourceEvidenceHash);
   assert.notEqual(first.materialization.evidenceHash, second.materialization.evidenceHash);
-  assert.deepEqual(await store.current({...request, providerId: http.metadata.providerId}), first.materialization);
-  assert.deepEqual(await store.current({...otherRequest, providerId: http.metadata.providerId}), second.materialization);
+  assert.deepEqual(await store.current({...publicBinding(), providerId: http.metadata.providerId}), first.materialization);
+  assert.deepEqual(await store.current({...publicBinding(otherRequest), providerId: http.metadata.providerId}), second.materialization);
   assert.equal(identityEvidenceAcceptanceV2(first.materialization, commitments, 1000).asset, request.asset);
   assert.equal(identityEvidenceAcceptanceV2(second.materialization, commitments, 1000).asset, otherRequest.asset);
 });
@@ -238,12 +270,11 @@ test("v2 identical assessment reference still rejects conflicting negative conte
   assert.equal((await store.replaceCurrent(snapshot)).applied, false);
 });
 
-test("v2 conformance rejects assessment references reused across bindings", async () => {
+test("v2 conformance safely rekeys assessment references reused across bindings", async () => {
   const adapter = demo();
   const colliding = {metadata: adapter.metadata, assess: async (...args: Parameters<typeof adapter.assess>) => ({...await adapter.assess(...args), assessmentRefHash: ref(99)})};
   const report = await runKycProviderConformanceV2(colliding, {commitments, eligibleRequest: request, ineligibleRequest: {...request, subject: `0x${"33".repeat(20)}`}, now: () => 1000});
-  assert.equal(report.passed, false, JSON.stringify(report));
-  assert.ok(report.checks.some((check) => !check.pass && check.detail.includes("STORE_CONFLICT")));
+  assert.equal(report.passed, true, JSON.stringify(report));
 });
 
 test("v2 translator revalidates keyed evidence and emits only compact unsigned calldata", async () => {
@@ -254,7 +285,7 @@ test("v2 translator revalidates keyed evidence and emits only compact unsigned c
   assert.equal(call.functionName, "acceptEvidence");
   assert.equal(call.calldata.slice(0, 10), "0x9b3e5df6");
   assert.equal((call.calldata.length - 2) / 2, 292);
-  assert.equal(call.evidence.identityId, request.identity);
+  assert.equal(call.evidence.identityId, publicBinding().identity);
   assert.equal(call.evidence.expiresAt, 1900);
   for (const privateValue of [key, snapshot.lei, "private-person-ref", "private-case-123"]) {
     assert.ok(!JSON.stringify(call).includes(privateValue));
@@ -275,7 +306,7 @@ test("v2 expiration during operator acceptance or audit never publishes eligible
     const result = await new KycEvidenceCoordinatorV2(demo(), store, opts).refresh(request);
     assert.equal(result.eligible, false);
     if (!result.eligible) assert.equal(result.reason, "STALE_OR_FUTURE_ASSESSMENT");
-    assert.equal(await store.current({...request, providerId: demo().metadata.providerId}), undefined);
+    assert.equal(await store.current({...publicBinding(), providerId: demo().metadata.providerId}), undefined);
   }
 });
 

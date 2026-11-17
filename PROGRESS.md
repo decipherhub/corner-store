@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-11-17 Session: DATA-004 Review Hardening
+
+DATA-004 remains passing after review hardening for PR #165. Active RFQ onboarding
+can no longer omit its required blocking A-04-v2 RFQ policy: Toolkit schema 7
+rejects omission, TSV substitution and mixed tracks, while on-chain
+ManifestPolicyConfig schema 2/3 commits the RFQ/TSV track and checks it against
+the Manifest engine bit and exact Element parameters. The provider-neutral v2
+coordinator now HMAC-wraps every provider-controlled identity, request, source and
+assessment reference before audit, persistence, acceptance or calldata export.
+
+Targeted verification passed: 27/27 compliance-data tests, 32/32 Toolkit tests,
+13/13 IdentityPolicyComposition tests and `forge build --sizes` with
+TokenPolicyRegistry at 24,570 bytes, 6 bytes below EIP-170. `scripts/check.sh`
+then passed with 1,175/1,175 Foundry tests and every service/package gate.
+`scripts/e2e-identity-evidence.sh` initially exposed the stale pre-keyed fixture
+binding, then passed 40/40 live cases after binding the coordinator's public keyed
+identity. Whitespace and protected public-demo path checks also passed.
+
 ## 2026-11-11 Session: DATA-004 Assessment Reference Collision Fix
 
 DATA-004 is passing. Scope: the confirmed P2 HTTP v2 assessment-reference
@@ -117,9 +135,9 @@ opened. No item blocks this P1 release.
 
 Material operating constraints: bilateral A-04-v2 screening remains explicit;
 restoring the exact issuer basis can restore unexpired accepted evidence unless
-individually revoked; the reference store is in-process. TokenPolicyRegistry is
-24,536 bytes with the pinned compiler, leaving only 40 bytes of EIP-170 headroom.
-Its deployed-size regression passed; further growth needs explicit size work.
+individually revoked; the reference store is in-process. The later review-hardening
+result above supersedes this release measurement; TokenPolicyRegistry now has only
+6 bytes of EIP-170 headroom and further growth needs explicit size work.
 
 UNVERIFIED: A-04-v2 with a canonical Uniswap pool in live Anvil (named AMM tests
 use a callback mock; existing canonical-pool regressions passed); RFQ-host HTTP
