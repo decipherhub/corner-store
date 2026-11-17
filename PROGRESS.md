@@ -34,56 +34,6 @@ HTTP servers in both host suites. Anvil E2E and Docker/production integrations
 were not run: this task excludes fixed-port Anvil and changes only failure mapping.
 The review fixes were committed on this branch in `df2e387`.
 
-## 2026-11-17 Session: PR #163 Reviewer Findings
-
-Scope: only EXEC-002 conditional affiliate evidence, exact affiliate source
-binding, C-01-v2 limitation documentation and fresh verification. Findings 1-4
-are CONFIRMED. Legacy/demo runtime and public deployment artifacts are unchanged.
-
-- F1: ContextEvidence and OnchainRFQContextResolver inspect each ACTIVE leg's
-  compiled rules. A-06-v1, B-04-v1 or B-04-v2 requires current sender evidence;
-  other policies contribute zero without reading claims. Required missing,
-  conflicting or unavailable evidence still rejects. Four new Solidity tests
-  initially failed (41 passed), proving the missing-evidence, mixed-policy and
-  source-binding regressions. Existing freshness/revocation tests remain passing.
-- F2: the provenance spec and pending D043 document exact C-01-v2-only primary
-  distributor authority. No C-01-independent commitment was implemented and no
-  permanent C-01-v2-only product boundary is approved.
-- F3: schema 6 activation checks Engine/policy ElementRegistry identity and the
-  exact registered A-06-v1 implementation against the venue source whenever
-  compiled rules need affiliation. Runtime and SDK checks repeat source binding.
-  Added mismatched/unavailable activation regressions and SDK conditional-read
-  coverage. The new Toolkit regression failed before the fix (15 passed, 1 failed).
-  V3 fixtures now register their source as A-06-v1; the pending-authority test
-  refreshes its evidence commitment after removing the B-04 binding, so it still
-  reaches and tests distributor rejection.
-- F4: removed the current passing claim. All gates below passed on the final
-  code working tree at HEAD 3f44934 plus these uncommitted fixes. These are not
-  committed-final-head results. Only documentation was edited after the gates.
-
-The review fixes were committed on this branch in `441f895`.
-EXEC-002 stays active pending committed-head verification and team review.
-
-| Command | Actual result |
-| --- | --- |
-| `forge fmt --check` | Exit 0. Targeted formatting applied to the changed test fixture first. |
-| `forge build` | Exit 0; existing compiler/lint warnings remain. |
-| `forge test --offline --match-contract 'ContextEvidenceTest|RouterV2Test|RFQAdapterV3Test|ContextProvenanceTest|RealUniswapV3Test|AMMAdapterTest|EngineSelectionV2Test'` | Exit 0; 129 passed, 0 failed, 0 skipped, 7 suites. Initial run had 119 passed and 2 failures: missing canonical pool dependency and a stale evidence commitment in the pending-authority test; both resolved before this run. |
-| `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm ci --prefix services/rfq && npm ci --prefix services/toolkit'` | Exit 0; both dependency installs completed. Initial Toolkit test before installation exited 127 because tsc was absent. |
-| `npx --yes -p node@20 -p yarn@1.22.22 -c 'cd tools/deploy-v3 && yarn install --frozen-lockfile'` | Exit 0; canonical Uniswap artifacts installed. |
-| `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm test --prefix services/rfq && npm test --prefix services/toolkit'` | Exit 0; RFQ smoke plus 13 provenance tests and Toolkit smoke plus 16 provenance tests passed, 0 failed. |
-| `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm test --prefix services/toolkit'` | Final rerun exit 0; smoke and 16 provenance tests passed, 0 failed. |
-| `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'` | Exit 0; 1,104 Foundry tests across 66 suites, 0 failed/skipped; 38 service provenance tests, 0 failed; all service/packaged-consumer gates passed, including 4 generated adapter conformance tests and 10 deploy-v3 tests. |
-| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'` | Exit 0; 7/7 scenarios and 30 RFQ/runtime PASS checks, 0 failures. |
-| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh --profile reg-d'` | Exit 0; 7/7 scenarios and 20 RFQ/runtime PASS checks, 0 failures. |
-| `npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'` | Exit 0; 12 passed, 0 failed, including actual sender evidence and recipient-only MM settlement. |
-| `git diff --check` | Exit 0. Protected legacy Router/B-04/test and public runtime/artifact diff is empty. |
-
-Logs: `/private/tmp/w157-{check,e2e,regd,v3}-final.log`,
-`/private/tmp/w157-{focused,build,services,toolkit-before,review-before}.log`.
-UNVERIFIED: a merged/committed final head, public-chain or production activation.
-Next: rerun final-head checks, and obtain the team's D043 decision while keeping PR #163 in draft.
-
 ## 2026-11-11 Session: RFQ-006 Nested TTL Review Fix
 
 RFQ-006 is passing. Scope: the confirmed P3 pre-authentication recursive TTL hash in the production
@@ -265,6 +215,34 @@ was not changed. No full-gate rerun was needed.
 - Next: user reviews the working tree. No commit, push, GitHub comment, public
   broadcast or publication was performed.
 
+
+## 2026-11-17 Session: EXEC-002 Review Hardening
+
+PR #163 review findings were fixed on the feature branch without changing the
+legacy Router/RFQ v2 or public Monad deployment paths.
+
+- Affiliate evidence is now required only when the active compiled policy
+  actually contains A-06-v1. When present, ElementRegistry must resolve A-06-v1
+  to the source pinned in venue activation evidence; a different registered
+  implementation fails closed.
+- Primary distribution now discovers the authorized distributor by the immutable
+  `corner-store.element.lockup.primary-distributor.v1` parameter schema instead
+  of the exact C-01-v2 Element ID. Compatible future immutable Element versions
+  therefore keep the same authority contract without adapter changes.
+- RFQ on-chain resolution and Toolkit activation verification enforce the same
+  policy/source/schema rules as Solidity. Regression coverage includes policies
+  without A-06, source substitution and a non-C-01-v2 Element using the canonical
+  distributor schema.
+
+Targeted verification: ContextEvidence 24/24, RFQAdapterV3 38/38, RouterV2 19/19,
+ContextProvenance 13/13, RFQ service 13/13 and Toolkit provenance 16/16.
+`scripts/check.sh` passed with 1,102 Foundry tests and all service/package smoke
+gates. Both legacy Anvil profiles completed their 7/7 scenarios and extended
+backend/CLI/Router checks; the isolated context-provenance E2E passed 12/12.
+The local Foundry 1.7.1 formatter changes three pre-existing unrelated main files;
+they were temporarily normalized only for the formatter gate and restored before
+the final diff. `git diff --check` passes and no public deployment was changed.
+
 ## 2026-11-11 Session: EXEC-002 Confirmed Review Fixes
 
 Scope: F1 recipient MM-claim selection and F2 reverse Engine/Router activation
@@ -393,16 +371,10 @@ reference execution contracts와 vendored Uniswap v3 배포 도구를 포함한�
 Element/Recipe/Manifest/Operator 4-Layer와 mode-aware `RecipeBinding[]` 모델을
 source of truth로 사용한다.
 
-## Current Feature
+## Active Feature
 
-`RFQ-006: Bounded Lifetime and Pre-Pricing Product Authorization` (issue #155).
-RFQ-006 is passing after all requested gates. HACK-001 closure is in approved
-upstream PR #162; the historical HACK-001 notes below are retained.
-
-### Upstream HACK-001 history
-
-EXEC-002 (issue #157) is active for PR #163 review fixes. HACK-001 remains
-closed as recorded by #162; the public demo is maintained operationally.
+No feature is active after HACK-001. The public demo is maintained operationally;
+no next feature has been selected.
 
 ## HACK-001 Completion Record
 

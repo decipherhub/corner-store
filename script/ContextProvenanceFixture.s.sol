@@ -26,9 +26,10 @@ contract ContextProvenanceRecipe is BaseRecipe {
     constructor() BaseRecipe(1, 1, _ids()) {}
 
     function _ids() private pure returns (bytes32[] memory ids) {
-        ids = new bytes32[](2);
+        ids = new bytes32[](3);
         ids[0] = "B-02-v2";
         ids[1] = "B-04-v2";
+        ids[2] = "A-06-v1";
     }
 }
 
@@ -73,6 +74,11 @@ contract ContextProvenanceFixture is Script, TREXCore {
         engineSelection = new EngineSelectionV2();
         engineSelection.setSupportedEngines(address(rwaToken), 4);
         elements.registerElement("B-04-v2", address(engineSelection));
+        affiliate = new Affiliate();
+        affiliate.setTrustedClaimIssuer(admin, true);
+        _claim(affiliate, admin, maker);
+        _claim(affiliate, admin, taker);
+        elements.registerElement("A-06-v1", address(affiliate));
         recipes.registerRecipe(1, 1, address(new ContextProvenanceRecipe()));
         ManifestCore memory manifest;
         manifest.supportedEngines = uint8(1 << uint256(VenueType.RFQ));
@@ -86,11 +92,6 @@ contract ContextProvenanceFixture is Script, TREXCore {
         venues = new VenueRegistry();
         router = new ExecutionRouterV2(engine, venues, new VenueSelector(), new OperatorRegistry());
         engine.setRouter(address(router));
-        affiliate = new Affiliate();
-        elements.registerElement("A-06-v1", address(affiliate));
-        affiliate.setTrustedClaimIssuer(admin, true);
-        _claim(affiliate, admin, maker);
-        _claim(affiliate, admin, taker);
         adapter = new RFQAdapterV3(new MakerAuthorizer(), venues, policies, address(affiliate));
         adapter.setRouter(address(router));
         adapter.setMakerApproved(maker, true);
@@ -126,8 +127,8 @@ contract ContextProvenanceFixture is Script, TREXCore {
         vm.writeJson(json, vm.envString("CONTEXT_PROVENANCE_ARTIFACT"));
     }
 
-    function _claim(Affiliate affiliate, address issuer, address subject) private {
-        affiliate.setClaim(
+    function _claim(Affiliate source, address issuer, address subject) private {
+        source.setClaim(
             subject,
             address(rwaToken),
             Affiliate.AffiliateBasis.NOT_AFFILIATE,

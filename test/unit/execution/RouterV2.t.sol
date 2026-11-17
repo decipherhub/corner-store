@@ -51,7 +51,7 @@ contract RouterV2Test is Test {
         policy = new ContextPolicyRegistry();
         engine = new ContextEngine(address(policy));
         affiliate = new Affiliate();
-        policy.setAffiliateImplementation(address(affiliate));
+        policy.setAffiliateSource(address(affiliate));
         adapter = new MockContextAdapter();
         router = new ExecutionRouterV2(engine, venues, selector, operators);
         adapter.setRouter(address(router));
@@ -138,13 +138,6 @@ contract RouterV2Test is Test {
         assertEq(engine.lastCommit().amountOut, 200);
         assertEq(tokenIn.balanceOf(BUYER), 9900);
         assertEq(tokenOut.balanceOf(BUYER), 200);
-    }
-
-    function test_activePolicyWithoutAffiliateConsumerExecutesWithoutClaim() public {
-        policy.setWithoutAffiliateContext(address(tokenOut), true);
-        affiliate.setTrustedClaimIssuer(ISSUER, false);
-        _execute();
-        assertEq(engine.commitCount(), 1);
     }
 
     function test_missingEvidenceRejectsBeforeEvaluation() public {

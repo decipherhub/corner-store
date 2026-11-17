@@ -1,4 +1,4 @@
-import {AbiCoder, Contract, Provider, keccak256, toUtf8Bytes, encodeBytes32String} from "ethers";
+import {AbiCoder, Contract, Provider, encodeBytes32String, keccak256, toUtf8Bytes} from "ethers";
 import {Address, Hex, RFQContextEvidence, RFQContextResolver, RFQQuoteRequest} from "./types";
 import {affiliateEvidenceCommitment, AffiliateLegEvidence} from "./contextEvidence";
 import {normalizeAddress, normalizeChainId} from "./validation";
@@ -7,6 +7,9 @@ import {normalizeFlowType} from "./quoteService";
 const coder = AbiCoder.defaultAbiCoder();
 const VENUE_TUPLE = "tuple(uint8 venueType,address adapter,address target,address operator,uint8 custody,bool active)";
 const EVIDENCE_TUPLE = "tuple(uint16 adapterVersion,uint16 contextVersion,bytes32 adapterCodeHash,address affiliateSource,bytes32 affiliateSourceCodeHash,address policyRegistry,bytes32 policyRegistryCodeHash,bytes32 configurationHash)";
+const ELEMENT_METADATA_TUPLE = "tuple(bytes32 elementId,uint8 category,string version,uint8 temporal,uint8 decidability,uint8 timing,uint8 statefulness,uint8 evidenceType,uint8 defaultEnforcement,bytes32 parameterSchemaId,uint16 parameterSchemaVersion,uint32 maxParameterBytes,bool parametersRequired)";
+const AFFILIATE_ELEMENT_ID = encodeBytes32String("A-06-v1").toLowerCase();
+const PRIMARY_DISTRIBUTOR_SCHEMA_ID = keccak256(toUtf8Bytes("corner-store.element.lockup.primary-distributor.v1")).toLowerCase();
 export interface RFQContextChainReader {
   snapshot(): Promise<{chainId: number; blockNumber: number; timestamp: number}>;
   getCode(address: string, blockNumber: number): Promise<string>;
@@ -68,29 +71,30 @@ export class OnchainRFQContextResolver implements RFQContextResolver {
     if (configurationHash.toLowerCase() !== String(evidence[7]).toLowerCase()) throw new Error("context configuration drift");
     if (await call(c.verifyingContract, "function approvedMaker(address) view returns (bool)", "approvedMaker", [request.maker]) !== true) throw new Error("context maker not approved");
     if (request.nonce !== undefined && await call(c.verifyingContract, "function usedQuoteNonce(address,uint256) view returns (bool)", "usedQuoteNonce", [request.maker, request.nonce]) !== false) throw new Error("context quote nonce used or cancelled");
+    const elementRegistry = normalizeAddress(await call(c.policyRegistry, "function elementReg() view returns (address)", "elementReg"), "elementRegistry");
+    if (await c.reader.getCode(elementRegistry, block.blockNumber) === "0x") throw new Error("context element registry unavailable");
+    const compiledRules = async (asset: Address) => {
+      const count = Number(await call(c.policyRegistry, "function compiledBindingCountOf(address) view returns (uint256)", "compiledBindingCountOf", [asset]));
+      const bindings: any[][] = [];
+      for (let i = 0; i < count; i++) bindings.push(await call(c.policyRegistry, "function compiledRulesOf(address,uint256) view returns (tuple(bytes32 elementId,uint8 action)[])", "compiledRulesOf", [asset, i]));
+      return bindings;
+    };
+    const rulesByAsset = new Map<string, any[][]>();
+    const rulesFor = async (asset: Address) => {
+      const key = asset.toLowerCase();
+      if (!rulesByAsset.has(key)) rulesByAsset.set(key, await compiledRules(asset));
+      return rulesByAsset.get(key)!;
+    };
     const statuses: number[] = [];
     async function leg(asset: Address, sender: Address): Promise<AffiliateLegEvidence | undefined> {
       const status = Number(await call(c.policyRegistry, "function statusOf(address) view returns (uint8)", "statusOf", [asset]));
       statuses.push(status);
       if (status === 1) return undefined;
       if (status !== 2) throw new Error("context policy not active");
-      const count = Number(await call(c.policyRegistry, "function compiledBindingCountOf(address) view returns (uint256)", "compiledBindingCountOf", [asset]));
-      if (!Number.isInteger(count) || count < 1 || count > 8) throw new Error("invalid compiled binding count");
-      let required = false;
-      const consumers = ["A-06-v1", "B-04-v1", "B-04-v2"].map((id) => encodeBytes32String(id).toLowerCase());
-      for (let i = 0; i < count; i++) {
-        const rules = await call(c.policyRegistry, "function compiledRulesOf(address,uint256) view returns (tuple(bytes32 elementId,uint8 action)[])", "compiledRulesOf", [asset, i]);
-        if (!Array.isArray(rules) || rules.length < 1 || rules.length > 32) throw new Error("invalid compiled rules");
-        for (const rule of rules) {
-          const id = String(rule.elementId ?? rule[0]);
-          if (!/^0x[0-9a-f]{64}$/i.test(id)) throw new Error("invalid compiled element ID");
-          if (consumers.includes(id.toLowerCase())) required = true;
-        }
-      }
-      if (!required) return undefined;
-      const elements = await call(c.policyRegistry, "function elementReg() view returns (address)", "elementReg");
-      const implementation = await call(elements, "function elementOf(bytes32) view returns (address)", "elementOf", [encodeBytes32String("A-06-v1")]);
-      if (String(implementation).toLowerCase() !== c.affiliateSource.toLowerCase()) throw new Error("context affiliate source mismatch");
+      const requiresAffiliate = (await rulesFor(asset)).some((rules) => rules.some((rule) => String(rule.elementId ?? rule[0]).toLowerCase() === AFFILIATE_ELEMENT_ID));
+      if (!requiresAffiliate) return undefined;
+      const affiliateElement = await call(elementRegistry, "function elementOf(bytes32) view returns (address)", "elementOf", [AFFILIATE_ELEMENT_ID]);
+      if (String(affiliateElement).toLowerCase() !== c.affiliateSource.toLowerCase()) throw new Error("context affiliate source mismatch");
       const effectiveStatus = Number(await call(c.affiliateSource, "function effectiveStatus(address,address) view returns (uint8)", "effectiveStatus", [sender, asset]));
       const claim = await call(c.affiliateSource, "function claimOf(address,address) view returns (uint8 basis,uint8 source,address claimIssuer,uint64 verifiedAt,uint64 decayStartedAt)", "claimOf", [sender, asset]);
       return {asset, sender, affiliateSource: c.affiliateSource, basis: Number(claim[0]), source: Number(claim[1]), claimIssuer: claim[2], verifiedAt: Number(claim[3]), decayStartedAt: Number(claim[4]), effectiveStatus};
@@ -100,13 +104,17 @@ export class OnchainRFQContextResolver implements RFQContextResolver {
     const commitment = affiliateEvidenceCommitment(input, output, block.timestamp);
     if (flow === 1) {
       if (statuses[0] !== 1 || statuses[1] !== 2) throw new Error("primary flow requires output security only");
-      const count = Number(await call(c.policyRegistry, "function compiledBindingCountOf(address) view returns (uint256)", "compiledBindingCountOf", [tokenOut]));
       let distributor: string | undefined;
-      for (let i = 0; i < count; i++) {
-        const rules = await call(c.policyRegistry, "function compiledRulesOf(address,uint256) view returns (tuple(bytes32 elementId,uint8 action)[])", "compiledRulesOf", [tokenOut, i]);
+      const bindings = await rulesFor(tokenOut);
+      for (let i = 0; i < bindings.length; i++) {
+        const rules = bindings[i];
         const parameters = await call(c.policyRegistry, "function compiledParametersOf(address,uint256) view returns (bytes[])", "compiledParametersOf", [tokenOut, i]);
         if (rules.length !== parameters.length) throw new Error("primary authority parameters mismatch");
-        for (let j = 0; j < rules.length; j++) if (String(rules[j][0]).toLowerCase() === `0x${Buffer.from("C-01-v2").toString("hex").padEnd(64, "0")}`) {
+        for (let j = 0; j < rules.length; j++) {
+          const elementId = String(rules[j].elementId ?? rules[j][0]);
+          const metadata = await call(elementRegistry, `function metadataOf(bytes32) view returns (${ELEMENT_METADATA_TUPLE})`, "metadataOf", [elementId]);
+          if (String(metadata.parameterSchemaId ?? metadata[9]).toLowerCase() !== PRIMARY_DISTRIBUTOR_SCHEMA_ID) continue;
+          if (Number(metadata.parameterSchemaVersion ?? metadata[10]) !== 1 || Number(metadata.maxParameterBytes ?? metadata[11]) !== 32) throw new Error("primary authority schema mismatch");
           const bytes = String(parameters[j]);
           if (!/^0x0{24}[0-9a-fA-F]{40}$/.test(bytes) || BigInt(bytes) === 0n) throw new Error("primary authority malformed");
           const candidate = `0x${bytes.slice(-40)}`.toLowerCase();

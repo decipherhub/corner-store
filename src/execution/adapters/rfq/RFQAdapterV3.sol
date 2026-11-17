@@ -10,11 +10,13 @@ import {IMakerAuthorizer} from "../../../interfaces/execution/adapters/IMakerAut
 import {IExecutionContextVerifier} from "../../../interfaces/execution/IExecutionContextVerifier.sol";
 import {IVenueRegistry} from "../../../interfaces/execution/IVenueRegistry.sol";
 import {ITokenPolicyRegistry} from "../../../interfaces/compliance/ITokenPolicyRegistry.sol";
+import {IElementRegistry} from "../../../interfaces/compliance/IElementRegistry.sol";
 import {ContextEvidence} from "../../ContextEvidence.sol";
 import {ExecutionRequest, ExecutionResult} from "../../../types/ExecutionTypes.sol";
 import {
     ComplianceDecision,
     CompiledElementRule,
+    ElementMetadata,
     FlowType,
     PolicyStatus,
     VenueType
@@ -32,6 +34,8 @@ interface IRFQV3Router {
 contract RFQAdapterV3 is IRFQAdapter, IExecutionContextVerifier, Governed, EIP712 {
     using SafeERC20 for IERC20;
 
+    bytes32 internal constant PRIMARY_DISTRIBUTOR_SCHEMA_ID =
+        keccak256("corner-store.element.lockup.primary-distributor.v1");
     bytes32 public constant RFQ_QUOTE_TYPEHASH = keccak256(
         "RFQQuoteV3(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,bytes32 policyId,uint8 flowType,bytes32 affiliateEvidenceHash,uint256 nonce,uint64 expiry)"
     );
@@ -184,14 +188,20 @@ contract RFQAdapterV3 is IRFQAdapter, IExecutionContextVerifier, Governed, EIP71
                 || policyReg.statusOf(quote.tokenOut) != PolicyStatus.ACTIVE
         ) revert Errors.InvalidExecutionContext();
         address distributor;
+        IElementRegistry elements = policyReg.elementReg();
+        if (address(elements).code.length == 0) revert Errors.InvalidExecutionContext();
         uint256 count = policyReg.compiledBindingCountOf(quote.tokenOut);
         for (uint256 i; i < count; i++) {
             CompiledElementRule[] memory rules = policyReg.compiledRulesOf(quote.tokenOut, i);
             bytes[] memory parameters = policyReg.compiledParametersOf(quote.tokenOut, i);
             if (rules.length != parameters.length) revert Errors.InvalidExecutionContext();
             for (uint256 j; j < rules.length; j++) {
-                if (rules[j].elementId != bytes32("C-01-v2")) continue;
-                if (parameters[j].length != 32) revert Errors.InvalidExecutionContext();
+                ElementMetadata memory metadata = elements.metadataOf(rules[j].elementId);
+                if (metadata.parameterSchemaId != PRIMARY_DISTRIBUTOR_SCHEMA_ID) continue;
+                if (
+                    metadata.parameterSchemaVersion != 1 || metadata.maxParameterBytes != 32
+                        || parameters[j].length != 32
+                ) revert Errors.InvalidExecutionContext();
                 uint256 word = abi.decode(parameters[j], (uint256));
                 if (word == 0 || word > type(uint160).max) revert Errors.InvalidExecutionContext();
                 address candidate = address(uint160(word));

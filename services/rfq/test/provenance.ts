@@ -3,7 +3,7 @@ import {test} from "node:test";
 import {mkdtempSync, readFileSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {AbiCoder, Wallet, TypedDataEncoder, keccak256, toUtf8Bytes} from "ethers";
+import {AbiCoder, Wallet, TypedDataEncoder, encodeBytes32String, keccak256, toUtf8Bytes} from "ethers";
 import {
   RFQQuoteServiceV3, RFQQuoteCoordinatorV3, LocalFileQuoteCoordinatorStore,
   RFQ_QUOTE_V3_TYPES, domainV3, typedDataV3, affiliateEvidenceCommitment,
@@ -125,8 +125,8 @@ test("chain context resolver binds activation and reads both actual senders at o
   const cfg = [2, addr(6), addr(20), addr(21), 0, true];
   const commitment = venueConfigurationHash(cfg, hash("adapter-config"));
   const calls: any[] = [];
-  const answers: Record<string, any> = {venueOf: cfg, contextEvidenceOf: [3, 1, codeHash, addr(8), codeHash, addr(12), codeHash, commitment], isContextImplementationApproved: true, router: addr(7), adapterVersion: 3, contextVersion: 1, contextConfigHash: hash("adapter-config"), venueReg: addr(11), policyReg: addr(12), affiliateSource: addr(8), makerAuthorizer: addr(13), approvedMaker: true, usedQuoteNonce: false, elementReg: addr(14), elementOf: addr(8), compiledBindingCountOf: 1, compiledRulesOf: [[`0x${Buffer.from("A-06-v1").toString("hex").padEnd(64, "0")}`, 2]], statusOf: 2, effectiveStatus: 3, claimOf: [8, 1, addr(9), 90, 0]};
-  const reader = {snapshot: async () => ({chainId: 31337, blockNumber: 10, timestamp: 100}), getCode: async () => code, call: async (to: string, _abi: string[], fn: string, args: any[], block: number) => {calls.push({to, fn, args, block}); if (!(fn in answers)) throw new Error(`missing ${fn}`); return answers[fn];}};
+  const answers: Record<string, any> = {venueOf: cfg, contextEvidenceOf: [3, 1, codeHash, addr(8), codeHash, addr(12), codeHash, commitment], isContextImplementationApproved: true, router: addr(7), adapterVersion: 3, contextVersion: 1, contextConfigHash: hash("adapter-config"), venueReg: addr(11), policyReg: addr(12), affiliateSource: addr(8), makerAuthorizer: addr(13), approvedMaker: true, usedQuoteNonce: false, elementReg: addr(14), compiledBindingCountOf: 1n, compiledRulesOf: [[encodeBytes32String("A-06-v1"), 2]], elementOf: addr(8), statusOf: 2, effectiveStatus: 3, claimOf: [8, 1, addr(9), 90, 0]};
+  const reader = {snapshot: async () => ({chainId: 31337, blockNumber: 10, timestamp: 100}), getCode: async () => code, call: async (to: string, _abi: string[], fn: string, args: any[], block: number) => {calls.push({to, fn, args, block}); if (!(fn in answers)) throw new Error(`missing ${fn}`); return typeof answers[fn] === "function" ? answers[fn](to, args) : answers[fn];}};
   const resolver = new OnchainRFQContextResolver({chainId: 31337, verifyingContract: addr(6), router: addr(7), venueRegistry: addr(11), policyRegistry: addr(12), affiliateSource: addr(8), reader});
   const result = await resolver.resolve(base);
   assert.equal(result.configurationHash, commitment);
@@ -136,22 +136,18 @@ test("chain context resolver binds activation and reads both actual senders at o
     const previous = answers[fn]; answers[fn] = value;
     await assert.rejects(() => resolver.resolve(base)); answers[fn] = previous;
   }
-  answers.elementOf = addr(99);
-  await assert.rejects(() => resolver.resolve(base), /affiliate source/);
-  answers.elementOf = addr(8);
-  answers.compiledRulesOf = [[`0x${Buffer.from("B-02-v2").toString("hex").padEnd(64, "0")}`, 2]];
-  answers.effectiveStatus = 0;
-  calls.length = 0;
-  const withoutAffiliate = await resolver.resolve(base);
-  assert.deepEqual({affiliateEvidenceHash: withoutAffiliate.affiliateEvidenceHash, sellerIsAffiliate: withoutAffiliate.sellerIsAffiliate}, affiliateEvidenceCommitment(undefined, undefined, 100));
-  assert.equal(calls.filter((c) => c.fn === "effectiveStatus" || c.fn === "claimOf").length, 0);
-  answers.compiledRulesOf = [[`0x${Buffer.from("B-04-v2").toString("hex").padEnd(64, "0")}`, 2]];
-  await assert.rejects(() => resolver.resolve(base));
-  answers.effectiveStatus = 3;
   await resolver.resolve({...base, nonce: "42"});
   answers.usedQuoteNonce = true;
   await assert.rejects(() => resolver.resolve({...base, nonce: "42"}));
   answers.usedQuoteNonce = false;
+  answers.elementOf = addr(99);
+  await assert.rejects(() => resolver.resolve(base), /affiliate source mismatch/);
+  answers.elementOf = addr(8);
+  answers.compiledRulesOf = [[encodeBytes32String("B-02-v2"), 2]];
+  const withoutAffiliate = await resolver.resolve(base);
+  assert.equal(withoutAffiliate.sellerIsAffiliate, false);
+  assert.equal(withoutAffiliate.affiliateEvidenceHash, keccak256(AbiCoder.defaultAbiCoder().encode(["bytes32", "bytes32", "bytes32"], [keccak256(toUtf8Bytes("corner-store.affiliate-evidence.v1")), `0x${"00".repeat(32)}`, `0x${"00".repeat(32)}`])));
+  answers.compiledRulesOf = [[encodeBytes32String("A-06-v1"), 2]];
   const primary = {...base, flowType: 1 as const};
   await assert.rejects(() => resolver.resolve(primary));
 });

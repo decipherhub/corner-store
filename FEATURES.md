@@ -284,10 +284,13 @@ passing
   configuration, with explicit reviewed immutable implementation approval.
 - RFQAdapterV3 signs the exact RFQQuoteV3/domain version 3, binding maker/taker,
   token directions, exact amounts, venue, policy, flow and current A-06 aggregate.
-  Conditional primary uses a unique active compiled C-01-v2 distributor.
-- Actual security sender is buyer on tokenIn and seller on tokenOut. Every
-  leg with compiled A-06/B-04 consumers requires current trusted A-06 evidence;
-  required statuses must agree. Refresh/revocation/expiry/decay invalidate old commitments.
+  Conditional primary uses a unique active compiled Manifest parameter carrying
+  the immutable primary-distributor schema, without coupling to one C-01 version.
+- Actual security sender is buyer on tokenIn and seller on tokenOut. A regulated
+  leg requires current trusted A-06 evidence only when its active compiled policy
+  contains A-06-v1, whose implementation must equal the pinned source.
+  Applicable dual-leg statuses must agree. Refresh/revocation/expiry/decay
+  invalidate old commitments.
 - Newly deployed AMM adapter version 2/context 1 binds seller/venue/target to the
   registered pool and canonical token order, secondary/self-directed only.
   Pool edits invalidate every venue sharing the adapter; re-registration clears
@@ -302,8 +305,7 @@ passing
 - Opt-in B-04-v2 checks the actual security recipient's MM claim in both
   directions. Schema 6 rejects active compiled B-04-v1 rules and unreadable
   policy evidence, verifies Engine.router() as well as RouterV2.engine(), and
-  wires a separately deployed v3 Engine before adapter activation. Required affiliate
-  evidence uses the exact registered A-06-v1 implementation at activation/runtime.
+  wires a separately deployed v3 Engine before adapter activation.
 
 ### Verification
 
@@ -316,6 +318,8 @@ passing
   `EngineSelectionV2Test`: buy parity fuzzing, exemptions and fail-closed context
 - Toolkit provenance regressions: reverse Engine binding mismatch/unavailability,
   active compiled B-04 direction checks and unsigned Engine wiring order
+- Policy-scoped A-06 absence/source mismatch and version-neutral primary
+  distributor schema regressions
 - `forge fmt --check`
 - `git diff --check`
 - protected-path diff for public artifacts/runtime/container deployment
@@ -328,11 +332,11 @@ passing
 
 - All delivery gates passed on 2026-11-11; exact commands and counts are recorded
   in PROGRESS.md.
-  HACK-001 retains upstream #162's closed state. Current review-fix gate evidence
-  and the blocked Git merge/commit operation are recorded in PROGRESS.md.
-- D028/D029 and `docs/product-specs/execution-context-provenance.md` record remaining
-  defaults as open items; D043 records the pending C-01-v2-only decision.
-  Reference/operator code uses one local env/file key; key management, multisig and custody are deferred.
+  This branch preserves HACK-001 as requested; upstream #162 owns its completion
+  and #161 owns CORE-015/D024-D027. Only EXEC-002 is worked in this session.
+- D028/D029 and `docs/product-specs/execution-context-provenance.md` record all six
+  adopted defaults as open items for team confirmation. Reference/operator code
+  uses one local env/file key; key management, multisig and custody are deferred.
 - The new live fixture is a manual delivery/release gate alongside the two
   existing Anvil profiles. CI retains its repository/container checks.
 - Confirmed review fixes passed 1,100 Foundry tests, the Toolkit smoke gate plus

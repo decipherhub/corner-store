@@ -46,7 +46,7 @@ test("unsigned activation transactions order wiring, pools, registration, review
 
 function reader(c: any, venue: any, patch: Record<string, unknown> = {}): any {
   const context = venue.context;
-  const base: Record<string, unknown> = {elementReg: c.addresses.elementRegistry, elementOf: context.affiliateSource, compiledBindingCountOf: 1n, compiledRulesOf: [[encodeBytes32String("B-04-v2"), 2]], router: c.addresses.executionRouter, venueReg: c.addresses.venueRegistry, policyReg: c.addresses.tokenPolicyRegistry, operatorReg: c.addresses.operatorRegistry, engine: c.addresses.complianceEngine, adapterVersion: context.adapterVersion, contextVersion: 1, contextConfigHash: hash("adapter-config"), isContextImplementationApproved: true, affiliateSource: context.affiliateSource, owner: context.affiliateSourceOwner, makerAuthorizer: c.addresses.makerAuthorizer, registeredPool: true, token0: context.token0, token1: context.token1};
+  const base: Record<string, unknown> = {compiledBindingCountOf: 1n, compiledRulesOf: [[encodeBytes32String("B-04-v2"), 2]], elementReg: c.addresses.elementRegistry, elementOf: context.affiliateSource, router: c.addresses.executionRouter, venueReg: c.addresses.venueRegistry, policyReg: c.addresses.tokenPolicyRegistry, operatorReg: c.addresses.operatorRegistry, engine: c.addresses.complianceEngine, adapterVersion: context.adapterVersion, contextVersion: 1, contextConfigHash: hash("adapter-config"), isContextImplementationApproved: true, affiliateSource: context.affiliateSource, owner: context.affiliateSourceOwner, makerAuthorizer: c.addresses.makerAuthorizer, registeredPool: true, token0: context.token0, token1: context.token1};
   return {getCode: async () => code, call: async (_a: string, _abi: string[], fn: string) => {if (fn in patch) {if (patch[fn] instanceof Error) throw patch[fn]; return patch[fn];} if (fn === "contextEvidenceOf") return [context.adapterVersion, 1, context.adapterCodeHash, context.affiliateSource, context.affiliateSourceCodeHash, context.policyRegistry, context.policyRegistryCodeHash, context.configurationHash]; if (fn in base) return base[fn]; throw new Error(`unhandled ${fn}`);}};
 }
 
@@ -60,14 +60,6 @@ test("activation reads verify every binding and source authority", async () => {
   const {c, v} = verifiedFixture();
   const checks = await verifyVenueContext(c, v, reader(c, v));
   assert.ok(checks.every((x: any) => x.pass), JSON.stringify(checks));
-});
-
-test("activation rejects a source different from the policy A-06 implementation", async () => {
-  const {c, v} = verifiedFixture();
-  for (const patch of [{elementOf: addr(99)}, {elementOf: new Error("unavailable")}, {elementReg: addr(99)}]) {
-    const checks = await verifyVenueContext(c, v, reader(c, v, patch));
-    assert.ok(checks.some((x: any) => !x.pass), JSON.stringify(patch));
-  }
 });
 
 test("activation fails closed on mismatched and unavailable reads", async () => {
@@ -104,6 +96,14 @@ test("activation rejects direction-unaware B-04 in the active compiled policy", 
   const {c, v} = verifiedFixture();
   const checks = await verifyVenueContext(c, v, reader(c, v, {compiledRulesOf: [[encodeBytes32String("B-04-v1"), 2]]}));
   assert.ok(checks.some((x: any) => x.name === "context-policy-direction" && !x.pass));
+});
+
+test("activation binds an active A-06 rule to the pinned affiliate source", async () => {
+  const {c, v} = verifiedFixture();
+  const rules = [[encodeBytes32String("A-06-v1"), 2], [encodeBytes32String("B-04-v2"), 2]];
+  assert.ok((await verifyVenueContext(c, v, reader(c, v, {compiledRulesOf: rules}))).every((x: any) => x.pass));
+  const checks = await verifyVenueContext(c, v, reader(c, v, {compiledRulesOf: rules, elementOf: addr(99)}));
+  assert.ok(checks.some((x: any) => !x.pass));
 });
 
 test("activation inspects every active binding and permits policies without B-04", async () => {

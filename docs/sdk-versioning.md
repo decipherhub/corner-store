@@ -188,5 +188,5 @@ persisted quote without re-signing; it can subsequently fail on chain if evidenc
 changed. To return to v2, restore pinned routing/packages/artifacts and reconcile
 outstanding v3 records separately; do not downgrade a schema 2 store by hand.
 Reference signing uses one local env/file key; key management, multisig and
-custody expansion remain deferred. The remaining team-to-confirm defaults remain open
+custody expansion remain deferred. The six team-to-confirm defaults remain open
 in the provenance specification and D028/D029.

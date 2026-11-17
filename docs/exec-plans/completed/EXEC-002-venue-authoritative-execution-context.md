@@ -48,5 +48,4 @@ Tracks issue #157 and decisions D028/D029.
 
 Actual final commands/counts are recorded in the 2026-11-11 session entry in
 `PROGRESS.md`. Live Anvil gates remain manual, matching the existing CI boundary.
-The remaining defaults in the provenance spec need team confirmation; the owner
-resolved conditional affiliate evidence in the PR #163 review fixes.
+The six defaults in the provenance spec remain open for team confirmation.

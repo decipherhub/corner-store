@@ -16,12 +16,13 @@ import {OperatorRegistry} from "../../../src/registry/OperatorRegistry.sol";
 import {Affiliate} from "../../../src/compliance/elements/Affiliate.sol";
 import {MockERC20} from "../../mocks/MockERC20.sol";
 import {ContextEngine} from "./RouterV2.t.sol";
-import {ContextPolicyRegistry} from "./ContextEvidence.t.sol";
+import {ContextElementRegistry, ContextPolicyRegistry} from "./ContextEvidence.t.sol";
 import {ExecutionRequest} from "../../../src/types/ExecutionTypes.sol";
 import {
     ComplianceContext,
     ComplianceDecision,
     CompiledElementRule,
+    ElementMetadata,
     EnforcementAction,
     PolicyStatus,
     VenueType,
@@ -31,7 +32,19 @@ import {VenueConfig, VenueContextEvidence, CustodyModel} from "../../../src/type
 import {Errors} from "../../../src/libraries/Errors.sol";
 
 contract V3PolicyRegistry is ContextPolicyRegistry {
+    bytes32 internal constant DISTRIBUTOR_ELEMENT_ID = "C-01-v3-test";
+    bytes32 internal constant DISTRIBUTOR_SCHEMA_ID = keccak256("corner-store.element.lockup.primary-distributor.v1");
     bytes[][] internal _parameters;
+
+    constructor() {
+        ElementMetadata memory metadata;
+        metadata.elementId = DISTRIBUTOR_ELEMENT_ID;
+        metadata.parameterSchemaId = DISTRIBUTOR_SCHEMA_ID;
+        metadata.parameterSchemaVersion = 1;
+        metadata.maxParameterBytes = 32;
+        metadata.parametersRequired = true;
+        ContextElementRegistry(address(elementReg)).setMetadata(DISTRIBUTOR_ELEMENT_ID, metadata);
+    }
 
     function setDistributors(bytes[] memory values) external {
         delete _parameters;
@@ -41,18 +54,29 @@ contract V3PolicyRegistry is ContextPolicyRegistry {
         }
     }
 
-    function compiledBindingCountOf(address) external view override returns (uint256) {
-        return _parameters.length + 1;
+    function compiledBindingCountOf(address asset) external view override returns (uint256) {
+        if (statusOf[asset] != PolicyStatus.ACTIVE) return 0;
+        return _parameters.length == 0 ? 1 : _parameters.length;
     }
 
-    function compiledRulesOf(address, uint256 i) external pure override returns (CompiledElementRule[] memory rules) {
-        rules = new CompiledElementRule[](1);
-        rules[0] = CompiledElementRule(i == 0 ? bytes32("A-06-v1") : bytes32("C-01-v2"), EnforcementAction.BLOCK);
+    function compiledRulesOf(address asset, uint256)
+        external
+        view
+        override
+        returns (CompiledElementRule[] memory rules)
+    {
+        if (statusOf[asset] != PolicyStatus.ACTIVE) {
+            return new CompiledElementRule[](0);
+        }
+        rules = new CompiledElementRule[](_parameters.length == 0 ? 1 : 2);
+        rules[0] = CompiledElementRule("A-06-v1", EnforcementAction.BLOCK);
+        if (_parameters.length != 0) rules[1] = CompiledElementRule(DISTRIBUTOR_ELEMENT_ID, EnforcementAction.BLOCK);
     }
 
-    function compiledParametersOf(address, uint256 i) external view returns (bytes[] memory) {
-        if (i == 0) return new bytes[](1);
-        return _parameters[i - 1];
+    function compiledParametersOf(address asset, uint256 i) external view override returns (bytes[] memory parameters) {
+        if (statusOf[asset] != PolicyStatus.ACTIVE) return new bytes[](0);
+        parameters = new bytes[](_parameters.length == 0 ? 1 : 2);
+        if (_parameters.length != 0) parameters[1] = _parameters[i][0];
     }
 }
 
@@ -81,8 +105,8 @@ contract RFQAdapterV3Test is Test {
         maker = vm.addr(MAKER_PK);
         policy = new V3PolicyRegistry();
         affiliate = new Affiliate();
-        policy.setAffiliateImplementation(address(affiliate));
         affiliate.setTrustedClaimIssuer(ISSUER, true);
+        policy.setAffiliateSource(address(affiliate));
         authorizer = new MakerAuthorizer();
         venues = new VenueRegistry();
         engine = new ContextEngine(address(policy));
