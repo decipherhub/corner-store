@@ -13,7 +13,7 @@ tags: [requirement-spec, A-12, red-flag, willful-blindness, resale-safe-harbor, 
 ## Current reference implementation (issue #132, item 6)
 
 Reg D v4 and A-12 v2 are **reference-only and non-production-activatable**
-until issue #132 item 13's public-disclosure decision is resolved (D028).
+until issue #132 item 13's public-disclosure decision is resolved (D044).
 Production onboarding rejects these versions before Safe export or update
 preflight; production core deploys a registry that rejects A-12-v2 registration.
 The generic registry used by local `DeployStack` has no production gate, and

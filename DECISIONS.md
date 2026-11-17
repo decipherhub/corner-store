@@ -1,6 +1,6 @@
 # Decisions
 
-## D028: A-12 public disclosure boundary
+## D044: A-12 public disclosure boundary
 
 Date: 2026-11-17
 Status: PENDING TEAM/LEGAL DECISION
@@ -61,7 +61,7 @@ versions and active Manifests must retain their meanings.
 4. Local reference v3 assets adopt v4 only through a reviewed Manifest commitment, exact
    Recipe binding, scheduled semantic update, timelock and activation. The new
    policy ID invalidates prior-policy RFQ quotes at settlement. Production adoption
-   is prohibited pending the item 13 decision in D028.
+   is prohibited pending the item 13 decision in D044.
 
 ### Alternatives Considered
 

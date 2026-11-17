@@ -24,7 +24,7 @@
   APIs/events. Assessments do not populate Engine flags. Direct scripts and CLI
   accept `reg-d-v4`; default BUIDL-like and `reg-d` v3 selection are preserved.
   Reg D v4/A-12 v2 are reference-only and non-production-activatable pending
-  the item 13 public-disclosure decision (D028). Production onboarding rejects
+  the item 13 public-disclosure decision (D044). Production onboarding rejects
   them and the production registry rejects A-12-v2. Migration instructions apply
   only to local reference assets.
 - New Router deployments emit `SettlementExecutedV2` after successful commit with

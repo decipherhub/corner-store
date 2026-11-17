@@ -810,13 +810,11 @@ Historical implementation and verification evidence follows.
 
 - 2026-11-17, PR #161 review fixes: confirmed all three findings. Reconciled
   `FEATURES.md`/`PROGRESS.md` against `origin/main` #162 while retaining CORE-015;
-  HACK-001 remains closed as `passing` and no feature is active. `git merge
-  origin/main` could not write `ORIG_HEAD.lock` in the worktree metadata directory
-  (sandbox permission denied), so no merge or fix commit was created. The actual
-  merge and commits remain required in a writable Git environment.
+  HACK-001 remains closed as `passing` and no feature is active. The review fixes
+  were committed on this branch in `c4923d6`.
 - Narrowed item 12 to operational RFQ risk disclosure only (three operational
   codes). Tiered compliance outcomes remain OPEN pending counsel-approved taxonomy.
-  Added D028, PENDING TEAM/LEGAL DECISION, for item 13. Reg D v4/A-12 v2 remain
+  Added D044, PENDING TEAM/LEGAL DECISION, for item 13. Reg D v4/A-12 v2 remain
   reference-only and non-production-activatable through supported production paths.
   Production onboarding rejects the element, recipe and Manifest/binding references
   across schema v1-v5, including existing-object UPDATEs. Production core deploys
@@ -836,8 +834,7 @@ Historical implementation and verification evidence follows.
   A diagnostic run excluding only that scenario passed the other 19 scenarios,
   including all disclosure tests. This does not count as a passing full host suite.
 - No fixed-port Anvil launcher, public-network runtime, production broadcast or
-  GitHub action was run. PR #161 stays draft. Next: complete the merge and commits,
-  resolve the existing RFQ-host test failure, and obtain team/legal decisions on
+  GitHub action was run. PR #161 stays draft. Next: resolve the existing RFQ-host test failure, and obtain team/legal decisions on
   item 12 taxonomy and item 13 public disclosure before production adoption.
 
 - 2026-11-10, issue #132 integration: verified the four merged slices together
