@@ -214,10 +214,13 @@ passing
   configuration, with explicit reviewed immutable implementation approval.
 - RFQAdapterV3 signs the exact RFQQuoteV3/domain version 3, binding maker/taker,
   token directions, exact amounts, venue, policy, flow and current A-06 aggregate.
-  Conditional primary uses a unique active compiled C-01-v2 distributor.
-- Actual security sender is buyer on tokenIn and seller on tokenOut. Every
-  regulated leg requires current trusted A-06 evidence; dual-regulated statuses
-  must agree. Refresh/revocation/expiry/decay invalidate old commitments.
+  Conditional primary uses a unique active compiled Manifest parameter carrying
+  the immutable primary-distributor schema, without coupling to one C-01 version.
+- Actual security sender is buyer on tokenIn and seller on tokenOut. A regulated
+  leg requires current trusted A-06 evidence only when its active compiled policy
+  contains A-06-v1, whose implementation must equal the pinned source.
+  Applicable dual-leg statuses must agree. Refresh/revocation/expiry/decay
+  invalidate old commitments.
 - Newly deployed AMM adapter version 2/context 1 binds seller/venue/target to the
   registered pool and canonical token order, secondary/self-directed only.
   Pool edits invalidate every venue sharing the adapter; re-registration clears
@@ -245,6 +248,8 @@ passing
   `EngineSelectionV2Test`: buy parity fuzzing, exemptions and fail-closed context
 - Toolkit provenance regressions: reverse Engine binding mismatch/unavailability,
   active compiled B-04 direction checks and unsigned Engine wiring order
+- Policy-scoped A-06 absence/source mismatch and version-neutral primary
+  distributor schema regressions
 - `forge fmt --check`
 - `git diff --check`
 - protected-path diff for public artifacts/runtime/container deployment

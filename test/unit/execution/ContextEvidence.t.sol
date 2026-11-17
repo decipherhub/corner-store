@@ -5,14 +5,71 @@ import {Test} from "forge-std/Test.sol";
 import {ContextEvidence} from "../../../src/execution/ContextEvidence.sol";
 import {Affiliate} from "../../../src/compliance/elements/Affiliate.sol";
 import {ITokenPolicyRegistry} from "../../../src/interfaces/compliance/ITokenPolicyRegistry.sol";
-import {ComplianceContext, PolicyStatus} from "../../../src/types/ComplianceTypes.sol";
+import {IElementRegistry} from "../../../src/interfaces/compliance/IElementRegistry.sol";
+import {
+    CompiledElementRule,
+    ComplianceContext,
+    ElementMetadata,
+    EnforcementAction,
+    PolicyStatus
+} from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
+
+contract ContextElementRegistry {
+    mapping(bytes32 => address) public elementOf;
+    mapping(bytes32 => ElementMetadata) internal _metadata;
+
+    function setElement(bytes32 elementId, address element) external {
+        elementOf[elementId] = element;
+    }
+
+    function setMetadata(bytes32 elementId, ElementMetadata memory metadata) external {
+        _metadata[elementId] = metadata;
+    }
+
+    function metadataOf(bytes32 elementId) external view returns (ElementMetadata memory) {
+        return _metadata[elementId];
+    }
+}
 
 contract ContextPolicyRegistry {
     mapping(address => PolicyStatus) public statusOf;
+    mapping(address => bool) internal _affiliateRequired;
+    IElementRegistry public elementReg;
 
-    function setStatus(address asset, PolicyStatus status) external {
+    constructor() {
+        elementReg = IElementRegistry(address(new ContextElementRegistry()));
+    }
+
+    function setStatus(address asset, PolicyStatus status) external virtual {
         statusOf[asset] = status;
+        _affiliateRequired[asset] = status == PolicyStatus.ACTIVE;
+    }
+
+    function setAffiliateRequired(address asset, bool required) external {
+        _affiliateRequired[asset] = required;
+    }
+
+    function setAffiliateSource(address source) external {
+        ContextElementRegistry(address(elementReg)).setElement(bytes32("A-06-v1"), source);
+    }
+
+    function compiledBindingCountOf(address asset) external view virtual returns (uint256) {
+        return _affiliateRequired[asset] ? 1 : 0;
+    }
+
+    function compiledRulesOf(address asset, uint256)
+        external
+        view
+        virtual
+        returns (CompiledElementRule[] memory rules)
+    {
+        rules = new CompiledElementRule[](_affiliateRequired[asset] ? 1 : 0);
+        if (rules.length != 0) rules[0] = CompiledElementRule(bytes32("A-06-v1"), EnforcementAction.BLOCK);
+    }
+
+    function compiledParametersOf(address asset, uint256) external view virtual returns (bytes[] memory parameters) {
+        parameters = new bytes[](_affiliateRequired[asset] ? 1 : 0);
     }
 }
 
@@ -39,6 +96,7 @@ contract ContextEvidenceTest is Test {
         harness = new ContextEvidenceHarness();
         affiliate = new Affiliate();
         affiliate.setTrustedClaimIssuer(ISSUER, true);
+        policy.setAffiliateSource(address(affiliate));
         ctx.buyer = address(0xB0B);
         ctx.seller = address(0xCAFE);
         ctx.tokenIn = address(0x111);
@@ -122,6 +180,23 @@ contract ContextEvidenceTest is Test {
         );
         ctx.sellerIsAffiliate = true;
         vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        _hash();
+    }
+
+    function test_activePolicyWithoutAffiliateElementUsesZeroAndRequiresFalseBoolean() public {
+        policy.setAffiliateRequired(ctx.tokenOut, false);
+        ctx.seller = address(0xBAD);
+        assertEq(
+            _hash(), keccak256(abi.encode(keccak256("corner-store.affiliate-evidence.v1"), bytes32(0), bytes32(0)))
+        );
+        ctx.sellerIsAffiliate = true;
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        _hash();
+    }
+
+    function test_activeAffiliateElementMustResolveToPinnedSource() public {
+        policy.setAffiliateSource(address(0xBAD));
+        vm.expectRevert(Errors.InvalidAffiliateEvidence.selector);
         _hash();
     }
 

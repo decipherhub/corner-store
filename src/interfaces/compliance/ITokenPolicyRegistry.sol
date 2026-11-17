@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.17;
 
+import {IElementRegistry} from "./IElementRegistry.sol";
+
 import {
     CompiledElementRule,
     ElementEnforcementOverride,
@@ -12,6 +14,8 @@ import {
 
 // ITokenPolicyRegistry  (Manifest store)
 interface ITokenPolicyRegistry {
+    function elementReg() external view returns (IElementRegistry);
+
     function MIN_MANIFEST_DELAY() external view returns (uint64);
 
     function registerManifest(address token, ManifestCore calldata m, RecipeBinding[] calldata bindings) external; // -> PROPOSED

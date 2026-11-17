@@ -1,5 +1,32 @@
 # Progress
 
+## 2026-11-17 Session: EXEC-002 Review Hardening
+
+PR #163 review findings were fixed on the feature branch without changing the
+legacy Router/RFQ v2 or public Monad deployment paths.
+
+- Affiliate evidence is now required only when the active compiled policy
+  actually contains A-06-v1. When present, ElementRegistry must resolve A-06-v1
+  to the source pinned in venue activation evidence; a different registered
+  implementation fails closed.
+- Primary distribution now discovers the authorized distributor by the immutable
+  `corner-store.element.lockup.primary-distributor.v1` parameter schema instead
+  of the exact C-01-v2 Element ID. Compatible future immutable Element versions
+  therefore keep the same authority contract without adapter changes.
+- RFQ on-chain resolution and Toolkit activation verification enforce the same
+  policy/source/schema rules as Solidity. Regression coverage includes policies
+  without A-06, source substitution and a non-C-01-v2 Element using the canonical
+  distributor schema.
+
+Targeted verification: ContextEvidence 24/24, RFQAdapterV3 38/38, RouterV2 19/19,
+ContextProvenance 13/13, RFQ service 13/13 and Toolkit provenance 16/16.
+`scripts/check.sh` passed with 1,102 Foundry tests and all service/package smoke
+gates. Both legacy Anvil profiles completed their 7/7 scenarios and extended
+backend/CLI/Router checks; the isolated context-provenance E2E passed 12/12.
+The local Foundry 1.7.1 formatter changes three pre-existing unrelated main files;
+they were temporarily normalized only for the formatter gate and restored before
+the final diff. `git diff --check` passes and no public deployment was changed.
+
 ## 2026-11-11 Session: EXEC-002 Confirmed Review Fixes
 
 Scope: F1 recipient MM-claim selection and F2 reverse Engine/Router activation

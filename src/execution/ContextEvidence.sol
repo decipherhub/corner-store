@@ -3,8 +3,9 @@ pragma solidity 0.8.17;
 
 import {IExecutionContextVerifier} from "../interfaces/execution/IExecutionContextVerifier.sol";
 import {ITokenPolicyRegistry} from "../interfaces/compliance/ITokenPolicyRegistry.sol";
+import {IElementRegistry} from "../interfaces/compliance/IElementRegistry.sol";
 import {Affiliate} from "../compliance/elements/Affiliate.sol";
-import {ComplianceContext, PolicyStatus} from "../types/ComplianceTypes.sol";
+import {CompiledElementRule, ComplianceContext, PolicyStatus} from "../types/ComplianceTypes.sol";
 import {VenueConfig, VenueContextEvidence} from "../types/VenueTypes.sol";
 import {Errors} from "../libraries/Errors.sol";
 
@@ -12,6 +13,7 @@ library ContextEvidence {
     uint16 internal constant CONTEXT_VERSION = 1;
     bytes32 internal constant AFFILIATE_DOMAIN = keccak256("corner-store.affiliate-evidence.v1");
     bytes32 internal constant CONFIG_DOMAIN = keccak256("corner-store.venue-context-config.v1");
+    bytes32 internal constant AFFILIATE_ELEMENT_ID = "A-06-v1";
 
     function configurationHash(VenueConfig memory cfg) internal view returns (bytes32) {
         return keccak256(abi.encode(CONFIG_DOMAIN, cfg, IExecutionContextVerifier(cfg.adapter).contextConfigHash()));
@@ -66,6 +68,9 @@ library ContextEvidence {
         PolicyStatus policyStatus = registry.statusOf(asset);
         if (policyStatus == PolicyStatus.UNREGULATED) return (bytes32(0), Affiliate.EffectiveStatus.UNKNOWN);
         if (policyStatus != PolicyStatus.ACTIVE) revert Errors.PolicyNotActive();
+        if (!_requiresAffiliateEvidence(asset, registry, source)) {
+            return (bytes32(0), Affiliate.EffectiveStatus.UNKNOWN);
+        }
         if (sender == address(0) || source.code.length == 0) revert Errors.InvalidAffiliateEvidence();
         Affiliate affiliate = Affiliate(source);
         status = affiliate.effectiveStatus(sender, asset);
@@ -100,6 +105,27 @@ library ContextEvidence {
                 uint8(status)
             )
         );
+    }
+
+    function _requiresAffiliateEvidence(address asset, ITokenPolicyRegistry registry, address source)
+        private
+        view
+        returns (bool)
+    {
+        uint256 count = registry.compiledBindingCountOf(asset);
+        bool required;
+        for (uint256 i; i < count; i++) {
+            CompiledElementRule[] memory rules = registry.compiledRulesOf(asset, i);
+            for (uint256 j; j < rules.length; j++) {
+                if (rules[j].elementId == AFFILIATE_ELEMENT_ID) required = true;
+            }
+        }
+        if (!required) return false;
+        IElementRegistry elements = registry.elementReg();
+        if (address(elements).code.length == 0 || elements.elementOf(AFFILIATE_ELEMENT_ID) != source) {
+            revert Errors.InvalidAffiliateEvidence();
+        }
+        return true;
     }
 
     function _matchesCode(address subject, bytes32 expected) private view returns (bool) {
