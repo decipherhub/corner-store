@@ -13,6 +13,56 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCAL = ROOT / '.assurance'
+MARKERS = {'.archive-sha256'}
+
+
+def _stable_path(path):
+    parts = Path(path).parts
+    return not any(part == '__pycache__' for part in parts) and not str(path).endswith('.pyc') and Path(path).name not in MARKERS
+
+
+def _tree_record(kind, name, mode, payload):
+    return b'\0'.join([kind.encode(), name.encode(), str(mode & 0o111).encode(), payload]) + b'\n'
+
+
+def archive_tree_digest(archive):
+    """Derive an installed-tree identity directly from the checksum-pinned archive."""
+    result = hashlib.sha256()
+    with tarfile.open(archive) as tar:
+        members = []
+        for member in tar.getmembers():
+            name = member.name.removeprefix('./').rstrip('/')
+            if not name or member.isdir() or not _stable_path(name):
+                continue
+            members.append((name, member))
+        for name, member in sorted(members):
+            if member.issym():
+                result.update(_tree_record('symlink', name, member.mode, member.linkname.encode()))
+            elif member.isfile() or member.islnk():
+                stream = tar.extractfile(member)
+                if stream is None:
+                    raise RuntimeError('unreadable tool archive member: ' + name)
+                result.update(_tree_record('file', name, member.mode, hashlib.sha256(stream.read()).digest()))
+            else:
+                raise RuntimeError('unsupported tool archive member: ' + name)
+    return result.hexdigest()
+
+
+def installed_tree_digest(destination):
+    result = hashlib.sha256()
+    destination = Path(destination)
+    for path in sorted(destination.rglob('*'), key=lambda item: item.relative_to(destination).as_posix()):
+        name = path.relative_to(destination).as_posix()
+        if path.is_dir() or not _stable_path(name):
+            continue
+        mode = path.lstat().st_mode
+        if path.is_symlink():
+            result.update(_tree_record('symlink', name, mode, os.readlink(path).encode()))
+        elif path.is_file():
+            result.update(_tree_record('file', name, mode, hashlib.sha256(path.read_bytes()).digest()))
+        else:
+            raise RuntimeError('unsupported installed tool entry: ' + str(path))
+    return result.hexdigest()
 
 
 def download(spec, offline):
@@ -47,6 +97,35 @@ def unpack(archive, destination):
         tar.extractall(destination)
 
 
+def install_archive(archive, destination, archive_sha256):
+    marker = destination / '.archive-sha256'
+    if destination.exists():
+        if marker.exists() and (not marker.is_file() or marker.read_text() != archive_sha256):
+            raise RuntimeError('installed tool identity mismatch: ' + destination.name)
+    else:
+        unpack(archive, destination)
+    expected = archive_tree_digest(archive)
+    actual = installed_tree_digest(destination)
+    if actual != expected:
+        raise RuntimeError('installed tool content mismatch: ' + destination.name)
+    if not marker.exists():
+        marker.write_text(archive_sha256)
+
+
+def verify_cached_installations(config, key):
+    for tool, spec in config['platforms'][key].items():
+        archive = download(spec, True)
+        destination = LOCAL / 'tools' / tool
+        if tool == 'solc':
+            binary = destination / 'solc'
+            if not binary.is_file() or hashlib.sha256(binary.read_bytes()).hexdigest() != spec[1]:
+                raise RuntimeError('installed tool content mismatch: solc')
+        else:
+            install_archive(archive, destination, spec[1])
+    yarn = download(config['yarn'], True)
+    install_archive(yarn, LOCAL / 'tools/yarn', config['yarn'][1])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--offline', action='store_true')
@@ -61,16 +140,16 @@ def main():
         destination = LOCAL / 'tools' / tool
         if tool == 'solc':
             destination.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(archive, destination / 'solc')
-            (destination / 'solc').chmod(0o755)
-        elif not (destination / '.archive-sha256').exists():
-            unpack(archive, destination)
-            (destination / '.archive-sha256').write_text(spec[1])
-        elif (destination / '.archive-sha256').read_text() != spec[1]:
-            raise RuntimeError('installed tool identity mismatch: ' + tool)
+            binary = destination / 'solc'
+            if binary.exists() and hashlib.sha256(binary.read_bytes()).hexdigest() != spec[1]:
+                raise RuntimeError('installed tool content mismatch: solc')
+            if not binary.exists():
+                shutil.copyfile(archive, binary)
+                binary.chmod(0o755)
+        else:
+            install_archive(archive, destination, spec[1])
     yarn = download(config['yarn'], args.offline)
-    if not (LOCAL / 'tools/yarn/package/bin/yarn.js').exists():
-        unpack(yarn, LOCAL / 'tools/yarn')
+    install_archive(yarn, LOCAL / 'tools/yarn', config['yarn'][1])
     python = LOCAL / 'tools/python/python/bin/python3'
     env = os.environ.copy()
     env.update(PIP_CACHE_DIR=str(LOCAL / 'pip-cache'), PYTHONNOUSERSITE='1',
@@ -78,6 +157,8 @@ def main():
                TMPDIR=str(LOCAL / 'tmp'))
     (LOCAL / 'tmp').mkdir(exist_ok=True)
     subprocess.run([str(python), '-c', 'import sys; assert sys.version_info[:3] == (3,12,12)'], check=True, env=env)
+    if not args.bootstrap_only and (LOCAL / 'venv').exists():
+        shutil.rmtree(LOCAL / 'venv')
     if not (LOCAL / 'venv/bin/python').exists():
         subprocess.run([str(python), '-m', 'venv', str(LOCAL / 'venv')], check=True, env=env)
     if not args.bootstrap_only:

@@ -4,6 +4,7 @@ import fnmatch
 import hashlib
 import json
 from pathlib import Path
+import re
 
 
 class GateError(RuntimeError):
@@ -12,6 +13,65 @@ class GateError(RuntimeError):
 
 def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _package_name(value):
+    return re.sub(r'[-_.]+', '-', value).lower()
+
+
+def review_dependencies(lock_text, inventory, today=None):
+    """Bind the reviewed assurance dependency inventory to the exact hash lock."""
+    today = today or datetime.date.today()
+    locked = {}
+    for line in lock_text.splitlines():
+        match = re.match(r'([A-Za-z0-9_.-]+)==([^ ;\\]+)', line)
+        if not match:
+            continue
+        name, version = _package_name(match[1]), match[2]
+        if name in locked:
+            raise GateError('duplicate locked assurance dependency: ' + name)
+        locked[name] = version
+    if not locked or inventory.get('schemaVersion') != 1:
+        raise GateError('invalid assurance dependency inventory')
+    try:
+        reviewed = datetime.date.fromisoformat(inventory['reviewedAt'])
+        expires = datetime.date.fromisoformat(inventory['reviewExpires'])
+    except (KeyError, TypeError, ValueError) as error:
+        raise GateError('invalid assurance dependency review window') from error
+    if reviewed > today or expires <= today or expires <= reviewed:
+        raise GateError('assurance dependency review expired or invalid')
+    policy = inventory.get('policy', {})
+    allowed = set(policy.get('allowedMaintenanceStatuses', []))
+    if not allowed or not isinstance(policy.get('licenseReview'), str) or not policy['licenseReview'].strip():
+        raise GateError('incomplete assurance dependency policy')
+    reviewed_dependencies = {}
+    required = ['name', 'version', 'license', 'upstream', 'pypi', 'pinnedReleaseDate',
+                'latestVersionAtReview', 'maintenanceStatus', 'purpose', 'distribution']
+    for item in inventory.get('dependencies', []):
+        if any(not isinstance(item.get(key), str) or not item[key].strip() for key in required):
+            raise GateError('incomplete assurance dependency review')
+        name = _package_name(item['name'])
+        if name in reviewed_dependencies:
+            raise GateError('duplicate reviewed assurance dependency: ' + name)
+        if item['maintenanceStatus'] not in allowed:
+            raise GateError('unapproved assurance dependency maintenance status: ' + name)
+        if not item['upstream'].startswith('https://') or not item['pypi'].startswith('https://'):
+            raise GateError('non-HTTPS assurance dependency source: ' + name)
+        try:
+            release = datetime.date.fromisoformat(item['pinnedReleaseDate'])
+        except ValueError as error:
+            raise GateError('invalid assurance dependency release date: ' + name) from error
+        if release > reviewed:
+            raise GateError('assurance dependency release postdates review: ' + name)
+        reviewed_dependencies[name] = item['version']
+    if reviewed_dependencies != locked:
+        missing = sorted(set(locked) - set(reviewed_dependencies))
+        extra = sorted(set(reviewed_dependencies) - set(locked))
+        changed = sorted(name for name in set(locked) & set(reviewed_dependencies)
+                         if locked[name] != reviewed_dependencies[name])
+        raise GateError('assurance dependency inventory mismatch: missing=' + str(missing)
+                        + ' extra=' + str(extra) + ' changed=' + str(changed))
+    return len(locked)
 
 
 def coverage_gate(root, lcov, scopes, exemptions=None):
@@ -145,7 +205,7 @@ def review_slither(findings, baseline, suppressions, today=None):
         raise GateError('duplicate analyzer baseline/finding')
     approved = {}
     for suppression in suppressions:
-        required = ['fingerprint', 'detector', 'impact', 'justification', 'reviewer', 'tracking_issue', 'expiry']
+        required = ['fingerprint', 'detector', 'impact', 'justification', 'reviewer', 'tracking_issue', 'expiry', 'status']
         if any(not isinstance(suppression.get(k), str) or not suppression[k].strip() for k in required):
             raise GateError('incomplete reviewed suppression')
         try: expiry = datetime.date.fromisoformat(suppression['expiry'])
@@ -155,6 +215,8 @@ def review_slither(findings, baseline, suppressions, today=None):
             raise GateError('expired, duplicate or stale suppression: ' + key)
         if suppression['detector'] != current[key]['detector'] or suppression['impact'] != current[key]['impact']:
             raise GateError('suppression detector/severity mismatch: ' + key)
+        if suppression['status'] != 'approved':
+            raise GateError('suppression lacks human approval: ' + key)
         approved[key] = suppression
     failures = []
     for key, finding in current.items():

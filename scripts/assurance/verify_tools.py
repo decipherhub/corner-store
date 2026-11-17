@@ -8,12 +8,23 @@ import shutil
 import subprocess
 import sys
 
-from gates import GateError
+from gates import GateError, review_dependencies
+from install import verify_cached_installations
 
 
 def verify_tools():
     root = Path(__file__).resolve().parents[2]
-    versions = json.loads((root / 'assurance/toolchain.json').read_text())['versions']
+    config = json.loads((root / 'assurance/toolchain.json').read_text())
+    versions = config['versions']
+    key = platform.system() + '-' + platform.machine()
+    if key not in config['platforms']:
+        raise GateError('unsupported pinned tool platform: ' + key)
+    try:
+        verify_cached_installations(config, key)
+    except RuntimeError as error:
+        raise GateError(str(error)) from error
+    inventory = json.loads((root / 'assurance/dependencies.json').read_text())
+    review_dependencies((root / 'assurance/requirements.lock').read_text(), inventory)
     if platform.python_version() != versions['python'] or importlib.metadata.version('slither-analyzer') != versions['slither-analyzer']:
         raise GateError('pinned Python/Slither missing; run python3 scripts/assurance/install.py')
     if not Path(sys.executable).is_relative_to(root / '.assurance'):

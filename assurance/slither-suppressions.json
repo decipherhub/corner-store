@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "reviewed implementation defaults, team-to-confirm",
+  "status": "candidate suppressions; human approval required",
   "suppressions": [
     {
       "fingerprint": "013797fb326816cd8ea04ce433fb0a12330d219034f732ff7640b016e3ad4d49",
@@ -10,7 +10,8 @@
       "justification": "False is the intentional default for a zero recipient; entry checks require to != address(0), which also computes newHolder.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "014b8607e4020b014c6f7f2e6335648e2ac53dca476f094fcc4030987fd65a8a",
@@ -20,7 +21,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.NONE || ! c.signatureValid (src/compliance/elements/QualifiedPurchaser.sol#180)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "02151e2e1a9eb662ad2a4e0f000cab8a404ec2357343076049fcc0a69e02534c",
@@ -30,7 +32,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeUint(key,chainId,block.chainid) (script/DeployProductionCore.s.sol#66)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "0541b2317fcebd038f4aab8b9b1ad12b065826feb8dc8d13db3d35cc3f6b3899",
@@ -40,7 +43,8 @@
       "justification": "False is the initial membership search result for each parameter. A matching required ID sets true; unmatched parameters reject.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "06476b92e6ad56db66d972089cb6244a324216b8403f2ed6dc69751c1fc2c894",
@@ -50,7 +54,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,engine,deployed.engine) (script/DeployProductionCore.s.sol#77)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "0d4df435456e3234378713f8cc71203428e654e518c4ebaadd953ccbb01ab8bc",
@@ -60,7 +65,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,governance,governance) (script/DeployProductionCore.s.sol#69)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "11be99e24f04d720d4e6a5306c866061ff24e805438de00fefd4979c81783c1c",
@@ -70,7 +76,8 @@
       "justification": "The zero uint64 is the initial maximum; each ACTIVE leg folds its registered manifestVersion through _max64 before decision construction.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "1459d6706799b5923993373dbc32e7ca7c849cb9a2ef2b9ed7d9aede89966a66",
@@ -80,7 +87,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,makerAuthorizerCodeHash,bytes32(deployed.makerAuthorizer.codehash)) (script/DeployProductionCore.s.sol#93)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "1931b0a8a6bc2c1fdf12fd7bae252eb3bb82681532046370bcec357716df1005",
@@ -90,7 +98,8 @@
       "justification": "Both accepted positive-delta/token-order branches assign amountOwed. All other cases revert before safeTransferFrom.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "19e9eafd77e287b360e4aa269b4f96cbd3acc65af08c9b1d0f6bbff8d5fa9a9b",
@@ -100,7 +109,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,rfqAdapter,deployed.rfqAdapter) (script/DeployProductionCore.s.sol#83)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "1e2a29c11fe9f163cbda1a99c6da6b31b688f0f1af035dfe07b0ae97530585ec",
@@ -110,7 +120,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBool(key,rfqEnabled,enableRfq) (script/DeployProductionCore.s.sol#72)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "21950f85cccc68281e0104d5f1774adff3485ad7ddaba3f4a04fffdd41f8df2d",
@@ -120,7 +131,8 @@
       "justification": "This explicit CardStatus enum comparison rejects missing or suspended cards before version, activation delay and classification checks. Reviewed predicate: card.status == CardStatus.NONE (src/compliance/elements/AssetClassification.sol#218)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "24159954fe937eab6f5cb61f771b04a4f1782357748b1b0bcae7a6e62543feff",
@@ -130,7 +142,8 @@
       "justification": "ExecutionRouterBase.execute is nonReentrant across adapter dispatch and commit. The pre/post balance difference is the intended measurement, checked against approved exact amounts and adapter output before commit. Existing same/distinct nonce reentry and delta rollback tests exercise the lock and accounting. Token onboarding prohibits fee/rebase behavior; pool/adapter governance remains trusted.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "2fdb33cf5f3b4e50698d9c9218b2b3814210b51a44494e4930f3d3e17c6c9c76",
@@ -140,7 +153,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,selectorCodeHash,bytes32(deployed.selector.codehash)) (script/DeployProductionCore.s.sol#90)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "30f79bd9201d03b70e6c8b5e0dbedc3d8936b2ab83d99df737eae07410a317dd",
@@ -150,7 +164,8 @@
       "justification": "The memory path accumulator starts with count zero; arrays are explicitly allocated from the bounded binding length before indexed reads/writes.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "32aae3df79bc54718e0eb2032f1a17b220f24e8b5862130fadaa1b91e67b7cba",
@@ -160,7 +175,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeUint(key,schemaVersion,1) (script/DeployProductionCore.s.sol#62)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "34ce8836aa86bde8d7683a99b69db9f915286a8b4f33a0a830facb00e06008cd",
@@ -170,7 +186,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeString(key,deploymentId,deploymentId) (script/DeployProductionCore.s.sol#63)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "3bec96b711556d4d35d0f6d949aa60ce58268c3fb0991febc978e5bfa4bd0a62",
@@ -180,7 +197,8 @@
       "justification": "Both balance and frozen amounts are assigned in successful external reads; either catch returns a blocking reason immediately. No failed read reaches the free-balance subtraction.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "3ef27ac80153739fec125334079e9f3b9f99ca6b5e129f2cf2bff3b8077e29cd",
@@ -190,7 +208,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,operator,operator) (script/DeployProductionCore.s.sol#70)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "451149d49b8275c6197a5fa4a315294ec22f8fcf2e839115531a100bf38cd2ea",
@@ -200,7 +219,8 @@
       "justification": "ExecutionRouterBase.execute is nonReentrant across adapter dispatch and commit. The pre/post balance difference is the intended measurement, checked against approved exact amounts and adapter output before commit. Existing same/distinct nonce reentry and delta rollback tests exercise the lock and accounting. Token onboarding prohibits fee/rebase behavior; pool/adapter governance remains trusted.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "485567a80118d5b2a7a1e386c8826dea7a9b2f41e49c9bb9609bd553a6b0b78b",
@@ -210,7 +230,8 @@
       "justification": "Zero is the deliberate sum identity. Each parameter length is added with checked arithmetic and compared with MAX_TOTAL_PARAMETER_BYTES.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "4f876495336f0b5c7f51067df17a53f5e11e1f684a8b737693adb400319f4c6f",
@@ -220,7 +241,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.FAMILY_COMPANY (src/compliance/elements/QualifiedPurchaser.sol#202)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "548752daa5242348f853ce7c1a014f2225ff5d8beb52ab8613509f381da4306b",
@@ -230,7 +252,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,policyRegCodeHash,bytes32(deployed.policyReg.codehash)) (script/DeployProductionCore.s.sol#86)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "54a169e5498a86809d3fd3d20215d3315febf8413fa41c5f5c260364cf5179df",
@@ -240,7 +263,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBool(key,ammEnabled,enableAmm) (script/DeployProductionCore.s.sol#71)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "58cc7f797f829e5725946a183bb13891d1fd127070f8f8658af101ad61c79833",
@@ -250,7 +274,8 @@
       "justification": "Both balance and frozen amounts are assigned in successful external reads; either catch returns a blocking reason immediately. No failed read reaches the free-balance subtraction.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "5d51f58a379d6b779cac1e94f552b23253566b3a56d3b3d179c8145963cb79a5",
@@ -260,7 +285,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,ammAdapter,deployed.ammAdapter) (script/DeployProductionCore.s.sol#81)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "5e2cb0021003c474e04d742d34faceb5cd5828ff5e7648ed1b84a360866022e0",
@@ -270,7 +296,8 @@
       "justification": "Debit and exit branches require from != address(0), which assigns _identity(from) before either use.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "623993bc11af99df70ca2fe3bb97b63775aa6036e111d9262a97865728295d0d",
@@ -280,7 +307,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,venueRegCodeHash,bytes32(deployed.venueReg.codehash)) (script/DeployProductionCore.s.sol#89)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "62bd9811ec6b58909944639002c10cc1898a2d0429ecaaf5bdee48920538c340",
@@ -290,7 +318,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.ltStatus == LookThroughStatus.NONE (src/compliance/elements/QualifiedPurchaser.sol#210)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "6e7ac970681a646a5e14415788dfcc6c85e909bdb2e007048d54c0af67ae591d",
@@ -300,7 +329,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.TRUST (src/compliance/elements/QualifiedPurchaser.sol#209)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "6f81cf6fb2b73d94cf09a227e6354d4df98930e065f7bb1c68c86c9de9cd461d",
@@ -310,7 +340,8 @@
       "justification": "False is the initial membership search result for each override. Matching required IDs set true; unmatched overrides reject.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "73325ccd91b07f6b9130501039ffb20f6d952a238e0dd41a031c150cdf0923d7",
@@ -320,7 +351,8 @@
       "justification": "execute is onlyRouter; _validateQuote verifies maker authorization over the EIP-712 quote, approved maker, current policy, initiator/buyer/maker/token/amount/venue equality and unused quote nonce before either transferFrom. The Router authenticates msg.sender to initiator. This transfer uses the explicitly signed payer. Reviewed transfer: IERC20(quote.tokenOut).safeTransferFrom(quote.maker,quote.taker,quote.amountOut) (src/execution/adapters/rfq/RFQAdapter.sol#77)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "772520311e1b8efaf3ca0732025fdac0cc6fbc11e283aa92a528737a14cf8e0d",
@@ -330,7 +362,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,policyReg,deployed.policyReg) (script/DeployProductionCore.s.sol#75)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "777af9618d825c9ec8c6e07b8e294b269cca02f5f2ff2f2cca7709f1aad18717",
@@ -340,7 +373,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,recipeReg,deployed.recipeReg) (script/DeployProductionCore.s.sol#74)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "7e2cc8ed6b3a91e70ebbcb89e7c772e20ca5433e58f5d726e0b3ece619a9948e",
@@ -350,7 +384,8 @@
       "justification": "The callback requires registeredPool[msg.sender] and canonical token0/token1 direction with exactly one positive owed delta. Pool registration is owner-controlled and canonical pool onboarding remains the trust boundary. Only a registered pool can request the allowance debit. Existing AMM callback-origin/token-direction and real Uniswap tests cover this boundary.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "838bfcafadca6b674581563d5a36257daa99225ec5e7b885f3602f02c8c5aa25",
@@ -360,7 +395,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,recipeRegCodeHash,bytes32(deployed.recipeReg.codehash)) (script/DeployProductionCore.s.sol#85)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "858ec4d4cf9e35475a9dc003768cce852005872db4b702af1ffd8ca31b3feae5",
@@ -370,7 +406,8 @@
       "justification": "readyAt == 0 detects absence of a scheduled action, before the separate block.timestamp < readyAt timelock check. Equality is a sentinel, not a timestamp acceptance condition.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "86ba2bf3cd8921496a277e97a0026909c66a29685f5f9f297705d23adff0fa10",
@@ -380,7 +417,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeUint(key,createdAt,block.timestamp) (script/DeployProductionCore.s.sol#67)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "8748d6b6b207e4cef0f6adafb4e8e5dd7446089c9fca4bcb92b41cc6a3b04fb2",
@@ -390,7 +428,8 @@
       "justification": "affiliateEvidenceHash is invoked for its validation/revert behavior before evaluation. RFQAdapterV3 separately compares its returned commitment against the signed quote. RouterV2 does not use a commitment as an authorization result.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "8b79e93c2c09b839068ebeae37e6d8f5f421a36ab20fe98f7130c0ade6a8cf31",
@@ -400,7 +439,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.ltStatus == LookThroughStatus.PENDING (src/compliance/elements/QualifiedPurchaser.sol#204)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "8be9b4251d50b3b55df76a274abea4d7b42c3da5fe6034e36c4f398e7ee6b8d2",
@@ -410,7 +450,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.KNOWLEDGEABLE_EMPLOYEE (src/compliance/elements/QualifiedPurchaser.sol#219)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "8ec9e81bad1b2c592ca987c912a26941b3332ba6908164b3e637c8d35d0b595c",
@@ -420,7 +461,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,venueReg,deployed.venueReg) (script/DeployProductionCore.s.sol#78)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "8faa1931679dc35d27d6d39bf1b0b21670c2372506d51a7a8639014e4e1b3bd7",
@@ -430,7 +472,8 @@
       "justification": "False is the initial search result. REQUIRED_BLOCKING or PATH_OPTION sets true; an all FLAG_ONLY plan must retain false and reject.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "9322153750b2515180d931da59e792dc674ba15a2b987956e5fe298af7fd7139",
@@ -440,7 +483,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.ltStatus == LookThroughStatus.FAILED (src/compliance/elements/QualifiedPurchaser.sol#212)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "960abfc746fc29ab7fa7c1c8661c2e14f29a8d035ce4a2d68d2e6c51f2c621a2",
@@ -450,7 +494,8 @@
       "justification": "Both balance and frozen amounts are assigned in successful external reads; either catch returns a blocking reason immediately. No failed read reaches the free-balance subtraction.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "961d7ac90b70a72789cb59afc0dfe82671d0b7bf7031b559cc20c2f7dbfcecc3",
@@ -460,7 +505,8 @@
       "justification": "AMM settlement measures actual tokenOut balance delta after swap; the Router independently checks both exact token deltas. Trusting swap return amounts instead would weaken the existing accounting invariant.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "9f1627fb44f17e0575211f0ac37b095593fe57c5da5d4f862fa9e383b1f363a2",
@@ -470,7 +516,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.ltStatus == LookThroughStatus.FAILED (src/compliance/elements/QualifiedPurchaser.sol#205)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "a0109a074942388cbff9ea4ece46bb528524e0feb19fd7026806558492ccc0ac",
@@ -480,7 +527,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.ltStatus == LookThroughStatus.NONE (src/compliance/elements/QualifiedPurchaser.sol#203)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "a050cf8957ed638cf510dba79c7b3bbbe5bed59772de0e6935f1daae8e43728e",
@@ -490,7 +538,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,ammAdapterCodeHash,bytes32(deployed.ammAdapter.codehash)) (script/DeployProductionCore.s.sol#92)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "a16f9a61571723e03e430b841f44c9c2bb23bc05cf21714200800aca8a76d088",
@@ -500,7 +549,8 @@
       "justification": "The memory struct is zero-initialized; allowed is explicitly set true and reason/flags intentionally start empty before _evaluateBindings updates them.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "a28df4ff4dea797b15eaebfa937303965ef42459e730415cd05babbe51ad03d1",
@@ -510,7 +560,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeString(key,sourceCommit,sourceCommit) (script/DeployProductionCore.s.sol#64)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "a2fefdebc40bd5d769a77a85509858e386c44c2c6f7fb5a9599a3a0215fd640a",
@@ -520,7 +571,8 @@
       "justification": "The zero bytes32 is the initial policy accumulator; each ACTIVE leg calls _accumulatePolicyId before building the decision. At least one leg is ACTIVE on entry.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "a67f67ae3f31351ae09e44e45dd3ed7193d56f6566f0b63d9c0a8bde9370e978",
@@ -530,7 +582,8 @@
       "justification": "The memory path accumulator starts with count zero; arrays are explicitly allocated from the bounded binding length before indexed reads/writes.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "aa52ec00166313571912ae01f573c62913fd33ab5bd72a9acbc8db437d979dfc",
@@ -540,7 +593,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeString(key,contractsHash,contractsHash) (script/DeployProductionCore.s.sol#65)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "adcb69e6775dd6b7bac162215222d496aa287d5ea4c5679fe681ade2e942c4c3",
@@ -550,7 +604,8 @@
       "justification": "Each matching token axis assigns amountIn/amountOut. The unmatched-token branch reverts InvalidAmountCapToken before comparing this local.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "b1d9cc08838bc00615c3105577b8280bbf660ed79a69575aa4fa8b614a5eb65c",
@@ -560,7 +615,8 @@
       "justification": "Only used under to != address(0), the same branch that assigns _identity(to); mint/burn absence never consumes the unassigned value.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "b53d24ebb5c47d916c3a1d5aa2350d98bcf12d21a840bace6cdd5eb6f0fdf8ee",
@@ -570,7 +626,8 @@
       "justification": "compiledBindingOf returns binding, recipeKey and compiled rules. The first two values are bound here; rules are fetched through compiledRulesOf with matching parameters and every Element is hashed below. The unused tuple member is not an authorization result.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "c4f47e21ec031e38ba15b5d61f23d5e4b33429967a5d38c2ae1fa7930392455e",
@@ -580,7 +637,8 @@
       "justification": "The offset intentionally starts at zero for the first regulated leg and advances by bindingsIn.length before the output leg.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "c6dccd134860954b3503e75d6e72b08c31ecdb65a768d5f124ca78c7d043e29a",
@@ -590,7 +648,8 @@
       "justification": "Only used in debit/exit branches guarded by from != address(0); that branch snapshots the identity balance before mutation.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "c8c1bde993c7475b7c9b5ede3e06310ed553bdbf0f3d6eff8c0a03cc02dc41ef",
@@ -600,7 +659,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.ltStatus == LookThroughStatus.PENDING (src/compliance/elements/QualifiedPurchaser.sol#211)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "ca16c45434d22d73933f3c27d1310fa9d4307d0ce31bef01ffd3d447ac789615",
@@ -610,7 +670,8 @@
       "justification": "AssetFlow.resolve validates membership/direction and supplies actual sender. Lockup checks sender acquisition age; recipient is intentionally unused for this property.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "d1c88abfec7ad086ce60bfa5fc6f92cd06b2e99941e0b83c1f3ee64f30d81e43",
@@ -620,7 +681,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,operatorReg,deployed.operatorReg) (script/DeployProductionCore.s.sol#76)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "d29911e7bca1603a113c5d711eab25c70ac00bcce4afa536bf084e747ba4777c",
@@ -630,7 +692,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,routerCodeHash,bytes32(deployed.router.codehash)) (script/DeployProductionCore.s.sol#91)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "d405e39927abe4663bc1c7d4ecdd95311306a9ef2a2d9ec7214c967b55b008b6",
@@ -640,7 +703,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,router,deployed.router) (script/DeployProductionCore.s.sol#80)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "d85ba6a9bca4232194e4fc9668941325b5b7a46da053652a23a660eb2880015e",
@@ -650,7 +714,8 @@
       "justification": "execute is onlyRouter; _validateQuote verifies maker authorization over the EIP-712 quote, approved maker, current policy, initiator/buyer/maker/token/amount/venue equality and unused quote nonce before either transferFrom. The Router authenticates msg.sender to initiator. This transfer uses the explicitly signed payer. Reviewed transfer: IERC20(quote.tokenIn).safeTransferFrom(quote.taker,quote.maker,quote.amountIn) (src/execution/adapters/rfq/RFQAdapter.sol#76)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "d8abba6cb473b3741853e9c08d87bee768b868e47e6e4f8e99dd948f3f8e9091",
@@ -660,7 +725,8 @@
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.NATURAL || c.basis == QpBasis.INSTITUTIONAL || c.basis == QpBasis.QIB (src/compliance/elements/QualifiedPurchaser.sol#194)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "e0394b4dd2cf0795682f92e19d2f9af19a5e35ad16484d361c7f6d1e25d7bc66",
@@ -670,7 +736,8 @@
       "justification": "AssetFlow.resolve validates direction and supplies actual recipient for the market-maker check. Sender is irrelevant to this element predicate.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "e1defc83721f75a4225207ecf47173e96b5e9bd1a2f8c33f49ff1c58f5089737",
@@ -680,7 +747,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,makerAuthorizer,deployed.makerAuthorizer) (script/DeployProductionCore.s.sol#82)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "e2e0fa267aad86d7f602661ab7c96df3363dfd49f1cb27c0327dde2848460230",
@@ -690,7 +758,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,elementReg,deployed.elementReg) (script/DeployProductionCore.s.sol#73)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "e3e4de0959c5ec785ead956f9b6a7832142eeeb800e56dbb15e79ac4d300b8c0",
@@ -700,7 +769,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,selector,deployed.selector) (script/DeployProductionCore.s.sol#79)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "eb0fd742f4e24e36ab51c5a22390cee5d00a6f19786a990d2b3f653b6004b9bc",
@@ -710,7 +780,8 @@
       "justification": "This explicit CardStatus enum comparison rejects missing or suspended cards before version, activation delay and classification checks. Reviewed predicate: card.status == CardStatus.SUSPENDED (src/compliance/elements/AssetClassification.sol#221)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "eba95829dbbd6adc38b481ad71bf14bfe586abd2177751046bd4c10c66dd9231",
@@ -720,7 +791,8 @@
       "justification": "Zero denotes no violation. Each rejection branch sets a nonzero reason; only a still-zero failure returns true.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "ecbd4f948a09600ecee163dede98756c082adaefa696b6d116f7d7d496c3a84b",
@@ -730,7 +802,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,engineCodeHash,bytes32(deployed.engine.codehash)) (script/DeployProductionCore.s.sol#88)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "ee887fe2fcf31bb6b422a01648c9ea484a7401146582ad60dfadcdf08cf4959d",
@@ -740,7 +813,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeAddress(key,deployer,deployer) (script/DeployProductionCore.s.sol#68)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "f6eaacfbaf8a45241fa6aafbd7f4e61976f3b05fec2cbfb41249f00450cd45ed",
@@ -750,7 +824,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,operatorRegCodeHash,bytes32(deployed.operatorReg.codehash)) (script/DeployProductionCore.s.sol#87)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "f704e7c94139a37cfeffa6eb625ef7d83adbff30e0ae7fc1521a67cd067d8518",
@@ -760,7 +835,8 @@
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,elementRegCodeHash,bytes32(deployed.elementReg.codehash)) (script/DeployProductionCore.s.sol#84)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "fcdeaa37a2aa8b64872d6c6fb47c79c36b5aeb57c5f46146099a10dc687555c7",
@@ -770,7 +846,8 @@
       "justification": "Zero denotes no C-01-v2 distributor found. Nonzero canonical parameters assign it; conflicts and zero/no-match reject before accepting primary distribution.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     },
     {
       "fingerprint": "fcf88b7ffa0488a0775c5313182720f07915be5f1fe8a6166131d648fc117c4f",
@@ -780,7 +857,8 @@
       "justification": "Both balance and frozen amounts are assigned in successful external reads; either catch returns a blocking reason immediately. No failed read reaches the free-balance subtraction.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
-      "expiry": "2026-12-11"
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
     }
   ]
 }

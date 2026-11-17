@@ -1,13 +1,17 @@
 import copy
 import datetime
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
+import tarfile
 import tempfile
 import unittest
 
-from gates import GateError, coverage_gate, normalize_slither, review_slither, replace_coverage_source
+from gates import GateError, coverage_gate, normalize_slither, review_dependencies, review_slither, replace_coverage_source
+from install import archive_tree_digest, install_archive, installed_tree_digest
 from mutation import apply_mutation, classify_forge, classify_node, validate_manifest
 
 
@@ -134,7 +138,7 @@ class AnalysisTests(unittest.TestCase):
         f = self.findings()[0]
         return dict(fingerprint=f['fingerprint'], detector=f['detector'], impact='Medium',
                     justification='Reviewed external call ordering', reviewer='repo owner, team-to-confirm',
-                    tracking_issue='#156', expiry='2026-12-11')
+                    tracking_issue='#156', expiry='2026-12-11', status='approved')
 
     def test_baseline_does_not_suppress(self):
         with self.assertRaisesRegex(GateError, 'unsuppressed'):
@@ -144,7 +148,8 @@ class AnalysisTests(unittest.TestCase):
         review_slither(self.findings(), self.findings(), [self.suppression()], self.today)
 
     def test_expired_missing_duplicate_and_unknown_suppressions_fail(self):
-        for update in [{'expiry': '2026-11-11'}, {'reviewer': ''}, {'fingerprint': 'unknown'}]:
+        for update in [{'expiry': '2026-11-11'}, {'reviewer': ''}, {'fingerprint': 'unknown'},
+                       {'status': 'pending-human-review'}]:
             s = self.suppression(); s.update(update)
             with self.assertRaises(GateError):
                 review_slither(self.findings(), self.findings(), [s], self.today)
@@ -179,6 +184,60 @@ class AnalysisTests(unittest.TestCase):
         self.raw['results']['detectors'].reverse()
         self.assertEqual(before, self.findings())
         self.assertEqual(len(before), 1)
+
+
+class DependencyReviewTests(unittest.TestCase):
+    def setUp(self):
+        self.today = datetime.date(2026, 11, 18)
+        self.lock = 'alpha==1.2.3 --hash=sha256:abc\n'
+        self.inventory = {
+            'schemaVersion': 1,
+            'reviewedAt': '2026-11-18',
+            'reviewExpires': '2027-02-16',
+            'policy': {'allowedMaintenanceStatuses': ['current-release'], 'licenseReview': 'tooling only'},
+            'dependencies': [{
+                'name': 'Alpha', 'version': '1.2.3', 'license': 'MIT',
+                'upstream': 'https://example.com/alpha', 'pypi': 'https://pypi.org/project/alpha/1.2.3/',
+                'pinnedReleaseDate': '2026-11-17', 'latestVersionAtReview': '1.2.3',
+                'maintenanceStatus': 'current-release', 'purpose': 'analysis', 'distribution': 'not bundled'
+            }]
+        }
+
+    def test_inventory_matches_exact_lock(self):
+        self.assertEqual(review_dependencies(self.lock, self.inventory, self.today), 1)
+
+    def test_inventory_rejects_expiry_drift_and_incomplete_review(self):
+        for mutate in [
+            lambda data: data.update(reviewExpires='2026-11-18'),
+            lambda data: data['dependencies'][0].update(version='2.0.0'),
+            lambda data: data['dependencies'][0].update(license=''),
+            lambda data: data['dependencies'][0].update(maintenanceStatus='yanked'),
+            lambda data: data['dependencies'][0].update(upstream='http://example.com/alpha'),
+        ]:
+            candidate = copy.deepcopy(self.inventory)
+            mutate(candidate)
+            with self.assertRaises(GateError):
+                review_dependencies(self.lock, candidate, self.today)
+
+
+class ToolIntegrityTests(unittest.TestCase):
+    def test_archive_identity_detects_cached_tool_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / 'tool.tar.gz'
+            with tarfile.open(archive, 'w:gz') as tar:
+                info = tarfile.TarInfo('bin/tool')
+                info.mode = 0o755
+                payload = b'#!/bin/sh\necho pinned\n'
+                info.size = len(payload)
+                tar.addfile(info, io.BytesIO(payload))
+            destination = root / 'installed'
+            archive_hash = hashlib.sha256(archive.read_bytes()).hexdigest()
+            install_archive(archive, destination, archive_hash)
+            self.assertEqual(archive_tree_digest(archive), installed_tree_digest(destination))
+            (destination / 'bin/tool').write_text('#!/bin/sh\necho changed\n')
+            with self.assertRaisesRegex(RuntimeError, 'content mismatch'):
+                install_archive(archive, destination, archive_hash)
 
 
 class MutationTests(unittest.TestCase):
