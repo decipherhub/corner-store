@@ -1478,7 +1478,7 @@ existing consumers and deployed settlement.
 - `services/toolkit/src/production-onboarding.ts`
 - `scripts/e2e-context-provenance.sh`
 
-## D030: Primary Distributor Authority for EXEC-002
+## D043: Primary Distributor Authority for EXEC-002
 
 ### Status
 

@@ -290,7 +290,7 @@ active
   HACK-001 retains upstream #162's closed state. Current review-fix gate evidence
   and the blocked Git merge/commit operation are recorded in PROGRESS.md.
 - D028/D029 and `docs/product-specs/execution-context-provenance.md` record remaining
-  defaults as open items; D030 records the pending C-01-v2-only decision.
+  defaults as open items; D043 records the pending C-01-v2-only decision.
   Reference/operator code uses one local env/file key; key management, multisig and custody are deferred.
 - The new live fixture is a manual delivery/release gate alongside the two
   existing Anvil profiles. CI retains its repository/container checks.

@@ -44,7 +44,7 @@ without C-01, or with another C-01 version, cannot authenticate a distributor an
 is rejected even if it has an otherwise valid primary-distribution policy. This
 coupling is not approved as a permanent product boundary. The team must choose a
 Manifest/policy-config distributor commitment or explicitly approve C-01-v2-only
-support (D030). No distributor-authority redesign is included here.
+support (D043). No distributor-authority redesign is included here.
 
 AMM supports self-directed secondary trades only. Redemption,
 unknown classes, identical-token pairs and delegated AMM execution reject. The
