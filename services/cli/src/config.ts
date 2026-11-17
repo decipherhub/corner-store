@@ -24,6 +24,10 @@ export const DEFAULT_CHAIN_ID = 31337;
 export const ALLOWED_JURISDICTION = "US";
 
 export interface Artifact {
+  routerV2?: string;
+  rfqV3Adapter?: string;
+  rfqV3Venue?: string;
+  affiliateSource?: string;
   assetProfile?: "buidl-like" | "reg-d";
   ammAdapter: string;
   deployer: string;

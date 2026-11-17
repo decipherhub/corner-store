@@ -6,7 +6,7 @@ import {
   QuoteCoordinatorIntent,
   RFQCoordinatorError,
   RFQModuleFreshnessEvidence,
-  RFQQuoteCoordinator,
+  RFQQuoteCoordinator, RFQQuoteCoordinatorV3, RFQQuoteIntentV3, SignedRFQQuoteV3, normalizeFlowType,
   SignedRFQQuote,
   hashCanonical,
   normalizeAddress,
@@ -23,6 +23,7 @@ const DEFAULT_RATE_LIMIT_MAX_BUCKETS = 10_000;
 const DEFAULT_READINESS_TIMEOUT_MS = 3_000;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const READINESS_COMPONENTS = new Set([
+  "context",
   "audit",
   "authentication",
   "coordinator",
@@ -34,7 +35,7 @@ const READINESS_COMPONENTS = new Set([
 ]);
 
 type JsonRecord = Record<string, unknown>;
-type NormalizedHostQuoteIntent = QuoteCoordinatorIntent & {amountIn: string; ttlSeconds: number};
+type NormalizedHostQuoteIntent = QuoteCoordinatorIntent & Partial<RFQQuoteIntentV3> & {amountIn: string; ttlSeconds: number};
 type NormalizedHostQuoteBody = Omit<NormalizedHostQuoteIntent, "policyId">;
 
 export interface AuthPrincipal {
@@ -83,6 +84,7 @@ export interface IncidentSink {
 }
 
 export type RFQReadinessComponent =
+  | "context"
   | "audit"
   | "authentication"
   | "coordinator"
@@ -110,6 +112,10 @@ export interface ProductionRFQHostConfig {
   host?: string;
   port?: number;
   coordinator: RFQQuoteCoordinator;
+  v3?: {
+    coordinator: RFQQuoteCoordinatorV3;
+    resolvePolicyId(request: NormalizedHostQuoteBody & {flowType: 0 | 1}): Promise<Hex> | Hex;
+  };
   authenticator: RFQAuthenticator;
   resolvePolicyId(request: NormalizedHostQuoteBody): Promise<Hex> | Hex;
   rateLimiter?: RateLimiter;
@@ -339,14 +345,15 @@ async function handleRequest(
       metric(config, "rfq_host_http_requests_total", {route: "ready", outcome: report.ready ? "success" : "unavailable"});
       return;
     }
-    if (req.method !== "POST" || req.url !== "/rfq/quote") {
+    if (req.method !== "POST" || (req.url !== "/rfq/quote" && (req.url !== "/rfq/v3/quote" || !config.v3))) {
       sendJson(res, 404, {error: "not_found"});
       metric(config, "rfq_host_http_requests_total", {route: "unknown", outcome: "reject"});
       return;
     }
 
     const body = await readJsonBody(req, config.maxBodyBytes);
-    const normalizedBody = normalizeQuoteBody(body);
+    const v3 = req.url === "/rfq/v3/quote";
+    const normalizedBody = normalizeQuoteBody(body, v3);
     requestHash = hashCanonical({
       taker: normalizedBody.taker,
       tokenIn: normalizedBody.tokenIn,
@@ -365,7 +372,7 @@ async function handleRequest(
 
     const rate = await config.rateLimiter.check({
       principalHash: authenticatedPrincipalHash,
-      route: "/rfq/quote",
+      route: req.url!,
       nowMs: Date.now()
     });
     if (!rate.allowed) {
@@ -389,7 +396,7 @@ async function handleRequest(
 
     let policyId: Hex;
     try {
-      policyId = normalizeBytes32(await config.resolvePolicyId(normalizedBody), "policyId");
+      policyId = normalizeBytes32(await (v3 ? config.v3!.resolvePolicyId(normalizedBody as NormalizedHostQuoteBody & {flowType: 0 | 1}) : config.resolvePolicyId(normalizedBody)), "policyId");
     } catch {
       throw Object.assign(new Error("policy resolver unavailable"), {
         dependencyModule: "policy",
@@ -407,7 +414,10 @@ async function handleRequest(
       ttlSeconds: normalized.ttlSeconds
     });
 
-    const issued = await config.coordinator.quoteWithEvidence(normalized, {now: config.now(), futureSkewSeconds: config.futureSkewSeconds});
+    const freshnessPolicy = {now: config.now(), futureSkewSeconds: config.futureSkewSeconds};
+    const issued = v3
+      ? await config.v3!.coordinator.quoteWithEvidence(normalized as QuoteCoordinatorIntent & RFQQuoteIntentV3, freshnessPolicy)
+      : await config.coordinator.quoteWithEvidence(normalized, freshnessPolicy);
     const signed = issued.signedQuote;
     if (!issued.evidence) throw new RFQCoordinatorError("STRICT_EVIDENCE_REQUIRED", "strict coordinator did not return production evidence");
     pricing = issued.evidence.pricing;
@@ -453,16 +463,19 @@ async function handleRequest(
   }
 }
 
-function normalizeQuoteBody(body: unknown): NormalizedHostQuoteBody {
+function normalizeQuoteBody(body: unknown, v3 = false): NormalizedHostQuoteBody {
   if (!isRecord(body)) throw new Error("request body must be a JSON object");
   if (typeof body.idempotencyKey !== "string" || body.idempotencyKey.length > 256) {
     throw new Error("idempotencyKey must be a 1-256 character string");
   }
+  if (v3 && Object.keys(body).some((key) => !["idempotencyKey", "taker", "tokenIn", "tokenOut", "amountIn", "venue", "ttlSeconds", "flowType"].includes(key))) throw new Error("unsupported v3 request field");
+  const flow = v3 ? {flowType: normalizeFlowType(body.flowType)} : {};
   const {taker, tokenIn, tokenOut, amountIn, venue, ttlSeconds} = body;
   if (typeof taker !== "string" || typeof tokenIn !== "string" || typeof tokenOut !== "string" || typeof amountIn !== "string" || typeof venue !== "string") {
     throw new Error("taker, tokenIn, tokenOut, amountIn and venue are required strings");
   }
   return {
+    ...flow,
     idempotencyKey: body.idempotencyKey,
     taker: normalizeAddress(taker as Address, "taker"),
     tokenIn: normalizeAddress(tokenIn as Address, "tokenIn"),
@@ -529,7 +542,7 @@ function auditEvent(
     requestHash?: string;
     idempotencyKeyHash?: string;
     normalized?: NormalizedHostQuoteIntent;
-    signed?: SignedRFQQuote;
+    signed?: SignedRFQQuote | SignedRFQQuoteV3;
     quoteHash?: string;
     pricing?: RFQModuleFreshnessEvidence;
     risk?: RFQModuleFreshnessEvidence;
@@ -603,6 +616,7 @@ function classifyError(error: unknown): {status: number; publicError: string; re
     };
   }
   if (error instanceof RFQCoordinatorError) {
+    if (error.code === "CONTEXT_EVIDENCE_INVALID") return {status: 503, publicError: "dependency_unavailable", reason: "context_unavailable", module: "context", incident: "dependency_unavailable"};
     if (error.code === "RISK_REJECTED") {
       return {status: 422, publicError: "risk_rejected", reason: "risk_rejected", module: "risk"};
     }

@@ -23,7 +23,7 @@
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build && node scripts/prepare-package.mjs",
     "start": "node dist/cli/src/index.js",
-    "test": "npm run build && node dist/cli/test/smoke.js"
+    "test": "npm run build && node dist/cli/test/smoke.js && node --test dist/cli/test/provenance.js"
   },
   "dependencies": {
     "commander": "^12.1.0",

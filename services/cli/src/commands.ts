@@ -99,12 +99,14 @@ import {
   RFQQuoteService,
   SignedRFQQuote,
   WalletTypedDataSigner,
-  encodeVenueData,
+  encodeVenueData, encodeVenueDataV3, isV3QuoteFile, parseQuoteFile, requestBackendQuoteV3,
   readQuoteFile,
   requestBackendQuote,
   rfqDomain,
   writeQuoteFile
 } from "./rfq";
+import {ROUTER_ABI} from "./abi";
+import {RFQQuoteServiceV3, OnchainRFQContextResolver, ethersContextReader, domainV3, RFQ_QUOTE_V3_TYPES} from "../../rfq/src";
 import {CliError} from "./util";
 import {
   copyDeploymentArtifact,
@@ -1468,6 +1470,8 @@ export async function cmdBuy(
   let amountOutMin: bigint;
   let adapterForApproval: string;
   let amountIn: bigint;
+  let routerAddress = a.router;
+  let inputToken = a.quote;
 
   if (venue === "rfq") {
     if (!opts.quote) throw new CliError("--quote <file> is required for --venue rfq");
@@ -1482,6 +1486,17 @@ export async function cmdBuy(
     ctx = [buyer, buyer, q.maker, q.tokenIn, q.tokenOut, amountIn, amountOut, 2, q.venue, 0, false];
     venueData = encodeVenueData(q, qf.signature);
     adapterForApproval = a.rfqAdapter;
+    if (isV3QuoteFile(qf)) {
+      validateV3DeploymentQuote(qf, a, Number((await provider.getNetwork()).chainId));
+      const evidence = await v3Resolver(a, provider, Number((await provider.getNetwork()).chainId)).resolve(qf.quote);
+      if (evidence.affiliateEvidenceHash.toLowerCase() !== qf.quote.affiliateEvidenceHash.toLowerCase()) throw new CliError("RFQ v3 affiliate evidence changed");
+      ctx[9] = qf.quote.flowType;
+      ctx[10] = evidence.sellerIsAffiliate;
+      venueData = encodeVenueDataV3(qf.quote, qf.signature);
+      adapterForApproval = a.rfqV3Adapter!;
+      routerAddress = a.routerV2!;
+      inputToken = qf.quote.tokenIn;
+    }
   } else if (venue === "amm") {
     amountIn = parseEther(amountInArg);
     const amountOut = amountIn; // 1:1 MockPool
@@ -1494,7 +1509,7 @@ export async function cmdBuy(
   }
 
   // ensure the buyer has approved the adapter to pull QUOTE (tokenIn).
-  const quoteToken = erc20(a.quote, signer);
+  const quoteToken = erc20(inputToken, signer);
   const allowance: bigint = await quoteToken.allowance(buyer, adapterForApproval);
   if (allowance < amountIn) {
     console.log(`  approving ${adapterForApproval} to spend QUOTE`);
@@ -1505,7 +1520,7 @@ export async function cmdBuy(
   if (!latest) throw new CliError("cannot read latest block for execution deadline");
   const req = [ctx, amountOutMin, BigInt(latest.timestamp + 3600), nonce, venueData];
   console.log(`Executing ${venue.toUpperCase()} buy: amountIn=${formatEther(amountIn)} as ${buyer}`);
-  await logTx(await router(a, signer).execute(req), "execute");
+  await logTx(await new Contract(routerAddress, ROUTER_ABI, signer).execute(req), "execute");
 
   const rwaAfter = await erc20(a.rwaToken, provider).balanceOf(buyer);
   console.log(`  RWA balance delta: +${formatEther(rwaAfter - rwaBefore)}`);
@@ -2085,10 +2100,15 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
 
   // EOA recovery is diagnostic only. The Adapter's immutable authorizer is the
   // source of truth for direct maker, delegated and ERC-1271 signatures.
-  const dom = rfqDomain(DEFAULT_CHAIN_ID, a.rfqAdapter as `0x${string}`);
+  const v3 = isV3QuoteFile(qf);
+  const chainId = v3 ? Number((await provider.getNetwork()).chainId) : DEFAULT_CHAIN_ID;
+  if (v3) validateV3DeploymentQuote(qf, a, chainId);
+  const adapterAddress = v3 ? a.rfqV3Adapter! : a.rfqAdapter;
+  const dom = v3 ? domainV3(chainId, adapterAddress as `0x${string}`) : rfqDomain(DEFAULT_CHAIN_ID, a.rfqAdapter as `0x${string}`);
+  const quoteTypes = v3 ? RFQ_QUOTE_V3_TYPES : RFQ_QUOTE_TYPES;
   let recovered = "";
   try {
-    recovered = verifyTypedData(dom, RFQ_QUOTE_TYPES, q, qf.signature);
+    recovered = verifyTypedData(dom, quoteTypes, q, qf.signature);
   } catch (e: any) {
     recovered = `<recovery failed: ${e?.shortMessage ?? e?.message ?? e}>`;
   }
@@ -2099,14 +2119,14 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
   const secsLeft = Number(q.expiry) - now;
   const expired = secsLeft <= 0;
 
-  const rfq = rfqAdapter(a, provider);
+  const rfq = rfqAdapter({...a, rfqAdapter: adapterAddress}, provider);
   const [nonceUsed, makerApproved, authorizerAddress]: [boolean, boolean, string] = await Promise.all([
     rfq.usedQuoteNonce(q.maker, BigInt(q.nonce)),
     rfq.approvedMaker(q.maker),
     rfq.makerAuthorizer()
   ]);
   const authorizer = new Contract(authorizerAddress, MAKER_AUTHORIZER_ABI, provider);
-  const quoteHash = TypedDataEncoder.hash(dom, RFQ_QUOTE_TYPES, q);
+  const quoteHash = TypedDataEncoder.hash(dom, quoteTypes, q);
   const [sigOk, authorizerVersion]: [boolean, bigint] = await Promise.all([
     authorizer.isAuthorizedSigner(q.maker, quoteHash, qf.signature),
     authorizer.authorizerVersion()
@@ -2132,21 +2152,59 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
       detail: makerApproved ? "maker on RFQ allowlist" : "maker NOT on RFQ allowlist"
     }
   ];
+  if (isV3QuoteFile(qf)) {
+    try {
+      const current = await v3Resolver(a, provider, Number((await provider.getNetwork()).chainId)).resolve(qf.quote);
+      checks.push({name: "context-evidence", pass: current.affiliateEvidenceHash.toLowerCase() === qf.quote.affiliateEvidenceHash.toLowerCase(), detail: "current venue and affiliate evidence"});
+    } catch {checks.push({name: "context-evidence", pass: false, detail: "context evidence unavailable or mismatched"});}
+  }
   const allPass = checks.every((c) => c.pass);
 
   if (opts.json) {
     console.log(
-      JSON.stringify({file, quote: q, verifyingContract: a.rfqAdapter, recovered, checks, allPass}, null, 2)
+      JSON.stringify({file, quote: q, verifyingContract: adapterAddress, recovered, checks, allPass}, null, 2)
     );
     if (!allPass) process.exitCode = 1;
     return;
   }
 
-  console.log(`Quote ${file}  (verifyingContract=${a.rfqAdapter}, chainId=${DEFAULT_CHAIN_ID})`);
+  console.log(`Quote ${file}  (verifyingContract=${adapterAddress}, chainId=${chainId})`);
   for (const [k, v] of Object.entries(q)) console.log(`  ${k.padEnd(10)} ${v}`);
   console.log(`  signature  ${qf.signature}`);
   console.log("");
   console.log("Checks:");
   for (const c of checks) console.log(`  [${c.pass ? "PASS" : "FAIL"}] ${c.name.padEnd(15)} ${c.detail}`);
   if (!allPass) process.exitCode = 1;
+}
+
+function v3Resolver(a: Artifact, provider: JsonRpcProvider, chainId: number): OnchainRFQContextResolver {
+  if (!a.routerV2 || !a.rfqV3Adapter || !a.rfqV3Venue || !a.affiliateSource) throw new CliError("RFQ v3 requires explicit routerV2, rfqV3Adapter, rfqV3Venue and affiliateSource artifact fields");
+  return new OnchainRFQContextResolver({chainId, verifyingContract: a.rfqV3Adapter as `0x${string}`, router: a.routerV2 as `0x${string}`, venueRegistry: a.venueReg as `0x${string}`, policyRegistry: a.policyReg as `0x${string}`, affiliateSource: a.affiliateSource as `0x${string}`, reader: ethersContextReader(provider)});
+}
+
+function validateV3DeploymentQuote(signed: import("./rfq").SignedRFQQuoteV3, a: Artifact, chainId: number): void {
+  if (!a.routerV2 || !a.rfqV3Adapter || !a.rfqV3Venue || signed.typedData.domain.chainId !== chainId || signed.typedData.domain.verifyingContract.toLowerCase() !== a.rfqV3Adapter.toLowerCase() || signed.quote.venue.toLowerCase() !== a.rfqV3Venue.toLowerCase()) throw new CliError("RFQ v3 quote does not match the explicit v3 deployment");
+}
+
+export async function cmdRfqV3Quote(opts: GlobalOpts & {request: string; backend?: string; authEnv?: string; out?: string}): Promise<void> {
+  const a = loadArtifact(opts.artifact);
+  const provider = makeProvider(opts);
+  const chainId = Number((await provider.getNetwork()).chainId);
+  const request = JSON.parse(readFileSync(opts.request, "utf8"));
+  let signed: import("./rfq").SignedRFQQuoteV3;
+  if (opts.backend) {
+    const token = opts.authEnv ? process.env[opts.authEnv] : undefined;
+    if (opts.authEnv && !token) throw new CliError("RFQ authentication environment variable is unavailable");
+    signed = await requestBackendQuoteV3(opts.backend, request, token);
+  } else {
+    const signer = resolveSigner(opts, provider, 0);
+    if (request.maker?.toLowerCase() !== (await signer.getAddress()).toLowerCase()) throw new CliError("RFQ v3 request maker must match the local signer");
+    const current = await v3Resolver(a, provider, chainId).resolve(request);
+    signed = await new RFQQuoteServiceV3({chainId, verifyingContract: a.rfqV3Adapter as `0x${string}`, now: async () => {const b = await provider.getBlock("latest"); if (!b) throw new CliError("latest block unavailable"); return b.timestamp;}}, new WalletTypedDataSigner(signer)).createSignedQuote({...request, affiliateEvidenceHash: current.affiliateEvidenceHash});
+  }
+  parseQuoteFile(signed, 3);
+  validateV3DeploymentQuote(signed, a, chainId);
+  if (signed.quote.taker.toLowerCase() !== request.taker?.toLowerCase() || signed.quote.amountIn !== request.amountIn || signed.quote.tokenIn.toLowerCase() !== request.tokenIn?.toLowerCase() || signed.quote.tokenOut.toLowerCase() !== request.tokenOut?.toLowerCase() || signed.quote.flowType !== request.flowType) throw new CliError("RFQ v3 response does not match request");
+  writeQuoteFile(opts.out ?? "quote-v3.json", signed);
+  console.log(`Signed RFQ v3 quote written to ${opts.out ?? "quote-v3.json"}`);
 }

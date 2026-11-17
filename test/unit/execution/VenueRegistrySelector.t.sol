@@ -4,10 +4,12 @@ pragma solidity 0.8.17;
 import {Test} from "forge-std/Test.sol";
 import {VenueRegistry} from "../../../src/execution/VenueRegistry.sol";
 import {VenueSelector} from "../../../src/execution/VenueSelector.sol";
-import {VenueConfig, CustodyModel} from "../../../src/types/VenueTypes.sol";
+import {VenueConfig, VenueContextEvidence, CustodyModel} from "../../../src/types/VenueTypes.sol";
 import {ComplianceDecision, VenueType} from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 import {Events} from "../../../src/libraries/Events.sol";
+import {MockContextAdapter} from "../../mocks/MockContextAdapter.sol";
+import {ContextEvidence} from "../../../src/execution/ContextEvidence.sol";
 
 contract VenueRegistrySelectorTest is Test {
     VenueRegistry internal reg;
@@ -109,4 +111,128 @@ contract VenueRegistrySelectorTest is Test {
         assertTrue(sel.validate(VENUE, VenueType.RFQ, d));
         assertFalse(sel.validate(VENUE, VenueType.ORDER_BOOK, d));
     }
+}
+
+contract VenueContextRegistryTest is Test {
+    VenueRegistry internal reg;
+    MockContextAdapter internal adapter;
+    VenueConfig internal cfg;
+    VenueContextEvidence internal evidence;
+    address internal constant VENUE = address(0xCAFE);
+
+    function setUp() public {
+        reg = new VenueRegistry();
+        adapter = new MockContextAdapter();
+        adapter.setRouter(address(this));
+        cfg = VenueConfig(VenueType.RFQ, address(adapter), VENUE, address(0), CustodyModel.NONE, true);
+        reg.registerVenue(VENUE, cfg);
+        reg.setContextImplementation(address(adapter).codehash, 3, 1, true);
+        evidence = VenueContextEvidence({
+            adapterVersion: 3,
+            contextVersion: 1,
+            adapterCodeHash: address(adapter).codehash,
+            affiliateSource: address(reg),
+            affiliateSourceCodeHash: address(reg).codehash,
+            policyRegistry: address(reg),
+            policyRegistryCodeHash: address(reg).codehash,
+            configurationHash: ContextEvidence.configurationHash(cfg)
+        });
+    }
+
+    function test_evidenceRoundTrip() public {
+        reg.setVenueContextEvidence(VENUE, evidence);
+        assertEq(abi.encode(reg.contextEvidenceOf(VENUE)), abi.encode(evidence));
+    }
+
+    function test_evidenceOnlyOwner() public {
+        vm.prank(address(0xBAD));
+        vm.expectRevert("Ownable: caller is not the owner");
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+
+    function test_implementationReviewOnlyOwner() public {
+        vm.prank(address(0xBAD));
+        vm.expectRevert("Ownable: caller is not the owner");
+        reg.setContextImplementation(address(adapter).codehash, 3, 1, true);
+    }
+
+    function test_reregistrationInvalidatesEvidenceEvenIfConfigUnchanged() public {
+        reg.setVenueContextEvidence(VENUE, evidence);
+        reg.registerVenue(VENUE, cfg);
+        assertEq(reg.contextEvidenceOf(VENUE).adapterCodeHash, bytes32(0));
+    }
+
+    function test_changedRegistrationInvalidatesEvidence() public {
+        reg.setVenueContextEvidence(VENUE, evidence);
+        cfg.target = address(0xBAD);
+        reg.registerVenue(VENUE, cfg);
+        assertEq(reg.contextEvidenceOf(VENUE).configurationHash, bytes32(0));
+    }
+
+    function test_unreviewedNoOpVerifierCannotSelfDeclareSupport() public {
+        reg.setContextImplementation(address(adapter).codehash, 3, 1, false);
+        vm.expectRevert(Errors.ContextImplementationNotApproved.selector);
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+
+    function test_approvalBindsExactVersions() public {
+        evidence.adapterVersion = 4;
+        vm.expectRevert(Errors.ContextImplementationNotApproved.selector);
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+
+    function test_unsupportedContextVersionRejectsEvenIfReviewed() public {
+        reg.setContextImplementation(address(adapter).codehash, 3, 2, true);
+        evidence.contextVersion = 2;
+        vm.expectRevert(Errors.InvalidContextEvidence.selector);
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+
+    function test_staleConfigurationCommitmentRejects() public {
+        adapter.setConfiguration(bytes32("changed"));
+        vm.expectRevert(Errors.InvalidContextEvidence.selector);
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+
+    function test_wrongRuntimeEvidenceRejects() public {
+        evidence.affiliateSourceCodeHash = bytes32("wrong");
+        vm.expectRevert(Errors.InvalidContextEvidence.selector);
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+
+    function test_missingSourceRejects() public {
+        evidence.affiliateSource = address(0);
+        vm.expectRevert(Errors.InvalidContextEvidence.selector);
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+
+    function test_inactiveVenueCannotActivateEvidence() public {
+        cfg.active = false;
+        reg.registerVenue(VENUE, cfg);
+        vm.expectRevert(Errors.AdapterNotRegistered.selector);
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+
+    function test_eoaCannotActivateAsVerifier() public {
+        cfg.adapter = address(0xBAD);
+        reg.registerVenue(VENUE, cfg);
+        evidence.adapterCodeHash = cfg.adapter.codehash;
+        reg.setContextImplementation(evidence.adapterCodeHash, 3, 1, true);
+        vm.expectRevert(Errors.InvalidContextEvidence.selector);
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+
+    function test_fallbackOnlyVerifierRejectsDespiteReview() public {
+        FallbackContextVerifier fallbackVerifier = new FallbackContextVerifier();
+        cfg.adapter = address(fallbackVerifier);
+        reg.registerVenue(VENUE, cfg);
+        evidence.adapterCodeHash = address(fallbackVerifier).codehash;
+        reg.setContextImplementation(evidence.adapterCodeHash, 3, 1, true);
+        vm.expectRevert();
+        reg.setVenueContextEvidence(VENUE, evidence);
+    }
+}
+
+contract FallbackContextVerifier {
+    fallback() external {}
 }

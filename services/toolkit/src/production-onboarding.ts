@@ -12,7 +12,9 @@ import {
 } from "./policy-audit";
 import {assertRecipeVenueCompatibility} from "./policy-compatibility";
 
-export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 5;
+import {VenueContextInput, buildVenueContextTransactions, verifyVenueContext} from "./venue-context";
+
+export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 6;
 export const MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION = 1;
 export const POLICY_STATUS = {UNKNOWN: 0, UNREGULATED: 1, ACTIVE: 2, SUSPENDED: 3, PROPOSED: 4, RETIRED: 5} as const;
 export const VENUE_TYPE = {AMM: 0, ORDER_BOOK: 1, RFQ: 2} as const;
@@ -40,6 +42,7 @@ export interface ProductionOnboardingConfig {
   addresses: {
     token: string;
     complianceEngine?: string;
+    executionRouter?: string;
     identityRegistry: string;
     compliance: string;
     topicsRegistry: string;
@@ -143,6 +146,7 @@ export interface ElementEnforcementOverrideInput {
 }
 
 export interface VenueInput {
+  context?: VenueContextInput;
   venue: string;
   venueType: keyof typeof VENUE_TYPE | number;
   adapter: string;
@@ -356,13 +360,15 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   if (!isAddress(c.governance.operatorExecutor)) throw new Error("governance.operatorExecutor must be a non-zero address");
   if (!Number.isSafeInteger(c.governance.requiredApprovals) || c.governance.requiredApprovals < 1 || c.governance.requiredApprovals > 50) throw new Error("governance.requiredApprovals must be between 1 and 50");
   if (!c.addresses || typeof c.addresses !== "object" || Array.isArray(c.addresses)) throw new Error("addresses are required");
-  assertKnownKeys(c.addresses, ["token", "complianceEngine", "identityRegistry", "compliance", "topicsRegistry", "issuersRegistry", "identityStorage", "elementRegistry", "recipeRegistry", "tokenPolicyRegistry", "operatorRegistry", "venueRegistry", "rfqAdapter", "makerAuthorizer"], "addresses");
+  assertKnownKeys(c.addresses, ["token", "complianceEngine", "executionRouter", "identityRegistry", "compliance", "topicsRegistry", "issuersRegistry", "identityStorage", "elementRegistry", "recipeRegistry", "tokenPolicyRegistry", "operatorRegistry", "venueRegistry", "rfqAdapter", "makerAuthorizer"], "addresses");
   for (const key of ["token", "identityRegistry", "compliance", "topicsRegistry", "issuersRegistry", "identityStorage", "elementRegistry", "recipeRegistry", "tokenPolicyRegistry", "operatorRegistry", "venueRegistry"] as const) {
     if (!isAddress(c.addresses[key])) throw new Error(`addresses.${key} must be a non-zero address`);
   }
   if (c.addresses.rfqAdapter !== undefined && !isAddress(c.addresses.rfqAdapter)) throw new Error("addresses.rfqAdapter must be a non-zero address");
   if (c.addresses.makerAuthorizer !== undefined && !isAddress(c.addresses.makerAuthorizer)) throw new Error("addresses.makerAuthorizer must be a non-zero address");
   if (isV4Onboarding(c) && !isAddress(c.addresses.complianceEngine)) throw new Error("addresses.complianceEngine is required for schemaVersion 4 onboarding");
+  if (schemaVersion < 6 && c.addresses.executionRouter !== undefined) throw new Error("executionRouter requires schemaVersion 6");
+  if (schemaVersion === 6 && (!isAddress(c.addresses.executionRouter) || !isHash32(c.codeHashes?.executionRouter))) throw new Error("schemaVersion 6 requires executionRouter and its code hash");
   validateUniqueAddresses(c.addresses as Record<string, string | undefined>);
   if (c.codeHashes) {
     if (typeof c.codeHashes !== "object" || Array.isArray(c.codeHashes)) throw new Error("codeHashes must be an object");
@@ -481,7 +487,11 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   if (v5) validatePolicyConfig(c.policyConfig, c.recipeBindings, c.recipes, c.elements);
   if (!Array.isArray(c.venues) || c.venues.length === 0) throw new Error("venues must contain at least one venue");
   const venueSeen = new Set<string>();
-  for (const [index, venue] of c.venues.entries()) validateVenue(venue, index, venueSeen);
+  for (const [index, venue] of c.venues.entries()) {
+    validateVenue(venue, index, venueSeen);
+    if (schemaVersion === 6) validateVenueContext(c as ProductionOnboardingConfig, venue);
+    else if (venue.context !== undefined) throw new Error("venue context requires schemaVersion 6");
+  }
   if (!c.venues.some((venue) => venue.active)) throw new Error("venues must contain at least one active venue");
   const ammEnabled = (c.manifest!.supportedEngines & (1 << VENUE_TYPE.AMM)) !== 0 || c.venues.some(
     (venue) => venue.active && enumValue(venue.venueType, VENUE_TYPE, "venueType") === VENUE_TYPE.AMM
@@ -609,7 +619,12 @@ export function createProductionOnboardingPlan(
   if (v4) {
     txs.push(tx(policyReadyId, "operator", "Record policyId/version/artifact audit checkpoint", selected.addresses.complianceEngine!, POLICY_AUDIT_ENGINE.encodeFunctionData("recordPolicyAuditCheckpoint", [selected.addresses.token]), [activationId], "operator"));
   }
-  for (const [index, venue] of (lifecycleAction === "REGISTER" ? (selected.venues ?? []) : []).entries()) {
+  if (selected.schemaVersion === 6 && lifecycleAction === "REGISTER") {
+    const contextTxs = buildVenueContextTransactions(selected, [policyReadyId]);
+    txs.push(...contextTxs);
+    ids.venues.push(...contextTxs.filter((t) => t.id.endsWith("-evidence")).map((t) => t.id));
+  }
+  for (const [index, venue] of (lifecycleAction === "REGISTER" && selected.schemaVersion < 6 ? (selected.venues ?? []) : []).entries()) {
     const id = `venue-${index + 1}`;
     ids.venues.push(id);
     txs.push(tx(id, "governance-owner", `Register venue ${venue.venue}`, selected.addresses.venueRegistry, VENUE_REGISTRY.encodeFunctionData("registerVenue", [venue.venue, venueTuple(venue)]), [policyReadyId], "safe-owner"));
@@ -827,6 +842,10 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
       check(`venue-${index + 1}`, venueMatches(actual, expected), `expected=${JSON.stringify(expected)}; actual=${JSON.stringify(tupleToJson(actual))}`);
       await verifyCallBool(reader, selected.addresses.operatorRegistry, OPERATOR_REGISTRY, "isVenueSuspended", [venue.venue], false, `venue-${index + 1}-suspended`, check);
     } catch (err: any) { check(`venue-${index + 1}`, false, `unavailable: ${err.message}`); }
+    if (selected.schemaVersion === 6) {
+      const contextChecks = await verifyVenueContext(selected, venue, reader);
+      checks.push(...contextChecks.map((entry) => ({...entry, name: `venue-${index + 1}-${entry.name}`})));
+    }
   }
   for (const [index, maker] of (selected.rfq?.makers ?? []).entries()) {
     try {
@@ -1238,7 +1257,7 @@ function validateManifest(m: any): void {
 }
 
 function validateVenue(venue: VenueInput, index: number, seen: Set<string>): void {
-  assertKnownKeys(venue, ["venue", "venueType", "adapter", "target", "operator", "custody", "active"], `venues[${index}]`);
+  assertKnownKeys(venue, ["venue", "venueType", "adapter", "target", "operator", "custody", "active", "context"], `venues[${index}]`);
   if (!isAddress(venue?.venue)) throw new Error(`venues[${index}].venue must be a non-zero address`);
   enumValue(venue.venueType, VENUE_TYPE, `venues[${index}].venueType`);
   if (!isAddress(venue.adapter)) throw new Error(`venues[${index}].adapter must be a non-zero address`);
@@ -1475,4 +1494,26 @@ function venueMatches(actual: any, expected: any[]): boolean {
 
 function tupleToJson(tuple: any): any {
   return Array.isArray(tuple) ? tuple.map((v) => typeof v === "bigint" ? v.toString() : v) : tuple;
+}
+
+export function parseLegacyProductionOnboardingConfig(value: unknown): ProductionOnboardingConfig {
+  const selected = validateProductionOnboardingConfig(value);
+  if (selected.schemaVersion > 5) throw new Error("legacy onboarding parser accepts only schemas 1 through 5");
+  return selected;
+}
+
+function validateVenueContext(config: ProductionOnboardingConfig, venue: VenueInput): void {
+  const c = venue.context;
+  if (!c || typeof c !== "object") throw new Error("schemaVersion 6 requires venue context evidence");
+  assertKnownKeys(c, ["adapterVersion", "contextVersion", "adapterCodeHash", "affiliateSource", "affiliateSourceCodeHash", "policyRegistry", "policyRegistryCodeHash", "configurationHash", "reviewedImmutable", "affiliateSourceOwner", "token0", "token1"], "venue.context");
+  const kind = enumValue(venue.venueType, VENUE_TYPE, "venueType");
+  if ((kind !== VENUE_TYPE.RFQ && kind !== VENUE_TYPE.AMM) || c.adapterVersion !== (kind === VENUE_TYPE.RFQ ? 3 : 2) || c.contextVersion !== 1) throw new Error("unsupported venue context version");
+  if (c.reviewedImmutable !== true) throw new Error("activation requires reviewed immutable implementations");
+  for (const key of ["adapterCodeHash", "affiliateSourceCodeHash", "policyRegistryCodeHash", "configurationHash"] as const) if (!isHash32(c[key]) || /^0x0{64}$/i.test(c[key])) throw new Error(`venue.context.${key} must be a nonzero runtime/configuration hash`);
+  for (const key of ["affiliateSource", "policyRegistry", "affiliateSourceOwner"] as const) if (!isAddress(c[key])) throw new Error(`venue.context.${key} must be a nonzero address`);
+  if (c.policyRegistry.toLowerCase() !== config.addresses.tokenPolicyRegistry.toLowerCase() || c.policyRegistryCodeHash.toLowerCase() !== config.codeHashes!.tokenPolicyRegistry.toLowerCase()) throw new Error("venue context policy registry mismatch");
+  if (kind === VENUE_TYPE.RFQ) {
+    if (venue.adapter.toLowerCase() !== config.addresses.rfqAdapter?.toLowerCase() || !isAddress(config.addresses.makerAuthorizer)) throw new Error("RFQ v3 adapter/authorizer binding required");
+    if (c.token0 !== undefined || c.token1 !== undefined) throw new Error("RFQ context must not contain AMM pool tokens");
+  } else if (venue.venue.toLowerCase() !== venue.target.toLowerCase() || !isAddress(c.token0) || !isAddress(c.token1) || BigInt(c.token0!) >= BigInt(c.token1!)) throw new Error("AMM requires target venue binding and canonical token0/token1");
 }

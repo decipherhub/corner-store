@@ -6,7 +6,8 @@
   "license": "GPL-3.0-or-later",
   "files": [
     "dist/src",
-    "README.md"
+    "README.md",
+    "examples/corner-store.production-onboarding-v6.json"
   ],
   "exports": {
     ".": {
@@ -27,7 +28,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
-    "test": "npm run build && node dist/test/smoke.js"
+    "test": "npm run build && node dist/test/smoke.js && node --test dist/test/provenance.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

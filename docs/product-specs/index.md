@@ -12,6 +12,7 @@
 | [`buidl-like-demo-profile.md`](buidl-like-demo-profile.md) | MVP용 BUIDL-like ERC-3643 demo asset profile | Current |
 | [`rfq-backend-sdk-and-demo.md`](./rfq-backend-sdk-and-demo.md) | RFQ backend SDK와 MVP demo backend 계획 | Current |
 | [`production-rfq-policy.md`](./production-rfq-policy.md) | production RFQ dealer/settlement 책임과 구현 계약 | Current |
+| [`execution-context-provenance.md`](./execution-context-provenance.md) | versioned venue authority, RFQ v3 and activation evidence | Current |
 
 DOC-001에서 연구·회의 입력을 반영했다. 내용이 다를 경우 위 current 문서를 source
 of truth로 사용한다. acquisition/state/reject/surveillance seam은 ADR-008/D012를

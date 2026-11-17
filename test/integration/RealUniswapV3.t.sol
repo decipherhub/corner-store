@@ -8,6 +8,11 @@ import {ExecutionRequest} from "../../src/types/ExecutionTypes.sol";
 import {VenueType} from "../../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../../src/types/VenueTypes.sol";
 import {Errors} from "../../src/libraries/Errors.sol";
+import {ExecutionRouterV2} from "../../src/execution/ExecutionRouterV2.sol";
+import {ContextEvidence} from "../../src/execution/ContextEvidence.sol";
+import {Affiliate} from "../../src/compliance/elements/Affiliate.sol";
+import {VenueContextEvidence} from "../../src/types/VenueTypes.sol";
+import {FlowType} from "../../src/types/ComplianceTypes.sol";
 
 interface ICanonicalUniswapV3Factory {
     function createPool(address tokenA, address tokenB, uint24 fee) external returns (address pool);
@@ -137,6 +142,112 @@ contract RealUniswapV3Test is IntegrationBase {
     function test_unregisteredCallbackCannotPullBuyerFunds() public {
         vm.expectRevert(bytes("callback: unauthorized"));
         adapter.uniswapV3SwapCallback(int256(1 ether), 0, abi.encode(alice, address(quote)));
+    }
+
+    function _enableRouterV2() private returns (ExecutionRouterV2 v2) {
+        v2 = new ExecutionRouterV2(engine, venueReg, selector, operatorReg);
+        engine.setRouter(address(v2));
+        adapter.setRouter(address(v2));
+        Affiliate affiliate = new Affiliate();
+        affiliate.setTrustedClaimIssuer(address(this), true);
+        affiliate.setClaim(
+            realPool,
+            address(rwaToken),
+            Affiliate.AffiliateBasis.NOT_AFFILIATE,
+            Affiliate.DeterminationSource.ISSUER_REGISTRY,
+            address(this),
+            uint64(block.timestamp),
+            0
+        );
+        affiliate.setClaim(
+            alice,
+            address(rwaToken),
+            Affiliate.AffiliateBasis.NOT_AFFILIATE,
+            Affiliate.DeterminationSource.ISSUER_REGISTRY,
+            address(this),
+            uint64(block.timestamp),
+            0
+        );
+        VenueConfig memory cfg = venueReg.venueOf(realPool);
+        venueReg.setContextImplementation(address(adapter).codehash, 2, 1, true);
+        venueReg.setVenueContextEvidence(
+            realPool,
+            VenueContextEvidence(
+                2,
+                1,
+                address(adapter).codehash,
+                address(affiliate),
+                address(affiliate).codehash,
+                address(policyReg),
+                address(policyReg).codehash,
+                ContextEvidence.configurationHash(cfg)
+            )
+        );
+    }
+
+    function test_routerV2CanonicalBuy() public {
+        setupBuyer(alice);
+        fundBuyerQuote(alice, 1000 ether);
+        ExecutionRequest memory req = _realPoolBuyRequest(alice, 100 ether);
+        ExecutionRouterV2 v2 = _enableRouterV2();
+        vm.prank(alice);
+        v2.execute(req);
+        assertEq(quote.balanceOf(alice), 900 ether);
+        assertEq(rwaToken.balanceOf(alice), req.context.amountOut);
+        assertEq(rwaToken.balanceOf(address(adapter)), 0);
+    }
+
+    function test_routerV2CanonicalSell() public {
+        setupBuyer(alice);
+        mint(alice, 500 ether);
+        vm.prank(alice);
+        rwaToken.approve(address(adapter), type(uint256).max);
+        ExecutionRequest memory req = buildBuyRequest(alice, 100 ether, 0);
+        req.context.seller = realPool;
+        req.context.venue = realPool;
+        req.context.tokenIn = address(rwaToken);
+        req.context.tokenOut = address(quote);
+        req.context.amountOut = _quoteExactInput(address(rwaToken), address(quote), !quoteIsToken0, 100 ether);
+        req.venueData = abi.encode(!quoteIsToken0, _priceLimit(!quoteIsToken0));
+        ExecutionRouterV2 v2 = _enableRouterV2();
+        vm.prank(alice);
+        v2.execute(req);
+        assertEq(rwaToken.balanceOf(alice), 400 ether);
+        assertEq(quote.balanceOf(alice), req.context.amountOut);
+    }
+
+    function test_routerV2CanonicalContextMismatchBeforeEvaluation() public {
+        setupBuyer(alice);
+        fundBuyerQuote(alice, 1000 ether);
+        ExecutionRequest memory original = _realPoolBuyRequest(alice, 100 ether);
+        ExecutionRouterV2 v2 = _enableRouterV2();
+        vm.mockCallRevert(address(engine), abi.encodeWithSelector(engine.evaluate.selector), "evaluation reached");
+        uint256 poolQuote = quote.balanceOf(realPool);
+        uint256 poolRwa = rwaToken.balanceOf(realPool);
+        for (uint256 i; i < 3; i++) {
+            ExecutionRequest memory req = abi.decode(abi.encode(original), (ExecutionRequest));
+            if (i == 0) req.context.seller = alice;
+            if (i == 1) req.context.flowType = FlowType.PRIMARY_DISTRIBUTION;
+            if (i == 2) req.venueData = abi.encode(!quoteIsToken0, _priceLimit(!quoteIsToken0));
+            vm.prank(alice);
+            vm.expectRevert(i == 2 ? Errors.AMMPoolTokenMismatch.selector : Errors.InvalidExecutionContext.selector);
+            v2.execute(req);
+            assertFalse(v2.usedNonce(alice, req.nonce));
+            assertEq(quote.balanceOf(realPool), poolQuote);
+            assertEq(rwaToken.balanceOf(realPool), poolRwa);
+        }
+    }
+
+    function test_routerV2CanonicalPoolConfigurationDrift() public {
+        setupBuyer(alice);
+        fundBuyerQuote(alice, 1000 ether);
+        ExecutionRequest memory req = _realPoolBuyRequest(alice, 100 ether);
+        ExecutionRouterV2 v2 = _enableRouterV2();
+        adapter.setPool(realPool, false);
+        vm.prank(alice);
+        vm.expectRevert(Errors.InvalidContextEvidence.selector);
+        v2.execute(req);
+        assertFalse(v2.usedNonce(alice, req.nonce));
     }
 
     function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata) external {

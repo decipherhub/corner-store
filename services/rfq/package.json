@@ -27,7 +27,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",
-    "test": "npm run build && node dist/test/smoke.js"
+    "test": "npm run build && node dist/test/smoke.js && node --test dist/test/provenance.js"
   },
   "dependencies": {
     "ethers": "^6.13.5"

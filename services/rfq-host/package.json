@@ -7,11 +7,12 @@
   "types": "dist/src/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node dist/test/smoke.js",
+    "test": "npm run build && node dist/test/smoke.js && node --test dist/test/provenance.js",
     "start:production": "node dist/src/main.js"
   },
   "dependencies": {
-    "@corner-store/rfq-service": "file:../rfq"
+    "@corner-store/rfq-service": "file:../rfq",
+    "ethers": "^6.13.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

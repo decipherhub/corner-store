@@ -1339,3 +1339,142 @@ against across Compliance Core refactors (issue #128).
 - `services/compliance-data/src/kyc-conformance.ts`
 - `services/compliance-data/examples/http-kyc-provider-adapter.ts`
 - `services/compliance-data/README.md`
+
+## D028: Context authority is authenticated before policy evaluation
+
+Date: 2026-11-11
+
+### Context
+
+Policy evaluation consumes actor, flow and affiliate context. Caller-provided
+seller/flow/affiliate fields alone are insufficient authority for those inputs.
+Issue #157 needs a versioned authentication boundary while preserving deployed
+contracts and the public RFQ v2 runtime.
+
+### Decision
+
+1. Separate `ExecutionRouterV2` authenticates registration, type, implementation
+   review and runtime/configuration evidence before Engine evaluation. Its
+   view-only adapter preflight validates the supplied context without replacing
+   it or returning a generic hash as authority.
+2. RFQ actors, token legs, exact amounts and venue derive from a signed quote;
+   AMM seller/venue/target derive from the registered pool and canonical tokens.
+   Caller authentication stays with the Router. Settlement repeats validation
+   and retains measured exact fill, atomic rollback, commit and existing events.
+3. Current pinned A-06 evidence authenticates every regulated leg's actual
+   sender: buyer for tokenIn, seller for tokenOut. RFQ signs the exact leg/aggregate
+   commitment specified in `docs/product-specs/execution-context-provenance.md`.
+   A-06 remains operator-attested evidence rather than independent fact finding.
+4. Venue evidence is separate from unchanged `VenueConfig`. It pins versions,
+   adapter/source/policy runtime hashes and final configuration. Re-registration
+   clears evidence; every AMM pool edit invalidates all venues on that adapter.
+5. Implementation approval reviews immutable code and dependencies explicitly.
+   Self-declared capability/runtime hashes cannot prove correctness or
+   immutability. Governance-approved malicious code remains a trust boundary.
+6. V3 deployments admitting affiliate RFQ sells must use the new immutable
+   `EngineSelectionV2` (`B-04-v2`) wherever B-04 applies. It resolves the security
+   recipient per asset through `AssetFlow`: buyer for tokenOut, seller for
+   tokenIn, and checks that recipient's MM claim. Register the new ID and bind it
+   through an opt-in exact Recipe/Manifest update; existing B-04-v1, tests,
+   recipes and defaults stay unchanged. Schema 6 activation rejects any active
+   compiled B-04-v1 rule, including non-blocking rules, and unavailable/malformed
+   compiled-policy reads. Policies without B-04 remain supported.
+7. Deploy a separate ComplianceEngine for each v3 Router stack. Its single
+   `onlyRouter` binding cannot serve both legacy Router and RouterV2. Schema 6
+   REGISTER plans include unsigned `Engine.setRouter(RouterV2)` before adapter
+   wiring and final evidence pinning; UPDATE verifies existing wiring without
+   rebinding. Activation requires both `RouterV2.engine() == Engine` and
+   `Engine.router() == RouterV2`, rejecting mismatched or unavailable reads.
+
+### Alternatives Considered
+
+- Authenticate only after evaluation: leaves policy inputs unauthenticated at
+  the point of evaluation.
+- Replace context inside the adapter: creates disagreement with already-bound
+  decisions and obscures field ownership.
+- Let callers choose affiliate booleans or supply arbitrary hashes: provides no
+  current-source or actual-sender authentication.
+
+### Consequences
+
+- Unsupported/mismatched context and missing/drifting evidence fail closed.
+  ERC-3643/ONCHAINID remain external token/identity boundaries; non-Router paths
+  do not gain Corner Store policy enforcement.
+- The following implemented defaults remain **open items, team to confirm**:
+  conditional primary distribution from the unique active compiled C-01-v2
+  distributor; matching statuses for dual-regulated pairs; mandatory A-06
+  evidence for every regulated leg; immediate invalidation on any commitment
+  change, including same-status refresh; and reviewed immutable-only activation
+  without proxy-aware verification. Opt-in timing is recorded in D029.
+
+### Related Files
+
+- `docs/product-specs/execution-context-provenance.md`
+- `src/execution/ExecutionRouterV2.sol`
+- `src/execution/ContextEvidence.sol`
+- `src/execution/VenueRegistry.sol`
+- `src/interfaces/execution/IExecutionContextVerifier.sol`
+- `services/toolkit/src/venue-context.ts`
+
+## D029: RFQ v3 migrates through separate deployments and explicit wire versions
+
+Date: 2026-11-11
+
+### Context
+
+Context provenance requires signed flow and affiliate evidence. Reinterpreting
+existing RFQ v2 signatures, APIs, records or public Monad artifacts would break
+existing consumers and deployed settlement.
+
+### Decision
+
+1. Deploy `ExecutionRouterV2` and `RFQAdapterV3` separately. V3 uses the ordered
+   `RFQQuoteV3` type and CornerStoreRFQ domain version `3`, with chain ID and the
+   new adapter as verifying contract. Only `flowType` and
+   `affiliateEvidenceHash` are added before nonce. Never convert v2 signatures.
+2. Preserve the legacy Router ABI/events, RFQ v2 type/domain/builders,
+   `/rfq/quote` responses and live Monad runtime/artifacts. Opt into new SDK
+   exports, `/rfq/v3/quote`, host capability/readiness and explicit CLI bindings.
+3. Persist new coordinator records at schema 2 with quote version, domain and
+   context evidence; read legacy records under their original meanings.
+   Revalidate RESERVED evidence/domain/nonce before signing and never silently
+   re-sign PUBLISHED quotes. Legacy-only stores continue to write schema 1.
+4. Onboarding schema 6 adds explicit Router/runtime, immutable venue and source
+   authority evidence. Legacy schemas 1-5 have explicit parsers and reject v6-only
+   fields. Pin final configuration after wiring/pool edits and verify post-state
+   before activation. Deployment/onboarding helpers emit unsigned intents only.
+5. Keep reference/operator signing on one locally stored env/file key. Key
+   management, multisig and custody expansion remain deferred. No registry
+   contract for quote conversion, package publication or public deployment is
+   introduced by this feature.
+
+### Alternatives Considered
+
+- Change v2 types/defaults in place: breaks signature and API compatibility.
+- Registry-based quote reinterpretation: adds authority/state without preserving
+  the original signed meaning; the approved plan selects versioned typed data.
+- Rewrite persisted records or infer v3 addresses from legacy artifacts: hides
+  domain/deployment mismatches and risks signing against the wrong contract.
+
+### Consequences
+
+- Operators preserve v2 artifacts, expire/cancel old quotes and request fresh v3
+  signatures after new deployments and schema 6 verification. Package/schema/
+  capability/ABI/domain compatibility is published in `docs/sdk-versioning.md`.
+- Package versions remain 0.1.0 in this unpublished branch. Publication requires
+  the normal version/release gate; no release is implied here.
+- **Open item, team to confirm:** migration timing remains opt-in, with separate
+  deployments and RFQ v2 retained on Monad. D028's five other defaults also remain
+  open. No migration is performed on an existing public deployment.
+- The v3 live E2E joins both legacy Anvil profiles as a documented manual
+  delivery/release gate. Existing CI continues its repository/container gates.
+
+### Related Files
+
+- `docs/sdk-versioning.md`
+- `docs/product-specs/production-rfq-policy.md`
+- `services/rfq/src/eip712.ts`
+- `services/rfq/src/coordinator.ts`
+- `services/rfq-host/src/server.ts`
+- `services/toolkit/src/production-onboarding.ts`
+- `scripts/e2e-context-provenance.sh`

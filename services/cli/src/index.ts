@@ -316,6 +316,15 @@ program
   .action(run((opts, command) => cmd.cmdRfqQuote(command.optsWithGlobals())));
 
 program
+  .command("rfq-v3-quote")
+  .description("request or locally sign an opt-in RFQ v3 quote using explicit v3 deployment bindings")
+  .requiredOption("--request <file>", "v3 request JSON, with raw integer amounts and explicit flowType")
+  .option("--backend <url>", "versioned RFQ host base URL")
+  .option("--auth-env <name>", "environment variable containing the backend bearer token")
+  .option("--out <file>", "output quote path", "quote-v3.json")
+  .action(run((opts, command) => cmd.cmdRfqV3Quote(command.optsWithGlobals())));
+
+program
   .command("rfq-cancel")
   .description("cancel a maker quote nonce")
   .argument("<nonce>")

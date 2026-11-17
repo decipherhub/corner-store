@@ -84,6 +84,22 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
 
 ## Current Decisions
 
+- Opt-in `ExecutionRouterV2` authenticates venue context and current A-06 evidence
+  before Engine evaluation. `IExecutionContextVerifier.validateContext(req, cfg)`
+  returns no replacement context. Legacy `ExecutionRouter` keeps its existing
+  evaluation order and ABI.
+- RFQ v3 binds seller to signed maker, buyer/initiator to signed taker/caller,
+  token legs and exact amounts to the quote, flow to signed class plus active
+  Manifest authority, and affiliate status to current actual-sender evidence.
+  AMM binds seller/venue/target to the registered pool and canonical token order,
+  with self-directed secondary execution only.
+- RouterV2 requires separately pinned runtime/configuration evidence and reviewed
+  immutable implementation approval. Venue re-registration clears evidence;
+  AMM pool edits invalidate every venue sharing the adapter. Settlement repeats
+  authentication and retains independent amount measurement, rollback, commit
+  and existing events. The complete ownership matrix and constraints are in
+  [`execution-context-provenance.md`](../product-specs/execution-context-provenance.md).
+
 - policy evaluation과 venue dispatch 책임을 분리하기 위해 `ExecutionRouter`와
   `ComplianceEngine`을 분리한다.
 - generic Router와 Adapter 경계는 SDK에 포함하고, 모든 구체 venue는 공통 Adapter
@@ -115,8 +131,9 @@ Uniswap v3, RFQ와 Order Book의 구체 Adapter 및 Corner Store 배포 configur
 - 외부 preview API의 응답 형식
 - nonce scope와 batch execution
 - adapter upgrade/replace governance
-- venue가 인증하거나 파생해야 하는 `seller`, `flowType`, affiliate 상태의 versioned
-  provenance contract
+- Team confirmation of the adopted context-version-1 defaults, including
+  conditional primary, dual-regulated status agreement and migration timing;
+  see the provenance specification's open items.
 - Router-exclusive, token-level enforcement, limited-scope 중 production 보장 모델
 - 일반 ERC-20 public venue fast path의 허용 venue와 관측 이벤트 범위
 - 자산 classification onboarding과 integrator API

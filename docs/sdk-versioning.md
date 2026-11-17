@@ -125,3 +125,68 @@ contains `ManifestPolicyConfig` parameters or when exporting a semantic UPDATE.
 
 Do not change only the schema number: v5 deliberately fails closed when lifecycle
 or Element capability data is absent.
+
+### Opt-in execution context / RFQ v3 migration
+
+EXEC-002 adds new exports and deployments without changing legacy defaults.
+Current development package versions are still `0.1.0`; these changes do not
+publish packages. Apply the release policy above before publishing a version.
+
+| Boundary | Legacy | Explicit opt-in |
+| --- | --- | --- |
+| Router deployment | `ExecutionRouter`, existing ABI/order | Separate `ExecutionRouterV2`, preflight before evaluation |
+| RFQ deployment/domain | `RFQAdapter`, CornerStoreRFQ version `2` | Separate `RFQAdapterV3`, CornerStoreRFQ version `3` |
+| Quote type/calldata | `RFQQuote`, `(RFQQuote,bytes)` | `RFQQuoteV3`, `(RFQQuoteV3,bytes)`; ordered `flowType` and `affiliateEvidenceHash` before nonce |
+| Adapter/context capability | No provenance requirement | RFQ adapter `3` / context `1`; newly deployed AMM adapter `2` / context `1` |
+| Venue ABI | Existing `VenueConfig` | Same tuple, separate `VenueContextEvidence` and implementation approval APIs |
+| SDK builders | `domain`, `typedData`, `RFQQuoteService`, `createRFQService` | `domainV3`, `typedDataV3`, `RFQQuoteServiceV3`, `RFQBackendSDKV3`, `createRFQServiceV3` |
+| Module signing | Existing `signerModule` and capabilities | `signerModuleV3`, `RFQ_V3_MODULE_CAPABILITIES`, explicit `rfq.sign.eip712.v3` |
+| Module composition/conformance | Existing module helpers | `createRFQServiceV3FromModules`, `runRFQV3ModuleConformance` |
+| Coordinator records | Schema 1 | Schema 2, `quoteVersion: 3`, exact domain and context evidence |
+| Local store container | Legacy-only writes remain schema 1 | Reads 1/2; first v3 reservation writes container 2, retaining legacy records/accounting |
+| Host route | `/rfq/quote`, unchanged v2 response | `/rfq/v3/quote` only with `config.v3`; requires `flowType`, derives policy/evidence server-side |
+| Production bootstrap/config | Contract `1.0.0` / config `1` | Same versions plus `v3_context_provenance: true`, v3 dependencies and ready `context` component |
+| CLI | Existing quote commands/artifacts | `rfq-v3-quote --request <file>` and explicit v3 artifact addresses |
+| Onboarding | Schema 1-5 under original meanings | Schema 6 with Router/runtime, immutable context and source authority evidence |
+
+The exact EIP-712 field order, domain and evidence encoding are defined in
+[`product-specs/execution-context-provenance.md`](./product-specs/execution-context-provenance.md).
+V2 and v3 signatures cross-reject; never reinterpret old calldata or signatures.
+
+1. Preserve pinned v2 artifacts, packages and outstanding quotes. The live public
+   Monad stack, `services/testnet-rfq-demo` and existing host route stay on v2.
+2. Use `createContextDeploymentPlan` to prepare unsigned constructor intents for
+   separate RouterV2/RFQAdapterV3 and, if needed, a new UniswapV3Adapter. Review
+   immutable adapter/source/registry implementations and ownership first.
+3. Use `createContextOnboardingTemplate` with explicit schema 5 input and new
+   bindings to produce schema 6. `parseLegacyProductionOnboardingConfig` accepts
+   only schemas 1-5; those parsers reject v6-only fields. The packaged v6 example
+   contains placeholders and is not activation evidence.
+4. Wire the Engine and adapter to the new Router, complete every pool edit, then
+   register venues, approve implementation versions/runtime hashes and pin the
+   final post-configuration commitment. Activate makers after pinning. Re-pin
+   all venues on an AMM adapter after any later `setPool` operation.
+5. Verify post-state using `verifyVenueContext` and the schema 6 production
+   verifier. Provide current trusted A-06 claims for actual senders on every
+   regulated leg. Missing or unavailable reads stop activation/signing.
+6. Install an `OnchainRFQContextResolver` with `ethersContextReader` (or an
+   explicitly reviewed custom resolver), v3 signing/module/coordinator and the
+   optional host route. `affiliateEvidenceCommitment` provides the same encoding
+   as Solidity. Run the v3 conformance suite before enabling the route.
+7. CLI artifacts must explicitly contain `routerV2`, `rfqV3Adapter`, `rfqV3Venue`
+   and `affiliateSource`, with `venueReg`/`policyReg`. Legacy fields do not imply
+   v3 support. Request JSON uses raw integer amount strings. `--auth-env` can
+   name a local bearer-token environment variable for the host path.
+8. Run the full repository and three manual Anvil gates in `testing.md`, plus
+   packed-consumer smoke, before routing traffic. Expire/cancel legacy quotes;
+   obtain fresh v3 quotes instead of converting records or signatures.
+
+V3 RESERVED recovery revalidates exact domain/version, current evidence and the
+reserved nonce before signing. Changed/missing/unavailable context revokes the
+reservation and releases inventory. PUBLISHED replay returns the identical
+persisted quote without re-signing; it can subsequently fail on chain if evidence
+changed. To return to v2, restore pinned routing/packages/artifacts and reconcile
+outstanding v3 records separately; do not downgrade a schema 2 store by hand.
+Reference signing uses one local env/file key; key management, multisig and
+custody expansion remain deferred. The six team-to-confirm defaults remain open
+in the provenance specification and D028/D029.
