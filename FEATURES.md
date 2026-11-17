@@ -23,6 +23,8 @@
 ### Verification
 
 - RFQ/coordinator and host ordering, TTL boundary, persistence/replay and taxonomy tests
+- Typed store failures: alternate diagnostic messages preserve v2/v3 conflict 409,
+  inventory 409 and missing-inventory configuration 500 responses
 - Both endpoint versions: auth/limiter/audit/incident ordering including audit failure;
   deeply nested TTL preserves auth/limiter ordering and bounded rejection;
   both evidence APIs: PUBLISHED/RESERVED replay after catalog policy drift;

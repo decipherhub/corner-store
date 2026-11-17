@@ -1,5 +1,43 @@
 # Progress
 
+## 2026-11-17 Session: RFQ-006 Typed Store Failure Review Fix
+
+Confirmed PR #164's store-message classification finding. Scope: typed store
+failures and coordinator/host mappings only; no contract or product boundary change.
+`QuoteCoordinatorStore` now requires `RFQStoreError` for idempotency conflicts,
+inventory exhaustion and missing inventory configuration. The local store emits
+those codes, the coordinator translates them to bounded coordinator errors, and
+both host versions preserve 409/409/500 responses independently of diagnostic text.
+Untyped store failures remain 503. RFQ-006 remains passing.
+
+Node commands used `npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`:
+
+- `npm ci --prefix services/rfq && npm ci --prefix services/rfq-host`: exit 0.
+- `npm run build --prefix services/rfq && npm run build --prefix services/rfq-host && node --test --test-name-pattern="alternate store|typed store" services/rfq/dist/test/authorization.js services/rfq-host/dist/test/authorization.js`:
+  before mapping fixes, exit 1; 9 failed, 37 skipped. All nine failures reproduced
+  coded terminal errors becoming dependency-unavailable errors with alternate text.
+- Initial `npm test --prefix services/rfq && npm test --prefix services/rfq-host`:
+  exit 1 in RFQ smoke's old inventory-message assertion. Updated that assertion to
+  check `RFQCoordinatorError.code`; the host command was not reached.
+- Final `npm test --prefix services/rfq && npm test --prefix services/rfq-host`:
+  exit 0; RFQ smoke plus 35 named tests and host smoke plus 30 named tests passed,
+  zero failures. Added 11 named regressions covering alternate store messages on
+  both endpoints, local store codes and untyped message lookalikes.
+- `forge fmt --check`: exit 0.
+- `forge build`: exit 0, compiler/lint warnings remain.
+- `forge test --offline --match-path 'test/**/RFQ*.t.sol'`: exit 0;
+  72 passed, 0 failed, 0 skipped across 3 suites.
+- `git diff --check`: exit 0.
+
+Logs: `/private/tmp/w155-typed-*.log`. Runtime checks use real ephemeral loopback
+HTTP servers in both host suites. Anvil E2E and Docker/production integrations
+were not run: this task excludes fixed-port Anvil and changes only failure mapping.
+Commit attempt: `git add <the nine changed files> && git commit -m
+"fix(rfq): classify store failures with typed error codes"` stopped at `git add`
+with exit 128: the sandbox denied creating the worktree's Git `index.lock`.
+No commit was created. Next: user reviews and commits the verified working tree;
+no push or GitHub action.
+
 ## 2026-11-11 Session: RFQ-006 Nested TTL Review Fix
 
 RFQ-006 is passing. Scope: the confirmed P3 pre-authentication recursive TTL hash in the production
