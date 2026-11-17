@@ -32,11 +32,7 @@ Node commands used `npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`:
 Logs: `/private/tmp/w155-typed-*.log`. Runtime checks use real ephemeral loopback
 HTTP servers in both host suites. Anvil E2E and Docker/production integrations
 were not run: this task excludes fixed-port Anvil and changes only failure mapping.
-Commit attempt: `git add <the nine changed files> && git commit -m
-"fix(rfq): classify store failures with typed error codes"` stopped at `git add`
-with exit 128: the sandbox denied creating the worktree's Git `index.lock`.
-No commit was created. Next: user reviews and commits the verified working tree;
-no push or GitHub action.
+The review fixes were committed on this branch in `df2e387`.
 
 ## 2026-11-11 Session: RFQ-006 Nested TTL Review Fix
 
