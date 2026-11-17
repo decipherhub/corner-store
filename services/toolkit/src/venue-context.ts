@@ -93,14 +93,21 @@ export async function verifyVenueContext(config: ProductionOnboardingConfig, ven
     if (!Number.isInteger(count) || count < 1 || count > 8) throw new Error("invalid compiled binding count");
     const legacyId = encodeBytes32String("B-04-v1").toLowerCase();
     let directionAware = true;
+    let affiliateRequired = false;
+    const consumers = ["A-06-v1", "B-04-v1", "B-04-v2"].map((id) => encodeBytes32String(id).toLowerCase());
     for (let i = 0; i < count; i++) {
       const rules = await reader.call(config.addresses.tokenPolicyRegistry, ["function compiledRulesOf(address,uint256) view returns (tuple(bytes32 elementId,uint8 action)[])"], "compiledRulesOf", [config.addresses.token, i]);
       if (!Array.isArray(rules) || rules.length < 1 || rules.length > 32) throw new Error("invalid compiled rules");
       for (const rule of rules) {
         const id = String(rule.elementId ?? rule[0]);
         if (!/^0x[0-9a-f]{64}$/i.test(id)) throw new Error("invalid compiled element ID");
+        if (consumers.includes(id.toLowerCase())) affiliateRequired = true;
         if (id.toLowerCase() === legacyId) directionAware = false;
       }
+    }
+    if (affiliateRequired) {
+      for (const subject of [config.addresses.complianceEngine!, c.policyRegistry]) await read(subject, "function elementReg() view returns (address)", "elementReg", [], config.addresses.elementRegistry);
+      await read(config.addresses.elementRegistry, "function elementOf(bytes32) view returns (address)", "elementOf", [encodeBytes32String("A-06-v1")], c.affiliateSource);
     }
     check("context-policy-direction", directionAware, "active compiled policy must replace B-04-v1 with opt-in B-04-v2 for context-aware venues");
   } catch (error: any) {check("context-policy-direction", false, `unavailable: ${error.message}`);}

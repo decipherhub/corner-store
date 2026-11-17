@@ -34,6 +34,56 @@ HTTP servers in both host suites. Anvil E2E and Docker/production integrations
 were not run: this task excludes fixed-port Anvil and changes only failure mapping.
 The review fixes were committed on this branch in `df2e387`.
 
+## 2026-11-17 Session: PR #163 Reviewer Findings
+
+Scope: only EXEC-002 conditional affiliate evidence, exact affiliate source
+binding, C-01-v2 limitation documentation and fresh verification. Findings 1-4
+are CONFIRMED. Legacy/demo runtime and public deployment artifacts are unchanged.
+
+- F1: ContextEvidence and OnchainRFQContextResolver inspect each ACTIVE leg's
+  compiled rules. A-06-v1, B-04-v1 or B-04-v2 requires current sender evidence;
+  other policies contribute zero without reading claims. Required missing,
+  conflicting or unavailable evidence still rejects. Four new Solidity tests
+  initially failed (41 passed), proving the missing-evidence, mixed-policy and
+  source-binding regressions. Existing freshness/revocation tests remain passing.
+- F2: the provenance spec and pending D043 document exact C-01-v2-only primary
+  distributor authority. No C-01-independent commitment was implemented and no
+  permanent C-01-v2-only product boundary is approved.
+- F3: schema 6 activation checks Engine/policy ElementRegistry identity and the
+  exact registered A-06-v1 implementation against the venue source whenever
+  compiled rules need affiliation. Runtime and SDK checks repeat source binding.
+  Added mismatched/unavailable activation regressions and SDK conditional-read
+  coverage. The new Toolkit regression failed before the fix (15 passed, 1 failed).
+  V3 fixtures now register their source as A-06-v1; the pending-authority test
+  refreshes its evidence commitment after removing the B-04 binding, so it still
+  reaches and tests distributor rejection.
+- F4: removed the current passing claim. All gates below passed on the final
+  code working tree at HEAD 3f44934 plus these uncommitted fixes. These are not
+  committed-final-head results. Only documentation was edited after the gates.
+
+The review fixes were committed on this branch in `441f895`.
+EXEC-002 stays active pending committed-head verification and team review.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0. Targeted formatting applied to the changed test fixture first. |
+| `forge build` | Exit 0; existing compiler/lint warnings remain. |
+| `forge test --offline --match-contract 'ContextEvidenceTest|RouterV2Test|RFQAdapterV3Test|ContextProvenanceTest|RealUniswapV3Test|AMMAdapterTest|EngineSelectionV2Test'` | Exit 0; 129 passed, 0 failed, 0 skipped, 7 suites. Initial run had 119 passed and 2 failures: missing canonical pool dependency and a stale evidence commitment in the pending-authority test; both resolved before this run. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm ci --prefix services/rfq && npm ci --prefix services/toolkit'` | Exit 0; both dependency installs completed. Initial Toolkit test before installation exited 127 because tsc was absent. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'cd tools/deploy-v3 && yarn install --frozen-lockfile'` | Exit 0; canonical Uniswap artifacts installed. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm test --prefix services/rfq && npm test --prefix services/toolkit'` | Exit 0; RFQ smoke plus 13 provenance tests and Toolkit smoke plus 16 provenance tests passed, 0 failed. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm test --prefix services/toolkit'` | Final rerun exit 0; smoke and 16 provenance tests passed, 0 failed. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'` | Exit 0; 1,104 Foundry tests across 66 suites, 0 failed/skipped; 38 service provenance tests, 0 failed; all service/packaged-consumer gates passed, including 4 generated adapter conformance tests and 10 deploy-v3 tests. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'` | Exit 0; 7/7 scenarios and 30 RFQ/runtime PASS checks, 0 failures. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh --profile reg-d'` | Exit 0; 7/7 scenarios and 20 RFQ/runtime PASS checks, 0 failures. |
+| `npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'` | Exit 0; 12 passed, 0 failed, including actual sender evidence and recipient-only MM settlement. |
+| `git diff --check` | Exit 0. Protected legacy Router/B-04/test and public runtime/artifact diff is empty. |
+
+Logs: `/private/tmp/w157-{check,e2e,regd,v3}-final.log`,
+`/private/tmp/w157-{focused,build,services,toolkit-before,review-before}.log`.
+UNVERIFIED: a merged/committed final head, public-chain or production activation.
+Next: rerun final-head checks, and obtain the team's D043 decision while keeping PR #163 in draft.
+
 ## 2026-11-11 Session: RFQ-006 Nested TTL Review Fix
 
 RFQ-006 is passing. Scope: the confirmed P3 pre-authentication recursive TTL hash in the production
@@ -351,7 +401,13 @@ upstream PR #162; the historical HACK-001 notes below are retained.
 
 ### Upstream HACK-001 history
 
-`HACK-001 — Monad Onchain Finance RFQ Demo` (issue #145)
+EXEC-002 (issue #157) is active for PR #163 review fixes. HACK-001 remains
+closed as recorded by #162; the public demo is maintained operationally.
+
+## HACK-001 Completion Record
+
+`HACK-001: Monad Onchain Finance RFQ Demo` (issue #145), `passing` as of 2026-11-10.
+Historical implementation and verification evidence follows.
 
 - `hackathon/monad-onchain-finance`를 최신 `origin/main`의 별도 worktree에서
   시작했다. 기존 root checkout과 미추적 개인 파일은 변경하지 않았다.
@@ -1141,6 +1197,35 @@ upstream PR #162; the historical HACK-001 notes below are retained.
    finality/recovery 정책을 별도 운영 feature로 구체화한다.
 
 ## Last Session Summary
+
+- 2026-11-10 (issue #145): marked HACK-001 `passing` after the hackathon ended
+  on 2026-10-14, per team decision. Updated only `FEATURES.md` and `PROGRESS.md`,
+  preserving implementation history and recording work not completed before the deadline:
+  judge wallet guide, browser-wallet settlement with `--evidence` rehearsal, and explorer
+  source verification. No feature remains active and no next feature was selected.
+- Live verification used `curl -k` against `https://161.33.155.224`: `/health` returned
+  `{"service":"corner-store-testnet-rfq-demo","status":"ok","blockNumber":78558332}`;
+  `/api/state` returned HTTP 200 with four scenarios, chain ID 10143, source commit
+  `e7345b3a41edaca05e3260c4c39240bf0e2c9e2c`, `verifiedAtStartup=true`,
+  `makerApproved=true` and `manifestActive=true`. All four `/api/precheck` calls used
+  `amountIn=5000000000000000000000000` and returned HTTP 200:
+  success buy `allowed=true`, zero reason and `explanation=null`; qualification buy
+  `allowed=false`, `FAIL_NOT_QP`; investor B sell `allowed=false`,
+  `HOLDING_PERIOD_NOT_ELAPSED`, `availableAt=1822982925`; expired-claim buy
+  `allowed=false`, `FAIL_QP_CLAIM_EXPIRED`, `evidenceExpiredAt=1791360525`.
+  Maker approval, inventory and allowance passed in every response.
+- `cast chain-id` returned 10143. Read-only `cast call acquisitionOf` against
+  `https://testnet-rpc.monad.xyz` confirmed `expiresAt=1796688000`, status `VALID`
+  for maker, investor, eligibleInvestorB, ineligibleInvestor and expiredInvestor;
+  investor B's original `clockStart=1791446925` remains intact. The five 2026-11-10
+  renewal hashes and blocks are recorded in HACK-001's `FEATURES.md` notes from the
+  operator's Foundry broadcast records. QP claims were intentionally untouched.
+- Validation: live HTTP pre-checks and on-chain reads only; no signing or settlement.
+  Build/unit suites and browser-wallet `--evidence` rehearsal were not rerun for this
+  documentation-only closure. `git diff --check` passed.
+  Next operational step: renew acquisition evidence every 30 days using
+  `scripts/refresh-testnet-evidence.sh`, with the next renewal before
+  2026-12-08 00:00 UTC (`1796688000`). Deployment artifacts remain unchanged.
 
 - RFQ maker settlement account와 signer authority를 분리했다. delegate 권한
   추가는 1일 delay, revoke는 즉시 적용하며 direct maker ECDSA와 ERC-1271도

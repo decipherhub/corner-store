@@ -58,6 +58,7 @@ contract ContextProvenanceTest is IntegrationBase {
         routerV2 = new ExecutionRouterV2(engine, venueReg, selector, operatorReg);
         engine.setRouter(address(routerV2));
         affiliate = new Affiliate();
+        elementReg.registerElement("A-06-v1", address(affiliate));
         affiliate.setTrustedClaimIssuer(ISSUER, true);
         _claim(maker, Affiliate.AffiliateBasis.NOT_AFFILIATE);
         _claim(alice, Affiliate.AffiliateBasis.NOT_AFFILIATE);
@@ -262,6 +263,7 @@ contract ContextProvenanceTest is IntegrationBase {
         req.deadline = uint64(block.timestamp + 1 hours);
         (RFQQuoteV3 memory q,) = abi.decode(req.venueData, (RFQQuoteV3, bytes));
         q.expiry = req.deadline;
+        q.affiliateEvidenceHash = ContextEvidence.affiliateEvidenceHash(req.context, policyReg, address(affiliate));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(MAKER_PK, rfq.hashQuote(q));
         req.venueData = abi.encode(q, abi.encodePacked(r, s, v));
         vm.expectRevert(Errors.InvalidExecutionContext.selector);

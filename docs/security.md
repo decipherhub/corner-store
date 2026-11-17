@@ -179,7 +179,7 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   Router deployments retain their existing order. RFQAdapterV3 verifies signed
   actors, token legs, amounts, venue, flow and actual-sender A-06 commitment in
   preflight and settlement. Never interpret a v2 signature/calldata as v3.
-- Current A-06 evidence is mandatory for every regulated v3 leg and remains
+- Current A-06 evidence is required for compiled A-06/B-04 consumers and remains
   operator-attested. Claim refresh, revocation, expiry or decay can invalidate a
   quote immediately. The single context boolean requires matching statuses for
   dual-regulated legs; conflicting/unknown/unavailable evidence fails closed.

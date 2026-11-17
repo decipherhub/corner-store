@@ -1,4 +1,4 @@
-import {AbiCoder, Contract, Provider, keccak256, toUtf8Bytes} from "ethers";
+import {AbiCoder, Contract, Provider, keccak256, toUtf8Bytes, encodeBytes32String} from "ethers";
 import {Address, Hex, RFQContextEvidence, RFQContextResolver, RFQQuoteRequest} from "./types";
 import {affiliateEvidenceCommitment, AffiliateLegEvidence} from "./contextEvidence";
 import {normalizeAddress, normalizeChainId} from "./validation";
@@ -74,6 +74,23 @@ export class OnchainRFQContextResolver implements RFQContextResolver {
       statuses.push(status);
       if (status === 1) return undefined;
       if (status !== 2) throw new Error("context policy not active");
+      const count = Number(await call(c.policyRegistry, "function compiledBindingCountOf(address) view returns (uint256)", "compiledBindingCountOf", [asset]));
+      if (!Number.isInteger(count) || count < 1 || count > 8) throw new Error("invalid compiled binding count");
+      let required = false;
+      const consumers = ["A-06-v1", "B-04-v1", "B-04-v2"].map((id) => encodeBytes32String(id).toLowerCase());
+      for (let i = 0; i < count; i++) {
+        const rules = await call(c.policyRegistry, "function compiledRulesOf(address,uint256) view returns (tuple(bytes32 elementId,uint8 action)[])", "compiledRulesOf", [asset, i]);
+        if (!Array.isArray(rules) || rules.length < 1 || rules.length > 32) throw new Error("invalid compiled rules");
+        for (const rule of rules) {
+          const id = String(rule.elementId ?? rule[0]);
+          if (!/^0x[0-9a-f]{64}$/i.test(id)) throw new Error("invalid compiled element ID");
+          if (consumers.includes(id.toLowerCase())) required = true;
+        }
+      }
+      if (!required) return undefined;
+      const elements = await call(c.policyRegistry, "function elementReg() view returns (address)", "elementReg");
+      const implementation = await call(elements, "function elementOf(bytes32) view returns (address)", "elementOf", [encodeBytes32String("A-06-v1")]);
+      if (String(implementation).toLowerCase() !== c.affiliateSource.toLowerCase()) throw new Error("context affiliate source mismatch");
       const effectiveStatus = Number(await call(c.affiliateSource, "function effectiveStatus(address,address) view returns (uint8)", "effectiveStatus", [sender, asset]));
       const claim = await call(c.affiliateSource, "function claimOf(address,address) view returns (uint8 basis,uint8 source,address claimIssuer,uint64 verifiedAt,uint64 decayStartedAt)", "claimOf", [sender, asset]);
       return {asset, sender, affiliateSource: c.affiliateSource, basis: Number(claim[0]), source: Number(claim[1]), claimIssuer: claim[2], verifiedAt: Number(claim[3]), decayStartedAt: Number(claim[4]), effectiveStatus};

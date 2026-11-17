@@ -1361,8 +1361,8 @@ contracts and the public RFQ v2 runtime.
    AMM seller/venue/target derive from the registered pool and canonical tokens.
    Caller authentication stays with the Router. Settlement repeats validation
    and retains measured exact fill, atomic rollback, commit and existing events.
-3. Current pinned A-06 evidence authenticates every regulated leg's actual
-   sender: buyer for tokenIn, seller for tokenOut. RFQ signs the exact leg/aggregate
+3. Current pinned A-06 evidence authenticates the actual sender for each leg
+   with compiled affiliate consumers: buyer for tokenIn, seller for tokenOut. RFQ signs the exact leg/aggregate
    commitment specified in `docs/product-specs/execution-context-provenance.md`.
    A-06 remains operator-attested evidence rather than independent fact finding.
 4. Venue evidence is separate from unchanged `VenueConfig`. It pins versions,
@@ -1402,9 +1402,8 @@ contracts and the public RFQ v2 runtime.
   do not gain Corner Store policy enforcement.
 - The following implemented defaults remain **open items, team to confirm**:
   conditional primary distribution from the unique active compiled C-01-v2
-  distributor; matching statuses for dual-regulated pairs; mandatory A-06
-  evidence for every regulated leg; immediate invalidation on any commitment
-  change, including same-status refresh; and reviewed immutable-only activation
+  distributor; matching statuses for evidence-requiring pairs; immediate
+  invalidation on any commitment change, including same-status refresh; and reviewed immutable-only activation
   without proxy-aware verification. Opt-in timing is recorded in D029.
 
 ### Related Files
@@ -1464,7 +1463,7 @@ existing consumers and deployed settlement.
 - Package versions remain 0.1.0 in this unpublished branch. Publication requires
   the normal version/release gate; no release is implied here.
 - **Open item, team to confirm:** migration timing remains opt-in, with separate
-  deployments and RFQ v2 retained on Monad. D028's five other defaults also remain
+  deployments and RFQ v2 retained on Monad. D028's remaining defaults also remain
   open. No migration is performed on an existing public deployment.
 - The v3 live E2E joins both legacy Anvil profiles as a documented manual
   delivery/release gate. Existing CI continues its repository/container gates.
@@ -1543,3 +1542,25 @@ Re-resolving policy on a retry can change the request's authoritative identity.
 - `services/rfq/src/coordinator.ts`
 - `services/rfq-host/src/server.ts`
 - `services/rfq-host/README.md`
+
+## D043: Primary Distributor Authority for EXEC-002
+
+### Status
+
+Pending team decision. C-01-v2-only support is a known implementation limitation,
+not an approved permanent product boundary.
+
+### Context and Options
+
+RFQAdapterV3 and OnchainRFQContextResolver authenticate primary distributors only
+from exact active compiled `C-01-v2` parameters. Primary assets without C-01 or
+using another C-01 version fail closed. The team must choose:
+
+1. Add a Manifest/policy-config distributor commitment independent of C-01.
+2. Explicitly approve C-01-v2-only primary-distribution support.
+
+PR #163 documents the limitation without redesigning distributor authority.
+The owner resolved affiliate evidence separately: require it only for active
+compiled A-06/B-04 consumers, and bind the pinned source to the exact registered
+A-06-v1 implementation at activation and runtime. Existing required-evidence
+failure behavior remains fail closed.

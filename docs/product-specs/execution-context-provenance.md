@@ -36,7 +36,17 @@ RFQ supports secondary trades in both directions and conditional primary
 distribution. Primary requires an explicitly UNREGULATED input, ACTIVE output
 security and a unique nonzero distributor from active compiled C-01-v2 Manifest
 parameters matching the signed maker. Missing/conflicting parameters or pending
-authority reject. AMM supports self-directed secondary trades only. Redemption,
+authority reject.
+
+Known limitation, pending team decision: both RFQAdapterV3 and the on-chain SDK
+resolver recognize only exact `C-01-v2` distributor parameters. A primary asset
+without C-01, or with another C-01 version, cannot authenticate a distributor and
+is rejected even if it has an otherwise valid primary-distribution policy. This
+coupling is not approved as a permanent product boundary. The team must choose a
+Manifest/policy-config distributor commitment or explicitly approve C-01-v2-only
+support (D043). No distributor-authority redesign is included here.
+
+AMM supports self-directed secondary trades only. Redemption,
 unknown classes, identical-token pairs and delegated AMM execution reject. The
 C-01-family/AMM prohibition remains in force.
 
@@ -87,7 +97,8 @@ expire or be cancelled; never translate or silently re-sign them as v3 quotes.
 
 ## Affiliate Evidence Commitment
 
-For every ACTIVE leg, the pinned A-06 source must return AFFILIATE or
+For an ACTIVE leg whose compiled rules include `A-06-v1`, `B-04-v1` or
+`B-04-v2`, the pinned A-06 source must return AFFILIATE or
 NON_AFFILIATE for the actual sender. Missing, unknown, uncertain, expired,
 untrusted, malformed or unavailable evidence rejects. Source, issuer and
 verification timestamp must be present; future timestamps and missing/future
@@ -104,14 +115,17 @@ aggregate = keccak256(abi.encode(
 ))
 ```
 
-An explicitly UNREGULATED leg contributes zero; other inactive classifications
-reject. Both regulated legs must have matching effective statuses because this
-context version has one boolean. A fully unregulated pair requires false. RFQ
+An explicitly UNREGULATED leg or ACTIVE leg without these consumers contributes
+zero; other inactive classifications reject. Both evidence-requiring legs must
+have matching effective statuses because this context version has one boolean.
+A pair with no affiliate consumer requires false. RFQ
 signs the aggregate and checks it against current state in preflight and
 settlement. Any commitment change invalidates the old quote immediately,
 including a refresh that preserves the effective status. The SDK resolver reads
 the current status and claim at one block snapshot and authenticates deployment
-bindings; custom resolvers remain an integrator trust boundary.
+bindings; custom resolvers remain an integrator trust boundary. New Element
+versions that consume affiliate context must extend the explicit consumer list
+in both the on-chain library and SDK before activation.
 
 ## Registration and Activation Evidence
 
@@ -150,7 +164,11 @@ approval, source ownership, authorizer, Router dependencies, the reverse
 `Engine.router() == executionRouter` binding and AMM membership/token order.
 It inspects every active compiled binding for the onboarding token and rejects
 B-04-v1 even if non-blocking. B-04-v2 and policies without B-04 are supported;
-missing, unavailable or malformed compiled-policy reads fail closed. Repeat
+missing, unavailable or malformed compiled-policy reads fail closed. When any
+compiled rule requires affiliate context, activation also requires Engine and
+policy registry to use the declared ElementRegistry and pins `affiliateSource`
+to its exact `elementOf("A-06-v1")` implementation. Missing/mismatched reads reject.
+Runtime evidence checks repeat the policy registry's exact A-06 binding. Repeat
 post-state verification for each onboarded security before activation.
 Schema 6 extends the existing unsigned plan format and adds no signing or custody.
 
@@ -176,8 +194,8 @@ See [`../testing.md`](../testing.md) for the manual/CI gate boundary.
 The authorized implementation adopts these defaults pending team confirmation:
 
 1. Conditional primary distribution with the active Manifest distributor above.
-2. Matching statuses for dual-regulated pairs until a per-asset context version.
-3. Mandatory A-06 evidence on every regulated v3 leg.
+2. Matching statuses for evidence-requiring pairs until a per-asset context version.
+3. Resolved by owner: require A-06 evidence only for compiled affiliate consumers.
 4. Immediate invalidation on any current evidence commitment change.
 5. Reviewed immutable implementations only, with no proxy-aware activation.
 6. Opt-in migration timing and separate deployments, retaining RFQ v2 on Monad.

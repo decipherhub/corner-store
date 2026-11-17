@@ -5,11 +5,51 @@ import {Test} from "forge-std/Test.sol";
 import {ContextEvidence} from "../../../src/execution/ContextEvidence.sol";
 import {Affiliate} from "../../../src/compliance/elements/Affiliate.sol";
 import {ITokenPolicyRegistry} from "../../../src/interfaces/compliance/ITokenPolicyRegistry.sol";
-import {ComplianceContext, PolicyStatus} from "../../../src/types/ComplianceTypes.sol";
+import {
+    ComplianceContext,
+    PolicyStatus,
+    CompiledElementRule,
+    EnforcementAction
+} from "../../../src/types/ComplianceTypes.sol";
 import {Errors} from "../../../src/libraries/Errors.sol";
 
 contract ContextPolicyRegistry {
     mapping(address => PolicyStatus) public statusOf;
+
+    mapping(address => bool) public withoutAffiliateContext;
+    address public affiliateImplementation;
+
+    function setAffiliateImplementation(address implementation) external {
+        affiliateImplementation = implementation;
+    }
+
+    function elementReg() external view returns (address) {
+        return address(this);
+    }
+
+    function elementOf(bytes32) external view returns (address) {
+        return affiliateImplementation;
+    }
+
+    function setWithoutAffiliateContext(address asset, bool value) external {
+        withoutAffiliateContext[asset] = value;
+    }
+
+    function compiledBindingCountOf(address) external view virtual returns (uint256) {
+        return 1;
+    }
+
+    function compiledRulesOf(address asset, uint256)
+        external
+        view
+        virtual
+        returns (CompiledElementRule[] memory rules)
+    {
+        rules = new CompiledElementRule[](1);
+        rules[0] = CompiledElementRule(
+            withoutAffiliateContext[asset] ? bytes32("B-02-v2") : bytes32("A-06-v1"), EnforcementAction.BLOCK
+        );
+    }
 
     function setStatus(address asset, PolicyStatus status) external {
         statusOf[asset] = status;
@@ -38,6 +78,7 @@ contract ContextEvidenceTest is Test {
         policy = new ContextPolicyRegistry();
         harness = new ContextEvidenceHarness();
         affiliate = new Affiliate();
+        policy.setAffiliateImplementation(address(affiliate));
         affiliate.setTrustedClaimIssuer(ISSUER, true);
         ctx.buyer = address(0xB0B);
         ctx.seller = address(0xCAFE);
@@ -71,6 +112,37 @@ contract ContextEvidenceTest is Test {
                 asset, sender, address(affiliate), basis, source, issuer, verifiedAt, decayStartedAt, uint8(status)
             )
         );
+    }
+
+    function test_activePolicyWithoutAffiliateConsumerSkipsMissingEvidence() public {
+        policy.setWithoutAffiliateContext(ctx.tokenOut, true);
+        ctx.seller = address(0xBAD);
+        assertEq(
+            _hash(), keccak256(abi.encode(keccak256("corner-store.affiliate-evidence.v1"), bytes32(0), bytes32(0)))
+        );
+    }
+
+    function test_unneededLegDoesNotConflictWithRequiredAffiliateLeg() public {
+        policy.setStatus(ctx.tokenIn, PolicyStatus.ACTIVE);
+        policy.setWithoutAffiliateContext(ctx.tokenOut, true);
+        _claim(ctx.buyer, ctx.tokenIn, Affiliate.AffiliateBasis.OFFICER_DIRECTOR);
+        ctx.sellerIsAffiliate = true;
+        assertEq(
+            _hash(),
+            keccak256(
+                abi.encode(
+                    keccak256("corner-store.affiliate-evidence.v1"),
+                    _leg(ctx.tokenIn, ctx.buyer, Affiliate.EffectiveStatus.AFFILIATE),
+                    bytes32(0)
+                )
+            )
+        );
+    }
+
+    function test_mismatchedRegisteredAffiliateSourceRejects() public {
+        policy.setAffiliateImplementation(address(new Affiliate()));
+        vm.expectRevert(Errors.InvalidAffiliateEvidence.selector);
+        _hash();
     }
 
     function test_buyCommitmentUsesSellerAndExactDomain() public view {
