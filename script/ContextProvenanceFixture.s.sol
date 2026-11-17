@@ -87,6 +87,7 @@ contract ContextProvenanceFixture is Script, TREXCore {
         router = new ExecutionRouterV2(engine, venues, new VenueSelector(), new OperatorRegistry());
         engine.setRouter(address(router));
         affiliate = new Affiliate();
+        elements.registerElement("A-06-v1", address(affiliate));
         affiliate.setTrustedClaimIssuer(admin, true);
         _claim(affiliate, admin, maker);
         _claim(affiliate, admin, taker);

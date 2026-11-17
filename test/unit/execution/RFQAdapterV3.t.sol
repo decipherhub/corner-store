@@ -41,17 +41,18 @@ contract V3PolicyRegistry is ContextPolicyRegistry {
         }
     }
 
-    function compiledBindingCountOf(address) external view returns (uint256) {
-        return _parameters.length;
+    function compiledBindingCountOf(address) external view override returns (uint256) {
+        return _parameters.length + 1;
     }
 
-    function compiledRulesOf(address, uint256) external pure returns (CompiledElementRule[] memory rules) {
+    function compiledRulesOf(address, uint256 i) external pure override returns (CompiledElementRule[] memory rules) {
         rules = new CompiledElementRule[](1);
-        rules[0] = CompiledElementRule("C-01-v2", EnforcementAction.BLOCK);
+        rules[0] = CompiledElementRule(i == 0 ? bytes32("A-06-v1") : bytes32("C-01-v2"), EnforcementAction.BLOCK);
     }
 
     function compiledParametersOf(address, uint256 i) external view returns (bytes[] memory) {
-        return _parameters[i];
+        if (i == 0) return new bytes[](1);
+        return _parameters[i - 1];
     }
 }
 
@@ -80,6 +81,7 @@ contract RFQAdapterV3Test is Test {
         maker = vm.addr(MAKER_PK);
         policy = new V3PolicyRegistry();
         affiliate = new Affiliate();
+        policy.setAffiliateImplementation(address(affiliate));
         affiliate.setTrustedClaimIssuer(ISSUER, true);
         authorizer = new MakerAuthorizer();
         venues = new VenueRegistry();

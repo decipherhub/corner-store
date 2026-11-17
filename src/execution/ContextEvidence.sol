@@ -3,10 +3,15 @@ pragma solidity 0.8.17;
 
 import {IExecutionContextVerifier} from "../interfaces/execution/IExecutionContextVerifier.sol";
 import {ITokenPolicyRegistry} from "../interfaces/compliance/ITokenPolicyRegistry.sol";
+import {IElementRegistry} from "../interfaces/compliance/IElementRegistry.sol";
 import {Affiliate} from "../compliance/elements/Affiliate.sol";
-import {ComplianceContext, PolicyStatus} from "../types/ComplianceTypes.sol";
+import {ComplianceContext, PolicyStatus, CompiledElementRule} from "../types/ComplianceTypes.sol";
 import {VenueConfig, VenueContextEvidence} from "../types/VenueTypes.sol";
 import {Errors} from "../libraries/Errors.sol";
+
+interface IContextPolicyElements {
+    function elementReg() external view returns (IElementRegistry);
+}
 
 library ContextEvidence {
     uint16 internal constant CONTEXT_VERSION = 1;
@@ -58,6 +63,18 @@ library ContextEvidence {
         return keccak256(abi.encode(AFFILIATE_DOMAIN, inputLeg, outputLeg));
     }
 
+    function requiresAffiliateContext(ITokenPolicyRegistry registry, address asset) internal view returns (bool) {
+        uint256 count = registry.compiledBindingCountOf(asset);
+        for (uint256 i; i < count; i++) {
+            CompiledElementRule[] memory rules = registry.compiledRulesOf(asset, i);
+            for (uint256 j; j < rules.length; j++) {
+                bytes32 id = rules[j].elementId;
+                if (id == bytes32("A-06-v1") || id == bytes32("B-04-v1") || id == bytes32("B-04-v2")) return true;
+            }
+        }
+        return false;
+    }
+
     function _affiliateLeg(address asset, address sender, ITokenPolicyRegistry registry, address source)
         private
         view
@@ -66,6 +83,10 @@ library ContextEvidence {
         PolicyStatus policyStatus = registry.statusOf(asset);
         if (policyStatus == PolicyStatus.UNREGULATED) return (bytes32(0), Affiliate.EffectiveStatus.UNKNOWN);
         if (policyStatus != PolicyStatus.ACTIVE) revert Errors.PolicyNotActive();
+        if (!requiresAffiliateContext(registry, asset)) return (bytes32(0), Affiliate.EffectiveStatus.UNKNOWN);
+        if (IContextPolicyElements(address(registry)).elementReg().elementOf("A-06-v1") != source) {
+            revert Errors.InvalidAffiliateEvidence();
+        }
         if (sender == address(0) || source.code.length == 0) revert Errors.InvalidAffiliateEvidence();
         Affiliate affiliate = Affiliate(source);
         status = affiliate.effectiveStatus(sender, asset);
