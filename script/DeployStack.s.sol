@@ -77,6 +77,10 @@ import {ProductionCoreDeployer} from "./ProductionCoreDeployer.sol";
 /// venue and the surveillance-enabled recipe (id 7, for scenario 6) are set up
 /// here, before ownership moves.
 contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer {
+    function _deployElementRegistry() internal override returns (ElementRegistry) {
+        return new ElementRegistry();
+    }
+
     // --- Corner Store stack ----------------------------------------------
     ElementRegistry internal elementReg;
     RecipeRegistry internal recipeReg;

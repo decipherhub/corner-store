@@ -15,6 +15,14 @@ tags: [recipe-requirement-spec, R1, reg-d, 506c, issuance, R1]
 
 ## Current reference versions (issue #132, item 6)
 
+Reg D v4 and A-12 v2 are **reference-only and non-production-activatable**
+until issue #132 item 13's public-disclosure decision is resolved (D028).
+Production onboarding rejects these versions before Safe export or update
+preflight; production core deploys a registry that rejects A-12-v2 registration.
+The generic registry used by local `DeployStack` has no production gate, and
+existing deployments are not retrofitted. Assessment calldata, storage and events
+remain public; reporter redaction does not hide them. No legal option is selected.
+
 The implementation sections below describe the historical v2 reference. Current
 local defaults use `RegD506cRecipeV3` (family 1, version 3). The opt-in
 `RegD506cRecipeV4` (family 1, version 4) appends `A-12-v2` to V3's nine elements:
@@ -41,7 +49,7 @@ profile and `reg-d` remains v3. The existing full `scripts/e2e-anvil.sh` launche
 and Toolkit configuration templates retain their two supported profiles; use the
 scripts directly or the CLI for this opt-in reference version.
 
-For an existing v3 asset, register `RedFlagKnowledgeBarV2` as `A-12-v2` with
+For an existing local reference v3 asset, register `RedFlagKnowledgeBarV2` as `A-12-v2` with
 `FLAG_ONLY`, then register recipe family 1/version 4. Registration alone does not
 change an active Manifest. Submit a new reviewed Manifest hash and a binding to
 `(1, 4)` through `scheduleManifestUpdate`, wait the configured timelock, then

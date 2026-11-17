@@ -1,5 +1,40 @@
 # Decisions
 
+## D028: A-12 public disclosure boundary
+
+Date: 2026-11-17
+Status: PENDING TEAM/LEGAL DECISION
+
+Issue #132 item 13 requests suppression of surveillance details. A-12 v2's
+`raiseFlag`, `markUncertain`, `ReviewResolved` and `assessmentOf` expose subjects,
+reason/flag data and resolution through public storage, calldata and events.
+Reporter redaction cannot hide those records.
+
+Until the team/legal decision is resolved, Reg D v4 (family 1/version 4) and
+A-12 v2 (`RedFlagKnowledgeBarV2`) are reference-only and non-production-activatable
+through supported production paths. Production onboarding validation rejects
+A-12-v2, Reg D v4 recipes, Manifest references and bindings before Safe export,
+verification or delayed-update activation preflight. `ProductionCoreDeployer`
+deploys `ProductionElementRegistry`, which rejects A-12-v2 through both
+registration overloads, preventing compilation of Reg D v4's required Element.
+`DeployStack` explicitly uses the generic registry for local reference work.
+Production core has no legal-policy profile or automatic Manifest activation.
+
+The generic `ElementRegistry` has no production mode or allowlist. Already
+deployed generic registries and manually assembled deployments are not upgraded
+or constrained by these gates. Governance must not use them to activate these
+reference versions in production. ID checks do not certify arbitrary replacement
+implementations or aliases as legally approved.
+
+Options requiring a team/legal decision:
+
+- Keep the detailed assessment implementation reference-only.
+- Move detailed records off-chain under approved access/retention controls and
+  expose only coarse commitments through a separately reviewed version.
+
+Neither option is selected here. Do not record real surveillance data with the
+reference implementation. PR #161 remains draft.
+
 ## D024: Reg D v4 adopts immutable nonblocking A-12 v2 by explicit selection
 
 Date: 2026-11-10
@@ -23,9 +58,10 @@ versions and active Manifests must retain their meanings.
 3. Require explicit `ASSET_PROFILE=reg-d-v4` selection through DeployStack and
    matching direct-script/CLI inputs. The default stays BUIDL-like; `reg-d` stays
    v3. The full E2E launcher and Toolkit templates retain their two profiles.
-4. Existing v3 assets adopt v4 only through a reviewed Manifest commitment, exact
+4. Local reference v3 assets adopt v4 only through a reviewed Manifest commitment, exact
    Recipe binding, scheduled semantic update, timelock and activation. The new
-   policy ID invalidates prior-policy RFQ quotes at settlement.
+   policy ID invalidates prior-policy RFQ quotes at settlement. Production adoption
+   is prohibited pending the item 13 decision in D028.
 
 ### Alternatives Considered
 
@@ -171,8 +207,10 @@ Date: 2026-11-10
 
 ### Context
 
-Issue #132 item 12 requests useful operational RFQ rejection feedback without
-exposing provider text or sensitive compliance findings. Disclosure belongs at
+This PR implements operational RFQ risk disclosure only. Issue #132 item 12
+also requests tiered compliance outcomes; qualification, holding period,
+jurisdiction and other Element failures remain OPEN pending a counsel-approved
+taxonomy. No compliance bridge is implemented. Disclosure belongs at
 host presentation, independently of compliance reporting and settlement authority.
 
 ### Decision

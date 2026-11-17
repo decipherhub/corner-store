@@ -13,14 +13,20 @@
 
 ### Behavior
 
-- Issue #132 items 6, 7, 11 and 12 are additive capabilities with explicit
-  deployment/consumer selection and backward-compatible settlement behavior.
+- Issue #132 items 6, 7 and 11 are additive reference capabilities. Item 12 is
+  operational RFQ risk disclosure only: `INVENTORY_LIMIT_EXCEEDED`,
+  `RISK_LIMIT_EXCEEDED` and `PRICING_OUTSIDE_LIMITS`. Tiered compliance outcomes
+  for qualification, holding period, jurisdiction and other Element failures remain
+  OPEN pending a counsel-approved taxonomy; no compliance bridge is implemented.
 - Opt-in `RegD506cRecipeV4` appends `A-12-v2` to V3's nine blocking requirements.
   `RedFlagKnowledgeBarV2` declares matching `FLAG_ONLY` metadata, fixing the
   wave-3 registration mismatch while preserving separate, nonblocking assessment
   APIs/events. Assessments do not populate Engine flags. Direct scripts and CLI
   accept `reg-d-v4`; default BUIDL-like and `reg-d` v3 selection are preserved.
-  Existing assets migrate through a reviewed, delayed Manifest update.
+  Reg D v4/A-12 v2 are reference-only and non-production-activatable pending
+  the item 13 public-disclosure decision (D028). Production onboarding rejects
+  them and the production registry rejects A-12-v2. Migration instructions apply
+  only to local reference assets.
 - New Router deployments emit `SettlementExecutedV2` after successful commit with
   execution ID, venue, token pair, fresh policy ID and measured input/output in
   token base units. Legacy events, return values and execution ID derivation
@@ -67,6 +73,12 @@ passing
 
 ### Notes
 
+- PR #161 review fixes: production deployment/registry tests passed 7/7; existing
+  Registry/Recipe/A-12/v4 suites passed 27/27. Node 20 Toolkit, CLI and RFQ smoke
+  passed, including 20 production export and two verification rejection checks.
+  RFQ host full smoke failed its existing mismatched Content-Length test (400 vs
+  expected 413); a diagnostic run excluding that scenario passed the other 19.
+  Production activation remains prohibited; PR #161 remains draft.
 - Integrated and verified on 2026-11-10 with Foundry 1.7.1 and Node 20 after
   frozen-lockfile deploy-v3 installation and `npm ci` in all nine gate services
   with lockfiles. The initial gate failed its stale A-12-v1 source assertion;
@@ -74,6 +86,7 @@ passing
 - Decisions D024 through D027 record migration, canonical event selection,
   restricted reporting and RFQ disclosure. Counsel questions remain open; this
   feature does not establish legal adequacy, retention or chain-wide secrecy.
+  PR #161 remains draft; item 12 compliance taxonomy and item 13 are OPEN.
 - Specs: [requirement reporting](./docs/product-specs/compliance-reporting.md),
   [settlement reconstruction](./docs/architecture/execution-routing.md),
   [Reg D v4](./docs/compliance/recipes/R1_RegD-506c-Issuance.md),
@@ -143,9 +156,38 @@ passing
 
 ### State
 
-active
+passing
 
 ### Notes
+
+- 2026-11-10: closed HACK-001 as `passing` by team decision after the
+  2026-10-14 hackathon deadline. This records the delivered demo and the incomplete
+  work explicitly; it does not assert that every original verification item was completed.
+  Not completed before the hackathon ended: judge wallet guide, browser-wallet
+  settlement with the `--evidence` rehearsal, and explorer source verification.
+- The public demo at `https://161.33.155.224` remains an operational task, with
+  acquisition evidence renewal every 30 days via `scripts/refresh-testnet-evidence.sh`.
+  Next renewal must occur before 2026-12-08 00:00 UTC (`1796688000`).
+- 2026-11-10 read-only live verification: `/health` and `/api/state` returned HTTP
+  200, chain ID 10143, source `e7345b3`, startup verification true, and maker/Manifest
+  readiness true. For 5,000,000 tokens, `/api/precheck` returned HTTP 200 for all four
+  scenes: success buy `allowed=true` (zero reason), qualification buy `allowed=false`
+  / `FAIL_NOT_QP`, investor B sell `allowed=false` / `HOLDING_PERIOD_NOT_ELAPSED`
+  (availableAt `1822982925`), and expired-claim buy `allowed=false` /
+  `FAIL_QP_CLAIM_EXPIRED` (evidenceExpiredAt `1791360525`). Maker approval, inventory
+  and allowance checks passed in all four responses. No signing or settlement was performed.
+- 2026-11-10 acquisition renewal: `cast call acquisitionOf` confirmed all five
+  snapshots have `expiresAt=1796688000` and status `VALID`; investor B retains
+  `clockStart=1791446925`. QP claims were intentionally untouched. Renewal transaction
+  hashes and blocks from the operator's Foundry broadcast records:
+
+  | Subject | Transaction hash | Block |
+  | --- | --- | --- |
+  | `maker` | `0xecc681892fc3c8762f4c919fef110e2a3ae906c7f2bac18d814831098b7c1190` | 78557916 |
+  | `investor` | `0x8d193993f60206a8c450a4d47a627252ca31f987dc00c888e3d2892e767347f3` | 78557960 |
+  | `eligibleInvestorB` | `0xaca0c93e24b06337e34f492a0251ae7017c222137dc81deb00d122b27aa4ec48` | 78557990 |
+  | `ineligibleInvestor` | `0x01cf83b2e616cb10a58688f969516c244f365b4dfc4062e688fdb62611ac90e3` | 78558026 |
+  | `expiredInvestor` | `0x7e57d1fb7daca265755b4b6bf5502a5980a7043bb9b08258275337e37edcdd13` | 78558064 |
 
 - Tracks issue #145. Decision Receipts r2/EAS/anchor/verifier work from #139 is
   deferred to the November accelerator round and is not part of this feature.

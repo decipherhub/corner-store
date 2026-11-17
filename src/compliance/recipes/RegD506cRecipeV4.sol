@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {BaseRecipe} from "./BaseRecipe.sol";
 
 /// @dev Opt-in Reg D reference recipe: V3 plus the nonblocking A-12-v2 element.
-///      Production policy requires separate review and approval.
+///      Reference-only; production activation is prohibited pending issue #132 item 13.
 contract RegD506cRecipeV4 is BaseRecipe {
     constructor() BaseRecipe(1, 4, _elements506c()) {}
 

@@ -17,6 +17,7 @@ import {ReasonCodes} from "../../libraries/ReasonCodes.sol";
 import {Events} from "../../libraries/Events.sol";
 
 /// @dev Opt-in, nonblocking A-12 reference element. Operator assessments are read separately.
+///      Reference-only; production activation is prohibited pending issue #132 item 13.
 contract RedFlagKnowledgeBarV2 is BaseElement, Governed {
     bytes32 internal constant ELEMENT_ID = "A-12-v2";
 

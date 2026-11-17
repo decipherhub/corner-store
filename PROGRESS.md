@@ -11,7 +11,13 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-`HACK-001 — Monad Onchain Finance RFQ Demo` (issue #145)
+No feature is active after HACK-001. The public demo is maintained operationally;
+no next feature has been selected.
+
+## HACK-001 Completion Record
+
+`HACK-001: Monad Onchain Finance RFQ Demo` (issue #145), `passing` as of 2026-11-10.
+Historical implementation and verification evidence follows.
 
 - `hackathon/monad-onchain-finance`를 최신 `origin/main`의 별도 worktree에서
   시작했다. 기존 root checkout과 미추적 개인 파일은 변경하지 않았다.
@@ -802,12 +808,44 @@ source of truth로 사용한다.
 
 ## Last Session Summary
 
+- 2026-11-17, PR #161 review fixes: confirmed all three findings. Reconciled
+  `FEATURES.md`/`PROGRESS.md` against `origin/main` #162 while retaining CORE-015;
+  HACK-001 remains closed as `passing` and no feature is active. `git merge
+  origin/main` could not write `ORIG_HEAD.lock` in the worktree metadata directory
+  (sandbox permission denied), so no merge or fix commit was created. The actual
+  merge and commits remain required in a writable Git environment.
+- Narrowed item 12 to operational RFQ risk disclosure only (three operational
+  codes). Tiered compliance outcomes remain OPEN pending counsel-approved taxonomy.
+  Added D028, PENDING TEAM/LEGAL DECISION, for item 13. Reg D v4/A-12 v2 remain
+  reference-only and non-production-activatable through supported production paths.
+  Production onboarding rejects the element, recipe and Manifest/binding references
+  across schema v1-v5, including existing-object UPDATEs. Production core deploys
+  a registry rejecting A-12-v2 through both overloads; local DeployStack explicitly
+  retains the generic registry. Existing deployments are not retrofitted.
+- Regression evidence: before the fix, the new production registry test failed
+  (0 passed, 1 failed) because registration succeeded, and Toolkit export accepted
+  reference-only A-12-v2. After the fix, deployment tests passed 7/7 and Registry,
+  Recipe, A-12 v2 and Reg D v4 suites passed 27/27. Node 20 Toolkit smoke passed
+  20 export checks, two verifier checks and reader/smoke coverage; CLI and RFQ
+  smoke passed. Initial parallel RFQ-host dependency installation failed during
+  the local RFQ prepare step; sequential retry installed successfully. A new test
+  reader type error was corrected before the passing Toolkit run.
+- `forge fmt --check`, `forge build` (compiler/lint warnings) and `git diff --check`
+  passed. RFQ-host full smoke failed in its unchanged malformed/oversize/rate-limit
+  scenario: mismatched Content-Length returned 400 rather than expected 413.
+  A diagnostic run excluding only that scenario passed the other 19 scenarios,
+  including all disclosure tests. This does not count as a passing full host suite.
+- No fixed-port Anvil launcher, public-network runtime, production broadcast or
+  GitHub action was run. PR #161 stays draft. Next: complete the merge and commits,
+  resolve the existing RFQ-host test failure, and obtain team/legal decisions on
+  item 12 taxonomy and item 13 public disclosure before production adoption.
+
 - 2026-11-10, issue #132 integration: verified the four merged slices together
   and added `CORE-015: Compliance Reporting and Settlement Reconstruction` as
   `passing`. Added D024 through D027 for opt-in nonblocking A-12/v4 adoption,
   canonical settlement reconstruction, restricted public reporting and
   generic-by-default RFQ disclosure. Added the reporting spec to `docs/README.md`.
-  HACK-001 retains its existing state. Counsel questions are explicit open items.
+  HACK-001 is closed as `passing` by #162. Counsel questions are explicit open items.
 - The first merged gate failed before formatting because
   `scripts/check-wave3-element-policies.sh` still required A-12-v1 and the v1
   constructor. Updated only its expected registration and error text to require
@@ -851,6 +889,35 @@ source of truth로 사용한다.
   approval. The opt-in v4 direct-script live suite was verified in its slice and
   was not rerun by integration; the documented full launcher supports only
   BUIDL-like and Reg D v3. No public deployment was changed.
+- 2026-11-10 (issue #145): marked HACK-001 `passing` after the hackathon ended
+  on 2026-10-14, per team decision. Updated only `FEATURES.md` and `PROGRESS.md`,
+  preserving implementation history and recording work not completed before the deadline:
+  judge wallet guide, browser-wallet settlement with `--evidence` rehearsal, and explorer
+  source verification. No feature remains active and no next feature was selected.
+- Live verification used `curl -k` against `https://161.33.155.224`: `/health` returned
+  `{"service":"corner-store-testnet-rfq-demo","status":"ok","blockNumber":78558332}`;
+  `/api/state` returned HTTP 200 with four scenarios, chain ID 10143, source commit
+  `e7345b3a41edaca05e3260c4c39240bf0e2c9e2c`, `verifiedAtStartup=true`,
+  `makerApproved=true` and `manifestActive=true`. All four `/api/precheck` calls used
+  `amountIn=5000000000000000000000000` and returned HTTP 200:
+  success buy `allowed=true`, zero reason and `explanation=null`; qualification buy
+  `allowed=false`, `FAIL_NOT_QP`; investor B sell `allowed=false`,
+  `HOLDING_PERIOD_NOT_ELAPSED`, `availableAt=1822982925`; expired-claim buy
+  `allowed=false`, `FAIL_QP_CLAIM_EXPIRED`, `evidenceExpiredAt=1791360525`.
+  Maker approval, inventory and allowance passed in every response.
+- `cast chain-id` returned 10143. Read-only `cast call acquisitionOf` against
+  `https://testnet-rpc.monad.xyz` confirmed `expiresAt=1796688000`, status `VALID`
+  for maker, investor, eligibleInvestorB, ineligibleInvestor and expiredInvestor;
+  investor B's original `clockStart=1791446925` remains intact. The five 2026-11-10
+  renewal hashes and blocks are recorded in HACK-001's `FEATURES.md` notes from the
+  operator's Foundry broadcast records. QP claims were intentionally untouched.
+- Validation: live HTTP pre-checks and on-chain reads only; no signing or settlement.
+  Build/unit suites and browser-wallet `--evidence` rehearsal were not rerun for this
+  documentation-only closure. `git diff --check` passed.
+  Next operational step: renew acquisition evidence every 30 days using
+  `scripts/refresh-testnet-evidence.sh`, with the next renewal before
+  2026-12-08 00:00 UTC (`1796688000`). Deployment artifacts remain unchanged.
+
 - RFQ maker settlement account와 signer authority를 분리했다. delegate 권한
   추가는 1일 delay, revoke는 즉시 적용하며 direct maker ECDSA와 ERC-1271도
   동일한 fill-time authorizer 경계에서 검증한다.

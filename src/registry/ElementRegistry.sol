@@ -30,7 +30,7 @@ contract ElementRegistry is IElementRegistry, Governed {
         address element,
         EnforcementAction requestedDefaultAction,
         bool callerSpecifiedDefault
-    ) internal {
+    ) internal virtual {
         if (elementId == bytes32(0) || element == address(0) || element.code.length == 0) {
             revert Errors.InvalidElementMetadata(elementId);
         }

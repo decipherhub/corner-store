@@ -12,6 +12,14 @@ tags: [requirement-spec, A-12, red-flag, willful-blindness, resale-safe-harbor, 
 
 ## Current reference implementation (issue #132, item 6)
 
+Reg D v4 and A-12 v2 are **reference-only and non-production-activatable**
+until issue #132 item 13's public-disclosure decision is resolved (D028).
+Production onboarding rejects these versions before Safe export or update
+preflight; production core deploys a registry that rejects A-12-v2 registration.
+The generic registry used by local `DeployStack` has no production gate, and
+existing deployments are not retrofitted. Assessment calldata, storage and events
+remain public; reporter redaction does not hide them. No legal option is selected.
+
 `RedFlagKnowledgeBarV2.sol` is the opt-in `A-12-v2` implementation. Its metadata
 and registration both declare `FLAG_ONLY`. The legacy `RedFlagKnowledgeBar.sol`
 retains its `A-12-v1` identity and `BLOCK` metadata; explicitly registering v1 as

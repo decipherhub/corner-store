@@ -121,6 +121,12 @@ inventory reservation conflicts and signer failures keep their status mappings.
 Compliance identity/claim judgments and compliance reporter integration are
 outside this disclosure module.
 
+Issue #132 item 12 is implemented as **operational RFQ risk disclosure only**
+for `INVENTORY_LIMIT_EXCEEDED`, `RISK_LIMIT_EXCEEDED` and
+`PRICING_OUTSIDE_LIMITS`. Item 12's tiered compliance outcomes for qualification,
+holding period, jurisdiction and other Element failures remain **OPEN** pending
+a counsel-approved taxonomy. No compliance bridge is implemented.
+
 Policy schema v1 maps each allowlisted identifier to a `tier` and literal
 `message`, with a separate `policyVersion` identifier. The host validates the
 whole file with exact fields and snapshots it until restart. Mapping and wording
