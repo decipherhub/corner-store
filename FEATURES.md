@@ -69,9 +69,38 @@
 
 ### State
 
-active
+passing
 
 ### Notes
+
+- 2026-11-10: closed HACK-001 as `passing` by team decision after the
+  2026-10-14 hackathon deadline. This records the delivered demo and the incomplete
+  work explicitly; it does not assert that every original verification item was completed.
+  Not completed before the hackathon ended: judge wallet guide, browser-wallet
+  settlement with the `--evidence` rehearsal, and explorer source verification.
+- The public demo at `https://161.33.155.224` remains an operational task, with
+  acquisition evidence renewal every 30 days via `scripts/refresh-testnet-evidence.sh`.
+  Next renewal must occur before 2026-12-08 00:00 UTC (`1796688000`).
+- 2026-11-10 read-only live verification: `/health` and `/api/state` returned HTTP
+  200, chain ID 10143, source `e7345b3`, startup verification true, and maker/Manifest
+  readiness true. For 5,000,000 tokens, `/api/precheck` returned HTTP 200 for all four
+  scenes: success buy `allowed=true` (zero reason), qualification buy `allowed=false`
+  / `FAIL_NOT_QP`, investor B sell `allowed=false` / `HOLDING_PERIOD_NOT_ELAPSED`
+  (availableAt `1822982925`), and expired-claim buy `allowed=false` /
+  `FAIL_QP_CLAIM_EXPIRED` (evidenceExpiredAt `1791360525`). Maker approval, inventory
+  and allowance checks passed in all four responses. No signing or settlement was performed.
+- 2026-11-10 acquisition renewal: `cast call acquisitionOf` confirmed all five
+  snapshots have `expiresAt=1796688000` and status `VALID`; investor B retains
+  `clockStart=1791446925`. QP claims were intentionally untouched. Renewal transaction
+  hashes and blocks from the operator's Foundry broadcast records:
+
+  | Subject | Transaction hash | Block |
+  | --- | --- | --- |
+  | `maker` | `0xecc681892fc3c8762f4c919fef110e2a3ae906c7f2bac18d814831098b7c1190` | 78557916 |
+  | `investor` | `0x8d193993f60206a8c450a4d47a627252ca31f987dc00c888e3d2892e767347f3` | 78557960 |
+  | `eligibleInvestorB` | `0xaca0c93e24b06337e34f492a0251ae7017c222137dc81deb00d122b27aa4ec48` | 78557990 |
+  | `ineligibleInvestor` | `0x01cf83b2e616cb10a58688f969516c244f365b4dfc4062e688fdb62611ac90e3` | 78558026 |
+  | `expiredInvestor` | `0x7e57d1fb7daca265755b4b6bf5502a5980a7043bb9b08258275337e37edcdd13` | 78558064 |
 
 - Tracks issue #145. Decision Receipts r2/EAS/anchor/verifier work from #139 is
   deferred to the November accelerator round and is not part of this feature.

@@ -11,7 +11,13 @@ source of truth로 사용한다.
 
 ## Active Feature
 
-`HACK-001 — Monad Onchain Finance RFQ Demo` (issue #145)
+No feature is active after HACK-001. The public demo is maintained operationally;
+no next feature has been selected.
+
+## HACK-001 Completion Record
+
+`HACK-001: Monad Onchain Finance RFQ Demo` (issue #145), `passing` as of 2026-11-10.
+Historical implementation and verification evidence follows.
 
 - `hackathon/monad-onchain-finance`를 최신 `origin/main`의 별도 worktree에서
   시작했다. 기존 root checkout과 미추적 개인 파일은 변경하지 않았다.
@@ -801,6 +807,35 @@ source of truth로 사용한다.
    finality/recovery 정책을 별도 운영 feature로 구체화한다.
 
 ## Last Session Summary
+
+- 2026-11-10 (issue #145): marked HACK-001 `passing` after the hackathon ended
+  on 2026-10-14, per team decision. Updated only `FEATURES.md` and `PROGRESS.md`,
+  preserving implementation history and recording work not completed before the deadline:
+  judge wallet guide, browser-wallet settlement with `--evidence` rehearsal, and explorer
+  source verification. No feature remains active and no next feature was selected.
+- Live verification used `curl -k` against `https://161.33.155.224`: `/health` returned
+  `{"service":"corner-store-testnet-rfq-demo","status":"ok","blockNumber":78558332}`;
+  `/api/state` returned HTTP 200 with four scenarios, chain ID 10143, source commit
+  `e7345b3a41edaca05e3260c4c39240bf0e2c9e2c`, `verifiedAtStartup=true`,
+  `makerApproved=true` and `manifestActive=true`. All four `/api/precheck` calls used
+  `amountIn=5000000000000000000000000` and returned HTTP 200:
+  success buy `allowed=true`, zero reason and `explanation=null`; qualification buy
+  `allowed=false`, `FAIL_NOT_QP`; investor B sell `allowed=false`,
+  `HOLDING_PERIOD_NOT_ELAPSED`, `availableAt=1822982925`; expired-claim buy
+  `allowed=false`, `FAIL_QP_CLAIM_EXPIRED`, `evidenceExpiredAt=1791360525`.
+  Maker approval, inventory and allowance passed in every response.
+- `cast chain-id` returned 10143. Read-only `cast call acquisitionOf` against
+  `https://testnet-rpc.monad.xyz` confirmed `expiresAt=1796688000`, status `VALID`
+  for maker, investor, eligibleInvestorB, ineligibleInvestor and expiredInvestor;
+  investor B's original `clockStart=1791446925` remains intact. The five 2026-11-10
+  renewal hashes and blocks are recorded in HACK-001's `FEATURES.md` notes from the
+  operator's Foundry broadcast records. QP claims were intentionally untouched.
+- Validation: live HTTP pre-checks and on-chain reads only; no signing or settlement.
+  Build/unit suites and browser-wallet `--evidence` rehearsal were not rerun for this
+  documentation-only closure. `git diff --check` passed.
+  Next operational step: renew acquisition evidence every 30 days using
+  `scripts/refresh-testnet-evidence.sh`, with the next renewal before
+  2026-12-08 00:00 UTC (`1796688000`). Deployment artifacts remain unchanged.
 
 - RFQ maker settlement account와 signer authority를 분리했다. delegate 권한
   추가는 1일 delay, revoke는 즉시 적용하며 direct maker ECDSA와 ERC-1271도
