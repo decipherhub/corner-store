@@ -812,6 +812,7 @@ Historical implementation and verification evidence follows.
   `FEATURES.md`/`PROGRESS.md` against `origin/main` #162 while retaining CORE-015;
   HACK-001 remains closed as `passing` and no feature is active. The review fixes
   were committed on this branch in `c4923d6`.
+- Final-head Node 20 `scripts/check.sh` passed, including 1,010 Foundry tests and 10 deploy-v3 tests. Log: `/tmp/w132-check-final.log`.
 - Narrowed item 12 to operational RFQ risk disclosure only (three operational
   codes). Tiered compliance outcomes remain OPEN pending counsel-approved taxonomy.
   Added D044, PENDING TEAM/LEGAL DECISION, for item 13. Reg D v4/A-12 v2 remain
