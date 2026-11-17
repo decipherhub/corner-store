@@ -153,6 +153,7 @@ program
   .command("production-plan")
   .description("render a signer-free production deployment plan")
   .argument("[path]", "production config JSON path", "corner-store.production.json")
+  .option("--out <file>", "write the versioned unsigned deployment plan")
   .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
   .action(run((path, opts, command) => cmd.cmdProductionPlan(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
 
@@ -195,7 +196,7 @@ program
 
 program
   .command("production-onboarding-plan")
-  .description("render unsigned production ERC-3643 REGISTER/UPDATE plan and Safe drafts")
+  .description("render unsigned production ERC-3643 REGISTER/UPDATE plan and Safe drafts (schema 7 identity policies opt-in)")
   .argument("[path]", "production onboarding config JSON path", "corner-store.production-onboarding.json")
   .option("--out <path>", "immutable output JSON path")
   .option("--audit-artifact <path>", "reviewed canonical policy audit artifact (required by schema v4)")
@@ -223,15 +224,25 @@ program
   .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
   .option("--ledger", "use Foundry Ledger signer")
   .option("--account <name>", "use a Foundry keystore/account signer")
+  .option("--password-file <path>", "local Foundry keystore password file")
   .requiredOption("--confirm <text>", "must equal production-deploy")
-  .action(run((path, opts, command) => cmd.cmdProductionDeploy(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl, ledger: opts.ledger, account: opts.account, confirm: opts.confirm})));
+  .action(run((path, opts, command) => cmd.cmdProductionDeploy(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl, ledger: opts.ledger, account: opts.account ?? command.optsWithGlobals().account, passwordFile: opts.passwordFile, confirm: opts.confirm})));
+
+program
+  .command("production-recover")
+  .description("revalidate and publish a staged production operation without rebroadcasting")
+  .argument("[path]", "production config JSON path", "corner-store.production.json")
+  .requiredOption("--operation <directory>", "retained operation journal directory")
+  .option("--rpc-url <url>", "runtime RPC URL override")
+  .action(run((path, opts, command) => cmd.cmdProductionRecover(path, {...command.optsWithGlobals(), operation: opts.operation, rpcUrl: opts.rpcUrl})));
 
 program
   .command("production-verify")
   .description("verify production deployment artifact and on-chain core bindings")
+  .option("--expected-record-digest <digest>", "trusted version 2 record digest from deployment or review")
   .argument("[path]", "production config JSON path", "corner-store.production.json")
   .option("--rpc-url <url>", "runtime RPC URL override (also supports CORNER_STORE_RPC_URL)")
-  .action(run((path, opts, command) => cmd.cmdProductionVerify(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl})));
+  .action(run((path, opts, command) => cmd.cmdProductionVerify(path, {...command.optsWithGlobals(), rpcUrl: opts.rpcUrl, expectedRecordDigest: opts.expectedRecordDigest})));
 
 // Wrap an async command so any revert/error prints a decoded, human reason and
 // the process exits non-zero.
@@ -262,7 +273,7 @@ program
   .command("onboard")
   .description("factory one-call onboarding of the RWA token (retires+re-onboards if ACTIVE)")
   .option("--engines <list>", "supported engines, comma-separated (bundled profiles require rfq)", "rfq")
-  .option("--profile <profile>", "asset profile: buidl-like, reg-d or reg-d-v4 (must match deployment artifact)")
+  .option("--profile <profile>", "asset profile: buidl-like, reg-d or reg-d-v5 (must match deployment artifact)")
   .action(run((opts, command) => cmd.cmdOnboard(command.optsWithGlobals())));
 
 program
@@ -284,7 +295,7 @@ program
   .command("investor-setup")
   .description("apply the selected asset profile's investor attestations + QUOTE funding")
   .argument("<address>")
-  .option("--profile <profile>", "asset profile: buidl-like, reg-d or reg-d-v4 (must match deployment artifact)")
+  .option("--profile <profile>", "asset profile: buidl-like, reg-d or reg-d-v5 (must match deployment artifact)")
   .option("--fund <amount>", "QUOTE to mint to the investor (ether units; profile default when omitted)")
   .action(run((address, opts, command) => cmd.cmdInvestorSetup(address, command.optsWithGlobals())));
 
@@ -314,6 +325,15 @@ program
   .option("--expiry <sec>", "quote TTL in seconds", "3600")
   .option("--out <file>", "output path", "quote.json")
   .action(run((opts, command) => cmd.cmdRfqQuote(command.optsWithGlobals())));
+
+program
+  .command("rfq-v3-quote")
+  .description("request or locally sign an opt-in RFQ v3 quote using explicit v3 deployment bindings")
+  .requiredOption("--request <file>", "v3 request JSON, with raw integer amounts and explicit flowType")
+  .option("--backend <url>", "versioned RFQ host base URL")
+  .option("--auth-env <name>", "environment variable containing the backend bearer token")
+  .option("--out <file>", "output quote path", "quote-v3.json")
+  .action(run((opts, command) => cmd.cmdRfqV3Quote(command.optsWithGlobals())));
 
 program
   .command("rfq-cancel")

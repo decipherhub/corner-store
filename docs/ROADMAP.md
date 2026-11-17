@@ -380,6 +380,17 @@ Reference/demo evidence:
    finality/recovery 구현`
 8. `security: medium warning budget, independent analysis와 production review`
 
+## November identity follow-ups (issue #159)
+
+DATA-004 delivers only P1 identity topology guards, accepted evidence, keyed
+commitments, optional LEI and settlement-binding verification. Four separate
+November-plan PR slots are scheduled in
+[`product-specs/identity-p2-schedule.md`](./product-specs/identity-p2-schedule.md):
+MEMBER topology, venue pseudonyms/off-chain mapping before any TSV launch,
+settlement-asset cards, and opt-in A-01-v2 jurisdictional list bundles with
+mandatory OFAC for TSV. All four remain unimplemented. Dates and assignees need
+team confirmation; no PR was opened by this documentation work.
+
 ## Decision Backlog
 
 | 결정 | 영향 Phase | 결정 전 기본값 |

@@ -76,10 +76,10 @@ const config = loadConfig(path);
 if (config.asset.profile !== "buidl-like" || !config.venues.rfq) throw new Error("default config regression");
 if (JSON.parse(readFileSync(path, "utf8")).schemaVersion !== 1) throw new Error("version missing");
 validateConfig({...defaultConfig(), asset: {profile: "reg-d"}});
-assertProfileVenueCompatibility("reg-d-v4", false);
+assertProfileVenueCompatibility("reg-d-v5", false);
 assertThrows(
-  () => assertProfileVenueCompatibility("reg-d-v4", true),
-  "Reg D v4 still rejects AMM because it retains C-01-v2"
+  () => assertProfileVenueCompatibility("reg-d-v5", true),
+  "Reg D v5 still rejects AMM because it retains C-01-v2"
 );
 assertThrows(
   () => validateConfig({...defaultConfig(), venues: {amm: true, rfq: true, orderBook: false}}),
@@ -264,7 +264,7 @@ if (
   !productionPlan.command.includes("CORNER_STORE_ENABLE_AMM=1") ||
   !productionPlan.command.includes("CORNER_STORE_ENABLE_RFQ=0") ||
   !productionPlan.command.includes("CORNER_STORE_DEPLOYMENT_ID=mainnet-core-1") ||
-  !productionPlan.command.includes("CORNER_STORE_ARTIFACT=deployments/production-core.json") ||
+  !productionPlan.command.includes("CORNER_STORE_CANDIDATE=deployments/production-core.candidate.json") ||
   !productionPlan.command.includes("script/DeployProductionCore.s.sol:DeployProductionCore") ||
   !productionPlan.command.includes("--sender 0x4444444444444444444444444444444444444444") ||
   productionPlan.command.includes("--ledger") ||
@@ -284,10 +284,10 @@ validateProductionDeploymentEvidence({
   forkSimulation: {passed: true, chainId: 1, blockNumber: 20_000_000},
   reviewedAt: "2026-07-31T00:00:00.000Z"
 }, productionConfig);
-if (!createProductionDeploymentPlan(productionConfig, {kind: "ledger"}, true).command.includes("--ledger")) {
+if (!createProductionDeploymentPlan(productionConfig, {kind: "ledger"}).command.includes("--ledger")) {
   throw new Error("production ledger deploy plan regression");
 }
-if (!createProductionDeploymentPlan(productionConfig, {kind: "account", name: "prod-safe-deployer"}, true).command.includes("--account prod-safe-deployer")) {
+if (!createProductionDeploymentPlan(productionConfig, {kind: "account", name: "prod-safe-deployer"}).command.includes("--account prod-safe-deployer")) {
   throw new Error("production account deploy plan regression");
 }
 try {
@@ -477,11 +477,11 @@ const referenceOnlyElementConfig = {
 assertThrows(() => createProductionOnboardingPlan(referenceOnlyElementConfig), "production export rejects reference-only A-12-v2");
 const referenceOnlyRecipeConfig = {
   ...onboardingConfig,
-  recipes: [{...onboardingConfig.recipes[0], version: 4}],
-  manifest: {...onboardingConfig.manifest, issuanceRecipeVersion: 4},
-  recipeBindings: [{...onboardingConfig.recipeBindings[0], recipeVersion: 4}]
+  recipes: [{...onboardingConfig.recipes[0], version: 5}],
+  manifest: {...onboardingConfig.manifest, issuanceRecipeVersion: 5},
+  recipeBindings: [{...onboardingConfig.recipeBindings[0], recipeVersion: 5}]
 };
-assertThrows(() => createProductionOnboardingPlan(referenceOnlyRecipeConfig), "production export rejects reference-only Reg D v4 even without element composition");
+assertThrows(() => createProductionOnboardingPlan(referenceOnlyRecipeConfig), "production export rejects reference-only Reg D v5 even without element composition");
 const onboardingPlan = createProductionOnboardingPlan(onboardingConfig, "2026-08-23T00:00:00.000Z");
 const onboardingPlanRepeat = createProductionOnboardingPlan(onboardingConfig, "2026-08-24T00:00:00.000Z");
 assert(onboardingPlan.onboardingHash === onboardingPlanRepeat.onboardingHash, "onboarding hash is deterministic across render time");
@@ -767,9 +767,9 @@ let referenceOnlyChecks = 0;
 for (const config of [onboardingConfig, onboardingConfigV2Compat, onboardingConfigV3, onboardingConfigV4, updateConfigV5]) {
   for (const rejected of [
     {...config, elements: [{...config.elements[0], elementId: encodeBytes32String("A-12-v2").toUpperCase().replace("0X", "0x")}]},
-    {...config, recipes: [{...config.recipes[0], recipeId: 1, version: 4}]},
-    {...config, manifest: {...config.manifest, issuanceRecipeId: 1, issuanceRecipeVersion: 4}},
-    {...config, recipeBindings: [{...config.recipeBindings[0], recipeId: 1, recipeVersion: 4}]}
+    {...config, recipes: [{...config.recipes[0], recipeId: 1, version: 5}]},
+    {...config, manifest: {...config.manifest, issuanceRecipeId: 1, issuanceRecipeVersion: 5}},
+    {...config, recipeBindings: [{...config.recipeBindings[0], recipeId: 1, recipeVersion: 5}]}
   ]) {
     try {
       createProductionOnboardingPlan(rejected);
@@ -791,7 +791,7 @@ const referenceOnlyReader = {
 };
 const referenceOnlyVerificationPromise = Promise.all([
   verifyProductionOnboarding(referenceOnlyElementConfig, referenceOnlyReader),
-  verifyProductionPolicyUpdatePreActivation({...updateConfigV5, recipes: [{...updateConfigV5.recipes[0], recipeId: 1, version: 4}]}, referenceOnlyReader)
+  verifyProductionPolicyUpdatePreActivation({...updateConfigV5, recipes: [{...updateConfigV5.recipes[0], recipeId: 1, version: 5}]}, referenceOnlyReader)
 ].map((result) => result.then(() => { throw new Error("reference-only verification accepted"); }, (err) => {
   assert(String(err.message).includes("is reference-only pending issue #132 item 13"), "production verification must reject before RPC");
 }))).then(() => console.log("reference-only production verification checks: 2 passed"));

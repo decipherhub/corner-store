@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 
 import {IntegrationBase} from "./IntegrationBase.sol";
 import {RedFlagKnowledgeBarV2} from "../../src/compliance/elements/RedFlagKnowledgeBarV2.sol";
-import {RegD506cRecipeV4} from "../../src/compliance/recipes/RegD506cRecipeV4.sol";
+import {RegD506cRecipeV5} from "../../src/compliance/recipes/RegD506cRecipeV5.sol";
 import {Errors} from "../../src/libraries/Errors.sol";
 import {
     ComplianceContext,
@@ -16,7 +16,7 @@ import {
     VenueType
 } from "../../src/types/ComplianceTypes.sol";
 
-contract RegD506cV4Test is IntegrationBase {
+contract RegD506cV5Test is IntegrationBase {
     RedFlagKnowledgeBarV2 internal redFlag;
 
     function setUp() public {
@@ -29,7 +29,7 @@ contract RegD506cV4Test is IntegrationBase {
         ComplianceDecision memory beforeRegistration = engine.evaluate(_context());
         assertTrue(beforeRegistration.allowed);
         bytes32 planBefore = policyReg.compiledPlanHashOf(address(rwaToken));
-        _registerV4();
+        _registerV5();
         redFlag.raiseFlag(address(pool), alice, RedFlagKnowledgeBarV2.RedFlag.AI_INCONSISTENT);
         redFlag.markUncertain(address(pool), alice);
 
@@ -45,19 +45,19 @@ contract RegD506cV4Test is IntegrationBase {
         assertFalse(engine.evaluate(_context()).allowed, "v3 accreditation gate remains effective");
     }
 
-    function test_migrationV3ToV4_isDelayedAndCompilesTenElements() public {
-        _registerV4();
+    function test_migrationV3ToV5_isDelayedAndCompilesTenElements() public {
+        _registerV5();
         ComplianceDecision memory beforeUpdate = engine.evaluate(_context());
         bytes32 planBefore = policyReg.compiledPlanHashOf(address(rwaToken));
-        _scheduleV4();
+        _scheduleV5();
         assertEq(policyReg.recipeBindingsOf(address(rwaToken))[0].recipeVersion, 3);
         assertEq(policyReg.compiledPlanHashOf(address(rwaToken)), planBefore);
         assertEq(engine.evaluate(_context()).policyId, beforeUpdate.policyId);
         vm.expectPartialRevert(Errors.TimelockNotReady.selector);
         policyReg.activateManifestUpdate(address(rwaToken));
 
-        _activateV4();
-        assertEq(policyReg.recipeBindingsOf(address(rwaToken))[0].recipeVersion, 4);
+        _activateV5();
+        assertEq(policyReg.recipeBindingsOf(address(rwaToken))[0].recipeVersion, 5);
         assertEq(policyReg.manifestVersionOf(address(rwaToken)), 2);
         CompiledElementRule[] memory rules = policyReg.compiledRulesOf(address(rwaToken), 0);
         assertEq(rules.length, 10);
@@ -73,7 +73,7 @@ contract RegD506cV4Test is IntegrationBase {
     }
 
     function test_flaggedAssessment_staysNonblockingAndSeparate() public {
-        _migrateV4();
+        _migrateV5();
         redFlag.raiseFlag(address(pool), alice, RedFlagKnowledgeBarV2.RedFlag.AI_INCONSISTENT);
         assertEq(uint256(redFlag.dispositionOf(address(pool), alice)), uint256(RedFlagKnowledgeBarV2.Disposition.FLAG));
         _assertNeutralDecision();
@@ -82,7 +82,7 @@ contract RegD506cV4Test is IntegrationBase {
     }
 
     function test_uncertainAssessment_staysNonblockingAndSeparate() public {
-        _migrateV4();
+        _migrateV5();
         redFlag.markUncertain(address(pool), alice);
         assertEq(
             uint256(redFlag.dispositionOf(address(pool), alice)), uint256(RedFlagKnowledgeBarV2.Disposition.REVIEW)
@@ -92,37 +92,37 @@ contract RegD506cV4Test is IntegrationBase {
         _assertNeutralDecision();
     }
 
-    function test_v4_preservesExistingBlockingGate() public {
-        _migrateV4();
+    function test_v5_preservesExistingBlockingGate() public {
+        _migrateV5();
         redFlag.markUncertain(address(pool), alice);
         accredited.setAccredited(alice, false);
         assertFalse(engine.evaluate(_context()).allowed, "A-12 membership cannot bypass accreditation");
     }
 
-    function _registerV4() internal {
+    function _registerV5() internal {
         redFlag = new RedFlagKnowledgeBarV2();
         elementReg.registerElement(bytes32("A-12-v2"), address(redFlag), EnforcementAction.FLAG_ONLY);
-        recipeReg.registerRecipe(1, 4, address(new RegD506cRecipeV4()));
+        recipeReg.registerRecipe(1, 5, address(new RegD506cRecipeV5()));
     }
 
-    function _scheduleV4() internal {
+    function _scheduleV5() internal {
         ManifestCore memory manifest = policyReg.manifestOf(address(rwaToken));
-        manifest.fullManifestHash = keccak256("reg-d-v4-reference-policy");
+        manifest.fullManifestHash = keccak256("reg-d-v5-reference-policy");
         RecipeBinding[] memory bindings = new RecipeBinding[](1);
-        bindings[0] = RecipeBinding(1, 4, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+        bindings[0] = RecipeBinding(1, 5, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
         policyReg.scheduleManifestUpdate(address(rwaToken), manifest, bindings, bytes32("ADD_A12"));
     }
 
-    function _activateV4() internal {
+    function _activateV5() internal {
         (,, uint64 readyAt,) = policyReg.pendingManifestUpdateOf(address(rwaToken));
         vm.warp(readyAt);
         policyReg.activateManifestUpdate(address(rwaToken));
     }
 
-    function _migrateV4() internal {
-        _registerV4();
-        _scheduleV4();
-        _activateV4();
+    function _migrateV5() internal {
+        _registerV5();
+        _scheduleV5();
+        _activateV5();
     }
 
     function _assertNeutralDecision() internal view {

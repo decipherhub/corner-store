@@ -71,7 +71,12 @@ module.exports = {
   },
   createProductionRFQDependencies() {
     return {
-      coordinator: {quoteWithEvidence() { throw new Error("not used by runtime smoke"); }},
+      coordinator: {
+        assertProductionConfiguration() {},
+        getQuoteLifetimePolicy() { return {defaultTtlSeconds: 60, maxTtlSeconds: 300}; },
+        authorizeProduct() { throw new Error("not used by runtime smoke"); },
+        quoteAuthorizedWithEvidence() { throw new Error("not used by runtime smoke"); }
+      },
       authenticator: {authenticate() { throw new Error("not used by runtime smoke"); }},
       resolvePolicyId() { throw new Error("not used by runtime smoke"); },
       rateLimiter: {check() { return {allowed: false}; }},

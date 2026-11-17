@@ -3,14 +3,10 @@ import {createHash} from "crypto";
 import {
   copyFileSync,
   existsSync,
-  openSync,
-  closeSync,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
-  readlinkSync,
   rmSync,
   writeFileSync
 } from "fs";
@@ -34,6 +30,12 @@ import {
   loadProductionDeploymentEvidence,
   validateProductionConfig
 } from "../../toolkit/src/production";
+import {
+  ProductionRecord, assertProductionBroadcastIdentity, bindProductionRecord, buildProductionIdentity,
+  canonicalProductionJson, captureProductionSource, verifyProductionManifest, verifyProductionRecord
+} from "../../toolkit/src/production-evidence";
+import {ProductionPublication, publishProductionBytes} from "../../toolkit/src/production-publication";
+import {verifyProductionChain} from "../../toolkit/src/production-chain";
 import {scaffoldRFQIntegration} from "../../toolkit/src/scaffold";
 import {ProjectTemplateId} from "../../toolkit/src/project-templates";
 import {RFQIntegrationMode} from "../../toolkit/src/integration";
@@ -99,12 +101,14 @@ import {
   RFQQuoteService,
   SignedRFQQuote,
   WalletTypedDataSigner,
-  encodeVenueData,
+  encodeVenueData, encodeVenueDataV3, isV3QuoteFile, parseQuoteFile, requestBackendQuoteV3,
   readQuoteFile,
   requestBackendQuote,
   rfqDomain,
   writeQuoteFile
 } from "./rfq";
+import {ROUTER_ABI} from "./abi";
+import {RFQQuoteServiceV3, OnchainRFQContextResolver, ethersContextReader, domainV3, RFQ_QUOTE_V3_TYPES} from "../../rfq/src";
 import {CliError} from "./util";
 import {
   copyDeploymentArtifact,
@@ -276,7 +280,7 @@ export function cmdToolkitProposal(opts: {target: string; calldata: string; reas
     requiredApprovals: Number(opts.approvals)
   });
   try {
-    writeFileSync(resolve(process.cwd(), opts.output), `${JSON.stringify(proposal, null, 2)}\n`, {flag: "wx"});
+    writeImmutableJson(resolve(process.cwd(), opts.output), proposal);
   } catch (err: any) {
     throw new CliError(`cannot write immutable proposal: ${err.message}`);
   }
@@ -287,7 +291,7 @@ export function cmdToolkitSafeProposal(opts: {target: string; calldata: string; 
   const proposal = createGovernanceProposal({target: opts.target, value: "0", calldata: opts.calldata, reason: opts.reason, expectedArtifactHash: opts.artifactHash, requiredApprovals: Number(opts.approvals)});
   const draft = toSafeTransactionDraft(proposal, Number(opts.chainId));
   try {
-    writeFileSync(resolve(process.cwd(), opts.output), `${JSON.stringify(draft, null, 2)}\n`, {flag: "wx"});
+    writeImmutableJson(resolve(process.cwd(), opts.output), draft);
   } catch (err: any) {
     throw new CliError(`cannot write immutable Safe proposal: ${err.message}`);
   }
@@ -418,10 +422,17 @@ export async function cmdProductionPolicyUpdatePreActivation(path = "corner-stor
   }
 }
 
-export function cmdProductionPlan(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string}): void {
+export function cmdProductionPlan(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string; out?: string}): void {
   rejectProductionRawKey(opts);
   const config = productionConfigWithRuntimeOverrides(path, opts);
-  const plan = createProductionDeploymentPlan(config);
+  const source = productionContractSource(findRepoRoot(process.cwd()), opts.contracts);
+  if (!source) throw new CliError("Corner Store production contract bundle not found");
+  const captured = buildProductionIdentity(source, config);
+  const plan = {...createProductionDeploymentPlan(config, {kind: "none"}, false, captured.identity), source: captured.source, build: captured.build};
+  if (opts.out) {
+    const output = resolve(opts.out);
+    writeImmutableJson(output, plan);
+  }
   console.log(JSON.stringify(plan, null, 2));
 }
 
@@ -429,10 +440,13 @@ export function cmdProductionSourceHash(opts: GlobalOpts): void {
   const repoRoot = findRepoRoot(process.cwd());
   const contractSource = productionContractSource(repoRoot, opts.contracts);
   if (!contractSource) throw new CliError("Corner Store contract bundle not found; reinstall the CLI or set CORNER_STORE_CONTRACTS_ROOT");
+  const source = captureProductionSource(contractSource);
   console.log(JSON.stringify({
     contractsRoot: contractSource,
-    sourceCommit: productionSourceCommit(contractSource),
-    contractsHash: productionContractsHash(contractSource)
+    sourceCommit: source.provenance.head,
+    contractsHash: source.sourceHash,
+    provenance: source.provenance,
+    source
   }, null, 2));
 }
 
@@ -445,30 +459,19 @@ export async function cmdProductionPreflight(path = "corner-store.production.jso
 
 export async function cmdProductionDeploy(
   path = "corner-store.production.json",
-  opts: GlobalOpts & {ledger?: boolean; account?: string; confirm?: string; rpcUrl?: string}
+  opts: GlobalOpts & {ledger?: boolean; account?: string; passwordFile?: string; confirm?: string; rpcUrl?: string}
 ): Promise<void> {
   rejectProductionRawKey(opts);
   const config = productionConfigWithRuntimeOverrides(path, opts);
   if (opts.confirm !== "production-deploy") {
     throw new CliError('production-deploy requires --confirm production-deploy');
   }
+  ProductionPublication.assertVacant(resolve(config.deployment.artifact));
   const signer = productionSigner(opts);
   if (signer.kind === "none") throw new CliError("production-deploy requires --ledger or --account <foundry-account>");
   const repoRoot = findRepoRoot(process.cwd());
   const contractSource = productionContractSource(repoRoot, opts.contracts);
   if (!contractSource) throw new CliError("Corner Store contract bundle not found; reinstall the CLI or set CORNER_STORE_CONTRACTS_ROOT");
-  const contractsHash = productionContractsHash(contractSource);
-  if (contractsHash !== config.release.contractsHash) {
-    throw new CliError(
-      `contract source hash mismatch: config=${config.release.contractsHash}, actual=${contractsHash}; regenerate review evidence`
-    );
-  }
-  const actualSourceCommit = productionSourceCommit(contractSource);
-  if (actualSourceCommit && actualSourceCommit !== config.release.sourceCommit) {
-    throw new CliError(
-      `source commit mismatch: config=${config.release.sourceCommit}, actual=${actualSourceCommit}; review the intended release`
-    );
-  }
   const evidencePath = resolve(process.cwd(), config.deployment.evidence);
   let deploymentEvidence;
   try {
@@ -476,56 +479,128 @@ export async function cmdProductionDeploy(
   } catch (err: any) {
     throw new CliError(err.message);
   }
-  const preflight = await productionPreflight(config);
-  if (!preflight.ready) {
-    console.log(JSON.stringify(preflight, null, 2));
-    throw new CliError(`production preflight failed: ${preflight.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
-  }
-  const plan = createProductionDeploymentPlan(config, signer, true);
-  console.log(JSON.stringify({...plan, preflight, deploymentEvidence, evidencePath, contractsHash}, null, 2));
-  const projectRoot = process.cwd();
-  const deploymentRoot = repoRoot === projectRoot
-    ? repoRoot
-    : prepareDeploymentRuntime(projectRoot, contractSource);
-  const args = [
-    "script",
-    plan.script,
-    "--rpc-url",
-    config.network.rpcUrl,
-    "--chain-id",
-    String(config.network.chainId),
-    "--sender",
-    config.deployer,
-    "--broadcast"
-  ];
-  if (signer.kind === "ledger") args.push("--ledger");
-  if (signer.kind === "account") args.push("--account", signer.name);
-  execFileSync("forge", args, {
-    env: {
-      ...process.env,
-      CORNER_STORE_DEPLOYER: config.deployer,
-      CORNER_STORE_GOVERNANCE: config.safe.address,
-      CORNER_STORE_OPERATOR: config.operator,
-      CORNER_STORE_ENABLE_AMM: config.venues.amm ? "1" : "0",
-      CORNER_STORE_ENABLE_RFQ: config.venues.rfq ? "1" : "0",
-      CORNER_STORE_DEPLOYMENT_ID: config.deploymentId,
-      CORNER_STORE_SOURCE_COMMIT: config.release.sourceCommit,
-      CORNER_STORE_CONTRACTS_HASH: config.release.contractsHash,
-      CORNER_STORE_ARTIFACT: config.deployment.artifact
-    },
-    cwd: deploymentRoot,
-    stdio: "inherit"
-  });
-  if (deploymentRoot !== projectRoot) {
-    const source = resolve(deploymentRoot, config.deployment.artifact);
-    const output = resolve(projectRoot, config.deployment.artifact);
-    mkdirSync(dirname(output), {recursive: true});
-    copyFileSync(source, output);
-    console.log(`production deployment artifact copied to ${output}`);
+  if (deploymentEvidence.schemaVersion !== 2 || !deploymentEvidence.identity) throw new CliError("new production deployments require evidence version 2");
+  const publication = ProductionPublication.reserve(resolve(config.deployment.artifact));
+  let captured: ReturnType<typeof buildProductionIdentity> | undefined;
+  let executing = false;
+  try {
+    captured = buildProductionIdentity(contractSource, config, {keepWorkspace: true, workspaceParent: publication.directory});
+    assertProductionBroadcastIdentity(captured.identity, config);
+    if (deploymentEvidence.evidenceId !== captured.identity.evidenceId) throw new CliError("reviewed production evidence identity mismatch");
+    const preflight = await productionPreflight(config);
+    if (!preflight.ready) {
+      console.log(JSON.stringify(preflight, null, 2));
+      throw new CliError(`production preflight failed: ${preflight.checks.filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
+    }
+    const plan = createProductionDeploymentPlan(config, signer, true, captured.identity);
+    console.log(JSON.stringify({...plan, preflight, deploymentEvidence, evidencePath}, null, 2));
+    const args = ["script", plan.script, "--root", captured.workspace, "--offline", "--ast", "--use", captured.solcPath,
+      "--rpc-url", config.network.rpcUrl, "--chain-id", String(config.network.chainId), "--sender", config.deployer, "--broadcast", "--slow"];
+    if (signer.kind === "ledger") args.push("--ledger");
+    if (signer.kind === "account") {
+      args.push("--keystore", resolve(process.env.HOME ?? "", ".foundry/keystores", signer.name));
+      if (opts.passwordFile) args.push("--password-file", resolve(opts.passwordFile));
+    }
+    verifyProductionManifest(captured.workspace, captured.source);
+    const current = buildProductionIdentity(contractSource, config);
+    if (current.identity.evidenceId !== captured.identity.evidenceId) throw new CliError("production inputs changed before execution");
+    publication.journal("executing", {workspace: relative(publication.directory, captured.workspace), evidenceId: captured.identity.evidenceId});
+    executing = true;
+    execFileSync(captured.forgePath, args, {
+      env: {
+        ...captured.env,
+        CORNER_STORE_DEPLOYER: config.deployer,
+        CORNER_STORE_GOVERNANCE: config.safe.address,
+        CORNER_STORE_OPERATOR: config.operator,
+        CORNER_STORE_ENABLE_AMM: config.venues.amm ? "1" : "0",
+        CORNER_STORE_ENABLE_RFQ: config.venues.rfq ? "1" : "0",
+        CORNER_STORE_DEPLOYMENT_ID: config.deploymentId,
+        CORNER_STORE_SOURCE_COMMIT: config.release.sourceCommit,
+        CORNER_STORE_CONTRACTS_HASH: config.release.contractsHash,
+        CORNER_STORE_CANDIDATE: "deployments/production-core.candidate.json"
+      },
+      cwd: captured.workspace,
+      stdio: "inherit"
+    });
+    const record = await readProductionCandidate(captured, config);
+    await verifyProductionCandidate(config, record, captured);
+    publication.journal("verified", {evidenceId: record.evidenceId, recordDigest: record.recordDigest, artifactDigest: record.artifactDigest});
+    const bytes = Buffer.from(`${JSON.stringify(record, null, 2)}\n`);
+    const validate = (value: Buffer) => verifyProductionRecord(JSON.parse(value.toString()), captured!.identity.evidenceId);
+    publication.prepare(bytes, validate);
+    publication.publish(validate);
+    captured.dispose();
+    console.log(JSON.stringify({published: publication.output, operation: publication.directory, evidenceId: record.evidenceId, artifactDigest: record.artifactDigest, recordDigest: record.recordDigest}, null, 2));
+  } catch (error: any) {
+    if (!executing) { captured?.dispose(); publication.cancel(); }
+    throw new CliError(`${error.message}; operation journal: ${publication.directory}${executing ? "; recover without rebroadcasting" : ""}`);
   }
 }
 
-export async function cmdProductionVerify(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string}): Promise<void> {
+async function readProductionCandidate(captured: ReturnType<typeof buildProductionIdentity>, config: ProductionConfig, workspace = captured.workspace): Promise<ProductionRecord> {
+  const artifact = JSON.parse(readFileSync(resolve(workspace, "deployments/production-core.candidate.json"), "utf8"));
+  const broadcastPath = resolve(workspace, "broadcast/DeployProductionCore.s.sol", String(config.network.chainId), "run-latest.json");
+  const broadcast = JSON.parse(readFileSync(broadcastPath, "utf8"));
+  if (!Array.isArray(broadcast.transactions) || !broadcast.transactions.length) throw new CliError("production transaction inputs are required; recovery never rebroadcasts incomplete transactions");
+  if (!Array.isArray(broadcast.receipts) || broadcast.receipts.length !== broadcast.transactions.length) {
+    const provider = new JsonRpcProvider(config.network.rpcUrl);
+    try {
+      broadcast.receipts = await Promise.all(broadcast.transactions.map(async (tx: any) => {
+        if (typeof tx.hash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(tx.hash)) throw new CliError("incomplete transaction hashes; recovery never rebroadcasts");
+        const receipt = await provider.send("eth_getTransactionReceipt", [tx.hash]);
+        if (!receipt) throw new CliError("transaction receipts unavailable; recovery never rebroadcasts");
+        return receipt;
+      }));
+    } finally { provider.destroy(); }
+  }
+  return bindProductionRecord(captured.identity, artifact, broadcast.transactions, broadcast.receipts, {source: captured.source, build: captured.build});
+}
+
+async function verifyProductionCandidate(config: ProductionConfig, record: ProductionRecord, captured: ReturnType<typeof buildProductionIdentity>): Promise<ProductionPreflightResult> {
+  verifyProductionRecord(record, captured.identity.evidenceId);
+  const provider = new JsonRpcProvider(config.network.rpcUrl);
+  try {
+    await verifyProductionChain(record, config, captured.compilerOutput, (method, params) => provider.send(method, params));
+  } finally { provider.destroy(); }
+  const preflight = await productionPreflight(config);
+  const verified = await productionVerify(config, record.artifact);
+  if (!preflight.ready || !verified.ready) throw new CliError(`production candidate verification failed: ${[...preflight.checks, ...verified.checks].filter((check) => !check.pass).map((check) => check.name).join(", ")}`);
+  return verified;
+}
+
+export async function cmdProductionRecover(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string; operation: string}): Promise<void> {
+  rejectProductionRawKey(opts);
+  const config = productionConfigWithRuntimeOverrides(path, opts);
+  const publication = ProductionPublication.resume(opts.operation);
+  if (publication.output !== resolve(config.deployment.artifact)) throw new CliError("recovery destination/config mismatch");
+  const contractSource = productionContractSource(findRepoRoot(process.cwd()), opts.contracts);
+  if (!contractSource) throw new CliError("recovery requires reviewed contract inputs");
+  const captured = buildProductionIdentity(contractSource, config);
+  assertProductionBroadcastIdentity(captured.identity, config);
+  const reviewed = loadProductionDeploymentEvidence(resolve(config.deployment.evidence), config);
+  if (reviewed.schemaVersion !== 2 || reviewed.evidenceId !== captured.identity.evidenceId) throw new CliError("recovery reviewed evidence identity mismatch");
+  const events = publication.events();
+  let record: ProductionRecord;
+  if (events.some((event) => event.phase === "prepared")) {
+    record = JSON.parse(publication.preparedBytes().toString());
+  } else {
+    const execution = events.find((event) => event.phase === "executing");
+    if (!execution || execution.data.evidenceId !== captured.identity.evidenceId || !/^corner-production-build-[a-zA-Z0-9]+$/.test(execution.data.workspace)) throw new CliError("no recoverable production execution; no transactions were submitted by recovery");
+    record = await readProductionCandidate(captured, config, resolve(publication.directory, execution.data.workspace));
+  }
+  await verifyProductionCandidate(config, record, captured);
+  const validate = (bytes: Buffer) => {
+    const candidate = JSON.parse(bytes.toString());
+    verifyProductionRecord(candidate, captured.identity.evidenceId);
+    if (candidate.recordDigest !== record.recordDigest) throw new CliError("recovery record digest changed");
+  };
+  if (!events.some((event) => event.phase === "prepared")) publication.prepare(Buffer.from(`${JSON.stringify(record, null, 2)}\n`), validate);
+  publication.publish(validate);
+  console.log(JSON.stringify({published: publication.output, evidenceId: record.evidenceId, artifactDigest: record.artifactDigest, recordDigest: record.recordDigest, recovered: true}, null, 2));
+}
+
+
+export async function cmdProductionVerify(path = "corner-store.production.json", opts: GlobalOpts & {rpcUrl?: string; expectedRecordDigest?: string}): Promise<void> {
   rejectProductionRawKey(opts);
   const config = productionConfigWithRuntimeOverrides(path, opts);
   const artifactPath = opts.artifact ? resolve(process.cwd(), opts.artifact) : resolve(process.cwd(), config.deployment.artifact);
@@ -534,6 +609,20 @@ export async function cmdProductionVerify(path = "corner-store.production.json",
     artifact = JSON.parse(readFileSync(artifactPath, "utf8")) as Record<string, unknown>;
   } catch (err: any) {
     throw new CliError(`invalid production artifact ${artifactPath}: ${err.message}`);
+  }
+  if (opts.expectedRecordDigest && artifact.schemaVersion !== 2) throw new CliError("trusted expected record digest requires evidence version 2");
+  if (artifact.schemaVersion === 2) {
+    const record = artifact as unknown as ProductionRecord;
+    verifyProductionRecord(record, record.evidenceId);
+    if (!opts.expectedRecordDigest || record.recordDigest !== opts.expectedRecordDigest) throw new CliError("production verification requires a trusted expected record digest (--expected-record-digest)");
+    const source = productionContractSource(findRepoRoot(process.cwd()), opts.contracts);
+    if (!source) throw new CliError("production verification requires captured contract inputs");
+    const rebuilt = buildProductionIdentity(source, config);
+    const reviewed = loadProductionDeploymentEvidence(resolve(config.deployment.evidence), config);
+    if (reviewed.schemaVersion !== 2 || reviewed.evidenceId !== rebuilt.identity.evidenceId) throw new CliError("production reviewed evidence identity mismatch");
+    const result = await verifyProductionCandidate(config, record, rebuilt);
+    console.log(JSON.stringify({...result, artifact: artifactPath, evidenceId: record.evidenceId, recordDigest: record.recordDigest}, null, 2));
+    return;
   }
   const result = await productionVerify(config, artifact);
   console.log(JSON.stringify({...result, artifact: artifactPath}, null, 2));
@@ -568,17 +657,15 @@ class EthersOnboardingReader implements OnboardingReader {
 }
 
 function writeImmutableJson(path: string, value: unknown): void {
-  mkdirSync(dirname(path), {recursive: true});
-  let fd: number | undefined;
   try {
-    fd = openSync(path, "wx");
-    writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`);
-  } catch (err: any) {
-    throw new CliError(`cannot write immutable output ${path}: ${err.message}`);
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
+    const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
+    const expected = canonicalProductionJson(JSON.parse(bytes.toString()));
+    publishProductionBytes(path, bytes, (candidate) => {
+      if (canonicalProductionJson(JSON.parse(candidate.toString())) !== expected) throw new Error("immutable output validation failed");
+    });
+  } catch (err: any) { throw new CliError(`cannot write immutable output ${path}: ${err.message}`); }
 }
+
 function productionConfigWithRuntimeOverrides(path: string, opts: GlobalOpts & {rpcUrl?: string}): ProductionConfig {
   const config = loadProductionConfig(resolve(process.cwd(), path));
   const rpcUrl = opts.rpcUrl ?? explicitlyProvidedGlobalRpc() ?? process.env.CORNER_STORE_RPC_URL;
@@ -603,14 +690,19 @@ function productionSigner(opts: {ledger?: boolean; account?: string}): Productio
   if (opts.ledger) return {kind: "ledger"};
   if (opts.account) {
     if (/^0x[0-9a-fA-F]{64}$/.test(opts.account)) throw new CliError("production --account must be a Foundry account name, not a raw private key");
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(opts.account)) throw new CliError("production --account must be a conservative keystore name");
     return {kind: "account", name: opts.account};
   }
   return {kind: "none"};
 }
 
 async function productionPreflight(config: ProductionConfig): Promise<ProductionPreflightResult> {
+  const provider = makeProvider({rpc: config.network.rpcUrl});
+  try { return await productionPreflightAt(config, provider); } finally { provider.destroy(); }
+}
+
+async function productionPreflightAt(config: ProductionConfig, provider: JsonRpcProvider): Promise<ProductionPreflightResult> {
   const selected = validateProductionConfig(config);
-  const provider = makeProvider({rpc: selected.network.rpcUrl});
   const checks: ProductionCheck[] = [];
   const check = (name: string, pass: boolean, detail: string) => checks.push({name, pass, detail});
   try {
@@ -651,8 +743,12 @@ async function productionPreflight(config: ProductionConfig): Promise<Production
 }
 
 async function productionVerify(config: ProductionConfig, artifact: Record<string, unknown>): Promise<ProductionPreflightResult> {
+  const provider = makeProvider({rpc: config.network.rpcUrl});
+  try { return await productionVerifyAt(config, artifact, provider); } finally { provider.destroy(); }
+}
+
+async function productionVerifyAt(config: ProductionConfig, artifact: Record<string, unknown>, provider: JsonRpcProvider): Promise<ProductionPreflightResult> {
   const selected = validateProductionConfig(config);
-  const provider = makeProvider({rpc: selected.network.rpcUrl});
   const checks: ProductionCheck[] = [];
   const check = (name: string, pass: boolean, detail: string) => checks.push({name, pass, detail});
   const routerAddress = artifactAddress(artifact, ["router", "executionRouter"]);
@@ -666,6 +762,10 @@ async function productionVerify(config: ProductionConfig, artifact: Record<strin
   const selectorAddress = artifactAddress(artifact, ["selector", "venueSelector"]);
   const elementRegAddress = artifactAddress(artifact, ["elementReg", "elementRegistry"]);
   const recipeRegAddress = artifactAddress(artifact, ["recipeReg", "recipeRegistry"]);
+  try {
+    const network = await provider.getNetwork();
+    check("chain-id", network.chainId === BigInt(selected.network.chainId), `rpc=${network.chainId.toString()}, config=${selected.network.chainId}`);
+  } catch (error: any) { check("chain-id", false, `cannot read RPC chainId: ${error.message}`); }
   const governed = [
     ["element-registry", elementRegAddress],
     ["recipe-registry", recipeRegAddress],
@@ -927,51 +1027,12 @@ function artifactValue(artifact: Record<string, unknown>, paths: string[]): unkn
   return undefined;
 }
 
-function productionContractsHash(root: string): string {
-  const hasher = createHash("sha256");
-  const inputs = ["foundry.toml", "remappings.txt", "src", "lib", "script/DeployProductionCore.s.sol"];
-  const ignored = new Set([".git", "node_modules", "out", "cache", "broadcast", "deployments"]);
-  const visit = (absolutePath: string, relativePath: string): void => {
-    const stat = lstatSync(absolutePath);
-    if (stat.isSymbolicLink()) {
-      hasher.update(`L\0${relativePath}\0${readlinkSync(absolutePath)}\0`);
-      return;
-    }
-    if (stat.isDirectory()) {
-      const entries = readdirSync(absolutePath).filter((name) => !ignored.has(name)).sort();
-      for (const entry of entries) visit(resolve(absolutePath, entry), `${relativePath}/${entry}`);
-      return;
-    }
-    if (stat.isFile()) {
-      hasher.update(`F\0${relativePath}\0`);
-      hasher.update(readFileSync(absolutePath));
-      hasher.update("\0");
-    }
-  };
-  for (const input of inputs) {
-    const absolutePath = resolve(root, input);
-    try {
-      visit(absolutePath, input);
-    } catch (err: any) {
-      if (err?.code !== "ENOENT") throw err;
-    }
-  }
-  return `sha256:${hasher.digest("hex")}`;
-}
-
 function productionContractSource(repoRoot?: string, explicit?: string): string | undefined {
-  if (explicit) return resolveContractSource(repoRoot, explicit);
-  if (repoRoot && resolve(repoRoot) === resolve(process.cwd())) return repoRoot;
-  return resolveContractSource(repoRoot);
-}
-
-function productionSourceCommit(root: string): string | undefined {
-  if (!existsSync(resolve(root, ".git"))) return undefined;
-  try {
-    return String(execFileSync("git", ["-C", root, "rev-parse", "HEAD"], {encoding: "utf8"})).trim().toLowerCase();
-  } catch {
-    return undefined;
-  }
+  const selected = explicit ?? process.env.CORNER_STORE_CONTRACTS_ROOT;
+  const source = selected ? resolve(selected)
+    : repoRoot && resolve(repoRoot) === resolve(process.cwd()) ? repoRoot : resolveContractSource(repoRoot);
+  return source && existsSync(resolve(source, "foundry.toml")) && existsSync(resolve(source, "script/DeployProductionCore.s.sol"))
+    ? source : undefined;
 }
 
 export function cmdToolkitScaffoldRFQ(
@@ -1468,6 +1529,8 @@ export async function cmdBuy(
   let amountOutMin: bigint;
   let adapterForApproval: string;
   let amountIn: bigint;
+  let routerAddress = a.router;
+  let inputToken = a.quote;
 
   if (venue === "rfq") {
     if (!opts.quote) throw new CliError("--quote <file> is required for --venue rfq");
@@ -1482,6 +1545,17 @@ export async function cmdBuy(
     ctx = [buyer, buyer, q.maker, q.tokenIn, q.tokenOut, amountIn, amountOut, 2, q.venue, 0, false];
     venueData = encodeVenueData(q, qf.signature);
     adapterForApproval = a.rfqAdapter;
+    if (isV3QuoteFile(qf)) {
+      validateV3DeploymentQuote(qf, a, Number((await provider.getNetwork()).chainId));
+      const evidence = await v3Resolver(a, provider, Number((await provider.getNetwork()).chainId)).resolve(qf.quote);
+      if (evidence.affiliateEvidenceHash.toLowerCase() !== qf.quote.affiliateEvidenceHash.toLowerCase()) throw new CliError("RFQ v3 affiliate evidence changed");
+      ctx[9] = qf.quote.flowType;
+      ctx[10] = evidence.sellerIsAffiliate;
+      venueData = encodeVenueDataV3(qf.quote, qf.signature);
+      adapterForApproval = a.rfqV3Adapter!;
+      routerAddress = a.routerV2!;
+      inputToken = qf.quote.tokenIn;
+    }
   } else if (venue === "amm") {
     amountIn = parseEther(amountInArg);
     const amountOut = amountIn; // 1:1 MockPool
@@ -1494,7 +1568,7 @@ export async function cmdBuy(
   }
 
   // ensure the buyer has approved the adapter to pull QUOTE (tokenIn).
-  const quoteToken = erc20(a.quote, signer);
+  const quoteToken = erc20(inputToken, signer);
   const allowance: bigint = await quoteToken.allowance(buyer, adapterForApproval);
   if (allowance < amountIn) {
     console.log(`  approving ${adapterForApproval} to spend QUOTE`);
@@ -1505,7 +1579,7 @@ export async function cmdBuy(
   if (!latest) throw new CliError("cannot read latest block for execution deadline");
   const req = [ctx, amountOutMin, BigInt(latest.timestamp + 3600), nonce, venueData];
   console.log(`Executing ${venue.toUpperCase()} buy: amountIn=${formatEther(amountIn)} as ${buyer}`);
-  await logTx(await router(a, signer).execute(req), "execute");
+  await logTx(await new Contract(routerAddress, ROUTER_ABI, signer).execute(req), "execute");
 
   const rwaAfter = await erc20(a.rwaToken, provider).balanceOf(buyer);
   console.log(`  RWA balance delta: +${formatEther(rwaAfter - rwaBefore)}`);
@@ -2088,10 +2162,15 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
 
   // EOA recovery is diagnostic only. The Adapter's immutable authorizer is the
   // source of truth for direct maker, delegated and ERC-1271 signatures.
-  const dom = rfqDomain(DEFAULT_CHAIN_ID, a.rfqAdapter as `0x${string}`);
+  const v3 = isV3QuoteFile(qf);
+  const chainId = v3 ? Number((await provider.getNetwork()).chainId) : DEFAULT_CHAIN_ID;
+  if (v3) validateV3DeploymentQuote(qf, a, chainId);
+  const adapterAddress = v3 ? a.rfqV3Adapter! : a.rfqAdapter;
+  const dom = v3 ? domainV3(chainId, adapterAddress as `0x${string}`) : rfqDomain(DEFAULT_CHAIN_ID, a.rfqAdapter as `0x${string}`);
+  const quoteTypes = v3 ? RFQ_QUOTE_V3_TYPES : RFQ_QUOTE_TYPES;
   let recovered = "";
   try {
-    recovered = verifyTypedData(dom, RFQ_QUOTE_TYPES, q, qf.signature);
+    recovered = verifyTypedData(dom, quoteTypes, q, qf.signature);
   } catch (e: any) {
     recovered = `<recovery failed: ${e?.shortMessage ?? e?.message ?? e}>`;
   }
@@ -2102,14 +2181,14 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
   const secsLeft = Number(q.expiry) - now;
   const expired = secsLeft <= 0;
 
-  const rfq = rfqAdapter(a, provider);
+  const rfq = rfqAdapter({...a, rfqAdapter: adapterAddress}, provider);
   const [nonceUsed, makerApproved, authorizerAddress]: [boolean, boolean, string] = await Promise.all([
     rfq.usedQuoteNonce(q.maker, BigInt(q.nonce)),
     rfq.approvedMaker(q.maker),
     rfq.makerAuthorizer()
   ]);
   const authorizer = new Contract(authorizerAddress, MAKER_AUTHORIZER_ABI, provider);
-  const quoteHash = TypedDataEncoder.hash(dom, RFQ_QUOTE_TYPES, q);
+  const quoteHash = TypedDataEncoder.hash(dom, quoteTypes, q);
   const [sigOk, authorizerVersion]: [boolean, bigint] = await Promise.all([
     authorizer.isAuthorizedSigner(q.maker, quoteHash, qf.signature),
     authorizer.authorizerVersion()
@@ -2135,21 +2214,59 @@ export async function cmdQuoteInspect(file: string, opts: GlobalOpts & {json?: b
       detail: makerApproved ? "maker on RFQ allowlist" : "maker NOT on RFQ allowlist"
     }
   ];
+  if (isV3QuoteFile(qf)) {
+    try {
+      const current = await v3Resolver(a, provider, Number((await provider.getNetwork()).chainId)).resolve(qf.quote);
+      checks.push({name: "context-evidence", pass: current.affiliateEvidenceHash.toLowerCase() === qf.quote.affiliateEvidenceHash.toLowerCase(), detail: "current venue and affiliate evidence"});
+    } catch {checks.push({name: "context-evidence", pass: false, detail: "context evidence unavailable or mismatched"});}
+  }
   const allPass = checks.every((c) => c.pass);
 
   if (opts.json) {
     console.log(
-      JSON.stringify({file, quote: q, verifyingContract: a.rfqAdapter, recovered, checks, allPass}, null, 2)
+      JSON.stringify({file, quote: q, verifyingContract: adapterAddress, recovered, checks, allPass}, null, 2)
     );
     if (!allPass) process.exitCode = 1;
     return;
   }
 
-  console.log(`Quote ${file}  (verifyingContract=${a.rfqAdapter}, chainId=${DEFAULT_CHAIN_ID})`);
+  console.log(`Quote ${file}  (verifyingContract=${adapterAddress}, chainId=${chainId})`);
   for (const [k, v] of Object.entries(q)) console.log(`  ${k.padEnd(10)} ${v}`);
   console.log(`  signature  ${qf.signature}`);
   console.log("");
   console.log("Checks:");
   for (const c of checks) console.log(`  [${c.pass ? "PASS" : "FAIL"}] ${c.name.padEnd(15)} ${c.detail}`);
   if (!allPass) process.exitCode = 1;
+}
+
+function v3Resolver(a: Artifact, provider: JsonRpcProvider, chainId: number): OnchainRFQContextResolver {
+  if (!a.routerV2 || !a.rfqV3Adapter || !a.rfqV3Venue || !a.affiliateSource) throw new CliError("RFQ v3 requires explicit routerV2, rfqV3Adapter, rfqV3Venue and affiliateSource artifact fields");
+  return new OnchainRFQContextResolver({chainId, verifyingContract: a.rfqV3Adapter as `0x${string}`, router: a.routerV2 as `0x${string}`, venueRegistry: a.venueReg as `0x${string}`, policyRegistry: a.policyReg as `0x${string}`, affiliateSource: a.affiliateSource as `0x${string}`, reader: ethersContextReader(provider)});
+}
+
+function validateV3DeploymentQuote(signed: import("./rfq").SignedRFQQuoteV3, a: Artifact, chainId: number): void {
+  if (!a.routerV2 || !a.rfqV3Adapter || !a.rfqV3Venue || signed.typedData.domain.chainId !== chainId || signed.typedData.domain.verifyingContract.toLowerCase() !== a.rfqV3Adapter.toLowerCase() || signed.quote.venue.toLowerCase() !== a.rfqV3Venue.toLowerCase()) throw new CliError("RFQ v3 quote does not match the explicit v3 deployment");
+}
+
+export async function cmdRfqV3Quote(opts: GlobalOpts & {request: string; backend?: string; authEnv?: string; out?: string}): Promise<void> {
+  const a = loadArtifact(opts.artifact);
+  const provider = makeProvider(opts);
+  const chainId = Number((await provider.getNetwork()).chainId);
+  const request = JSON.parse(readFileSync(opts.request, "utf8"));
+  let signed: import("./rfq").SignedRFQQuoteV3;
+  if (opts.backend) {
+    const token = opts.authEnv ? process.env[opts.authEnv] : undefined;
+    if (opts.authEnv && !token) throw new CliError("RFQ authentication environment variable is unavailable");
+    signed = await requestBackendQuoteV3(opts.backend, request, token);
+  } else {
+    const signer = resolveSigner(opts, provider, 0);
+    if (request.maker?.toLowerCase() !== (await signer.getAddress()).toLowerCase()) throw new CliError("RFQ v3 request maker must match the local signer");
+    const current = await v3Resolver(a, provider, chainId).resolve(request);
+    signed = await new RFQQuoteServiceV3({chainId, verifyingContract: a.rfqV3Adapter as `0x${string}`, now: async () => {const b = await provider.getBlock("latest"); if (!b) throw new CliError("latest block unavailable"); return b.timestamp;}}, new WalletTypedDataSigner(signer)).createSignedQuote({...request, affiliateEvidenceHash: current.affiliateEvidenceHash});
+  }
+  parseQuoteFile(signed, 3);
+  validateV3DeploymentQuote(signed, a, chainId);
+  if (signed.quote.taker.toLowerCase() !== request.taker?.toLowerCase() || signed.quote.amountIn !== request.amountIn || signed.quote.tokenIn.toLowerCase() !== request.tokenIn?.toLowerCase() || signed.quote.tokenOut.toLowerCase() !== request.tokenOut?.toLowerCase() || signed.quote.flowType !== request.flowType) throw new CliError("RFQ v3 response does not match request");
+  writeQuoteFile(opts.out ?? "quote-v3.json", signed);
+  console.log(`Signed RFQ v3 quote written to ${opts.out ?? "quote-v3.json"}`);
 }

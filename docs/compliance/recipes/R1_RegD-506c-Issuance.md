@@ -15,7 +15,7 @@ tags: [recipe-requirement-spec, R1, reg-d, 506c, issuance, R1]
 
 ## Current reference versions (issue #132, item 6)
 
-Reg D v4 and A-12 v2 are **reference-only and non-production-activatable**
+Reg D v5 and A-12 v2 are **reference-only and non-production-activatable**
 until issue #132 item 13's public-disclosure decision is resolved (D044).
 Production onboarding rejects these versions before Safe export or update
 preflight; production core deploys a registry that rejects A-12-v2 registration.
@@ -25,7 +25,8 @@ remain public; reporter redaction does not hide them. No legal option is selecte
 
 The implementation sections below describe the historical v2 reference. Current
 local defaults use `RegD506cRecipeV3` (family 1, version 3). The opt-in
-`RegD506cRecipeV4` (family 1, version 4) appends `A-12-v2` to V3's nine elements:
+`RegD506cRecipeV5` (family 1, version 5) appends `A-12-v2` to V3's nine elements.
+Version 4 retains its separate A-04-v2 identity-evidence meaning:
 
 | Order | Element ID | Compiled default action |
 | --- | --- | --- |
@@ -42,17 +43,17 @@ verification. Production membership, verification evidence and review obligation
 remain subject to separate counsel approval; the legal discussion below does not
 certify either reference version.
 
-For a fresh local reference stack, explicitly set `ASSET_PROFILE=reg-d-v4` for
-`script/DeployStack.s.sol`. Select `--profile reg-d-v4` with CLI `onboard` or
+For a fresh local reference stack, explicitly set `ASSET_PROFILE=reg-d-v5` for
+`script/DeployStack.s.sol`. Select `--profile reg-d-v5` with CLI `onboard` or
 `investor-setup`, matching the generated artifact. `buidl-like` remains the default
 profile and `reg-d` remains v3. The existing full `scripts/e2e-anvil.sh` launcher
 and Toolkit configuration templates retain their two supported profiles; use the
 scripts directly or the CLI for this opt-in reference version.
 
 For an existing local reference v3 asset, register `RedFlagKnowledgeBarV2` as `A-12-v2` with
-`FLAG_ONLY`, then register recipe family 1/version 4. Registration alone does not
+`FLAG_ONLY`, then register recipe family 1/version 5. Registration alone does not
 change an active Manifest. Submit a new reviewed Manifest hash and a binding to
-`(1, 4)` through `scheduleManifestUpdate`, wait the configured timelock, then
+`(1, 5)` through `scheduleManifestUpdate`, wait the configured timelock, then
 call `activateManifestUpdate`. The compiled plan and policy ID change at
 activation; outstanding RFQ quotes must use the new policy ID. Existing v3
 registrations, recipes and the public Monad demo remain unchanged.

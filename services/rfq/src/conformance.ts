@@ -1,6 +1,6 @@
 import {verifyTypedData} from "ethers";
 
-import {createRFQServiceFromModules, validateRFQModuleSet} from "./modules";
+import {createRFQServiceFromModules, createRFQServiceV3FromModules, validateRFQModuleSet} from "./modules";
 import {Address, Hex, RFQModuleSet, SignedRFQQuote} from "./types";
 
 export interface RFQConformanceFixture {
@@ -235,4 +235,27 @@ function fail(name: string, detail: string): RFQConformanceCheck {
 
 function report(checks: RFQConformanceCheck[]): RFQConformanceReport {
   return {schemaVersion: 1, passed: checks.every((check) => check.pass), checks};
+}
+
+export async function runRFQV3ModuleConformance(
+  modules: import("./types").RFQModuleSetV3,
+  fixture: RFQConformanceFixture & {flowType: 0 | 1},
+  context: import("./types").RFQContextResolver
+): Promise<RFQConformanceReport> {
+  const checks: RFQConformanceCheck[] = [];
+  try {
+    const service = createRFQServiceV3FromModules({...fixture, modules, context, now: () => fixture.now});
+    const signed = await service.quote(fixture);
+    if (signed.typedData.domain.version !== "3" || signed.typedData.primaryType !== "RFQQuoteV3") throw new Error("wrong v3 domain");
+    checks.push(pass("v3-domain", "explicit v3 domain"));
+    const recovered = verifyTypedData(signed.typedData.domain, signed.typedData.types, signed.quote, signed.signature);
+    if (recovered.toLowerCase() !== fixture.maker.toLowerCase()) throw new Error("v3 signature does not recover maker");
+    for (const mutation of [{flowType: signed.quote.flowType === 0 ? 1 : 0}, {affiliateEvidenceHash: `0x${"99".repeat(32)}`}, {taker: fixture.otherTaker}]) {
+      if (verifyTypedData(signed.typedData.domain, signed.typedData.types, {...signed.quote, ...mutation}, signed.signature).toLowerCase() === fixture.maker.toLowerCase()) throw new Error("v3 field mutation preserved signer");
+    }
+    checks.push(pass("v3-field-binding", "flow, evidence and taker mutations invalidate the signature"));
+  } catch (error: any) {
+    checks.push(fail("v3-conformance", error.message));
+  }
+  return report(checks);
 }

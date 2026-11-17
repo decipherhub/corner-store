@@ -21,6 +21,7 @@ import {
 } from "../types/ComplianceTypes.sol";
 import {Errors} from "../libraries/Errors.sol";
 import {Events} from "../libraries/Events.sol";
+import {IdentityPolicy} from "../compliance/libraries/IdentityPolicy.sol";
 
 /// @title TokenPolicyRegistry
 /// @notice Manifest store + lifecycle state machine. Manifest recipe bindings are
@@ -113,7 +114,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         ManifestPolicyConfig memory config
     ) internal {
         _validateBindings(bindings);
-        bytes32 configHash = _validateAndHashPolicyConfig(config, bindings);
+        bytes32 configHash = _validateAndHashPolicyConfig(config, bindings, m.supportedEngines);
         bytes32 planHash = _compileInto(_compiledPlans[token], bindings, overrides_, config, configHash);
         PolicyStatus current = _manifests[token].status;
         bytes32 oldHash = _manifests[token].fullManifestHash;
@@ -252,7 +253,7 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
             revert Errors.InvalidManifestHash();
         }
         uint64 effectiveTime = _readyTime();
-        bytes32 configHash = _validateAndHashPolicyConfig(config, bindings);
+        bytes32 configHash = _validateAndHashPolicyConfig(config, bindings, m.supportedEngines);
         bytes32 planHash = _compileInto(_pendingCompiledPlans[token], bindings, overrides_, config, configHash);
         _pendingManifestUpdates[token] = PendingManifestUpdate(m, effectiveTime, reasonCode, planHash, configHash);
         _replaceBindings(_pendingManifestBindings[token], bindings);
@@ -476,9 +477,12 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         }
         _clearCompiled(target);
         bytes32 acc = configHash;
-        for (uint256 i = 0; i < bindings.length; i++) {
+        for (uint256 i = 0; i < bindings.length;) {
             bytes32 bindingPlanHash = _compileBinding(target, bindings[i], i, overrides_, config);
             acc = keccak256(abi.encode(acc, bindingPlanHash));
+            unchecked {
+                ++i;
+            }
         }
         _rejectOutOfRangeOverrides(overrides_, bindings.length);
         return acc;
@@ -497,8 +501,11 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         }
         CompiledElementRule[] memory rules = new CompiledElementRule[](required.length);
         bytes[] memory parameters = new bytes[](required.length);
-        for (uint256 i = 0; i < required.length; i++) {
-            (rules[i], parameters[i]) = _compileElement(overrides_, config, bindingIndex, required[i]);
+        for (uint256 i = 0; i < required.length;) {
+            (rules[i], parameters[i]) = _compileElement(overrides_, config, bindingIndex, required[i], binding.mode);
+            unchecked {
+                ++i;
+            }
         }
         _rejectUnusedOrDuplicateOverrides(overrides_, bindingIndex, required);
         _rejectUnknownParameters(config, bindingIndex, required);
@@ -528,7 +535,8 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         ElementEnforcementOverride[] memory overrides_,
         ManifestPolicyConfig memory config,
         uint256 bindingIndex,
-        bytes32 elementId
+        bytes32 elementId,
+        RecipeBindingMode bindingMode
     ) internal view returns (CompiledElementRule memory rule, bytes memory parameters) {
         if (elementReg.elementOf(elementId) == address(0)) {
             revert Errors.ElementNotRegistered(elementId);
@@ -537,6 +545,13 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
             elementId, _compiledAction(overrides_, bindingIndex, elementId, elementReg.defaultActionOf(elementId))
         );
         parameters = _parameterFor(config, bindingIndex, elementId, elementReg.metadataOf(elementId));
+        if (elementId == IdentityPolicy.ELEMENT_ID) {
+            if (bindingMode != RecipeBindingMode.REQUIRED_BLOCKING) revert Errors.InvalidRecipeBinding();
+            if (rule.action != EnforcementAction.BLOCK) revert Errors.LooseningForbidden();
+            if (!IdentityPolicy.valid(parameters)) {
+                revert Errors.InvalidPolicyParameter(bindingIndex, elementId);
+            }
+        }
     }
 
     function _pushCompiled(
@@ -552,9 +567,12 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         stored.binding = binding;
         stored.recipeKey = recipeKey;
         stored.planHash = bindingPlanHash;
-        for (uint256 i = 0; i < rules.length; i++) {
+        for (uint256 i = 0; i < rules.length;) {
             stored.rules.push(rules[i]);
             stored.parameters.push(parameters[i]);
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -609,22 +627,32 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
         internal
         pure
     {
-        for (uint256 i = 0; i < overrides_.length; i++) {
+        for (uint256 i = 0; i < overrides_.length;) {
             if (overrides_[i].bindingIndex >= bindingCount) revert Errors.InvalidEnforcementOverride();
+            unchecked {
+                ++i;
+            }
         }
     }
 
-    function _validateAndHashPolicyConfig(ManifestPolicyConfig memory config, RecipeBinding[] memory bindings)
-        internal
-        pure
-        returns (bytes32)
-    {
-        if (config.schemaVersion != POLICY_CONFIG_SCHEMA_VERSION) revert Errors.InvalidPolicyConfig();
+    function _validateAndHashPolicyConfig(
+        ManifestPolicyConfig memory config,
+        RecipeBinding[] memory bindings,
+        uint8 supportedEngines
+    ) internal pure returns (bytes32) {
+        uint256 missingIdentityTrack;
+        assembly {
+            missingIdentityTrack := sub(mload(config), 1)
+            if or(gt(missingIdentityTrack, 2), and(shr(2, and(supportedEngines, 4)), eq(missingIdentityTrack, 2))) {
+                mstore(0, shl(224, 0x957005ea)) // InvalidPolicyConfig()
+                revert(0, 4)
+            }
+        }
         if (config.elementParameters.length > MAX_POLICY_PARAMETERS) {
             revert Errors.TooManyPolicyParameters(config.elementParameters.length, MAX_POLICY_PARAMETERS);
         }
         uint256 totalBytes;
-        for (uint256 i = 0; i < config.elementParameters.length; i++) {
+        for (uint256 i = 0; i < config.elementParameters.length;) {
             ElementPolicyParameter memory item = config.elementParameters[i];
             if (item.bindingIndex >= bindings.length || item.elementId == bytes32(0)) {
                 revert Errors.InvalidPolicyParameter(item.bindingIndex, item.elementId);
@@ -633,11 +661,27 @@ contract TokenPolicyRegistry is ITokenPolicyRegistry, Governed {
             if (totalBytes > MAX_TOTAL_PARAMETER_BYTES) {
                 revert Errors.PolicyParametersTooLarge(totalBytes, MAX_TOTAL_PARAMETER_BYTES);
             }
-            for (uint256 j = 0; j < i; j++) {
+            if (
+                item.elementId == IdentityPolicy.ELEMENT_ID
+                    && IdentityPolicy.track(item.parameters) == missingIdentityTrack
+            ) missingIdentityTrack = 0;
+            for (uint256 j = 0; j < i;) {
                 ElementPolicyParameter memory prior = config.elementParameters[j];
                 if (prior.bindingIndex == item.bindingIndex && prior.elementId == item.elementId) {
                     revert Errors.DuplicatePolicyParameter(item.bindingIndex, item.elementId);
                 }
+                unchecked {
+                    ++j;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        assembly {
+            if missingIdentityTrack {
+                mstore(0, shl(224, 0x957005ea)) // InvalidPolicyConfig()
+                revert(0, 4)
             }
         }
         return keccak256(abi.encode(POLICY_CONFIG_DOMAIN, config));

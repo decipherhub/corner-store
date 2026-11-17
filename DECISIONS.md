@@ -10,13 +10,13 @@ Issue #132 item 13 requests suppression of surveillance details. A-12 v2's
 reason/flag data and resolution through public storage, calldata and events.
 Reporter redaction cannot hide those records.
 
-Until the team/legal decision is resolved, Reg D v4 (family 1/version 4) and
+Until the team/legal decision is resolved, Reg D v5 (family 1/version 5) and
 A-12 v2 (`RedFlagKnowledgeBarV2`) are reference-only and non-production-activatable
 through supported production paths. Production onboarding validation rejects
-A-12-v2, Reg D v4 recipes, Manifest references and bindings before Safe export,
+A-12-v2, Reg D v5 recipes, Manifest references and bindings before Safe export,
 verification or delayed-update activation preflight. `ProductionCoreDeployer`
 deploys `ProductionElementRegistry`, which rejects A-12-v2 through both
-registration overloads, preventing compilation of Reg D v4's required Element.
+registration overloads, preventing compilation of Reg D v5's required Element.
 `DeployStack` explicitly uses the generic registry for local reference work.
 Production core has no legal-policy profile or automatic Manifest activation.
 
@@ -35,7 +35,7 @@ Options requiring a team/legal decision:
 Neither option is selected here. Do not record real surveillance data with the
 reference implementation. PR #161 remains draft.
 
-## D024: Reg D v4 adopts immutable nonblocking A-12 v2 by explicit selection
+## D024: Reg D v5 adopts immutable nonblocking A-12 v2 by explicit selection
 
 Date: 2026-11-10
 
@@ -52,13 +52,13 @@ versions and active Manifests must retain their meanings.
    metadata. Preserve its nonblocking check behavior and separate assessment
    APIs/events. Review assessments do not populate Engine flags or create a new
    settlement gate.
-2. Add family 1 version 4, `RegD506cRecipeV4`, with V3's nine Elements in the same
+2. Add family 1 version 5, `RegD506cRecipeV5`, with V3's nine Elements in the same
    order followed by A-12-v2. Wave-3 registers v2 explicitly as `FLAG_ONLY` without
    activating a Recipe or migrating an asset.
-3. Require explicit `ASSET_PROFILE=reg-d-v4` selection through DeployStack and
+3. Require explicit `ASSET_PROFILE=reg-d-v5` selection through DeployStack and
    matching direct-script/CLI inputs. The default stays BUIDL-like; `reg-d` stays
    v3. The full E2E launcher and Toolkit templates retain their two profiles.
-4. Local reference v3 assets adopt v4 only through a reviewed Manifest commitment, exact
+4. Local reference v3 assets adopt v5 only through a reviewed Manifest commitment, exact
    Recipe binding, scheduled semantic update, timelock and activation. The new
    policy ID invalidates prior-policy RFQ quotes at settlement. Production adoption
    is prohibited pending the item 13 decision in D044.
@@ -83,7 +83,7 @@ versions and active Manifests must retain their meanings.
 ### Related Files
 
 - `src/compliance/elements/RedFlagKnowledgeBarV2.sol`
-- `src/compliance/recipes/RegD506cRecipeV4.sol`
+- `src/compliance/recipes/RegD506cRecipeV5.sol`
 - `tools/deploy-wave3/DeployWave3Elements.s.sol`
 - `scripts/check-wave3-element-policies.sh`
 - `docs/compliance/recipes/R1_RegD-506c-Issuance.md`
@@ -1602,3 +1602,607 @@ against across Compliance Core refactors (issue #128).
 - `services/compliance-data/src/kyc-conformance.ts`
 - `services/compliance-data/examples/http-kyc-provider-adapter.ts`
 - `services/compliance-data/README.md`
+
+## D028: Context authority is authenticated before policy evaluation
+
+Date: 2026-11-11
+
+### Context
+
+Policy evaluation consumes actor, flow and affiliate context. Caller-provided
+seller/flow/affiliate fields alone are insufficient authority for those inputs.
+Issue #157 needs a versioned authentication boundary while preserving deployed
+contracts and the public RFQ v2 runtime.
+
+### Decision
+
+1. Separate `ExecutionRouterV2` authenticates registration, type, implementation
+   review and runtime/configuration evidence before Engine evaluation. Its
+   view-only adapter preflight validates the supplied context without replacing
+   it or returning a generic hash as authority.
+2. RFQ actors, token legs, exact amounts and venue derive from a signed quote;
+   AMM seller/venue/target derive from the registered pool and canonical tokens.
+   Caller authentication stays with the Router. Settlement repeats validation
+   and retains measured exact fill, atomic rollback, commit and existing events.
+3. Current pinned A-06 evidence authenticates the actual sender for each leg
+   with compiled affiliate consumers: buyer for tokenIn, seller for tokenOut. RFQ signs the exact leg/aggregate
+   commitment specified in `docs/product-specs/execution-context-provenance.md`.
+   A-06 remains operator-attested evidence rather than independent fact finding.
+4. Venue evidence is separate from unchanged `VenueConfig`. It pins versions,
+   adapter/source/policy runtime hashes and final configuration. Re-registration
+   clears evidence; every AMM pool edit invalidates all venues on that adapter.
+5. Implementation approval reviews immutable code and dependencies explicitly.
+   Self-declared capability/runtime hashes cannot prove correctness or
+   immutability. Governance-approved malicious code remains a trust boundary.
+6. V3 deployments admitting affiliate RFQ sells must use the new immutable
+   `EngineSelectionV2` (`B-04-v2`) wherever B-04 applies. It resolves the security
+   recipient per asset through `AssetFlow`: buyer for tokenOut, seller for
+   tokenIn, and checks that recipient's MM claim. Register the new ID and bind it
+   through an opt-in exact Recipe/Manifest update; existing B-04-v1, tests,
+   recipes and defaults stay unchanged. Schema 6 activation rejects any active
+   compiled B-04-v1 rule, including non-blocking rules, and unavailable/malformed
+   compiled-policy reads. Policies without B-04 remain supported.
+7. Deploy a separate ComplianceEngine for each v3 Router stack. Its single
+   `onlyRouter` binding cannot serve both legacy Router and RouterV2. Schema 6
+   REGISTER plans include unsigned `Engine.setRouter(RouterV2)` before adapter
+   wiring and final evidence pinning; UPDATE verifies existing wiring without
+   rebinding. Activation requires both `RouterV2.engine() == Engine` and
+   `Engine.router() == RouterV2`, rejecting mismatched or unavailable reads.
+
+### Alternatives Considered
+
+- Authenticate only after evaluation: leaves policy inputs unauthenticated at
+  the point of evaluation.
+- Replace context inside the adapter: creates disagreement with already-bound
+  decisions and obscures field ownership.
+- Let callers choose affiliate booleans or supply arbitrary hashes: provides no
+  current-source or actual-sender authentication.
+
+### Consequences
+
+- Unsupported/mismatched context and missing/drifting evidence fail closed.
+  ERC-3643/ONCHAINID remain external token/identity boundaries; non-Router paths
+  do not gain Corner Store policy enforcement.
+- The following implemented defaults remain **open items, team to confirm**:
+  conditional primary distribution from the unique active compiled C-01-v2
+  distributor; matching statuses for evidence-requiring pairs; immediate
+  invalidation on any commitment change, including same-status refresh; and reviewed immutable-only activation
+  without proxy-aware verification. Opt-in timing is recorded in D029.
+
+### Related Files
+
+- `docs/product-specs/execution-context-provenance.md`
+- `src/execution/ExecutionRouterV2.sol`
+- `src/execution/ContextEvidence.sol`
+- `src/execution/VenueRegistry.sol`
+- `src/interfaces/execution/IExecutionContextVerifier.sol`
+- `services/toolkit/src/venue-context.ts`
+
+## D029: RFQ v3 migrates through separate deployments and explicit wire versions
+
+Date: 2026-11-11
+
+### Context
+
+Context provenance requires signed flow and affiliate evidence. Reinterpreting
+existing RFQ v2 signatures, APIs, records or public Monad artifacts would break
+existing consumers and deployed settlement.
+
+### Decision
+
+1. Deploy `ExecutionRouterV2` and `RFQAdapterV3` separately. V3 uses the ordered
+   `RFQQuoteV3` type and CornerStoreRFQ domain version `3`, with chain ID and the
+   new adapter as verifying contract. Only `flowType` and
+   `affiliateEvidenceHash` are added before nonce. Never convert v2 signatures.
+2. Preserve the legacy Router ABI/events, RFQ v2 type/domain/builders,
+   `/rfq/quote` responses and live Monad runtime/artifacts. Opt into new SDK
+   exports, `/rfq/v3/quote`, host capability/readiness and explicit CLI bindings.
+3. Persist new coordinator records at schema 2 with quote version, domain and
+   context evidence; read legacy records under their original meanings.
+   Revalidate RESERVED evidence/domain/nonce before signing and never silently
+   re-sign PUBLISHED quotes. Legacy-only stores continue to write schema 1.
+4. Onboarding schema 6 adds explicit Router/runtime, immutable venue and source
+   authority evidence. Legacy schemas 1-5 have explicit parsers and reject v6-only
+   fields. Pin final configuration after wiring/pool edits and verify post-state
+   before activation. Deployment/onboarding helpers emit unsigned intents only.
+5. Keep reference/operator signing on one locally stored env/file key. Key
+   management, multisig and custody expansion remain deferred. No registry
+   contract for quote conversion, package publication or public deployment is
+   introduced by this feature.
+
+### Alternatives Considered
+
+- Change v2 types/defaults in place: breaks signature and API compatibility.
+- Registry-based quote reinterpretation: adds authority/state without preserving
+  the original signed meaning; the approved plan selects versioned typed data.
+- Rewrite persisted records or infer v3 addresses from legacy artifacts: hides
+  domain/deployment mismatches and risks signing against the wrong contract.
+
+### Consequences
+
+- Operators preserve v2 artifacts, expire/cancel old quotes and request fresh v3
+  signatures after new deployments and schema 6 verification. Package/schema/
+  capability/ABI/domain compatibility is published in `docs/sdk-versioning.md`.
+- Package versions remain 0.1.0 in this unpublished branch. Publication requires
+  the normal version/release gate; no release is implied here.
+- **Open item, team to confirm:** migration timing remains opt-in, with separate
+  deployments and RFQ v2 retained on Monad. D028's remaining defaults also remain
+  open. No migration is performed on an existing public deployment.
+- The v3 live E2E joins both legacy Anvil profiles as a documented manual
+  delivery/release gate. Existing CI continues its repository/container gates.
+
+### Related Files
+
+- `docs/sdk-versioning.md`
+- `docs/product-specs/production-rfq-policy.md`
+- `services/rfq/src/eip712.ts`
+- `services/rfq/src/coordinator.ts`
+- `services/rfq-host/src/server.ts`
+- `services/toolkit/src/production-onboarding.ts`
+- `scripts/e2e-context-provenance.sh`
+
+## D030: Production RFQ bounds lifetime and authorizes products before pricing
+
+Date: 2026-11-11
+
+### Context
+
+Issue #155 requires bounded firm-quote exposure and explicit product support
+before pricing, inventory, risk or signing. A policy resolver alone can neither
+prove local product approval before RPC calls nor distinguish denial from outage.
+Re-resolving policy on a retry can change the request's authoritative identity.
+
+### Decision
+
+1. Production coordinators use a local operator catalog of maker, ordered pair,
+   venue, execution-bound policy ID, quote capability and flow. Bound catalogs to
+   1-256 entries, reject malformed/ambiguous entries and snapshot normalized
+   values at construction. Hosts require a catalog for each enabled endpoint.
+   After bounded body parsing, hosts authenticate and bind the taker, then apply
+   shared limiting before TTL/product authorization. TTL/product rejection still
+   precedes readiness, store, policy, pricing, risk, reservation and signing.
+   Authentication/rate-limit rejection auditing and incidents retain parent behavior.
+2. Default TTL is 60 seconds and default maximum is 300 seconds. Operator tuning
+   requires positive safe integers with default <= maximum <= 3600 seconds.
+   Invalid configuration fails startup; invalid/above-maximum request TTL fails
+   before quote work, after host authentication/rate limiting. Never clamp a
+   client's TTL silently.
+3. For a new request, resolve the current policy server-side and require an exact
+   catalog match before pricing. Persist the authoritative authorization schema
+   1 (including chain and adapter) atomically with request, nonce and lease.
+   Replays/conflicts use the original authorization/policy/expiry; no policy
+   refresh, repricing or replacement signature for a published quote. RESERVED
+   recovery retains freshness/context revalidation. Current local tuple support
+   and TTL limits still gate every attempt. Both evidence APIs compare current
+   catalog policy only for new requests; retries validate the persisted grant.
+4. Distinguish invalid input (400), product denial (403), conflict (409), terminal
+   policy/configuration failure (500) and retryable dependency failure (503).
+   Known resolver denials/configuration errors use typed coordinator codes;
+   arbitrary provider exceptions are unavailable. Diagnostics and metric labels
+   use bounded, redacted reason/module values and never raw exception messages.
+   Expected terminal unsigned replays use `TERMINAL_REPLAY` and retain the bounded
+   400 `invalid_request` response; unexpected internal errors remain 500.
+5. Preserve deployed contracts, quote types/events/success responses and protected
+   public Monad v2 paths. Legacy non-production `quote()` and lightweight SDK
+   paths remain available. Both production evidence APIs require a catalog.
+   Do not backfill grants for older records: drain/expire and use a fresh request
+   namespace/store. Bootstrap API shape is validated; runtime env schema stays 1.
+
+### Consequences
+
+- Operators own product approval and refresh catalogs after approved policy
+  changes. Approval is not independent verification of ERC-3643/ONCHAINID facts
+  or a substitute for current on-chain fill-time checks.
+- Removing a tuple disables retries; changing its policy never rewrites an old
+  authorization. A lower TTL ceiling may reject an older request.
+- The local context E2E explicitly configures 600s default/maximum and both
+  versions/directions. No public deployment or key-management change is included.
+
+### Related Files
+
+- `docs/product-specs/production-rfq-policy.md`
+- `services/rfq/src/productAuthorization.ts`
+- `services/rfq/src/coordinator.ts`
+- `services/rfq-host/src/server.ts`
+- `services/rfq-host/README.md`
+
+
+## D031: Identity topology is an explicit per-recipe commitment
+
+Date: 2026-11-11. Issue #159 decision 24. Status: P1 guard implemented;
+full MEMBER support scheduled as separate November P2 work.
+
+### Context
+
+New identity policies must not silently choose a topology or allow an alternative
+Recipe to bypass it. Legacy policy tuples and deployments must keep their meaning.
+
+### Decision
+
+Use opt-in production onboarding schema 7 with `recipes[].identityPolicy` declaring
+RFQ/TSV and DIRECT. RFQ has no default; TSV is fixed to DIRECT. Reject unset,
+unknown and MEMBER values until the separate P2 implementation. Commit the exact
+64-byte `abi.encode(uint8 track, uint8 topology)` through required A-04-v2
+ManifestPolicyConfig parameters, preserving shared Manifest/RecipeBinding tuples.
+Use ManifestPolicyConfig schema 1 for legacy configurations, schema 2 for RFQ and
+schema 3 for TSV. New schema 7 RFQ onboarding requires schema 2 and at least one
+matching REQUIRED_BLOCKING A-04-v2 RFQ policy; omission, a TSV substitution and
+mixed RFQ/TSV tracks fail closed. Legacy schema 1 Manifests retain their meaning.
+Require REQUIRED_BLOCKING bindings and BLOCK enforcement, including updates and
+mixed legacy/new compositions. Retain every schema 6 context check in schema 7.
+Schemas 1-6 keep their meaning and cannot select A-04-v2; schema 7 identity recipes
+cannot substitute A-04-v1.
+
+### Consequences
+
+Full-word decoding rejects noncanonical words, trailing data and malformed lengths.
+The live deployment exposed an EIP-170 size failure; equivalent compact validation
+now leaves TokenPolicyRegistry at 24,570 bytes, only 6 bytes below the limit.
+The deployed-size and composition/fuzz regressions must remain passing. MEMBER
+institution/attestation support and wallet sanctions in both modes are scheduled,
+not implemented. A TSV track declaration alone is not launch readiness.
+
+### Related Files
+
+- `docs/product-specs/identity-policy-topology.md`
+- `services/toolkit/src/identity-policy.ts`
+- `src/compliance/libraries/IdentityPolicy.sol`
+- `src/registry/TokenPolicyRegistry.sol`
+- `test/unit/registry/IdentityPolicyComposition.t.sol`
+
+## D032: External attestations require separate operator acceptance
+
+Date: 2026-11-11. Issue #159 decision 25. Status: P1 implemented.
+
+### Context
+
+Issuer and delegation provenance must be explicit without expanding A-04-v1's
+five-field KycClaim ABI or manufacturing valid evidence when binding a wallet.
+
+### Decision
+
+Deploy a separate A-04-v2 implementing IIdentityEvidenceV2. Its evidence binds
+wallet, identity, asset and binding generation to issuer ID, issuedAt, expiry,
+trust-basis commitment, attestation type and keyed evidence commitment. Operator
+acceptance is a decision based on evidence the operator accepted; external
+attestations do not replace it. SPI 2.0.0 requires explicit acceptance and strict
+audit before publishing eligible evidence. Preserve v1 exports and stores.
+
+Only authorized operators/owner manage issuer trust and evidence, with change
+events. Trade checks read current issuer trust and basis equality. Binding creates
+no evidence; unbind/rebind invalidates prior records. Missing, expired, unsupported,
+untrusted, mismatched or revoked evidence fails closed. Counterparty screening is
+an explicit operator setting with the same pipeline.
+
+### Consequences
+
+Restoring the exact trust basis can restore otherwise valid unexpired evidence;
+revoke individual records when reinstatement is unwanted. ERC-3643/ONCHAINID and
+provider accuracy remain external trust boundaries. The contract does not verify
+external signatures or recompute HMAC. The in-process reference store requires a
+transactional durable replacement in production. A-11 arithmetic is unchanged.
+
+### Related Files
+
+- `docs/product-specs/identity-evidence-v2.md`
+- `src/interfaces/compliance/IIdentityEvidenceV2.sol`
+- `src/compliance/elements/IdentityUniquenessV2.sol`
+- `services/compliance-data/src/kyc-v2.ts`
+- `test/unit/compliance/elements/IdentityEvidenceV2.t.sol`
+
+## D033: Compliance-data owns one local key for v2 evidence commitments
+
+Date: 2026-11-11. Issue #159 decision 26. Status: keyed commitments implemented;
+venue pseudonyms and private wallet mapping scheduled as separate P2 work.
+
+### Context
+
+Unkeyed identity-derived references permit outsiders to recompute guesses.
+Operator-api is a read-only public-commitment boundary, not an evidence processor.
+
+### Decision
+
+Use domain-separated HMAC-SHA-256 for v2 identity, source, assessment and evidence
+commitments over canonical JSON. Load exactly one 32-byte hex key from local env
+or file in the compliance-data runtime, and inject only a restricted hashing
+capability into adapters, coordinator, store validation and calldata translation.
+The coordinator rekeys every provider-controlled identity, request, source and
+assessment reference before public audit, persistence, acceptance or calldata
+export, even if the adapter supplied an opaque or keyed-looking value.
+Missing/malformed/unreadable/ambiguous configuration fails startup; no unkeyed
+fallback. Operator-api never receives the key. On-chain acceptance receives only
+public enforcement fields and commitments through unsigned exported calldata.
+
+### Consequences
+
+V2 uses separate domains, SPI types and persisted records; no automatic v1 hash
+migration. Raw evidence, provider case references, LEI and keys remain off-chain.
+Same-assessment replay/conflict and monotonic revocation remain validated by the
+store. Key management, rotation, KMS/HSM, custody and multisig remain deferred.
+Venue-specific pseudonyms, private wallet mappings and same-identity blocking are
+scheduled before any TSV launch, not provided by keyed commitments alone.
+
+### Related Files
+
+- `services/compliance-data/src/kyc-hmac-v2.ts`
+- `services/compliance-data/src/kyc-calldata-v2.ts`
+- `services/compliance-data/examples/http-kyc-provider-adapter-v2.ts`
+- `services/compliance-data/test/kyc-v2.ts`
+- `docs/product-specs/identity-p2-schedule.md`
+
+## D034: Prove the existing self-directed settlement identity binding
+
+Date: 2026-11-11. Issue #159 decision 27. Status: P1 proofs implemented;
+settlement-asset cards scheduled as separate November P2 work.
+
+### Context
+
+AMM-002 / #143 already binds execution actors on the Router path. The requested
+check needs explicit identity-to-token-leg evidence for RFQ v2/v3 and AMM.
+
+### Decision
+
+Add named `test_settlementLegBoundToPermittedIdentity_*` invariants for buys and
+sells without changing settlement contracts. Assert the screened wallet/identity,
+exact investor/counterparty token deltas and zero Router/adapter custody. Actor
+mismatch and revoked identity/evidence must leave balances, nonces and surveillance
+unchanged; explicit restoration permits the failed request to retry once.
+
+Register opt-in RegD506cRecipeV4 (family 1, version 4) replacing only A-04-v1 with
+A-04-v2. Retain B-02-v2 and C-01-v2, so this recipe remains incompatible with AMM.
+Use isolated fixtures and a live provider-evidence-to-calldata-to-settlement gate.
+
+### Consequences
+
+The 42 named invariants use real ERC-3643/ONCHAINID. Their AMM pool is a fixed-rate
+callback mock with a separate C-01-free test recipe; canonical Uniswap regressions
+retain their existing policy. The live identity gate covers 40 RFQ v2/v3 cases
+with bilateral screening enabled explicitly. These proofs cover self-directed
+Router execution, not delegated transfers or transfers outside the Router.
+Cards describing issuer, AML-owner label and freeze scope remain unimplemented.
+
+### Related Files
+
+- `docs/product-specs/identity-settlement-binding.md`
+- `src/compliance/recipes/RegD506cRecipeV4.sol`
+- `test/integration/IdentitySettlementBinding.t.sol`
+- `scripts/e2e-identity-evidence.sh`
+- `script/IdentityEvidenceFixture.s.sol`
+
+## D035: LEI is optional private evidence, never an eligibility requirement
+
+Date: 2026-11-11. Issue #159 decision 28. Status: P1 implemented.
+
+### Context
+
+Legal-entity participants may supply an identifier without imposing a new policy
+requirement or changing eligibility/sanctions behavior for existing participants.
+
+### Decision
+
+Allow optional `lei` in v2 off-chain evidence. Validate the 20-character uppercase
+alphanumeric format ending in two digits and MOD-97-10 checksum. Include a supplied
+value in canonical evidence commitments and store round trips. Omission is valid;
+no policy requires LEI or treats it as a substitute for eligibility,
+beneficial-ownership or sanctions facts.
+
+### Consequences
+
+LEI stays out of public calldata, events, artifacts and audit records. V1 evidence
+shapes and all on-chain tuples remain unchanged. Tests cover omission, valid values,
+malformed length/characters/checksum, commitment changes and persistence.
+
+### Related Files
+
+- `services/compliance-data/src/kyc-spi-v2.ts`
+- `services/compliance-data/src/kyc-hmac-v2.ts`
+- `services/compliance-data/test/kyc-v2.ts`
+- `docs/product-specs/identity-evidence-v2.md`
+
+## D036: Jurisdictional sanctions bundles require a separate opt-in A-01-v2
+
+Date: 2026-11-11. Issue #159 decision 29. Status: design scheduled for November
+P2; no sanctions implementation in DATA-004.
+
+### Context
+
+A-01-v1 has one currentListVersion. Per-jurisdiction list bundles need independent
+list identities/versions without reinterpreting deployed claims or recipes.
+
+### Decision
+
+Schedule one separate PR for A-01-v2 with recipe-selected list bundles and
+`(listId, version)` entries. A version update invalidates stale claims independently
+for each list. TSV must include OFAC and cannot remove it through configuration
+or updates. Missing required-list claims fail closed. A local SDN-file import is
+sufficient; oracle/vendor integration is optional, not a prerequisite.
+
+### Consequences
+
+Acceptance tests must cover independent invalidation, missing claims and OFAC
+omission/removal rejection. Preserve A-01-v1's single-version behavior until
+explicit opt-in. Wallet screening remains required in both future topologies.
+DATA-004 does not claim jurisdictional list support or TSV launch readiness.
+Dates and assignees for the four P2 PR slots remain for team confirmation.
+
+### Related Files
+
+- `docs/product-specs/identity-p2-schedule.md`
+- `docs/compliance/spec-sheets/A-01_sanctions.spec.md`
+- `docs/ROADMAP.md`
+
+## D037: Versioned complete production commitments require clean Git for broadcast
+
+Date: 2026-11-11. Issue #154. Status: implemented default, team-to-confirm.
+
+### Context
+
+A manual source list omitted the imported production deployer. HEAD alone could
+not distinguish changed sources or a copied source-only bundle from a clean
+release, and did not commit the compiler/build/orchestration inputs.
+
+### Decision
+
+Production evidence version 2 uses canonical domain-separated SHA-256 source,
+build and evidence identities. Resolve compiler inputs from the production entry
+point; include the deployer, transitive contracts, exact configuration/remappings,
+orchestration, lockfiles, tool/dependency identities, compiler settings and
+creation/runtime bytecode commitments. Compile a captured isolated workspace,
+exclude inherited build overrides and verify copied bytes before execution.
+
+Record HEAD plus explicit clean/dirty/source-only/unavailable provenance, with
+staged, unstaged, untracked and recursive submodule evidence. Dirty, unavailable
+and source-only provenance permits diagnostics but blocks production broadcast.
+Before granting clean provenance, compare captured bytes with HEAD blobs,
+following committed submodule gitlinks independently of index visibility flags.
+Bind canonical configuration, deployment ID, chain and wiring into evidenceId;
+plans, unsigned exports, review evidence and deployment records must agree.
+
+### Consequences
+
+Offline source hashing requires the pinned Forge/Solc toolchain. Repository,
+package and runtime copies preserve source/build commitments, but a source-only
+package cannot claim clean Git through an upstream commit string. New broadcast
+requires independently reviewed clean Git-backed inputs. Exact tool/runtime
+changes require a new identity and review. Key management, custody and multisig
+expansion remain deferred; the existing local Foundry account needs no vendor.
+
+### Related Files
+
+- `services/toolkit/src/production-evidence.ts`
+- `services/toolkit/src/production.ts`
+- `services/cli/scripts/prepare-package.mjs`
+- `docs/deployment-production.md`
+
+## D038: Production envelopes publish exclusively after validation
+
+Date: 2026-11-11. Issue #154. Status: implemented default, team-to-confirm.
+
+### Context
+
+Overwriting copies could replace reviewed artifacts, and exclusive writes alone
+could expose incomplete files. Interruption after broadcast needs a recovery
+path that preserves evidence without repeating transactions.
+
+### Decision
+
+Reserve a vacant destination before signing/broadcast. Generate in a unique
+sibling operation directory; the production Solidity script writes only a
+candidate inside its captured workspace. Validate successful canonical receipts,
+receipt-derived addresses, exact transaction inputs/order, reconstructed runtime
+bytecode, ownership/operator/wiring and Safe state before publication.
+
+Reservation setup is transactional before the operation is returned to the
+caller. A failure while writing operation pointers, probing hard-link/fsync
+semantics or performing the final vacancy check removes the reservation and
+staging directory. If filesystem cleanup itself fails, the typed error reports
+the exact staging and reservation paths and marks cleanup incomplete; signing or
+broadcast has not started and the incomplete setup is not recoverable as an
+execution journal.
+
+Require the staging/output directories and every ancestor to be owned by the
+current uid or root. Reject group/world write permissions on staging/output;
+allow writable ancestors only with the sticky bit, which protects operator-owned
+entries from other users. Reject foreign ownership even on sticky ancestors and
+reject application symlinked ancestry. The existing macOS `/tmp` and `/var`
+system aliases have their `/private` target ancestry checked too. Check existing
+output ancestry before creating directories, then check the output directory
+before reserving anything. Check staging on creation and recheck both paths at
+publication/recovery, naming the offending path on failure.
+
+This StrictModes-like precondition is the filesystem trust boundary: publication
+is safe against other local principals, with root trusted. Concurrent operator
+uid processes are out of scope because they already hold the operator's signing
+material. Node has no fd-based `linkat`/`unlinkat`; path checks cannot eliminate
+replacement races against writers within that trust boundary.
+
+Publish by exclusive no-follow creation and file fsync, validate through a
+no-follow descriptor held across the no-replacement
+hard link, then verify the final regular file's device, inode and size. On mismatch,
+attempt cleanup only after verifying the output directory/ancestry again and
+rechecking the observed entry's identity. Cleanup and its parent fsync are best
+effort, preserving the original publication error. The separate identity check
+and unlink do not protect against same-uid replacement immediately before unlink.
+Parent fsync, staging-link cleanup and another fsync complete publication. Never
+use a replacing rename; unsupported semantics fail closed. Apply the same
+publisher to signable exports. The raw-byte publisher preserves imported signed
+bytes without reserialization.
+
+Persist immutable journal events. Recovery rebuilds and revalidates staged
+commitments, receipts and chain state before publication/cleanup. It never
+signs, automatically rebroadcasts or overwrites an existing final artifact.
+
+### Consequences
+
+Pre-link failure leaves no final. Post-link interruption may leave a complete
+final, which recovery verifies before cleanup. Failed broadcast/verification
+retains the captured workspace and journal. Missing evidence/RPC access blocks
+recovery. Broadcast uses Foundry --slow to preserve transaction/hash association.
+Local SIGKILL and injected I/O tests do not establish power-loss durability or
+support for untested filesystems.
+
+### Related Files
+
+- `services/toolkit/src/production-publication.ts`
+- `services/toolkit/src/production-chain.ts`
+- `services/cli/src/commands.ts`
+- `script/DeployProductionCore.s.sol`
+
+## D039: Preserve legacy readers and require version 2 for new production releases
+
+Date: 2026-11-11. Issue #154. Status: implemented default, team-to-confirm.
+
+### Context
+
+Existing public-testnet records and consumers must remain usable while stronger
+production evidence becomes mandatory for new deployments.
+
+### Decision
+
+Keep legacy artifacts and review files in their original schema and readable
+through existing readers. Do not rewrite or upgrade published records. New
+production deployments require evidence version 2. Version 1 review evidence
+cannot authorize a new production deployment.
+
+Version 2 verification requires the reviewed evidenceId, rebuilt local
+source/build/configuration commitments and an independently trusted expected
+recordDigest. The record binds the script artifact digest, transaction inputs,
+receipts and evidence identity without circular hashes. A version 2 expectation
+cannot fall back to legacy verification.
+
+### Consequences
+
+Compatibility tests enumerate existing public records, pin the published Monad
+record hash, read exact files through the CLI and read-only Operator API and
+compare bytes afterward. No live-chain readiness is needed to prove readability.
+Public Monad runtime, deployment infrastructure and deployed contracts remain
+unchanged. Legacy readability does not imply version 2 verification guarantees.
+
+### Related Files
+
+- `scripts/test-production-legacy-artifacts.mjs`
+- `services/cli/src/commands.ts`
+- `services/toolkit/examples/production-evidence.example.json`
+- `services/toolkit/examples/production-evidence-v2.example.json`
+
+## D043: Primary Distributor Authority for EXEC-002
+
+### Status
+
+Pending team decision. C-01-v2-only support is a known implementation limitation,
+not an approved permanent product boundary.
+
+### Context and Options
+
+RFQAdapterV3 and OnchainRFQContextResolver authenticate primary distributors only
+from exact active compiled `C-01-v2` parameters. Primary assets without C-01 or
+using another C-01 version fail closed. The team must choose:
+
+1. Add a Manifest/policy-config distributor commitment independent of C-01.
+2. Explicitly approve C-01-v2-only primary-distribution support.
+
+PR #163 documents the limitation without redesigning distributor authority.
+The owner resolved affiliate evidence separately: require it only for active
+compiled A-06/B-04 consumers, and bind the pinned source to the exact registered
+A-06-v1 implementation at activation and runtime. Existing required-evidence
+failure behavior remains fail closed.

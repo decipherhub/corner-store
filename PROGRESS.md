@@ -1,5 +1,698 @@
 # Progress
 
+## 2026-11-17 Session: DEPLOY-004 Reservation Review Hardening
+
+DEPLOY-004 remains passing after fixing PR #166's pre-execution reservation
+failure boundary. `ProductionPublication.reserve()` now removes its newly created
+staging and reservation directories when operation-pointer writes, probe writes,
+file/directory fsync, hard-link probing or the final vacancy check fails. If that
+rollback also fails, `ProductionPublicationReserveError` reports the exact output,
+staging and reservation paths with `cleanupComplete=false`; no signing or
+broadcast has started and the incomplete setup is not treated as recoverable.
+
+Tests were added first. The original implementation left both directories behind
+on the first injected write failure. After the fix, all six setup failure classes
+roll back completely, the cleanup-failure case returns bounded recovery paths and
+all 22 publication tests pass. `scripts/check.sh` also passes with Foundry 1.7.1,
+including 1,175 contract tests, 78 Toolkit tests and the packed production
+deployment, publication, tampering and recovery gates.
+
+## 2026-11-17 Session: DATA-004 Review Hardening
+
+DATA-004 remains passing after review hardening for PR #165. Active RFQ onboarding
+can no longer omit its required blocking A-04-v2 RFQ policy: Toolkit schema 7
+rejects omission, TSV substitution and mixed tracks, while on-chain
+ManifestPolicyConfig schema 2/3 commits the RFQ/TSV track and checks it against
+the Manifest engine bit and exact Element parameters. The provider-neutral v2
+coordinator now HMAC-wraps every provider-controlled identity, request, source and
+assessment reference before audit, persistence, acceptance or calldata export.
+
+Targeted verification passed: 27/27 compliance-data tests, 32/32 Toolkit tests,
+13/13 IdentityPolicyComposition tests and `forge build --sizes` with
+TokenPolicyRegistry at 24,570 bytes, 6 bytes below EIP-170. `scripts/check.sh`
+then passed with 1,175/1,175 Foundry tests and every service/package gate.
+`scripts/e2e-identity-evidence.sh` initially exposed the stale pre-keyed fixture
+binding, then passed 40/40 live cases after binding the coordinator's public keyed
+identity. Whitespace and protected public-demo path checks also passed.
+
+## 2026-11-11 Session: DEPLOY-004 Publication Trust Boundary
+
+DEPLOY-004 is passing. Scope: remaining publication findings from
+`../out-review-154-fix.md`, trust preconditions, best-effort mismatch cleanup,
+tests and D038/runbook evidence. This supersedes the earlier publication safety
+claim: inode checks alone do not prevent ancestor substitution or cleanup races.
+
+`services/toolkit/src/production-publication.ts:36` checks staging/output ancestry
+through the root for current-uid/root ownership and safe modes. Only ancestors
+may be writable with the sticky bit. Output trust is checked before reservation;
+both paths are rechecked at publication/recovery. Inode pinning remains, and
+`:211` limits mismatch cleanup to verified output ancestry, preserving the
+original error on cleanup failure. D038 and the runbook explicitly trust root
+and exclude concurrent operator-uid processes, which already hold signing material.
+
+Tests first: seven new rejection/cleanup cases failed against the prior source;
+the sticky acceptance case and all 12 existing publication cases passed. All
+20 now pass. New cases at `services/toolkit/test/production-publication.ts:16`
+cover group-writable, world-writable non-sticky and foreign-owned ancestors,
+foreign-owned/writable output directories, sticky ancestor acceptance, trust
+rechecks before linking/recovery and refusing cleanup in an untrusted output
+directory. Ownership uses injected `stat.uid`; mode/sticky tests use real modes.
+
+All Node commands below used
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'` with Node 20.20.2,
+Yarn 1.22.22 and Foundry 1.7.1. Logs use `/private/tmp/w154-trust-`.
+
+| Command inside the wrapper | Actual result | Log suffix |
+| --- | --- | --- |
+| `npm run build --prefix services/toolkit && node --test services/toolkit/dist/test/production-publication.js` before implementation | Exit 1; 13 passed, seven new cases failed | `red.log` |
+| `npm test --prefix services/toolkit && npm test --prefix services/cli && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; smokes, Toolkit 74/74, CLI 19/19, legacy 2/2, zero failures/skips | `focused-stable.log` |
+| `scripts/check.sh` | Exit 0; 1,171 Foundry tests, all service checks, 50 packed production assertions including live 28-transaction Anvil deployment/recovery, legacy 2/2 and deploy-v3 10/10 | `check.log` |
+
+Intermediate runs failed on ownership error wording and an in-flight tracked-doc
+edit caught by the CLI provenance guard. Corrected wording and held the working
+tree unchanged for both successful runs. The full gate passed on its first run;
+the known RFQ flake did not occur. Separate legacy profile/context/identity E2E
+scripts were not repeated for this filesystem-only change; packed live production
+deployment/recovery supplied runtime coverage. Whitespace and protected-path
+comparisons against HEAD pass. No contract/public/demo changes, commit, push or
+external publication. Next: user reviews the working tree. Same-uid concurrency
+and other filesystems/power-loss durability remain outside verified guarantees.
+
+## 2026-11-11 Session: DEPLOY-004 Confirmed Review Fixes
+
+DEPLOY-004 is passing. Scope: F1 publication path replacement and F2 hidden Git
+input edits from `../out-review-154.md`, regression tests and related evidence
+wording. No contract, legacy artifact, public/demo path, custody or signing change.
+
+F1: `services/toolkit/src/production-publication.ts:160` holds a no-follow file
+descriptor across validation/linking, verifies final regular-file device/inode/size,
+and rechecks the created entry before mismatch cleanup and directory fsync.
+Staging ownership, permissions, ancestry and directory identity are checked.
+Missing staging before completion fails closed; recovery never overwrites finals.
+F2: `services/toolkit/src/production-evidence.ts:105` compares every captured
+input's raw bytes with HEAD blobs through committed submodule gitlinks, independent
+of index flags. Missing/different blobs cannot grant clean provenance or broadcast.
+
+Tests first: six targeted Toolkit cases failed against the original implementation
+(three publication cases and three provenance cases); both CLI index-flag cases
+failed by reaching RPC preflight instead of refusing provenance. Added cleanup
+replacement and missing-HEAD guards afterward. All ten new cases now pass, plus
+existing interruption/SIGKILL/recovery cases. Test names and locations:
+`services/toolkit/test/production-publication.ts:131`,
+`services/toolkit/test/production-evidence.ts:144` and
+`services/cli/test/production-evidence.ts:145`.
+
+All Node commands used `npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`
+(Node 20.20.2, Yarn 1.22.22); Foundry 1.7.1. Logs use `/private/tmp/w154-review-`.
+
+| Command inside the wrapper | Actual result | Log suffix |
+| --- | --- | --- |
+| `npm test --prefix services/toolkit && npm test --prefix services/cli && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; smokes, Toolkit 66/66, CLI 19/19, legacy 2/2, zero failures/skips | `focused-catfile.log` |
+| `scripts/check.sh` | Exit 0; 1,171 Foundry tests, all service checks, 50 packed production assertions including 28-transaction deployment/recovery, legacy 2/2 and deploy-v3 10/10 | `check-final.log` |
+| `scripts/e2e-anvil.sh && scripts/e2e-anvil.sh --profile reg-d && scripts/e2e-context-provenance.sh && scripts/e2e-identity-evidence.sh` | Exit 0; both profiles 7/7 plus runtime flows, context 12/12, identity 40/40 | `e2e.log` |
+| `npm test --prefix services/rfq` | Exit 0; smoke and 30/30 named tests after the unrelated assertion failure below | `rfq-rerun.log` |
+
+Earlier attempts are not passes: stdin-based Git hashing stalled full-source
+capture, so those runs were interrupted and replaced by direct HEAD-blob reads.
+The next full check failed at RFQ's unchanged concurrent nonce-order assertion
+(`check-catfile.log`), also present on origin/main; isolated RFQ and the complete
+rerun passed. No RFQ source was changed. Red logs: `red.log`, `cli-red.log`.
+
+D037/D038 and the production runbook clarify the enforced behavior. Whitespace,
+protected-path comparisons against `feat/159-identity-decisions` and original v1
+example preservation pass. No commit, push or external publication. Next: user
+reviews this working tree. Other filesystems and power-loss durability remain
+unverified, as before.
+
+## 2026-11-11 Session: DEPLOY-004 Step 3 Release Finalization
+
+DEPLOY-004 is passing after all required release gates. Scope: issue #154 step 3,
+D037-D039 (adopted defaults, team-to-confirm), deployment/testing documentation,
+versioned example, public-artifact compatibility and full verification. Out of
+scope: deployed contracts, protected demo paths, custody/key management/multisig
+expansion, vendors, commits/pushes and external publication.
+
+Steps 1-2 are committed as c38d9d5 and 652cc70. Their slice notes are transferred
+to the runbook, decisions, feature and execution plan; SLICE_NOTES.md is removed.
+The remote main sequencing check (`git ls-remote origin refs/heads/main`) exited
+0 and still returned 7893021ecc001041cdf6ee44f22de0d88909c932. Prerequisite merges
+remain a release constraint; this work follows the user's explicit stacked-slice
+instruction. Public records retain their original schema and exact bytes.
+
+Tests first: added two public-artifact compatibility cases, both passing against
+existing CLI/Operator API readers. The v2 example regression first failed to
+compile due to an incorrect test signer field, corrected from account to name;
+then it failed as expected with ENOENT for the absent v2 example (0 passed,
+1 failed, 15 name-filter skips). Added a source-only diagnostic v2 example,
+retaining the original v1 example. This example cannot authorize broadcast.
+
+All service/script commands below used Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`; Foundry is 1.7.1.
+Logs are under `/private/tmp/w154-step3-`, with the suffixes in the table.
+The exact shell redirection after each wrapped command was
+`> /private/tmp/w154-step3-<suffix> 2>&1`, substituting the listed suffix.
+
+| Exact command inside the Node wrapper | Actual result | Log suffix |
+| --- | --- | --- |
+| `npm run build --prefix services/cli && npm test --prefix services/operator-api && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; CLI build, Operator API smoke and 2/2 public compatibility tests passed before integration | `legacy.log` |
+| `npm run build --prefix services/toolkit && node --test --test-name-pattern="legacy review example" services/toolkit/dist/test/production-evidence.js` | First exit 2 on the test signer field; corrected run exit 1 with ENOENT, 0 passed/1 failed/15 skipped before adding the v2 example | `example-red.log` (corrected run) |
+| `npm test --prefix services/toolkit && npm test --prefix services/cli && node --test scripts/test-production-legacy-artifacts.mjs` | Exit 0; Toolkit smoke + 58/58 named tests, CLI smoke + 17/17 named tests, public compatibility 2/2; zero failed/skipped | `focused.log` |
+| `scripts/check.sh` | Exit 0, first run; 1,171/1,171 Foundry tests across 70 suites; fmt/high-severity lint/build; RFQ/host/Toolkit/CLI/compliance-data 30/24/58/17/25 named tests, zero failed/skipped; all service smokes/provider conformance; two external adapter consumers 4/4 Foundry tests each; packed version assertions 6/6; packed production assertions 50/50 (10 commitments + 40 live cases, including real production dry-run/fork and 28-transaction deployment); public compatibility 2/2; showcase plan; deploy-v3 10/10 | `check.log` |
+| `scripts/e2e-anvil.sh` | Exit 0, first run; BUIDL-like 7/7 scenarios plus backend/CLI/Router, repeated buys/sells, negative cases and temporal runtime flow | `buidl.log` |
+| `scripts/e2e-anvil.sh --profile reg-d` | Exit 0, first run; Reg D 7/7 scenarios plus backend/CLI/Router and runtime checks | `regd.log` |
+| `scripts/e2e-context-provenance.sh` | Exit 0, first run; 12/12 live cases, zero failures | `context.log` |
+| `scripts/e2e-identity-evidence.sh` | Exit 0, first run; 40/40 live cases, zero failures, normal EIP-170 limits | `identity.log` |
+| `node --version && yarn --version` | Exit 0; v20.20.2 and 1.22.22 | terminal |
+
+New coverage: two named public-artifact tests plus one Toolkit legacy/v2 example
+regression. The public gate enumerates tracked records, pins the published Monad
+SHA-256 `c43cef9e5857a8887d8e8648cbdc7e48e52bd28f4dd685c528a5fa13906e1263`,
+reads each exact file through CLI and Operator API and checks listing/hashes/bytes
+afterward. No live-chain readiness is used as a compatibility oracle. The original
+v1 review example is unchanged. No RFQ flake or full-gate rerun occurred.
+
+Changed files in step 3:
+
+- `FEATURES.md`, `DECISIONS.md`, `PROGRESS.md`
+- `docs/deployment-production.md`, `docs/testing.md`
+- `docs/exec-plans/completed/DEPLOY-004-append-only-production-evidence.md`
+- `scripts/check.sh`, `scripts/test-production-legacy-artifacts.mjs`
+- `services/toolkit/test/production-evidence.ts`
+- `services/toolkit/examples/production-evidence-v2.example.json`
+
+`SLICE_NOTES.md` was an untracked input and has been removed. The active-plan
+index returns to its original no-active-plan state. No production runtime source
+or deployed contract changed in step 3.
+
+Final `git diff --check`,
+`git diff --exit-code feat/159-identity-decisions -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`,
+`git diff --exit-code HEAD -- services/toolkit/examples/production-evidence.example.json`,
+`sh -n scripts/check.sh` and
+`node --check scripts/test-production-legacy-artifacts.mjs` exited 0.
+Relative documentation link targets exist; added lines/new files contain no em
+dash; no active feature or slice-note file remains. Packed consumer and E2E
+runners performed normal cleanup of their temporary processes/keys/artifacts.
+
+UNVERIFIED: real production networks, Ledger/hardware/interactive signer behavior,
+actual power-loss durability and filesystems other than this local host. Docker
+container smoke was not rerun because no image/container contract changed.
+Passing the tooling does not establish production deployment readiness. No
+production-chain/public Monad mutation, commit, push or external publication was
+performed. Next: user reviews the working tree, confirms D037-D039 defaults and
+merges prerequisites in the approved order before release.
+
+## 2026-11-11 Session: DATA-004 Assessment Reference Collision Fix
+
+DATA-004 is passing. Scope: the confirmed P2 HTTP v2 assessment-reference
+collision, regression tests and conformance coverage. The assessment reference
+now uses the keyed source commitment under the separate assessment domain, so
+identity/wallet/asset binding, status, facts and revision inputs participate.
+Same-case/same-time revocation reaches the existing replacement ordering,
+persists negative evidence, blocks acceptance export and survives stale positive
+replay. The immutable identical-reference conflict guard is unchanged.
+
+The non-example demo v2 adapter already commits binding and source evidence in
+its assessment reference. The v2 conformance runner now shares one store between
+eligible/ineligible checks to detect references reused across bindings.
+No product boundary, v1 adapter, contract or protected public Monad path changed.
+
+Tests first, against unchanged adapter/conformance code: 22 passed, three failed.
+`v2 HTTP same-case revocation persists and blocks acceptance export and stale
+approval replay` returned STORE_CONFLICT instead of REVOKED; `v2 HTTP one case
+materializes independently for two assets` rejected asset B with STORE_CONFLICT;
+`v2 conformance rejects assessment references reused across bindings` incorrectly
+reported passed. `v2 identical assessment reference still rejects conflicting
+negative content` passed both before and after the fix. All four pass afterward.
+
+Commands ran through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'` (Node 20.20.2,
+Foundry 1.7.1). Logs are under `/private/tmp/w159-p2-` with the suffixes below.
+
+| Command | Actual result | Log suffix |
+| --- | --- | --- |
+| `node --version && npm test --prefix services/compliance-data` (before fix) | Exit 1; smoke/provider checks passed, 22 named tests passed, three failed | `before.log` |
+| `npm test --prefix services/compliance-data` | Exit 0; smoke/provider checks and 25/25 named tests passed | `compliance-data.log` |
+| `npm test --prefix services/toolkit` | Exit 0; smoke and 30/30 named tests passed | `toolkit.log` |
+| `scripts/check.sh` | Exit 0, first run; 1,171 Foundry tests, service/packed-consumer checks and 10 deploy-v3 tests passed | `check.log` |
+| `scripts/e2e-identity-evidence.sh` | Exit 0, first run; 40/40 live cases passed | `identity.log` |
+
+`git diff --check` and
+`git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`
+both exited 0 after the final documentation edits. Legacy Anvil profile/context
+E2Es were not rerun for this adapter/conformance-only fix; their passing release
+baseline is recorded below. No commit, push or external publication was performed.
+Next: user reviews the working tree.
+
+## 2026-11-11 Session: DATA-004 Step 4 Release Finalization
+
+DATA-004 is passing after all required gates. Scope: issue #159 P1 release
+finalization, D031-D036, four separate November P2 PR slots, SDK/versioning and
+A-01/A-04/A-11 documentation, release verification and slice-note cleanup.
+Out of scope: P2 implementation, settlement contract changes, public Monad paths,
+production providers/durable storage, key management, custody and multisig.
+
+Steps 1-3 are already committed on this branch. Their deferred state-document
+entries are now finalized: explicit DIRECT/schema 7 topology guards; separate
+A-04-v2 evidence/issuer trust; SPI 2.0.0 operator acceptance, local compliance-data
+HMAC and optional LEI; opt-in Reg D v4 and named settlement proofs. D036 records
+scheduled design only. Reserved upstream decision/feature IDs were not reused.
+A-04-v1, existing recipes/quote schemas/API responses and A-11 expiry arithmetic
+retain their meanings. No deployed contract was upgraded.
+
+The first full gate provided the red baseline for one stale packed-consumer
+assertion: `PRODUCTION_ONBOARDING_SCHEMA_VERSION` was 7, expected 6. Updated only
+that assertion and its result label in `scripts/sdk-product-smoke.sh`, then reran
+the complete gate successfully. No product runtime code changed in step 4 and no
+new behavior tests were added. The known RFQ store flake did not occur.
+
+All service/script commands below used Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`; Foundry is 1.7.1.
+
+| Exact command inside the Node wrapper | Actual result |
+| --- | --- |
+| `scripts/check.sh` (first run) | Exit 1 at packed-consumer schema assertion, actual 7 vs expected 6; preceding 1,171 Foundry and RFQ/host/Toolkit/CLI tests passed. Log: `/private/tmp/w159-step4-check.log`. |
+| `scripts/check.sh` (after assertion fix) | Exit 0; 1,171/1,171 Foundry tests across 70 suites; format/high-severity lint/build; RFQ/host/Toolkit/CLI/compliance-data 30/24/30/8/21 named tests, all zero failed/skipped; all service smokes, provider conformance, packed consumers (6 version assertions), showcase plan, and 10/10 deploy-v3 tests passed. Log: `/private/tmp/w159-step4-check-final.log`. |
+| `scripts/e2e-anvil.sh` | Exit 0, first run; BUIDL-like 7/7 scenarios plus backend/CLI/Router, repeat trades, negative cases and temporal runtime flow passed. Log: `/private/tmp/w159-step4-buidl.log`. |
+| `scripts/e2e-anvil.sh --profile reg-d` | Exit 0, first run; Reg D 7/7 scenarios plus backend/CLI/Router and runtime checks passed. Log: `/private/tmp/w159-step4-regd.log`. |
+| `scripts/e2e-context-provenance.sh` | Exit 0, first run; 12/12 live cases, zero failed. Log: `/private/tmp/w159-step4-context.log`. |
+| `scripts/e2e-identity-evidence.sh` | Exit 0, first run; 40/40 live cases, zero failed, normal EIP-170 limits. Log: `/private/tmp/w159-step4-identity.log`. |
+| `node --version && yarn --version` | Exit 0; v20.20.2 and 1.22.22. |
+
+Exact log redirections used after each wrapped invocation were respectively
+`> /private/tmp/w159-step4-check.log 2>&1`,
+`> /private/tmp/w159-step4-check-final.log 2>&1`,
+`> /private/tmp/w159-step4-buidl.log 2>&1`,
+`> /private/tmp/w159-step4-regd.log 2>&1`,
+`> /private/tmp/w159-step4-context.log 2>&1` and
+`> /private/tmp/w159-step4-identity.log 2>&1`.
+
+Additional checks outside the wrapper:
+
+- `forge --version`: exit 0, 1.7.1-Homebrew.
+- `git diff --check`: exit 0, including final documentation edits.
+- `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`:
+  exit 0; protected paths unchanged in the working tree.
+- `git diff --exit-code feat/155-rfq-quote-bounds -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`:
+  exit 0; protected paths unchanged across all issue #159 slices.
+- Final Python document/link/state/character checks: exit 0; added local Markdown
+  links resolve, D031-D036 occur once each, DATA-004 is passing with no active
+  feature, and added lines contain no em dash. Slice notes were removed after
+  transferring their durable decisions, evidence and operating constraints here
+  and into the product specs.
+
+The release gate retains steps 1-3's v1 compatibility, full-word topology fuzzing,
+issuer trust/lifecycle, HMAC/LEI/privacy, store conflict/audit failure and codecs.
+It includes 42 named settlement-binding invariants plus recipe/missing-evidence/
+size tests. Identity live cases cover two acceptances, 32 mined rejections, four
+settlements, Manifest parameters and privacy. The step 2 fixture's historical gas
+measurements are retained in `docs/product-specs/identity-evidence-v2.md`; gas was
+not remeasured in step 4.
+
+November P2 slots are documented in `docs/product-specs/identity-p2-schedule.md`
+and linked from the roadmap: MEMBER institution/attestation support with wallet
+sanctions in both modes; venue pseudonyms/private wallet mapping/same-identity
+blocking before TSV launch; issuer/AML-owner/freeze-scope asset cards; and separate
+A-01-v2 list bundles with per-list invalidation and mandatory OFAC for TSV.
+They remain unimplemented. Team to confirm calendar dates/assignees; no PRs were
+opened. No item blocks this P1 release.
+
+Material operating constraints: bilateral A-04-v2 screening remains explicit;
+restoring the exact issuer basis can restore unexpired accepted evidence unless
+individually revoked; the reference store is in-process. The later review-hardening
+result above supersedes this release measurement; TokenPolicyRegistry now has only
+6 bytes of EIP-170 headroom and further growth needs explicit size work.
+
+UNVERIFIED: A-04-v2 with a canonical Uniswap pool in live Anvil (named AMM tests
+use a callback mock; existing canonical-pool regressions passed); RFQ-host HTTP
+with the new recipe (context-provenance HTTP passed separately); production
+providers/durable storage, public/external networks and Docker/container runtime.
+No external publication, commit, push or branch operation was performed. Next:
+user reviews the working tree; P2 proceeds as separate November PR work.
+
+## 2026-11-17 Session: RFQ-006 Typed Store Failure Review Fix
+
+Confirmed PR #164's store-message classification finding. Scope: typed store
+failures and coordinator/host mappings only; no contract or product boundary change.
+`QuoteCoordinatorStore` now requires `RFQStoreError` for idempotency conflicts,
+inventory exhaustion and missing inventory configuration. The local store emits
+those codes, the coordinator translates them to bounded coordinator errors, and
+both host versions preserve 409/409/500 responses independently of diagnostic text.
+Untyped store failures remain 503. RFQ-006 remains passing.
+
+Node commands used `npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`:
+
+- `npm ci --prefix services/rfq && npm ci --prefix services/rfq-host`: exit 0.
+- `npm run build --prefix services/rfq && npm run build --prefix services/rfq-host && node --test --test-name-pattern="alternate store|typed store" services/rfq/dist/test/authorization.js services/rfq-host/dist/test/authorization.js`:
+  before mapping fixes, exit 1; 9 failed, 37 skipped. All nine failures reproduced
+  coded terminal errors becoming dependency-unavailable errors with alternate text.
+- Initial `npm test --prefix services/rfq && npm test --prefix services/rfq-host`:
+  exit 1 in RFQ smoke's old inventory-message assertion. Updated that assertion to
+  check `RFQCoordinatorError.code`; the host command was not reached.
+- Final `npm test --prefix services/rfq && npm test --prefix services/rfq-host`:
+  exit 0; RFQ smoke plus 35 named tests and host smoke plus 30 named tests passed,
+  zero failures. Added 11 named regressions covering alternate store messages on
+  both endpoints, local store codes and untyped message lookalikes.
+- `forge fmt --check`: exit 0.
+- `forge build`: exit 0, compiler/lint warnings remain.
+- `forge test --offline --match-path 'test/**/RFQ*.t.sol'`: exit 0;
+  72 passed, 0 failed, 0 skipped across 3 suites.
+- Final main-integration `scripts/check.sh`: exit 0; 1,102 Foundry tests,
+  RFQ 35/35, RFQ host 30/30 and all package/clean-project gates passed.
+- `git diff --check`: exit 0.
+
+Logs: `/private/tmp/w155-typed-*.log`. Runtime checks use real ephemeral loopback
+HTTP servers in both host suites. Anvil E2E and Docker/production integrations
+were not run: this task excludes fixed-port Anvil and changes only failure mapping.
+The review fixes were committed on this branch in `df2e387`.
+
+## 2026-11-11 Session: RFQ-006 Nested TTL Review Fix
+
+RFQ-006 is passing. Scope: the confirmed P3 pre-authentication recursive TTL hash in the production
+RFQ host. Non-number TTL values now contribute only `null` to the preliminary
+audit request hash; the original TTL still reaches validation after authentication
+and rate limiting. No product boundary, coordinator or contract behavior changed.
+
+Tests first: six HTTP regressions named `v{2,3} nested TTL preserves authentication
+and limiting before {401,429,400} rejection` send 6,000 nested arrays in a body
+below 16 KB. Against unchanged production code, all six failed with actual 500;
+14 unrelated tests were skipped by the name filter. After the one-line fix,
+the host smoke and all 24 named tests passed, including all six regressions.
+They assert bounded errors, exact authentication/limiter/incident/audit order,
+no quote records and the audit rejection reason.
+
+Commands use Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`:
+
+- `npm run build --prefix services/rfq-host && node --test --test-name-pattern="nested TTL" services/rfq-host/dist/test/authorization.js`:
+  exit 1 before the fix, six failed with 500. Log: `/private/tmp/w155-nested-before.log`.
+- `npm test --prefix services/rfq-host`: exit 0, smoke plus 24 named tests.
+  Log: `/private/tmp/w155-nested-host.log`.
+- `npm test --prefix services/rfq`: exit 0 on the first run, smoke plus 30 named tests.
+  Log: `/private/tmp/w155-nested-rfq.log`.
+- `scripts/check.sh`: exit 0 on the first run, including 1,100 Foundry tests,
+  service and packed-consumer checks and 10 deploy-v3 tests.
+  Log: `/private/tmp/w155-nested-check.log`.
+- `git diff --check`: exit 0.
+- `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad`:
+  exit 0; protected paths unchanged.
+
+Runtime validation uses real loopback HTTP requests on both endpoints. Anvil E2E
+was not rerun because this fix only bounds pre-authentication hashing of malformed
+TTL; signing, settlement and contracts are unchanged. Prior E2E evidence remains
+in the entry below. Next: user reviews the working tree.
+No commit, push or external publication was performed.
+
+## 2026-11-11 Session: RFQ-006 Confirmed Review Fixes
+
+RFQ-006 is passing after all requested gates. Scope: confirmed review findings
+F1-F3 for issue #155, production host ordering, evidence API replay authority and
+terminal retry classification. Out of scope: contracts, public Monad/demo paths,
+key management and the known multi-process store creation flake.
+
+- F1: bounded body parsing remains before authentication; authentication/taker
+  binding and rate limiting now precede TTL/product authorization. Parent rejection
+  auditing, incidents and audit-failure handling remain in place. Both endpoints
+  count authentication, limiter, audit, incident, pricing, reservation, risk and
+  signer calls for unauthenticated, limited, invalid-TTL and unsupported-product
+  requests, with successful and failing audit sinks.
+- F2: current catalog policy is compared only after lookup establishes a new
+  request. Both evidence APIs validate replay against the persisted request/grant.
+  Eight v2/v3 PUBLISHED/RESERVED matrix cases cover policy drift, original quote,
+  expiry/grant preservation, conflicts, new-request policy denial and missing grants.
+- F3: `TERMINAL_REPLAY` maps expected unsigned signing-failure, expiry and revocation
+  retries to the parent's bounded 400 response. Same-key HTTP retries after signer
+  failure and after reservation expiry cover both versions; unexpected coordinator
+  failure still returns a bounded 500.
+- Updated D030, the production policy spec, host README and feature evidence.
+
+Tests first: after correcting test-only TypeScript typing, the focused Node 20
+build/regressions ran against unchanged production code: 18 passed, 13 failed.
+After the fixes, all 31 focused cases passed. Logs: `/private/tmp/w155-review-*.log`.
+Standalone `forge fmt --check` and Node 20 RFQ/host/Toolkit/CLI tests passed on the
+first run (smoke plus 30/18/15/5 named tests); no flake retry was needed.
+
+All service/script commands below ran with Node 20.20.2 and Yarn 1.22.22 through
+`npx --yes -p node@20 -p yarn@1.22.22 -c '<command>'`; Foundry is 1.7.1.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0. |
+| `npm test --prefix services/rfq` | Exit 0; smoke + 30 named tests. |
+| `npm test --prefix services/rfq-host` | Exit 0; smoke + 18 named tests. |
+| `npm test --prefix services/toolkit` | Exit 0; smoke + 15 named tests. |
+| `npm test --prefix services/cli` | Exit 0; smoke + 5 named tests. |
+| `scripts/check.sh` | Exit 0, first run; 1,100 Foundry tests, all service/packed-consumer gates and 10 deploy-v3 tests passed. |
+| `scripts/e2e-anvil.sh` | Exit 0; BUIDL-like scenario suite and backend/CLI/Router/runtime checks passed. |
+| `scripts/e2e-anvil.sh --profile reg-d` | Exit 0; Reg D scenario suite and backend/CLI/Router/runtime checks passed. |
+| `scripts/e2e-context-provenance.sh` | Exit 0; 12 passed, 0 failed. |
+| `git diff --check` | Exit 0. |
+| `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad` | Exit 0; protected paths unchanged. |
+| Python added-character check | Exit 0; no added em dash characters. |
+
+This entry supersedes the original delivery's ordering claims below. All requested
+checks passed without reruns. UNVERIFIED: Docker/container execution and public or
+production integrations, outside this fix scope. Next: user reviews the working
+tree. No commit, push or external publication was performed.
+
+## 2026-11-11 Session: RFQ-006 Issue #155 Delivery
+
+RFQ-006 is passing. Scope: production RFQ coordinator/host v2/v3 authorization,
+lifetime validation, persistence/replay and failure taxonomy. Out of scope:
+contracts, recipes, key management/custody, pricing strategy, public deployment
+and the pre-existing multi-process store creation race. HACK-001 closure is in
+approved upstream PR #162; this work allocates only RFQ-006 and D030.
+
+- Wrote `PLAN_155.md` before tests/implementation, then removed it after delivery;
+  the final handoff includes its contents. D030 records the implemented decision.
+- Added a bounded local catalog binding maker, ordered pair, venue, policy,
+  version capability and flow. Both host endpoints require explicit catalogs.
+  TTL and product rejection precede authentication, limiter, readiness, store,
+  policy, pricing, risk, context and signer calls. Live resolved policy must match
+  the catalog before pricing a new request.
+- Default TTL/max are 60/300 seconds, tunable through bootstrap coordinator
+  configuration with positive safe integers and default <= max <= 3600. Invalid
+  config fails construction/startup, invalid TTL fails before dependencies.
+- Persist schema-1 `productAuthorization` alongside existing record schemas 1/2,
+  request hash, nonce and lease. Host replay/conflicts use original authorization
+  and policy without resolver/pricing/risk recalls or replacement signatures;
+  RESERVED recovery keeps original expiry and freshness/context revalidation.
+- Added bounded typed 400 invalid-request, 403 product-denial, 500 configuration
+  and 503 dependency codes, preserving existing conflict/risk/signer/audit codes.
+  Known resolver denials/config errors stay terminal; untyped provider exceptions
+  remain retryable. Diagnostic reason/module labels redact provider messages.
+- Added 9 coordinator and 6 host named tests for invalid/boundary TTL, unsupported
+  products and versions/flows, zero dependency calls, restart/policy drift,
+  conflicts, concurrent retry, RESERVED recovery, altered/missing stored grants,
+  configuration validation and dependency/taxonomy redaction on both endpoints.
+- Updated production fixtures with explicit catalog grants, local context E2E
+  with explicit 600s default/max and both directions/versions, and the container
+  readiness smoke double with the required coordinator methods. Deployed contracts,
+  existing quote types/success responses and protected Monad paths are unchanged.
+
+### Verification Commands and Actual Results
+
+Foundry 1.7.1 and Node 20.20.2. Logs are local `/private/tmp/w155-*.log`, outside
+the working tree. Service test commands ran inside the Node 20/Yarn wrapper below.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0. No Solidity edits. |
+| `forge test --offline` | Exit 0; 1,100 passed, 66 suites, 0 failed/skipped. |
+| `npm test --prefix services/rfq` | Final exit 0; smoke plus 22 named tests passed. |
+| `npm test --prefix services/rfq-host` | Final exit 0; smoke plus 10 named tests passed. |
+| `npm test --prefix services/toolkit` | Exit 0; smoke plus 15 named tests passed. |
+| `npm test --prefix services/cli` | Exit 0; smoke plus 5 named tests passed. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'` | Exit 0 on first full run; all format/lint/build/Foundry/service/packed-consumer/vendor/whitespace gates passed. Vendored deploy-v3: 10 passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'` | Exit 0; BUIDL-like 7-scenario suite and backend/CLI/Router/runtime checks passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh --profile reg-d'` | Exit 0; Reg D 7-scenario suite and backend/CLI/Router/runtime checks passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'` | Exit 0; 12 passed, including 10 mined rejections with unchanged balances/nonces and 2 exact-fill settlements. |
+| `git diff --check` | Exit 0. |
+| `git diff --exit-code HEAD -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad` | Exit 0; protected paths unchanged. |
+| `bash -n scripts/production-container-smoke.sh` | Exit 0. |
+| `npx --yes -p node@20 -c 'node --check scripts/e2e-context-provenance.mjs'` | Exit 0. |
+| Extracted container bootstrap + Node 20 `startProductionRFQRuntime()` harness | Exit 0; HTTP health/ready 200 and graceful shutdown passed with the exact updated smoke fixture. |
+| Python local-doc-link and added-character checks | Exit 0; 5 local links valid, no added em dash characters. |
+
+The exact standalone service invocation was:
+
+```sh
+npx --yes -p node@20 -p yarn@1.22.22 -c 'for service in rfq rfq-host toolkit cli; do npm test --prefix "services/$service" > "/private/tmp/w155-final-$service.log" 2>&1; check_status=$?; echo "$service exit $check_status"; tail -12 "/private/tmp/w155-final-$service.log"; if [ "$check_status" -ne 0 ]; then exit "$check_status"; fi; done'
+```
+
+Tests-first evidence: the initial RFQ build failed on missing API/types, and
+`npx --yes -p node@20 -c 'node --test services/rfq/dist/test/authorization.js'`
+then ran the emitted regressions against baseline code: 0 passed, 6 failed. The
+initial host build failed on the missing product/configuration error codes.
+During implementation, a focused run exposed a missing-grant hashing bug (5/6
+passed), which was fixed. One intermediate `npm test --prefix services/rfq`
+run hit the known `multi-process initial store creation is race-safe` flake with
+`Unexpected end of JSON input` (`w155-rfq-test-2.log`). The single requested retry
+passed that race check but exposed a fresh RESERVED test fixture missing its new
+grant (`w155-rfq-test-2-retry.log`). Adding that explicit fixture grant fixed the
+migration. The next service run passed all then-current 19 named tests, and the
+final standalone/full-gate runs passed all 22. The store creation implementation
+was not changed. No full-gate rerun was needed.
+
+### Limits and Next Work
+
+- UNVERIFIED: Docker image/container execution and public/production deployment
+  were not run. The changed container fixture was syntax-checked and exercised
+  through the real local runtime; no image/release change was made.
+- Production operator catalog approval, HA store, live pricing/risk/auth/provider
+  integrations and WORM retention remain operator boundaries. Production evidence
+  callers must add explicit catalogs; records without historical grants must be
+  drained/expired and isolated under a fresh request namespace/store, never
+  automatically backfilled. Current tuple support/TTL caps still gate retries.
+- Next: user reviews the working tree. No commit, push, GitHub comment, public
+  broadcast or publication was performed.
+
+
+## 2026-11-17 Session: EXEC-002 Review Hardening
+
+PR #163 review findings were fixed on the feature branch without changing the
+legacy Router/RFQ v2 or public Monad deployment paths.
+
+- Affiliate evidence is now required only when the active compiled policy
+  actually contains A-06-v1. When present, ElementRegistry must resolve A-06-v1
+  to the source pinned in venue activation evidence; a different registered
+  implementation fails closed.
+- Primary distribution now discovers the authorized distributor by the immutable
+  `corner-store.element.lockup.primary-distributor.v1` parameter schema instead
+  of the exact C-01-v2 Element ID. Compatible future immutable Element versions
+  therefore keep the same authority contract without adapter changes.
+- RFQ on-chain resolution and Toolkit activation verification enforce the same
+  policy/source/schema rules as Solidity. Regression coverage includes policies
+  without A-06, source substitution and a non-C-01-v2 Element using the canonical
+  distributor schema.
+
+Targeted verification: ContextEvidence 24/24, RFQAdapterV3 38/38, RouterV2 19/19,
+ContextProvenance 13/13, RFQ service 13/13 and Toolkit provenance 16/16.
+`scripts/check.sh` passed with 1,102 Foundry tests and all service/package smoke
+gates. Both legacy Anvil profiles completed their 7/7 scenarios and extended
+backend/CLI/Router checks; the isolated context-provenance E2E passed 12/12.
+The local Foundry 1.7.1 formatter changes three pre-existing unrelated main files;
+they were temporarily normalized only for the formatter gate and restored before
+the final diff. `git diff --check` passes and no public deployment was changed.
+
+## 2026-11-11 Session: EXEC-002 Confirmed Review Fixes
+
+Scope: F1 recipient MM-claim selection and F2 reverse Engine/Router activation
+binding. Existing B-04-v1, its tests, default recipes and public Monad v2 paths
+are unchanged. EXEC-002 remains passing after the checks below.
+
+- F1: added opt-in immutable `EngineSelectionV2` (`B-04-v2`) using `AssetFlow`
+  for each security recipient. V3 integration/live fixtures register and bind
+  it explicitly. RouterV2 regressions cover both asymmetric affiliate sells and
+  buy parity with v1; unit coverage adds 256-run buy parity fuzzing, exemptions
+  and fail-closed context. Schema 6 scans every active compiled binding and
+  rejects B-04-v1 or unavailable/malformed reads, allowing policies without B-04.
+- F2: activation now requires `ComplianceEngine.router() == executionRouter`,
+  including unreadable-read rejection with all other bindings correct. REGISTER
+  plans add unsigned Engine wiring before adapter wiring. D028 and the product
+  spec require a separate v3 Engine because its Router authorization is single;
+  UPDATE continues to verify existing bindings without rebinding.
+- Tests first: with the original B-04, the two asymmetric sell regressions
+  failed and the other 11 integration tests passed. The initial Toolkit run
+  exposed all five new activation/wiring gaps (9 passed, 5 failed). Final
+  passing runs include the fixes and additional compiled-policy coverage.
+
+| Command | Actual result |
+| --- | --- |
+| `forge fmt --check` | Exit 0. Changed Solidity files were formatted with targeted `forge fmt` first. |
+| `forge build` | Exit 0; compiler/lint warnings remain. |
+| `forge test --offline` | Exit 0; 1,100 passed across 66 suites, 0 failed, 0 skipped. |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm test --prefix services/toolkit'` | Exit 0; smoke gate and 15 provenance tests passed, 0 failed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'` | Exit 0; 12 passed: 10 mined rejections with unchanged balances/nonces and 2 affiliate settlements with recipient MM claims only. |
+| `git diff --check` | Exit 0. Protected-path diff against origin/main and legacy B-04/tests/recipe diff checks also exited 0. |
+
+Logs are local `/private/tmp/w157-fixes-*.log` files. UNVERIFIED in this fix
+session: the broader `scripts/check.sh`, legacy Anvil profiles and public or
+production activation were not rerun. Prior delivery evidence below is historical.
+Next: review these working-tree fixes and run the documented activation checks
+for each separately deployed v3 stack and onboarded security. No commit, push,
+publication or GitHub comment was performed.
+
+## 2026-11-11 Session: EXEC-002 Delivery and Full Verification
+
+EXEC-002 (issue #157) is passing after all four approved implementation slices
+and the delivery gates below. This session changed only delivery fixtures,
+documentation and tracking. Earlier slices are commits `31efdb1`, `a3d9d21` and
+`64f4326`; their implementation is verified by this session's full gate, rather
+than relying only on the slice notes. HACK-001 and other feature entries are
+preserved: upstream #162 owns HACK-001 completion and #161 owns
+CORE-015/D024-D027. This session allocates only EXEC-002 and D028/D029.
+
+### Scope and Delivered Behavior
+
+- Added an isolated loopback chain-31337 deployment fixture with real
+  ERC-3643/ONCHAINID and a minimal B-02-v2 live-wiring recipe, mock cash/pricing
+  and reference local host/auth/store/audit adapters. It deploys separate
+  RouterV2/RFQAdapterV3 and never replaces the legacy deployment artifact.
+- The v3 HTTP host/coordinator uses the on-chain context resolver, signs current
+  actual-sender evidence and settles both directions. Eight mismatches produce
+  exact-error static rejections plus mined status-0 receipts with unchanged
+  balances and Router/quote nonces. Fresh quotes after evidence refresh settle
+  exact token deltas with nonce consumption and zero custody balances.
+- Published the ownership matrix, authentication order, exact ordered RFQ v3
+  type/domain/encoding, A-06 leg/aggregate commitments, immutable approval and
+  final post-configuration evidence rules. Added compatibility and migration for
+  SDK exports/modules, coordinator schema 2, opt-in host capability/route, CLI
+  artifacts and onboarding schema 6, preserving explicit legacy parsers.
+- Added the EXEC-002 execution plan and D028/D029. The six adopted defaults
+  remain open for team confirmation: conditional primary, matching statuses for
+  dual-regulated pairs, mandatory A-06 on every regulated leg, immediate
+  evidence-change invalidation, immutable-only activation and opt-in migration
+  timing. A-06 remains operator-attested. Reference/operator signing uses one
+  local env/file key; key management, multisig and custody expansion are deferred.
+- Existing recipes/events/API defaults and public Monad RFQ v2 are preserved.
+  All three live Anvil scripts remain documented manual delivery/release gates,
+  matching the current CI boundary. No extra live deployment is added to CI.
+
+### Verification Commands and Actual Results
+
+Foundry 1.7.1, solc 0.8.17 and Node 20.20.2. Full command output was captured in
+local `/private/tmp/w157-*.log` files, outside the working tree.
+
+| Exact command | Actual result |
+| --- | --- |
+| `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'` | Exit 0 on first full run. Forge: 1,090 passed across 65 suites, 0 failed, 0 skipped. RFQ/host/Toolkit/CLI provenance: 13/4/9/5 passed (31 total), 0 failed. Packed consumers: 6 v3/schema 6 assertions and 8 generated adapter Forge tests passed. Vendored deploy-v3: 10 passed. All remaining legacy service/smoke gates passed; they do not report assertion counts. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'` | Exit 0; BUIDL-like 7/7 scenarios plus 30 additional printed PASS checks. Existing v2 backend/CLI/Router flow passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh --profile reg-d'` | Exit 0; Reg D 7/7 scenarios plus 20 additional printed PASS checks. Existing v2 backend/CLI/Router flow passed. |
+| `npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'` | Final exit 0; 10/10 live cases passed: 8 mined mismatch rejections and 2 bidirectional exact-fill settlements. |
+| `forge fmt script/ContextProvenanceFixture.s.sol` | Exit 0; only the new fixture formatted. |
+| `forge fmt --check` | Exit 0. |
+| `git diff --check` | Exit 0. |
+| `bash -n scripts/e2e-context-provenance.sh` | Exit 0. |
+| `npx --yes -p node@20 -c 'node --check scripts/e2e-context-provenance.mjs'` | Exit 0. |
+| `git diff --exit-code origin/main -- deployments/public services/testnet-rfq-demo deploy/hackathon-monad` | Exit 0; all three protected paths unchanged across this branch. |
+
+The first new-E2E attempt failed compiling the fixture with stack-too-deep;
+moving deployment references into fixture storage fixed it. The next failed
+before any E2E case because the request fixture omitted `amountOutMin`; adding
+the explicit exact-output minimum fixed it. A subsequent burst broadcast stalled
+with one pending Anvil transaction and was interrupted (exit 130); sequential
+`--slow` broadcast completed and all 10 cases passed. These were fixture/runner
+issues; no product source or existing tests were changed in this session.
+The known RFQ multi-process initial-store race did not occur in the full gate,
+so no full-check rerun or flake fix was needed.
+Final read-only Python validation resolved all 51 local Markdown links in changed
+documents, found no added em dash characters and confirmed slice-note removal.
+`lsof` found no listeners remaining on E2E ports 8545, 8547 or 8787.
+
+### Limits and Next Work
+
+- UNVERIFIED: public/production v3 deployment, production infrastructure and
+  Docker container smoke gates were not run in this session. No public
+  broadcast, package publication, commit, push or GitHub comment was performed.
+- The local fixture proves protocol delivery with reference dependencies. It
+  does not validate a production TA provider, custom resolver, HA store, pricing
+  quality, proxy activation or non-Router enforcement.
+- Next: team confirms the six defaults, upstream #161/#162 merge, then any
+  explicitly authorized migration follows schema 6/post-state verification and
+  the documented manual delivery gates. Existing Monad traffic stays on v2.
+- `SLICE_NOTES.md` is removed after consolidating its intended product/tracking
+  text here and in FEATURES/D028/D029. No temporary debug files are added.
+
 ## Current Status
 
 저장소는 SDK/reference DEX 아키텍처·개발 계획 문서, Foundry product scaffold,
@@ -815,7 +1508,7 @@ Historical implementation and verification evidence follows.
 - Final-head Node 20 `scripts/check.sh` passed, including 1,010 Foundry tests and 10 deploy-v3 tests. Log: `/tmp/w132-check-final.log`.
 - Narrowed item 12 to operational RFQ risk disclosure only (three operational
   codes). Tiered compliance outcomes remain OPEN pending counsel-approved taxonomy.
-  Added D044, PENDING TEAM/LEGAL DECISION, for item 13. Reg D v4/A-12 v2 remain
+  Added D044, PENDING TEAM/LEGAL DECISION, for item 13. Reg D v5/A-12 v2 remain
   reference-only and non-production-activatable through supported production paths.
   Production onboarding rejects the element, recipe and Manifest/binding references
   across schema v1-v5, including existing-object UPDATEs. Production core deploys
@@ -824,7 +1517,7 @@ Historical implementation and verification evidence follows.
 - Regression evidence: before the fix, the new production registry test failed
   (0 passed, 1 failed) because registration succeeded, and Toolkit export accepted
   reference-only A-12-v2. After the fix, deployment tests passed 7/7 and Registry,
-  Recipe, A-12 v2 and Reg D v4 suites passed 27/27. Node 20 Toolkit smoke passed
+  Recipe, A-12 v2 and Reg D v5 suites passed 27/27. Node 20 Toolkit smoke passed
   20 export checks, two verifier checks and reader/smoke coverage; CLI and RFQ
   smoke passed. Initial parallel RFQ-host dependency installation failed during
   the local RFQ prepare step; sequential retry installed successfully. A new test

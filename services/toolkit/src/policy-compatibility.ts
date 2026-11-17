@@ -24,9 +24,9 @@ const REG_D_V3_ELEMENTS = [
 const FUND_V2_ELEMENTS = ["A-13-v1", "MIN-AMOUNT-v1"].map(asciiBytes32);
 
 const PROFILE_RECIPES: Record<string, {bindings: RecipeBindingDefinition[]; recipes: RecipeDefinition[]}> = {
-  "reg-d-v4": {
-    bindings: [{recipeId: 1, recipeVersion: 4}],
-    recipes: [{recipeId: 1, version: 4, requiredElements: [...REG_D_V3_ELEMENTS, asciiBytes32("A-12-v2")]}]
+  "reg-d-v5": {
+    bindings: [{recipeId: 1, recipeVersion: 5}],
+    recipes: [{recipeId: 1, version: 5, requiredElements: [...REG_D_V3_ELEMENTS, asciiBytes32("A-12-v2")]}]
   },
   "reg-d": {
     bindings: [{recipeId: 1, recipeVersion: 3}],

@@ -28,7 +28,7 @@ import {FormDFiling} from "../src/compliance/elements/FormDFiling.sol";
 import {LockupV2} from "../src/compliance/elements/LockupV2.sol";
 import {IAcquisitionSource} from "../src/interfaces/compliance/IAcquisitionSource.sol";
 import {RegD506cRecipeV3} from "../src/compliance/recipes/RegD506cRecipeV3.sol";
-import {RegD506cRecipeV4} from "../src/compliance/recipes/RegD506cRecipeV4.sol";
+import {RegD506cRecipeV5} from "../src/compliance/recipes/RegD506cRecipeV5.sol";
 import {RedFlagKnowledgeBarV2} from "../src/compliance/elements/RedFlagKnowledgeBarV2.sol";
 import {Fund3c7Recipe} from "../src/compliance/recipes/Fund3c7Recipe.sol";
 import {
@@ -109,7 +109,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
     MockPool internal pool;
     string internal assetProfile;
     bool internal useBuidlLikeProfile;
-    bool internal useRegDV4Profile;
+    bool internal useRegDV5Profile;
     uint256 internal deployerAccount;
     uint256 internal investorAccount;
     uint256 internal makerAccount;
@@ -152,10 +152,10 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         assetProfile = vm.envOr("ASSET_PROFILE", string("buidl-like"));
         bytes32 profileHash = keccak256(bytes(assetProfile));
         useBuidlLikeProfile = profileHash == keccak256("buidl-like");
-        useRegDV4Profile = profileHash == keccak256("reg-d-v4");
+        useRegDV5Profile = profileHash == keccak256("reg-d-v5");
         require(
-            useBuidlLikeProfile || useRegDV4Profile || profileHash == keccak256("reg-d"),
-            "ASSET_PROFILE must be buidl-like, reg-d or reg-d-v4"
+            useBuidlLikeProfile || useRegDV5Profile || profileHash == keccak256("reg-d"),
+            "ASSET_PROFILE must be buidl-like, reg-d or reg-d-v5"
         );
 
         vm.startBroadcast(deployerPk);
@@ -190,7 +190,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         //    generic QP/minimum profile (id 3, v2) + a surveillance-enabled RegD
         //    variant (id 7) used by scenario 6.
         recipeReg.registerRecipe(1, 3, address(new RegD506cRecipeV3()));
-        if (useRegDV4Profile) recipeReg.registerRecipe(1, 4, address(new RegD506cRecipeV4()));
+        if (useRegDV5Profile) recipeReg.registerRecipe(1, 5, address(new RegD506cRecipeV5()));
         recipeReg.registerRecipe(2, 1, address(new Fund3c7Recipe()));
         recipeReg.registerRecipe(3, 2, address(new QualifiedPurchaserMinimumAmountRecipe()));
         recipeReg.registerRecipe(
@@ -397,7 +397,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         elementReg.registerElement(bytes32("A-13-v1"), address(qualifiedPurchaser));
         elementReg.registerElement(bytes32("MIN-AMOUNT-v1"), address(new MinimumTradeAmount()));
         elementReg.registerElement(bytes32("F-02-v2"), address(surveillance));
-        if (useRegDV4Profile) {
+        if (useRegDV5Profile) {
             elementReg.registerElement(
                 bytes32("A-12-v2"), address(new RedFlagKnowledgeBarV2()), EnforcementAction.FLAG_ONLY
             );

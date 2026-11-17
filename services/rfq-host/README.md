@@ -9,19 +9,81 @@ transactional storage, TLS termination or WORM audit infrastructure.
 
 The host owns request-path hardening that belongs outside the SDK:
 
-1. request-size and JSON/schema validation;
-2. authentication through an `RFQAuthenticator` port;
-3. exact normalized authenticated-taker binding to body `taker`;
-4. principal-hash keyed rate limiting through a replaceable `RateLimiter` port;
-5. trusted on-chain `resolvePolicyId` after auth/rate-limit, never from client input;
-6. strict coordinator `quoteWithEvidence()` issuance, where the actual pricing result and risk decision carry freshness evidence before nonce reservation;
-7. durable coordinator quote issuance and local signer verification;
-8. strict PII-free audit persistence before returning a quote;
-9. bounded metrics and best-effort incident notification.
+1. request-size and JSON/schema parsing;
+2. authentication through `RFQAuthenticator` and exact normalized taker binding;
+3. principal-hash keyed rate limiting;
+4. bounded TTL and local product authorization for maker, ordered pair, venue,
+   policy, version capability and flow, then required dependency readiness;
+5. coordinator idempotency lookup and persisted authorization validation;
+6. new requests only: trusted `resolvePolicyId`, catalog policy match, actual
+   pricing/risk freshness checks and atomic authorized inventory/nonce reservation;
+7. local signer verification and persisted publication, or unchanged replay;
+8. strict PII-free audit, bounded metrics and best-effort incident notification.
 
 The request path never logs or audits raw bearer tokens, raw idempotency keys,
 raw request bodies, signer references or stack traces. Audit records carry hashes
 for principal/request/idempotency and on-chain identifiers only.
+
+## Operator product and lifetime configuration
+
+Construct each enabled endpoint's coordinator in the bootstrap with an explicit
+catalog and lifetime limits:
+
+```ts
+const coordinator = new RFQQuoteCoordinator({
+  ...dependencies,
+  defaultTtlSeconds: 60,
+  maxTtlSeconds: 300,
+  products: [{
+    maker, tokenIn, tokenOut, venue, policyId,
+    capability: "rfq.quote.v2",
+    flowType: 0
+  }]
+});
+```
+
+Use `RFQQuoteCoordinatorV3` with `capability: "rfq.quote.v3"` and its context
+resolver for the versioned endpoint. Add separate entries for reverse pairs and
+primary flow. V2 defaults to secondary and rejects client flow fields. Both
+endpoints reject client maker, policy, nonce and output fields; successful v2/v3
+quote response shapes and EIP-712 versions are unchanged.
+
+Defaults are 60-second TTL and 300-second maximum. Both must be positive safe
+integers with `defaultTtlSeconds <= maxTtlSeconds <= 3600`; the maximum is
+inclusive. If tuning below 60 seconds, also lower the default. Invalid configuration
+(including null) fails startup. After authentication and rate limiting, invalid
+TTL is rejected before readiness, store, policy, pricing, risk or signer work.
+Configure these values in the bootstrap's coordinator config, not through new
+runtime environment variables. Catalogs accept 1-256 exact tuples; ambiguous or malformed entries fail
+closed. The constructor snapshots catalog entries so later input mutation cannot
+widen access.
+
+The host uses `quoteAuthorizedWithEvidence()` so a replay/conflict never calls
+the policy resolver, pricing or risk. Its original authorization, policy, nonce,
+expiry and signature remain authoritative. RESERVED recovery revalidates stored
+freshness and current v3 context before signing. Current tuple support and TTL
+limits still gate retries, so catalog removal or a lower lifetime cap may deny
+an older request. Production evidence calls require an explicit catalog even
+when called without HTTP. Both evidence APIs use the persisted grant on replay;
+current catalog policy is compared only for a new request.
+
+Existing record schemas remain readable; production retries lacking the new
+`productAuthorization` fail closed. Drain/expire old quotes and start a fresh
+idempotency namespace/store. Do not synthesize historical grants from current
+configuration. Lightweight SDK and separate demo hosts are unaffected. The local
+context E2E explicitly sets its default/maximum to 600 seconds.
+
+Failures are bounded: 400 `invalid_request`, 403 `product_unauthorized`,
+409 `idempotency_conflict`, 500 `configuration_invalid`, or retryable
+503 `dependency_unavailable`. Known resolver denial/configuration failures must
+throw `RFQCoordinatorError` with `PRODUCT_UNAUTHORIZED`/`CONFIGURATION_INVALID`;
+untyped provider throws are unavailable. Invalid resolver output is a configuration
+failure. Terminal unsigned retries after signing failure, expiry or revocation
+return 400 `invalid_request` through the typed `TERMINAL_REPLAY` error. Unexpected
+internal failures return redacted 500 `internal_error`.
+Existing authentication, inventory, risk, signer and audit codes remain in place.
+No exception text or arbitrary resolver/limiter reason becomes a diagnostic label.
+See the [production policy](../../docs/product-specs/production-rfq-policy.md).
 
 ## Production replacement points
 
@@ -50,68 +112,6 @@ provided by an operator bundle, and readiness gates quote issuance. See
 the complete environment schema, OCI build target, read-only deployment example
 and release evidence requirements.
 
-## Rejection disclosure policy
-
-Disclosure is opt-in through `ProductionRFQHostConfig.disclosurePolicyFile`.
-The production bootstrap may return the same optional field in
-`ProductionRFQDependencies`, pointing to an operator-mounted JSON file. No new
-environment variable or bootstrap contract version is required. Without a path,
-the response remains `422 {"error":"risk_rejected"}`.
-
-The host reads and validates the file once at startup. Restart with a newly
-versioned reviewed policy to change disclosure. Missing, unreadable, oversized
-(over 16 KiB), invalid JSON or schema-invalid files disable disclosure. Startup
-and quote rejection still work with the generic response. The schema is exact:
-
-```json
-{
-  "schemaVersion": 1,
-  "policyVersion": "operator-v1",
-  "reasons": {
-    "INVENTORY_LIMIT_EXCEEDED": {
-      "tier": "detailed",
-      "message": "Requested quote exceeds available inventory."
-    }
-  }
-}
-```
-
-`policyVersion` is a 1-64 character identifier containing letters, digits, dots,
-underscores or hyphens, starting with a letter or digit. Messages are nonempty
-strings of at most 512 characters without control characters. Unknown fields,
-reason identifiers and tiers invalidate the whole file.
-
-[`policies/disclosure.v1.json`](policies/disclosure.v1.json) demonstrates the
-three tiers. It is a reference policy, is never loaded automatically, and requires
-operator/counsel approval of audience mapping and wording before production use.
-Policy entries apply only to the authenticated taker requesting its own quote;
-there is no privileged audience or compliance-report endpoint in this module.
-
-| Tier | Optional response entry |
-| --- | --- |
-| `detailed` | policy message, tier and structured `reasonCode` |
-| `action_only` | policy message and tier, with no reason identifier |
-| `generic` | policy message and tier, with no reason identifier |
-
-An allowlisted rejection adds `disclosure: {policyVersion, reasons: [...]}` to
-the existing body. Status codes and `error` values stay unchanged. Every reason
-must be recognized and allowlisted; otherwise the entire response stays generic
-with no disclosure or policy version. The SDK accepts only operational
-`INVENTORY_LIMIT_EXCEEDED`, `RISK_LIMIT_EXCEEDED` and `PRICING_OUTSIDE_LIMITS`
-identifiers from a risk decision's optional `reasonCodes`. Unknown or malformed
-reason lists suppress all entries, including otherwise safe entries. Sanctions,
-AML and surveillance identifiers are outside this allowlist and always suppress
-the whole response, even if a policy file attempts to disclose them. Integrations
-must supply the complete structured reason list; the host does not interpret raw
-provider text or integrate compliance reporter results.
-
-Only policy-owned literal wording can reach the response. Raw `reason` text,
-provider errors and internal messages never populate disclosure, audits or
-metrics. Rejected requests allocate no nonce and do not sign; retrying a rejection
-reruns the existing checks. Published quote replays retain the existing persisted
-evidence behavior and never call providers or sign again. Successful quote bodies
-contain no disclosure fields.
-
 ## Test
 
 ```sh
@@ -132,3 +132,9 @@ the server-owned resolved policy is included in the EIP-712 v2 quote. Disclosure
 coverage includes all three tiers, authenticated taker binding, rejection retries,
 quote replays, missing/malformed policy fallback and whole-response suppression
 for unknown, malformed and sensitive reasons.
+
+The authorization suites additionally verify invalid/max-boundary TTL, zero
+costly-dependency calls for unsupported products, both endpoint versions,
+persisted grants across restart/concurrent retry/RESERVED recovery, policy drift,
+resolver outage, conflicts, malformed stored grants and terminal versus retryable
+failure redaction.

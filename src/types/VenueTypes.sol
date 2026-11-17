@@ -18,3 +18,15 @@ struct VenueConfig {
     CustodyModel custody;
     bool active;
 }
+
+// Separate evidence preserves the existing VenueConfig ABI and legacy registration.
+struct VenueContextEvidence {
+    uint16 adapterVersion;
+    uint16 contextVersion;
+    bytes32 adapterCodeHash;
+    address affiliateSource;
+    bytes32 affiliateSourceCodeHash;
+    address policyRegistry;
+    bytes32 policyRegistryCodeHash;
+    bytes32 configurationHash;
+}

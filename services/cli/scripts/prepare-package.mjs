@@ -1,6 +1,7 @@
 import {cpSync, mkdirSync, rmSync} from "node:fs";
 import {dirname, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {createRequire} from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cliRoot = resolve(here, "..");
@@ -72,3 +73,7 @@ for (const [service, paths] of Object.entries(sandboxServices)) {
     );
   }
 }
+
+const require = createRequire(import.meta.url);
+const {captureProductionSource, copyProductionSource} = require("../dist/toolkit/src/production-evidence.js");
+copyProductionSource(repoRoot, target, captureProductionSource(repoRoot));

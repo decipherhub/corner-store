@@ -1,4 +1,4 @@
-import {domain, typedData} from "./eip712";
+import {domain, typedData, domainV3, typedDataV3} from "./eip712";
 import {
   Address,
   Hex,
@@ -182,4 +182,78 @@ function createMonotonicNonceGenerator(): () => bigint {
 function normalizeTimestamp(value: number): number {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error("time source must return a non-negative safe integer");
   return value;
+}
+
+export function normalizeFlowType(value: unknown): 0 | 1 {
+  if (value !== 0 && value !== 1) throw new Error("unsupported RFQ v3 flowType");
+  return value;
+}
+
+export class RFQQuoteServiceV3 {
+  private readonly legacy: RFQQuoteService;
+  constructor(private readonly config: RFQServiceConfig, private readonly signer: import("./types").TypedDataSignerV3) {
+    this.legacy = new RFQQuoteService({...config, now: () => 0}, {signTypedData: async () => "0x"});
+  }
+
+  async createSignedQuote(request: import("./types").RFQQuoteRequestV3): Promise<import("./types").SignedRFQQuoteV3> {
+    const flowType = normalizeFlowType(request.flowType);
+    const affiliateEvidenceHash = normalizeBytes32(request.affiliateEvidenceHash, "affiliateEvidenceHash");
+    const now = normalizeTimestamp(await (this.config.now?.() ?? Math.floor(Date.now() / 1000)));
+    const normalized = this.legacy.createQuote(request);
+    const quote = {...normalized, expiry: now + normalized.expiry, flowType, affiliateEvidenceHash};
+    validateRFQQuoteV3(quote);
+    const data = typedDataV3(domainV3(normalizeChainId(this.config.chainId), normalizeAddress(this.config.verifyingContract, "verifyingContract")), quote);
+    return {quote, typedData: data, signature: assertHex(await this.signer.signTypedData(data), "signature")};
+  }
+}
+
+export class RFQBackendSDKV3 {
+  private readonly nonces: NonceStore;
+  constructor(private readonly config: import("./types").RFQBackendSDKConfigV3) {
+    normalizeChainId(config.chainId);
+    normalizeAddress(config.verifyingContract, "verifyingContract");
+    normalizeAddress(config.maker, "maker");
+    this.nonces = config.nonceStore ?? new InMemoryNonceStore();
+  }
+
+  async quote(intent: import("./types").RFQQuoteIntentV3): Promise<import("./types").SignedRFQQuoteV3> {
+    const flowType = normalizeFlowType(intent.flowType);
+    const request = {
+      maker: normalizeAddress(this.config.maker, "maker"), taker: normalizeAddress(intent.taker, "taker"),
+      tokenIn: normalizeAddress(intent.tokenIn, "tokenIn"), tokenOut: normalizeAddress(intent.tokenOut, "tokenOut"),
+      amountIn: toPositiveUintString(intent.amountIn, "amountIn"), venue: normalizeAddress(intent.venue, "venue")
+    };
+    const price = await this.config.pricing.price(request);
+    const amountOut = toPositiveUintString(price.amountOut, "amountOut");
+    const risk = await (this.config.riskCheck ?? new NoopInventoryRiskCheck()).check(request, {amountOut});
+    if (risk?.decision === "rejected") throw new Error("risk rejected");
+    const full = {...request, amountOut, policyId: normalizeBytes32(intent.policyId, "policyId"), ttlSeconds: intent.ttlSeconds, flowType};
+    const nonce = await this.nonces.nextNonce(request);
+    const evidence = validateRFQContextEvidence(await this.config.context.resolve({...full, nonce}));
+    return new RFQQuoteServiceV3(this.config, this.config.signer).createSignedQuote({...full, nonce, affiliateEvidenceHash: evidence.affiliateEvidenceHash});
+  }
+}
+
+export function createRFQServiceV3(config: import("./types").RFQBackendSDKConfigV3): RFQBackendSDKV3 {
+  return new RFQBackendSDKV3(config);
+}
+
+export function validateRFQContextEvidence(value: import("./types").RFQContextEvidence): import("./types").RFQContextEvidence {
+  if (!value || value.contextVersion !== 1 || typeof value.sellerIsAffiliate !== "boolean") throw new Error("invalid context evidence");
+  return {contextVersion: 1, configurationHash: normalizeBytes32(value.configurationHash, "configurationHash"), affiliateEvidenceHash: normalizeBytes32(value.affiliateEvidenceHash, "affiliateEvidenceHash"), sellerIsAffiliate: value.sellerIsAffiliate};
+}
+
+export function validateRFQQuoteV3(quote: import("./types").RFQQuoteV3): void {
+  for (const key of ["maker", "taker", "tokenIn", "tokenOut", "venue"] as const) {
+    if (/^0x0{40}$/i.test(normalizeAddress(quote[key], key))) throw new Error(`${key} must be nonzero`);
+  }
+  if (quote.tokenIn.toLowerCase() === quote.tokenOut.toLowerCase()) throw new Error("RFQ v3 requires distinct token legs");
+  for (const key of ["amountIn", "amountOut", "nonce"] as const) {
+    const amount = BigInt(toUintString(quote[key], key));
+    if (amount >= (1n << 256n) || (key !== "nonce" && amount === 0n)) throw new Error(`${key} is outside uint256 bounds`);
+  }
+  if (!Number.isSafeInteger(quote.expiry) || quote.expiry < 0) throw new Error("quote expiry must be a nonnegative safe integer");
+  normalizeFlowType(quote.flowType);
+  normalizeBytes32(quote.affiliateEvidenceHash, "affiliateEvidenceHash");
+  normalizeBytes32(quote.policyId, "policyId");
 }

@@ -18,12 +18,12 @@
   `RISK_LIMIT_EXCEEDED` and `PRICING_OUTSIDE_LIMITS`. Tiered compliance outcomes
   for qualification, holding period, jurisdiction and other Element failures remain
   OPEN pending a counsel-approved taxonomy; no compliance bridge is implemented.
-- Opt-in `RegD506cRecipeV4` appends `A-12-v2` to V3's nine blocking requirements.
+- Opt-in `RegD506cRecipeV5` appends `A-12-v2` to V3's nine blocking requirements.
   `RedFlagKnowledgeBarV2` declares matching `FLAG_ONLY` metadata, fixing the
   wave-3 registration mismatch while preserving separate, nonblocking assessment
   APIs/events. Assessments do not populate Engine flags. Direct scripts and CLI
-  accept `reg-d-v4`; default BUIDL-like and `reg-d` v3 selection are preserved.
-  Reg D v4/A-12 v2 are reference-only and non-production-activatable pending
+  accept `reg-d-v5`; default BUIDL-like and `reg-d` v3 selection are preserved.
+  Reg D v5/A-12 v2 are reference-only and non-production-activatable pending
   the item 13 public-disclosure decision (D044). Production onboarding rejects
   them and the production registry rejects A-12-v2. Migration instructions apply
   only to local reference assets.
@@ -74,7 +74,7 @@ passing
 ### Notes
 
 - PR #161 review fixes: production deployment/registry tests passed 7/7; existing
-  Registry/Recipe/A-12/v4 suites passed 27/27. Node 20 Toolkit, CLI and RFQ smoke
+  Registry/Recipe/A-12/v5 suites passed 27/27. Node 20 Toolkit, CLI and RFQ smoke
   passed, including 20 production export and two verification rejection checks.
   RFQ host full smoke failed its existing mismatched Content-Length test (400 vs
   expected 413); a diagnostic run excluding that scenario passed the other 19.
@@ -89,12 +89,191 @@ passing
   PR #161 remains draft; item 12 compliance taxonomy and item 13 are OPEN.
 - Specs: [requirement reporting](./docs/product-specs/compliance-reporting.md),
   [settlement reconstruction](./docs/architecture/execution-routing.md),
-  [Reg D v4](./docs/compliance/recipes/R1_RegD-506c-Issuance.md),
+  [Reg D v5](./docs/compliance/recipes/R1_RegD-506c-Issuance.md),
   [A-12 v2](./docs/compliance/spec-sheets/A-12_willful-blindness.spec.md) and
   [RFQ disclosure](./docs/product-specs/production-rfq-policy.md).
 - Coordinated minor SDK release/package promotion and explicit deployment adoption
   remain follow-up work. Docker image gates, live public-network behavior and
   production provider/custody/retention integrations were not verified here.
+
+## DEPLOY-004: Complete and Append-Only Production Evidence
+
+### Behavior
+
+- Evidence version 2 binds resolved compiler inputs, the production deployer,
+  orchestration, exact tool/dependency identities, compiler settings and bytecode
+  templates through canonical domain-separated SHA-256 commitments.
+- Plans, unsigned exports, reviewed evidence and deployment records share one
+  evidenceId over source/build/provenance, configuration, chain and wiring.
+  Clean Git provenance is required for broadcast. Dirty, source-only and
+  unavailable provenance supports diagnostics only.
+- Production artifacts and signable exports reserve destinations and publish
+  complete validated envelopes exclusively through fsync and hard-link creation.
+  Receipts, reconstructed runtime bytecode, owners/operators and wiring must
+  verify before deployment publication. Reservation setup rolls back staging and
+  reservation state on failure; typed errors expose exact paths if rollback also
+  fails. Recovery revalidates returned operations without rebroadcast.
+- Publication requires current-uid/root-owned staging/output directories and
+  ancestry, without group/world writes except sticky ancestors. Trust is checked
+  before reservation and again at publication; mismatch cleanup is best effort
+  inside verified output ancestry. Same-uid concurrency is outside this boundary.
+- Version 2 verification requires the independently trusted recordDigest and
+  reviewed evidence identity. Legacy artifacts/review files remain readable;
+  legacy review evidence cannot authorize new deployments. Public Monad records,
+  contracts and demo runtime remain unchanged.
+
+### Verification
+
+- Toolkit/CLI source/build/provenance mutation, package/runtime equivalence,
+  publication failure/concurrency/SIGKILL/recovery and chain tampering tests.
+- Review regressions replace staged entries/parents during linking, reject
+  unsafe staging ownership/permissions, preserve another writer's final, and
+  block hidden index-flag edits, submodule edits and missing HEAD blobs.
+- Trust-boundary regressions reject writable/foreign-owned ancestry and output
+  directories before reservation, accept sticky ancestors, recheck before linking
+  and skip mismatch cleanup in untrusted output directories.
+- Reservation fault injection covers operation/reservation/probe writes, file and
+  directory fsync, hard-link probes, successful rollback and typed cleanup paths.
+- Packed clean Git-backed consumer: real production dry-run/fork, export,
+  deployment and verification with one evidenceId; source-only broadcast denial.
+- Existing public artifact listing, pinned hash, CLI/Operator API reads and
+  exact byte preservation without live-chain readiness checks.
+- `scripts/check.sh`, both `scripts/e2e-anvil.sh` profiles,
+  `scripts/e2e-context-provenance.sh`, `scripts/e2e-identity-evidence.sh`,
+  whitespace and protected-path comparisons.
+
+### State
+
+passing
+
+### Notes
+
+- Issue #154; D037-D039 defaults adopted, team-to-confirm.
+- Publication trust-boundary recheck verified on 2026-11-11: seven new guards
+  failed before implementation; all 20 publication cases now pass. Toolkit 74/74,
+  CLI 19/19, legacy 2/2 and the full gate passed, including 50 packed production
+  assertions and live Anvil deployment/recovery. See the latest PROGRESS entry.
+- Review hardening on 2026-11-17 makes `reserve()` transactional before return;
+  six setup faults leave no reservation/staging state, and failed cleanup returns
+  a typed error with exact operator cleanup paths.
+- Review fixes verified on 2026-11-11: 1,171 Foundry tests, 66 Toolkit/19 CLI
+  named tests, 50 packed production assertions and two public compatibility
+  cases. Legacy profiles passed 7/7 each; context 12/12; identity 40/40.
+  An unrelated RFQ nonce-order assertion failed once; isolated RFQ and the full
+  rerun passed. See PROGRESS for attempts and logs.
+- Plan: `docs/exec-plans/completed/DEPLOY-004-append-only-production-evidence.md`.
+- Main remains at 7893021 as of the step 3 sequencing check. Prerequisite PRs
+  must merge before release; this authorized work proceeds on the supplied stack.
+- Key management, custody and multisig expansion remain deferred. No external
+  vendor, production-chain broadcast or public deployment is part of this work.
+
+## DATA-004: Operator-Accepted Identity Evidence and Topology Guards
+
+### Behavior
+
+- Opt-in onboarding schema 7 declares per-recipe RFQ/TSV track and explicit
+  DIRECT topology through required, exact A-04-v2 ManifestPolicyConfig bytes.
+  Missing/unknown/MEMBER topology, nonblocking bindings and enforcement
+  downgrades fail closed at registration and update. Schema 6 context checks
+  remain required; schemas 1-6 retain their original meaning. Active RFQ support
+  additionally requires an explicit blocking RFQ identity policy in Toolkit and
+  its matching ManifestPolicyConfig schema 2 marker on-chain.
+- Separate A-04-v2 evidence binds identity, wallet and asset to issuer ID,
+  issuedAt, expiry, trust basis, type and keyed commitment. Binding creates no
+  accepted evidence. Current operator-managed issuer trust gates every trade.
+- SPI 2.0.0 requires explicit operator acceptance and strict audit. One local
+  env/file HMAC key belongs to compliance-data, never operator-api. V2 domains,
+  records, exports and unsigned acceptance codecs remain separate from v1. The
+  coordinator rekeys every provider-controlled public reference before use.
+- Optional format/checksum-validated LEI stays off-chain and participates in
+  evidence commitments; no eligibility or sanctions policy requires it.
+- Reg D v4 opts into A-04-v2 while retaining the other v3 elements and the
+  C-01 AMM restriction. Named RFQ v2/v3 and AMM invariants prove the existing
+  self-directed settlement binding without settlement contract changes.
+- Existing deployments, recipes, events, API responses and live public Monad
+  RFQ v2 paths retain their meaning. Four P2 PR slots are scheduled separately.
+
+### Verification
+
+- Foundry topology/composition, issuer authorization/lifecycle, identity evidence,
+  256-run full-word parameter fuzzing, v1 compatibility and deployed-size tests.
+- Compliance-data v1/v2 provider conformance, HMAC/replay/conflict/audit/expiry
+  and optional LEI tests; Toolkit schema 7/codec/verifier and CLI tests.
+- HTTP v2 same-case revocation, acceptance-export rejection, stale approval
+  replay and independent per-asset materialization; shared-store conformance
+  detects reused references while identical-reference conflicts remain rejected.
+- 42 named settlement-binding tests plus recipe, missing-evidence and size
+  regressions; isolated `scripts/e2e-identity-evidence.sh` (40 live cases).
+- `scripts/check.sh`, both `scripts/e2e-anvil.sh` profiles,
+  `scripts/e2e-context-provenance.sh`, whitespace and protected-path checks.
+
+### State
+
+passing
+
+### Notes
+
+- Confirmed P2 assessment-reference collision fix: three regressions failed
+  before the fix; all 25 compliance-data and 30 Toolkit tests, the full check
+  and identity E2E (40/40) passed afterward. See PROGRESS for commands/results.
+- Final release gates passed on 2026-11-11: 1,171 Foundry tests; both legacy
+  profiles 7/7 scenarios plus runtime flows; context 12/12; identity 40/40.
+  The full check passed after updating the stale packed schema-6 assertion.
+- Issue #159 decisions 24-29 map to D031-D036. D036 records scheduled design,
+  not implemented sanctions support. Reserved upstream IDs are unchanged.
+- Specs: `docs/product-specs/identity-policy-topology.md`,
+  `identity-evidence-v2.md`, `identity-settlement-binding.md` and
+  `identity-p2-schedule.md` in the same directory.
+- Counterparty evidence requires explicit operator enablement. Restoring the
+  exact issuer trust basis can restore unexpired evidence; revoke individual
+  records when reinstatement is unwanted. The reference store is in-process.
+- TokenPolicyRegistry runtime is 24,570 bytes with the pinned compiler, leaving
+  6 bytes below EIP-170. The size regression must remain passing; further growth
+  requires deliberate size reduction.
+- MEMBER, pseudonyms/off-chain wallet mapping before TSV launch, asset cards,
+  jurisdictional lists, key management/custody/multisig and external vendors
+  remain deferred. Passing this feature does not establish TSV launch readiness.
+
+## RFQ-006: Bounded Lifetime and Pre-Pricing Product Authorization
+
+### Behavior
+
+- Production RFQ v2/v3 hosts authenticate and rate limit before bounded TTL and
+  local product authorization, then perform pricing, risk, reservation and signing.
+- Authoritative product authorization and original expiry persist with the request;
+  replay never refreshes policy or signature. Failures use bounded, redacted codes.
+- Default TTL is 60 seconds, default maximum 300 seconds, hard maximum 3600 seconds.
+  Lightweight legacy SDK usage and protected public demo paths remain compatible.
+
+### Verification
+
+- RFQ/coordinator and host ordering, TTL boundary, persistence/replay and taxonomy tests
+- Typed store failures: alternate diagnostic messages preserve v2/v3 conflict 409,
+  inventory 409 and missing-inventory configuration 500 responses
+- Both endpoint versions: auth/limiter/audit/incident ordering including audit failure;
+  deeply nested TTL preserves auth/limiter ordering and bounded rejection;
+  both evidence APIs: PUBLISHED/RESERVED replay after catalog policy drift;
+  terminal SIGN_FAILED/expired reservation retries return 400, unexpected errors 500
+- Node 20 RFQ, host, Toolkit and CLI tests
+- `forge fmt --check`, `forge test --offline`, `scripts/check.sh`, `git diff --check`
+- Both `scripts/e2e-anvil.sh` profiles and `scripts/e2e-context-provenance.sh`
+
+### State
+
+passing
+
+### Notes
+
+- Issue #155; D030. HACK-001 closure is owned by approved upstream PR #162.
+- Scope excludes contracts, custody/key management and the store creation flake.
+- Nested TTL follow-up: six regressions failed with 500 before the fix and passed
+  afterward; Node 20 host/RFQ suites and `scripts/check.sh` passed. See PROGRESS.
+- Final verification: 1,100 Foundry tests; Node 20 RFQ/host/Toolkit/CLI smoke and
+  30/18/15/5 named tests; full repository gate; both legacy Anvil profiles and
+  12 context-provenance E2E cases passed after F1-F3 fixes. See the 2026-11-11
+  confirmed review fixes PROGRESS entry.
+- Production evidence callers must configure catalogs. Older records without a
+  persisted grant require draining and a fresh request namespace/store.
 
 ## HACK-001 — Monad Onchain Finance RFQ Demo
 
@@ -319,6 +498,75 @@ passing
   Monad deployment or its artifact.
 - Venue-authoritative `seller`, `flowType` and affiliate provenance is tracked
   separately and remains a production AMM activation blocker.
+
+## EXEC-002: Venue-Authoritative Execution Context
+
+### Behavior
+
+- Separate ExecutionRouterV2 authenticates venue/context before Engine evaluation
+  through a view-only verifier, without replacing context. Registration evidence
+  pins adapter/context versions, adapter/source/policy runtime hashes and final
+  configuration, with explicit reviewed immutable implementation approval.
+- RFQAdapterV3 signs the exact RFQQuoteV3/domain version 3, binding maker/taker,
+  token directions, exact amounts, venue, policy, flow and current A-06 aggregate.
+  Conditional primary uses a unique active compiled Manifest parameter carrying
+  the immutable primary-distributor schema, without coupling to one C-01 version.
+- Actual security sender is buyer on tokenIn and seller on tokenOut. A regulated
+  leg requires current trusted A-06 evidence only when its active compiled policy
+  contains A-06-v1, whose implementation must equal the pinned source.
+  Applicable dual-leg statuses must agree. Refresh/revocation/expiry/decay
+  invalidate old commitments.
+- Newly deployed AMM adapter version 2/context 1 binds seller/venue/target to the
+  registered pool and canonical token order, secondary/self-directed only.
+  Pool edits invalidate every venue sharing the adapter; re-registration clears
+  evidence. The C-01-family/AMM prohibition remains in force.
+- Settlement repeats authentication, preserves independently measured exact
+  full fill, atomic rollback, commit and existing events. Legacy Router/RFQ v2
+  APIs/signatures and the live public Monad deployment remain pinned.
+- Additive SDK builders/modules/conformance, schema 2 coordinator recovery,
+  opt-in host route/bootstrap capability and explicit CLI artifacts support v3.
+  Onboarding schema 6 verifies source/authority/Router/pool bindings and orders
+  final evidence pinning before maker activation. Legacy parsers remain explicit.
+- Opt-in B-04-v2 checks the actual security recipient's MM claim in both
+  directions. Schema 6 rejects active compiled B-04-v1 rules and unreadable
+  policy evidence, verifies Engine.router() as well as RouterV2.engine(), and
+  wires a separately deployed v3 Engine before adapter activation.
+
+### Verification
+
+- `scripts/check.sh` (Forge, service provenance suites, packed v3/schema 6 consumers)
+- `scripts/e2e-anvil.sh`
+- `scripts/e2e-anvil.sh --profile reg-d`
+- `scripts/e2e-context-provenance.sh` (both directions, mined mismatch and
+  affiliate sender-only MM-claim rejection, recipient-only MM-claim settlement)
+- `ContextProvenanceTest`: asymmetric affiliate sells and legacy buy parity;
+  `EngineSelectionV2Test`: buy parity fuzzing, exemptions and fail-closed context
+- Toolkit provenance regressions: reverse Engine binding mismatch/unavailability,
+  active compiled B-04 direction checks and unsigned Engine wiring order
+- Policy-scoped A-06 absence/source mismatch and version-neutral primary
+  distributor schema regressions
+- `forge fmt --check`
+- `git diff --check`
+- protected-path diff for public artifacts/runtime/container deployment
+
+### State
+
+passing
+
+### Notes
+
+- All delivery gates passed on 2026-11-11; exact commands and counts are recorded
+  in PROGRESS.md.
+  This branch preserves HACK-001 as requested; upstream #162 owns its completion
+  and #161 owns CORE-015/D024-D027. Only EXEC-002 is worked in this session.
+- D028/D029 and `docs/product-specs/execution-context-provenance.md` record all six
+  adopted defaults as open items for team confirmation. Reference/operator code
+  uses one local env/file key; key management, multisig and custody are deferred.
+- The new live fixture is a manual delivery/release gate alongside the two
+  existing Anvil profiles. CI retains its repository/container checks.
+- Confirmed review fixes passed 1,100 Foundry tests, the Toolkit smoke gate plus
+  15 provenance tests, and 12 live v3 cases. PROGRESS.md records the exact fix
+  commands and distinguishes prior full delivery evidence from this fix session.
 
 ## SDK-007 — External User Golden Path Acceptance
 

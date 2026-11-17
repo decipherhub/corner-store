@@ -329,6 +329,130 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - 아직 TTL이 남은 동일 quote의 Router fill-time `FAIL_QP_CLAIM_EXPIRED` 거부
 - temporal scenario 후 injected baseline QP 상태 복원
 
+### Isolated RFQ v3 Context Provenance E2E
+
+```sh
+npx --yes -p node@20 -c 'scripts/e2e-context-provenance.sh'
+# Optional alternative loopback Anvil port (default 8547):
+scripts/e2e-context-provenance.sh --port 18547
+```
+
+The runner starts its own chain 31337, deploys
+`script/ContextProvenanceFixture.s.sol`, builds RFQ/host packages and starts an
+ephemeral loopback v3 host. It uses real ERC-3643/ONCHAINID, a minimal B-02-v2
+live-wiring recipe, mock cash/1:1 pricing and reference local auth/store/audit.
+It does not overwrite the legacy Anvil artifact or public deployment records.
+Its temporary artifact/store/logs and Anvil/host processes are cleaned on exit.
+
+For each buy and sell it checks seller, flow and affiliate-boolean mismatch,
+then refreshes the actual security sender's evidence without changing its
+effective status and rejects the old signed commitment. Every rejection checks
+the exact static-call error, a mined status-0 receipt and unchanged actor/custody
+balances plus Router/quote nonces. A fresh host quote then settles exact token
+deltas with nonce consumption and zero Router/adapter custody. The runner prints
+12 PASS cases and exits nonzero on any failed assertion.
+
+`scripts/check.sh` already includes RouterV2, ContextEvidence, RFQAdapterV3,
+real ERC-3643 and canonical Uniswap RouterV2 integration tests, four service
+provenance suites and packed v3/schema 6 consumers. These cover every signed-field
+mutation, primary authority, evidence lifecycle, cancellation/replay, cross-domain
+rejection, registration/configuration drift and atomic rollback. The dedicated
+live fixture is intentionally narrower than those suites.
+
+All three live Anvil commands are **manual delivery/release gates**:
+`scripts/e2e-anvil.sh`, `scripts/e2e-anvil.sh --profile reg-d` and
+`scripts/e2e-context-provenance.sh`. `.github/workflows/ci.yml` runs
+`scripts/check.sh` and separate container smokes, and currently runs none of the
+live scripts. Keep that CI boundary to avoid a further deployment in every PR;
+record all three manual results before accepting EXEC-002 or promoting v3.
+Public Monad remains RFQ v2 and is not redeployed by these gates.
+
+### Isolated identity evidence v2 E2E (DATA-004)
+
+```sh
+npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/e2e-identity-evidence.sh'
+```
+
+This separate manual gate starts chain 31337 on loopback port 8548, builds
+compliance-data/Toolkit/RFQ, deploys the opt-in Reg D v4 fixture under normal
+EIP-170 limits and removes its temporary artifact/process on exit. An alternate
+port is available through `--port`. It never upgrades a public deployment.
+
+The gate checks 40 cases: one Manifest/parameter assertion, two provider evidence
+acceptances, 32 mined RFQ v2/v3 rejections, four exact buys/sells and one privacy
+assertion. Rejections preserve balances/nonces/surveillance; restored evidence
+permits the same signed quote to settle once. Acceptance uses one ephemeral local
+env-source HMAC key inside compliance-data and explicit operator acceptance/strict
+audit. Public calldata, events, artifact and audits exclude key/raw evidence/LEI.
+
+`scripts/check.sh` includes 42 named settlement-binding invariants covering AMM
+and RFQ v2/v3, plus recipe, missing-evidence and deployed-size regressions. The
+identity AMM fixture uses a callback mock and a C-01-free test recipe; existing
+canonical Uniswap tests keep their policy. A-04-v2 with a canonical live pool,
+production providers/durable stores and RFQ-host HTTP integration with this recipe
+are not covered by this gate. See the
+[settlement specification](./product-specs/identity-settlement-binding.md).
+
+DATA-004 requires the repository check, both legacy Anvil profiles, the context
+gate above, this identity gate and protected-path/whitespace checks before
+`passing`. Existing manual/CI boundaries stay as documented above. The four
+[P2 PR slots](./product-specs/identity-p2-schedule.md) are scheduled, not implemented.
+
+### Append-only production evidence (DEPLOY-004)
+
+Run focused suites under the pinned Node 20 environment:
+
+```sh
+npx --yes -p node@20 -p yarn@1.22.22 -c 'npm test --prefix services/toolkit && npm test --prefix services/cli'
+npx --yes -p node@20 -p yarn@1.22.22 -c 'npm run test:production-package --prefix services/cli'
+forge test --offline --match-path test/unit/deployment/DeployProductionCore.t.sol
+```
+
+Toolkit/CLI tests mutate source manifests (including the imported production
+deployer), compiler settings, tool/dependency/orchestration identities, Git states,
+configuration and wiring. They cover package/runtime commitment equality,
+source-only broadcast refusal, exclusive destination reservation, unchanged
+occupied files/symlinks, competing publishers, disk/write/fsync/link failures,
+transactional rollback for every reservation-setup write/fsync/link failure,
+typed cleanup paths when rollback fails, SIGKILL at publication boundaries and
+recovery before/after linking. Chain tests
+independently tamper receipts, transaction/hash associations, addresses, chain,
+fees/gas, immutable reconstruction and bytecode. Unavailable evidence fails closed.
+The legacy review example remains readable; the new version 2 source-only example
+is deliberately unable to authorize broadcast.
+
+`scripts/sdk-product-smoke.sh`, included in `scripts/check.sh`, runs the packed
+CLI/Toolkit consumer in a temporary clean Git-backed contracts fixture. Two
+isolated Anvil nodes exercise the real production script dry-run/fork and a
+28-transaction deployment through an encrypted local fixture account. Plan,
+unsigned export, deployment and verification share evidenceId. The gate rejects
+independent tampering/rebound records and chain drift; recovery preserves bytes
+and deployer nonce, including missing receipt retrieval without rebroadcast.
+Source-only package/runtime copies are tested separately and cannot report clean.
+Temporary processes, keys and consumer directories are cleaned on normal exit.
+
+After the CLI and Operator API builds, the compatibility gate can run alone:
+
+```sh
+npx --yes -p node@20 -p yarn@1.22.22 -c 'node --test scripts/test-production-legacy-artifacts.mjs'
+```
+
+It enumerates every tracked `deployments/public` JSON file, checks the pinned
+published Monad SHA-256, reads the exact files through CLI and Operator API,
+and checks the full listing, hashes and bytes afterward. It contacts no public
+RPC. `scripts/check.sh` includes it after building those readers. Preserve
+`deployments/public`, `services/testnet-rfq-demo` and `deploy/hackathon-monad`
+against the branch base as an independent release check.
+
+DEPLOY-004 requires the full repository check, both legacy Anvil profiles, context
+and identity E2Es above, whitespace and protected-path checks before passing.
+All commands use Node 20/Yarn 1.22.22 through the wrapper above and Foundry 1.7.1.
+Rerun the full check once only if its sole failure is the documented intermittent
+RFQ multi-process initial-store creation test. Docker container smoke is outside
+this slice because no image/container contract changes. Real production networks,
+Ledger/hardware signing, actual power-loss durability and other filesystems
+remain unverified. See the [production runbook](./deployment-production.md).
+
 ### Integrated Check
 
 ```sh

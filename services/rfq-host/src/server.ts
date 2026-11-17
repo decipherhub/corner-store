@@ -6,11 +6,10 @@ import {
   QuoteCoordinatorIntent,
   RFQCoordinatorError,
   RFQModuleFreshnessEvidence,
-  RFQQuoteCoordinator,
+  RFQQuoteCoordinator, RFQQuoteCoordinatorV3, RFQQuoteIntentV3, SignedRFQQuoteV3, normalizeFlowType,
   SignedRFQQuote,
   hashCanonical,
   normalizeAddress,
-  normalizeBytes32,
   normalizeTtlSeconds,
   toPositiveUintString
 } from "@corner-store/rfq-service";
@@ -25,6 +24,7 @@ const DEFAULT_RATE_LIMIT_MAX_BUCKETS = 10_000;
 const DEFAULT_READINESS_TIMEOUT_MS = 3_000;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const READINESS_COMPONENTS = new Set([
+  "context",
   "audit",
   "authentication",
   "coordinator",
@@ -36,7 +36,7 @@ const READINESS_COMPONENTS = new Set([
 ]);
 
 type JsonRecord = Record<string, unknown>;
-type NormalizedHostQuoteIntent = QuoteCoordinatorIntent & {amountIn: string; ttlSeconds: number};
+type NormalizedHostQuoteIntent = QuoteCoordinatorIntent & Partial<RFQQuoteIntentV3> & {amountIn: string; ttlSeconds: number};
 type NormalizedHostQuoteBody = Omit<NormalizedHostQuoteIntent, "policyId">;
 
 export interface AuthPrincipal {
@@ -85,6 +85,7 @@ export interface IncidentSink {
 }
 
 export type RFQReadinessComponent =
+  | "context"
   | "audit"
   | "authentication"
   | "coordinator"
@@ -112,6 +113,10 @@ export interface ProductionRFQHostConfig {
   host?: string;
   port?: number;
   coordinator: RFQQuoteCoordinator;
+  v3?: {
+    coordinator: RFQQuoteCoordinatorV3;
+    resolvePolicyId(request: NormalizedHostQuoteBody & {flowType: 0 | 1}): Promise<Hex> | Hex;
+  };
   authenticator: RFQAuthenticator;
   resolvePolicyId(request: NormalizedHostQuoteBody): Promise<Hex> | Hex;
   rateLimiter?: RateLimiter;
@@ -282,6 +287,8 @@ export async function startProductionRFQHost(config: ProductionRFQHostConfig): P
   if (!LOOPBACK_HOSTS.has(host) && config.publicBindAcknowledged !== true) {
     throw new Error("production RFQ host refuses public bind without explicit TLS/trusted-proxy acknowledgement");
   }
+  config.coordinator.assertProductionConfiguration();
+  config.v3?.coordinator.assertProductionConfiguration();
   const maxBodyBytes = normalizePositiveInteger(config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES, "maxBodyBytes");
   const strictAudit = config.strictAudit ?? true;
   const now = config.now ?? (() => Math.floor(Date.now() / 1000));
@@ -330,6 +337,7 @@ async function handleRequest(
   let pricing: RFQModuleFreshnessEvidence | undefined;
   let risk: RFQModuleFreshnessEvidence | undefined;
   let authIncidentSent = false;
+  let disclosureEligible = false;
   try {
     if (req.method === "GET" && req.url === "/health") {
       sendJson(res, 200, {status: "ok", service: "corner-store-rfq-host"});
@@ -344,43 +352,60 @@ async function handleRequest(
       metric(config, "rfq_host_http_requests_total", {route: "ready", outcome: report.ready ? "success" : "unavailable"});
       return;
     }
-    if (req.method !== "POST" || req.url !== "/rfq/quote") {
+    if (req.method !== "POST" || (req.url !== "/rfq/quote" && (req.url !== "/rfq/v3/quote" || !config.v3))) {
       sendJson(res, 404, {error: "not_found"});
       metric(config, "rfq_host_http_requests_total", {route: "unknown", outcome: "reject"});
       return;
     }
 
-    const body = await readJsonBody(req, config.maxBodyBytes);
-    const normalizedBody = normalizeQuoteBody(body);
+    const v3 = req.url === "/rfq/v3/quote";
+    const coordinator = v3 ? config.v3!.coordinator : config.coordinator;
+    let parsedBody: Omit<NormalizedHostQuoteBody, "ttlSeconds"> & {ttlSeconds: unknown};
+    try {
+      const body = await readJsonBody(req, config.maxBodyBytes);
+      parsedBody = normalizeQuoteBody(body, v3, coordinator.getQuoteLifetimePolicy());
+    } catch (error) {
+      if ((error as {statusCode?: number})?.statusCode === 413) throw error;
+      throw new RFQCoordinatorError("INVALID_REQUEST", "invalid RFQ request");
+    }
     requestHash = hashCanonical({
-      taker: normalizedBody.taker,
-      tokenIn: normalizedBody.tokenIn,
-      tokenOut: normalizedBody.tokenOut,
-      amountIn: normalizedBody.amountIn,
-      venue: normalizedBody.venue,
-      ttlSeconds: normalizedBody.ttlSeconds
+      taker: parsedBody.taker,
+      tokenIn: parsedBody.tokenIn,
+      tokenOut: parsedBody.tokenOut,
+      amountIn: parsedBody.amountIn,
+      venue: parsedBody.venue,
+      ttlSeconds: typeof parsedBody.ttlSeconds === "number" ? parsedBody.ttlSeconds : null
     });
-    idempotencyKeyHash = hashCanonical({idempotencyKey: normalizedBody.idempotencyKey});
+    idempotencyKeyHash = hashCanonical({idempotencyKey: parsedBody.idempotencyKey});
 
-    const principal = await config.authenticator.authenticate({headers: req.headers, method: req.method ?? "", url: req.url ?? ""});
+    const principal = await hostDependency("auth", () => config.authenticator.authenticate({headers: req.headers, method: req.method ?? "", url: req.url ?? ""}));
     const principalTaker = normalizeAddress(principal.taker, "authenticated taker");
     const authenticatedPrincipalHash = hashCanonical({principalId: principal.principalId});
     principalHash = authenticatedPrincipalHash;
-    if (principalTaker !== normalizedBody.taker) throw new ForbiddenError("authenticated taker does not match request taker");
+    if (principalTaker !== parsedBody.taker) throw new ForbiddenError("authenticated taker does not match request taker");
 
-    const rate = await config.rateLimiter.check({
+    const rate = await hostDependency("rate", () => config.rateLimiter.check({
       principalHash: authenticatedPrincipalHash,
-      route: "/rfq/quote",
+      route: req.url!,
       nowMs: Date.now()
-    });
+    }));
     if (!rate.allowed) {
-      await notifyIncident(config, {type: "rate_limited", module: "rate", reason: rate.reason ?? "rate_limited", principalHash, requestHash, at: config.now()});
+      await notifyIncident(config, {type: "rate_limited", module: "rate", reason: "rate_limited", principalHash, requestHash, at: config.now()});
       res.setHeader("Retry-After", String(rate.retryAfterSeconds ?? 1));
       await bestEffortAudit(config, auditEvent("reject", "rate_limited", "rate", config.now(), {principalHash, requestHash, idempotencyKeyHash, normalized}));
       sendJson(res, 429, {error: "rate_limited"});
       metric(config, "rfq_host_http_requests_total", {route: "quote", outcome: "rate_limited"});
       return;
     }
+
+    let normalizedBody: NormalizedHostQuoteBody;
+    try {
+      normalizedBody = {...parsedBody, ttlSeconds: normalizeTtlSeconds(parsedBody.ttlSeconds as number, coordinator.getQuoteLifetimePolicy().maxTtlSeconds)};
+    } catch {
+      throw new RFQCoordinatorError("INVALID_REQUEST", "invalid RFQ request");
+    }
+    if (v3) config.v3!.coordinator.authorizeProduct(normalizedBody as NormalizedHostQuoteBody & {flowType: 0 | 1});
+    else config.coordinator.authorizeProduct(normalizedBody);
 
     if (config.readiness) {
       const report = await readReadiness(config.readiness, config.readinessTimeoutMs);
@@ -391,28 +416,14 @@ async function handleRequest(
         });
       }
     }
+    disclosureEligible = true;
 
-    let policyId: Hex;
-    try {
-      policyId = normalizeBytes32(await config.resolvePolicyId(normalizedBody), "policyId");
-    } catch {
-      throw Object.assign(new Error("policy resolver unavailable"), {
-        dependencyModule: "policy",
-        dependencyReason: "unavailable"
-      });
-    }
-    normalized = {...normalizedBody, policyId};
-    requestHash = hashCanonical({
-      taker: normalized.taker,
-      tokenIn: normalized.tokenIn,
-      tokenOut: normalized.tokenOut,
-      amountIn: normalized.amountIn,
-      venue: normalized.venue,
-      policyId: normalized.policyId,
-      ttlSeconds: normalized.ttlSeconds
-    });
-
-    const issued = await config.coordinator.quoteWithEvidence(normalized, {now: config.now(), futureSkewSeconds: config.futureSkewSeconds});
+    const freshnessPolicy = {now: config.now(), futureSkewSeconds: config.futureSkewSeconds};
+    const issued = v3
+      ? await config.v3!.coordinator.quoteAuthorizedWithEvidence(normalizedBody as NormalizedHostQuoteBody & {flowType: 0 | 1}, () => config.v3!.resolvePolicyId(normalizedBody as NormalizedHostQuoteBody & {flowType: 0 | 1}), freshnessPolicy)
+      : await config.coordinator.quoteAuthorizedWithEvidence(normalizedBody, () => config.resolvePolicyId(normalizedBody), freshnessPolicy);
+    normalized = {...normalizedBody, policyId: issued.record.request.policyId};
+    requestHash = hashCanonical(issued.record.request);
     const signed = issued.signedQuote;
     if (!issued.evidence) throw new RFQCoordinatorError("STRICT_EVIDENCE_REQUIRED", "strict coordinator did not return production evidence");
     pricing = issued.evidence.pricing;
@@ -439,7 +450,7 @@ async function handleRequest(
       await notifyIncident(config, {type: classified.incident, module: classified.module, reason: classified.reason, principalHash, requestHash, at: now});
       authIncidentSent = classified.incident === "auth_abuse";
     }
-    if (!authIncidentSent && (classified.status === 401 || classified.status === 403)) {
+    if (!authIncidentSent && classified.module === "auth" && (classified.status === 401 || classified.status === 403)) {
       await notifyIncident(config, {type: "auth_abuse", module: "auth", reason: classified.reason, principalHash, requestHash, at: now});
     }
     await bestEffortAudit(config, auditEvent(classified.status >= 500 ? "error" : "reject", classified.reason, classified.module, now, {
@@ -451,7 +462,7 @@ async function handleRequest(
       risk
     }));
     if (classified.retryAfterSeconds) res.setHeader("Retry-After", String(classified.retryAfterSeconds));
-    const disclosure = normalized && error instanceof RFQCoordinatorError && error.code === "RISK_REJECTED"
+    const disclosure = disclosureEligible && error instanceof RFQCoordinatorError && error.code === "RISK_REJECTED"
       ? config.discloseRejection(error.reasonCodes)
       : undefined;
     sendJson(res, classified.status, {error: classified.publicError, ...(disclosure ? {disclosure} : {})});
@@ -461,23 +472,26 @@ async function handleRequest(
   }
 }
 
-function normalizeQuoteBody(body: unknown): NormalizedHostQuoteBody {
+function normalizeQuoteBody(body: unknown, v3: boolean, lifetime: {defaultTtlSeconds: number; maxTtlSeconds: number}): Omit<NormalizedHostQuoteBody, "ttlSeconds"> & {ttlSeconds: unknown} {
   if (!isRecord(body)) throw new Error("request body must be a JSON object");
-  if (typeof body.idempotencyKey !== "string" || body.idempotencyKey.length > 256) {
+  if (typeof body.idempotencyKey !== "string" || !body.idempotencyKey || body.idempotencyKey.length > 256) {
     throw new Error("idempotencyKey must be a 1-256 character string");
   }
+  if (Object.keys(body).some((key) => !["idempotencyKey", "taker", "tokenIn", "tokenOut", "amountIn", "venue", "ttlSeconds", ...(v3 ? ["flowType"] : [])].includes(key))) throw new Error("unsupported request field");
+  const flow = v3 ? {flowType: normalizeFlowType(body.flowType)} : {};
   const {taker, tokenIn, tokenOut, amountIn, venue, ttlSeconds} = body;
   if (typeof taker !== "string" || typeof tokenIn !== "string" || typeof tokenOut !== "string" || typeof amountIn !== "string" || typeof venue !== "string") {
     throw new Error("taker, tokenIn, tokenOut, amountIn and venue are required strings");
   }
   return {
+    ...flow,
     idempotencyKey: body.idempotencyKey,
     taker: normalizeAddress(taker as Address, "taker"),
     tokenIn: normalizeAddress(tokenIn as Address, "tokenIn"),
     tokenOut: normalizeAddress(tokenOut as Address, "tokenOut"),
     amountIn: toPositiveUintString(amountIn, "amountIn"),
     venue: normalizeAddress(venue as Address, "venue"),
-    ttlSeconds: normalizeTtlSeconds(ttlSeconds === undefined ? 60 : ttlSeconds as number)
+    ttlSeconds: ttlSeconds === undefined ? lifetime.defaultTtlSeconds : ttlSeconds
   };
 }
 
@@ -537,7 +551,7 @@ function auditEvent(
     requestHash?: string;
     idempotencyKeyHash?: string;
     normalized?: NormalizedHostQuoteIntent;
-    signed?: SignedRFQQuote;
+    signed?: SignedRFQQuote | SignedRFQQuoteV3;
     quoteHash?: string;
     pricing?: RFQModuleFreshnessEvidence;
     risk?: RFQModuleFreshnessEvidence;
@@ -606,11 +620,16 @@ function classifyError(error: unknown): {status: number; publicError: string; re
       status: 503,
       publicError: "dependency_unavailable",
       reason,
-      module: tagged.dependencyModule,
+      module: boundedDependencyModule(tagged.dependencyModule),
       incident: reason === "stale" ? "dependency_stale" : "dependency_unavailable"
     };
   }
   if (error instanceof RFQCoordinatorError) {
+    if (error.code === "INVALID_REQUEST" || error.code === "TERMINAL_REPLAY") return {status: 400, publicError: "invalid_request", reason: "invalid_request", module: "validation"};
+    if (error.code === "PRODUCT_UNAUTHORIZED") return {status: 403, publicError: "product_unauthorized", reason: "product_unauthorized", module: "product"};
+    if (error.code === "CONFIGURATION_INVALID") return {status: 500, publicError: "configuration_invalid", reason: "configuration_invalid", module: "product"};
+    if (error.code === "DEPENDENCY_UNAVAILABLE") return {status: 503, publicError: "dependency_unavailable", reason: "unavailable", module: boundedDependencyModule(tagged.dependencyModule), incident: "dependency_unavailable"};
+    if (error.code === "CONTEXT_EVIDENCE_INVALID") return {status: 503, publicError: "dependency_unavailable", reason: "context_unavailable", module: "context", incident: "dependency_unavailable"};
     if (error.code === "RISK_REJECTED") {
       return {status: 422, publicError: "risk_rejected", reason: "risk_rejected", module: "risk"};
     }
@@ -621,13 +640,23 @@ function classifyError(error: unknown): {status: number; publicError: string; re
     if (error.code === "SIGNER_CALL_FAILED" || error.code === "SIGNER_SIGNATURE_INVALID") {
       return {status: 503, publicError: "signer_unavailable", reason: error.code.toLowerCase(), module: "signer", incident: "signer_failure"};
     }
+    if (error.code === "INVENTORY_UNAVAILABLE") return {status: 409, publicError: "inventory_unavailable", reason: "inventory_unavailable", module: "coordinator"};
     if (error.code === "IDEMPOTENCY_CONFLICT") return {status: 409, publicError: "idempotency_conflict", reason: "idempotency_conflict", module: "coordinator"};
   }
   if (tagged.auditFailure) return {status: 503, publicError: "audit_unavailable", reason: "audit_sink_failed", module: "audit", incident: "audit_failure"};
-  const message = tagged.message ?? "unknown";
-  if (message.includes("idempotency key conflict")) return {status: 409, publicError: "idempotency_conflict", reason: "idempotency_conflict", module: "coordinator"};
-  if (message.includes("insufficient unreserved inventory")) return {status: 409, publicError: "inventory_unavailable", reason: "inventory_unavailable", module: "coordinator"};
-  return {status: 400, publicError: "invalid_request", reason: "invalid_request", module: "validation"};
+  return {status: 500, publicError: "internal_error", reason: "internal_error", module: "host"};
+}
+
+function boundedDependencyModule(module?: string): string {
+  return module && ["auth", "rate", "readiness", "policy", "pricing", "risk", "store", "context"].includes(module) ? module : "host";
+}
+
+async function hostDependency<T>(module: "auth" | "rate", operation: () => T | Promise<T>): Promise<T> {
+  try {return await operation();}
+  catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError || error instanceof RFQCoordinatorError) throw error;
+    throw Object.assign(new RFQCoordinatorError("DEPENDENCY_UNAVAILABLE", "RFQ dependency unavailable"), {dependencyModule: module});
+  }
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
