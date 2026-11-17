@@ -308,7 +308,7 @@ async function durableCoordinatorSmoke() {
   const fulfilled = concurrent.filter((result): result is PromiseFulfilledResult<any> => result.status === "fulfilled");
   const rejected = concurrent.filter((result): result is PromiseRejectedResult => result.status === "rejected");
   assert(fulfilled.length === 2, "concurrent reservations cannot exceed remaining inventory");
-  assert(rejected.length === 2 && rejected.every((result) => /insufficient unreserved inventory/.test(String(result.reason?.message))), "over-capacity reservations fail closed");
+  assert(rejected.length === 2 && rejected.every((result) => result.reason instanceof RFQCoordinatorError && result.reason.code === "INVENTORY_UNAVAILABLE"), "over-capacity reservations fail closed");
   const nonces = [first.quote.nonce, ...fulfilled.map((result) => result.value.quote.nonce)].map(BigInt);
   assert(new Set(nonces.map(String)).size === nonces.length, "durable coordinator nonces are unique");
   assert(nonces[1] > nonces[0] && nonces[2] > nonces[1], "durable coordinator nonces are monotonic by maker scope");

@@ -202,6 +202,12 @@ both lifetime values to 600 seconds; the public Monad v2 demo is unchanged.
 | Policy/pricing/risk/store/auth/limiter dependency exception | 503 `dependency_unavailable` | Retry the same request/key after recovery |
 | Unexpected internal failure | 500 `internal_error` | Operator investigation required |
 
+Store implementations must throw `RFQStoreError` with `IDEMPOTENCY_CONFLICT`,
+`INVENTORY_UNAVAILABLE` or `INVENTORY_NOT_CONFIGURED` for those expected failures.
+The coordinator maps them to the corresponding conflict/inventory code or
+`CONFIGURATION_INVALID`; untyped store exceptions remain dependency failures.
+Classification never depends on store diagnostic messages.
+
 Existing 401/403 authentication, 413 body cap, 429 rate limit, 422 risk rejection,
 409 inventory shortage and 503 signer/audit failures retain their codes. Raw
 exception messages, catalog data, principal values and request bodies never enter

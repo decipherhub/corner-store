@@ -630,12 +630,10 @@ function classifyError(error: unknown): {status: number; publicError: string; re
     if (error.code === "SIGNER_CALL_FAILED" || error.code === "SIGNER_SIGNATURE_INVALID") {
       return {status: 503, publicError: "signer_unavailable", reason: error.code.toLowerCase(), module: "signer", incident: "signer_failure"};
     }
+    if (error.code === "INVENTORY_UNAVAILABLE") return {status: 409, publicError: "inventory_unavailable", reason: "inventory_unavailable", module: "coordinator"};
     if (error.code === "IDEMPOTENCY_CONFLICT") return {status: 409, publicError: "idempotency_conflict", reason: "idempotency_conflict", module: "coordinator"};
   }
   if (tagged.auditFailure) return {status: 503, publicError: "audit_unavailable", reason: "audit_sink_failed", module: "audit", incident: "audit_failure"};
-  const message = tagged.message ?? "unknown";
-  if (message.includes("idempotency key conflict")) return {status: 409, publicError: "idempotency_conflict", reason: "idempotency_conflict", module: "coordinator"};
-  if (message.includes("insufficient unreserved inventory")) return {status: 409, publicError: "inventory_unavailable", reason: "inventory_unavailable", module: "coordinator"};
   return {status: 500, publicError: "internal_error", reason: "internal_error", module: "host"};
 }
 
