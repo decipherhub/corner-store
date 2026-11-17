@@ -17,7 +17,7 @@ export async function verifyProductionChain(record: ProductionRecord, config: Pr
   requireValue(quantity(await rpc("eth_chainId", [])) === BigInt(config.network.chainId), "RPC chain mismatch");
   const a = record.artifact as ObjectValue;
   const specs: Array<[string, string, string[]]> = [
-    ["elementReg", "src/registry/ElementRegistry.sol:ElementRegistry", []],
+    ["elementReg", "src/registry/ProductionElementRegistry.sol:ProductionElementRegistry", []],
     ["recipeReg", "src/registry/RecipeRegistry.sol:RecipeRegistry", []],
     ["policyReg", "src/registry/TokenPolicyRegistry.sol:TokenPolicyRegistry", ["recipeReg", "elementReg"]],
     ["operatorReg", "src/registry/OperatorRegistry.sol:OperatorRegistry", []],
