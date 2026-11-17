@@ -88,11 +88,14 @@ export async function verifyVenueContext(config: ProductionOnboardingConfig, ven
   await read(venue.adapter, "function adapterVersion() view returns (uint16)", "adapterVersion", [], c.adapterVersion);
   await read(venue.adapter, "function contextVersion() view returns (uint16)", "contextVersion", [], c.contextVersion);
   for (const [fn, expected] of [["venueReg", config.addresses.venueRegistry], ["policyReg", config.addresses.tokenPolicyRegistry], ["operatorReg", config.addresses.operatorRegistry], ["engine", config.addresses.complianceEngine]]) await read(config.addresses.executionRouter!, `function ${fn}() view returns (address)`, fn!, [], expected);
+  await read(config.addresses.tokenPolicyRegistry, "function elementReg() view returns (address)", "elementReg", [], config.addresses.elementRegistry);
   try {
     const count = Number(await reader.call(config.addresses.tokenPolicyRegistry, ["function compiledBindingCountOf(address) view returns (uint256)"], "compiledBindingCountOf", [config.addresses.token]));
     if (!Number.isInteger(count) || count < 1 || count > 8) throw new Error("invalid compiled binding count");
     const legacyId = encodeBytes32String("B-04-v1").toLowerCase();
+    const affiliateId = encodeBytes32String("A-06-v1").toLowerCase();
     let directionAware = true;
+    let affiliateRequired = false;
     for (let i = 0; i < count; i++) {
       const rules = await reader.call(config.addresses.tokenPolicyRegistry, ["function compiledRulesOf(address,uint256) view returns (tuple(bytes32 elementId,uint8 action)[])"], "compiledRulesOf", [config.addresses.token, i]);
       if (!Array.isArray(rules) || rules.length < 1 || rules.length > 32) throw new Error("invalid compiled rules");
@@ -100,9 +103,14 @@ export async function verifyVenueContext(config: ProductionOnboardingConfig, ven
         const id = String(rule.elementId ?? rule[0]);
         if (!/^0x[0-9a-f]{64}$/i.test(id)) throw new Error("invalid compiled element ID");
         if (id.toLowerCase() === legacyId) directionAware = false;
+        if (id.toLowerCase() === affiliateId) affiliateRequired = true;
       }
     }
     check("context-policy-direction", directionAware, "active compiled policy must replace B-04-v1 with opt-in B-04-v2 for context-aware venues");
+    if (affiliateRequired) {
+      const source = await reader.call(config.addresses.elementRegistry, ["function elementOf(bytes32) view returns (address)"], "elementOf", [affiliateId]);
+      check("context-affiliate-source", String(source).toLowerCase() === c.affiliateSource.toLowerCase(), "A-06-v1 implementation must match the pinned affiliate evidence source");
+    }
   } catch (error: any) {check("context-policy-direction", false, `unavailable: ${error.message}`);}
   await read(config.addresses.venueRegistry, VENUE_CONTEXT_ABI[3], "isContextImplementationApproved", [c.adapterCodeHash, c.adapterVersion, c.contextVersion], true);
   try {

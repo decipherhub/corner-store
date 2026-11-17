@@ -29,8 +29,9 @@ contract ContextEngineSelectionRecipe is BaseRecipe {
     constructor() BaseRecipe(9, 1, _ids()) {}
 
     function _ids() private pure returns (bytes32[] memory ids) {
-        ids = new bytes32[](1);
+        ids = new bytes32[](2);
         ids[0] = "B-04-v2";
+        ids[1] = "A-06-v1";
     }
 }
 
@@ -59,6 +60,7 @@ contract ContextProvenanceTest is IntegrationBase {
         engine.setRouter(address(routerV2));
         affiliate = new Affiliate();
         affiliate.setTrustedClaimIssuer(ISSUER, true);
+        elementReg.registerElement("A-06-v1", address(affiliate));
         _claim(maker, Affiliate.AffiliateBasis.NOT_AFFILIATE);
         _claim(alice, Affiliate.AffiliateBasis.NOT_AFFILIATE);
         rfq = new RFQAdapterV3(new MakerAuthorizer(), venueReg, policyReg, address(affiliate));
@@ -253,7 +255,12 @@ contract ContextProvenanceTest is IntegrationBase {
             ElementPolicyParameter(0, "C-01-v2", lockup.PARAMETER_SCHEMA_ID(), 1, abi.encode(address(0xBAD)));
         // The pending distributor has no authority until the Manifest activates.
         policyReg.scheduleManifestUpdate(
-            address(rwaToken), m, _regDBindings(0), new ElementEnforcementOverride[](0), config, bytes32("authority")
+            address(rwaToken),
+            m,
+            policyReg.recipeBindingsOf(address(rwaToken)),
+            new ElementEnforcementOverride[](0),
+            config,
+            bytes32("authority")
         );
         rfq.validateContext(req, venueReg.venueOf(VENUE));
         (,, uint64 readyAt,) = policyReg.pendingManifestUpdateOf(address(rwaToken));

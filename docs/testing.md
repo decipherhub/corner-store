@@ -413,7 +413,9 @@ deployer), compiler settings, tool/dependency/orchestration identities, Git stat
 configuration and wiring. They cover package/runtime commitment equality,
 source-only broadcast refusal, exclusive destination reservation, unchanged
 occupied files/symlinks, competing publishers, disk/write/fsync/link failures,
-SIGKILL at publication boundaries and recovery before/after linking. Chain tests
+transactional rollback for every reservation-setup write/fsync/link failure,
+typed cleanup paths when rollback fails, SIGKILL at publication boundaries and
+recovery before/after linking. Chain tests
 independently tamper receipts, transaction/hash associations, addresses, chain,
 fees/gas, immutable reconstruction and bytecode. Unavailable evidence fails closed.
 The legacy review example remains readable; the new version 2 source-only example

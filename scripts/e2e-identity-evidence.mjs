@@ -105,7 +105,8 @@ try {
       requestRefHash: commitments.hash("assessment", privateRef)});
     assert.ok(result.eligible);
     records.set(actor.address, result.materialization);
-    await (await evidence.bindIdentity(actor.address, identity)).wait();
+    assert.notEqual(result.materialization.identity, identity);
+    await (await evidence.bindIdentity(actor.address, result.materialization.identity)).wait();
     assert.equal((await evidence.evidenceOf(actor.address, a.rwa)).evidenceHash, `0x${"00".repeat(32)}`);
     pass(`${actor === taker ? "taker" : "maker"}: provider evidence explicitly accepted, binding creates no on-chain evidence`);
   }

@@ -3,7 +3,7 @@ import {test} from "node:test";
 import {mkdtempSync, readFileSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {RFQQuoteCoordinator, RFQQuoteCoordinatorV3, LocalFileQuoteCoordinatorStore, hashCanonical} from "../src";
+import {RFQQuoteCoordinator, RFQQuoteCoordinatorV3, LocalFileQuoteCoordinatorStore, hashCanonical, RFQStoreError, RFQCoordinatorError, ReserveQuoteInput} from "../src";
 
 const addr = (n: number) => `0x${n.toString(16).padStart(40, "0")}` as `0x${string}`;
 const policyId = `0x${"11".repeat(32)}` as const;
@@ -199,3 +199,58 @@ for (const version of [2, 3] as const) {
     }
   }
 }
+
+for (const [storeCode, coordinatorCode] of [
+  ["IDEMPOTENCY_CONFLICT", "IDEMPOTENCY_CONFLICT"],
+  ["INVENTORY_UNAVAILABLE", "INVENTORY_UNAVAILABLE"],
+  ["INVENTORY_NOT_CONFIGURED", "CONFIGURATION_INVALID"]
+] as const) {
+  test(`typed store ${storeCode} maps to ${coordinatorCode} independently of message`, async () => {
+    const failure = new RFQStoreError(storeCode, "alternate backend diagnostic");
+    const f = fixture({store: {
+      getByIdempotencyKeyHash: async () => undefined,
+      reserveOrReturnExisting: async () => {throw failure;}
+    }});
+    await assert.rejects(() => f.coordinator.quote(intent), (error: unknown) => {
+      assert.ok(error instanceof RFQCoordinatorError);
+      assert.equal(error.code, coordinatorCode);
+      return true;
+    });
+    assert.deepEqual(f.calls, ["pricing", "risk"]);
+  });
+}
+
+test("local store emits typed conflict, exhaustion and missing configuration failures", async () => {
+  const f = fixture();
+  const store = f.config.store;
+  const input: ReserveQuoteInput = {
+    scope: {chainId: 31337, adapter: addr(6), maker: addr(1)},
+    idempotencyKeyHash: "key", requestHash: "request", request: {...intent, ttlSeconds: 60},
+    inventoryDelta: {maker: addr(1), token: addr(4), venue: addr(5), amount: "20"},
+    createdAt: 100, reservationExpiresAt: 160
+  };
+  await store.reserveOrReturnExisting(input);
+  for (const [patch, expected] of [
+    [{requestHash: "different"}, "IDEMPOTENCY_CONFLICT"],
+    [{idempotencyKeyHash: "exhausted", inventoryDelta: {...input.inventoryDelta, amount: "1000"}}, "INVENTORY_UNAVAILABLE"],
+    [{idempotencyKeyHash: "missing", inventoryDelta: {...input.inventoryDelta, token: addr(9)}}, "INVENTORY_NOT_CONFIGURED"]
+  ] as const) {
+    await assert.rejects(() => store.reserveOrReturnExisting({...input, ...patch}), (error: unknown) => {
+      assert.ok(error instanceof RFQStoreError);
+      assert.equal(error.code, expected);
+      return true;
+    });
+  }
+  await assert.rejects(() => store.markSignFailed({...input, requestHash: "different", now: 100}), (error: unknown) => {
+    assert.ok(error instanceof RFQStoreError);
+    assert.equal(error.code, "IDEMPOTENCY_CONFLICT");
+    return true;
+  });
+});
+
+test("untyped store messages do not imply terminal failure codes", async () => {
+  for (const message of ["idempotency key conflict", "insufficient unreserved inventory", "inventory is not configured for maker/token/venue"]) {
+    const f = fixture({store: {getByIdempotencyKeyHash: async () => {throw new Error(message);}}});
+    await assert.rejects(() => f.coordinator.quote(intent), code("DEPENDENCY_UNAVAILABLE"));
+  }
+});

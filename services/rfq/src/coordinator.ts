@@ -27,9 +27,9 @@ import {
 import {normalizeFlowType, validateRFQContextEvidence, validateRFQQuoteV3} from "./quoteService";
 import {assertHex, normalizeAddress, normalizeChainId, normalizeTtlSeconds, normalizeBytes32, toPositiveUintString} from "./validation";
 
-import {RFQCoordinatorError} from "./errors";
+import {RFQCoordinatorError, RFQStoreError} from "./errors";
 import {RFQAuthorizedProduct, RFQProductAuthorization, RFQProductCatalog, quoteLifetimePolicy} from "./productAuthorization";
-export {RFQCoordinatorError, RFQCoordinatorErrorCode} from "./errors";
+export {RFQCoordinatorError, RFQCoordinatorErrorCode, RFQStoreError, RFQStoreErrorCode} from "./errors";
 
 const fs = require("fs");
 const fsp = require("fs/promises");
@@ -149,6 +149,7 @@ export interface InventoryLease extends QuoteInventoryDelta {
   releaseReason?: QuoteCoordinatorRecord["releaseReason"];
 }
 
+// Implementations must use RFQStoreError for conflicts, inventory exhaustion and missing inventory configuration.
 export interface QuoteCoordinatorStore {
   reserveOrReturnExisting(input: ReserveQuoteInput): Promise<ReserveQuoteResult>;
   markSigned(input: MarkSignedInput): Promise<QuoteCoordinatorRecord>;
@@ -445,9 +446,12 @@ export class RFQQuoteCoordinator<V extends 2 | 3 = 2> {
     try {return await operation();}
     catch (error) {
       if (error instanceof RFQCoordinatorError) throw error;
-      if (module === "store" && error instanceof Error) {
-        if (error.message.includes("idempotency key conflict") || error.message.includes("insufficient unreserved inventory")) throw error;
-        if (error.message === "inventory is not configured for maker/token/venue") throw new RFQCoordinatorError("CONFIGURATION_INVALID", "RFQ inventory is not configured");
+      if (module === "store" && error instanceof RFQStoreError) {
+        switch (error.code) {
+          case "IDEMPOTENCY_CONFLICT": throw new RFQCoordinatorError("IDEMPOTENCY_CONFLICT", "RFQ idempotency conflict", error);
+          case "INVENTORY_UNAVAILABLE": throw new RFQCoordinatorError("INVENTORY_UNAVAILABLE", "RFQ inventory unavailable", error);
+          case "INVENTORY_NOT_CONFIGURED": throw new RFQCoordinatorError("CONFIGURATION_INVALID", "RFQ inventory is not configured", error);
+        }
       }
       throw Object.assign(new RFQCoordinatorError("DEPENDENCY_UNAVAILABLE", "RFQ dependency unavailable"), {dependencyModule: module});
     }
@@ -630,16 +634,16 @@ export class LocalFileQuoteCoordinatorStore implements QuoteCoordinatorStore {
     return this.withLock(async (state) => {
       const existing = findByKey(state, input.scope, input.idempotencyKeyHash);
       if (existing) {
-        if (existing.requestHash !== input.requestHash) throw new Error("idempotency key conflict: request hash differs");
+        if (existing.requestHash !== input.requestHash) throw new RFQStoreError("IDEMPOTENCY_CONFLICT", "idempotency key conflict: request hash differs");
         return {record: clone(existing), existing: true};
       }
       const scopeKey = nonceScopeKey(input.scope);
       const inventoryKeyValue = inventoryKey(input.inventoryDelta);
       const bucket = state.inventoryByScope[inventoryKeyValue];
-      if (!bucket) throw new Error("inventory is not configured for maker/token/venue");
+      if (!bucket) throw new RFQStoreError("INVENTORY_NOT_CONFIGURED", "inventory is not configured for maker/token/venue");
       releaseExpiredLeases(state, input.createdAt);
       if (BigInt(bucket.available) - BigInt(bucket.reserved) < BigInt(input.inventoryDelta.amount)) {
-        throw new Error("insufficient unreserved inventory");
+        throw new RFQStoreError("INVENTORY_UNAVAILABLE", "insufficient unreserved inventory");
       }
       const nonce = ((BigInt(state.lastNonceByScope[scopeKey] ?? "0") + 1n)).toString();
       state.lastNonceByScope[scopeKey] = nonce;
@@ -979,7 +983,7 @@ function findByKey(state: StoreState, scope: QuoteNonceScope, idempotencyKeyHash
 function requireRecordByKey(state: StoreState, scope: QuoteNonceScope, idempotencyKeyHash: string, requestHash: string): QuoteCoordinatorRecord {
   const record = findByKey(state, scope, idempotencyKeyHash);
   if (!record) throw new Error("quote record not found");
-  if (record.requestHash !== requestHash) throw new Error("idempotency key conflict: request hash differs");
+  if (record.requestHash !== requestHash) throw new RFQStoreError("IDEMPOTENCY_CONFLICT", "idempotency key conflict: request hash differs");
   return record;
 }
 

@@ -23,7 +23,9 @@
 - Production artifacts and signable exports reserve destinations and publish
   complete validated envelopes exclusively through fsync and hard-link creation.
   Receipts, reconstructed runtime bytecode, owners/operators and wiring must
-  verify before deployment publication. Recovery revalidates without rebroadcast.
+  verify before deployment publication. Reservation setup rolls back staging and
+  reservation state on failure; typed errors expose exact paths if rollback also
+  fails. Recovery revalidates returned operations without rebroadcast.
 - Publication requires current-uid/root-owned staging/output directories and
   ancestry, without group/world writes except sticky ancestors. Trust is checked
   before reservation and again at publication; mismatch cleanup is best effort
@@ -43,6 +45,8 @@
 - Trust-boundary regressions reject writable/foreign-owned ancestry and output
   directories before reservation, accept sticky ancestors, recheck before linking
   and skip mismatch cleanup in untrusted output directories.
+- Reservation fault injection covers operation/reservation/probe writes, file and
+  directory fsync, hard-link probes, successful rollback and typed cleanup paths.
 - Packed clean Git-backed consumer: real production dry-run/fork, export,
   deployment and verification with one evidenceId; source-only broadcast denial.
 - Existing public artifact listing, pinned hash, CLI/Operator API reads and
@@ -62,6 +66,9 @@ passing
   failed before implementation; all 20 publication cases now pass. Toolkit 74/74,
   CLI 19/19, legacy 2/2 and the full gate passed, including 50 packed production
   assertions and live Anvil deployment/recovery. See the latest PROGRESS entry.
+- Review hardening on 2026-11-17 makes `reserve()` transactional before return;
+  six setup faults leave no reservation/staging state, and failed cleanup returns
+  a typed error with exact operator cleanup paths.
 - Review fixes verified on 2026-11-11: 1,171 Foundry tests, 66 Toolkit/19 CLI
   named tests, 50 packed production assertions and two public compatibility
   cases. Legacy profiles passed 7/7 each; context 12/12; identity 40/40.
@@ -81,13 +88,16 @@ passing
   DIRECT topology through required, exact A-04-v2 ManifestPolicyConfig bytes.
   Missing/unknown/MEMBER topology, nonblocking bindings and enforcement
   downgrades fail closed at registration and update. Schema 6 context checks
-  remain required; schemas 1-6 retain their original meaning.
+  remain required; schemas 1-6 retain their original meaning. Active RFQ support
+  additionally requires an explicit blocking RFQ identity policy in Toolkit and
+  its matching ManifestPolicyConfig schema 2 marker on-chain.
 - Separate A-04-v2 evidence binds identity, wallet and asset to issuer ID,
   issuedAt, expiry, trust basis, type and keyed commitment. Binding creates no
   accepted evidence. Current operator-managed issuer trust gates every trade.
 - SPI 2.0.0 requires explicit operator acceptance and strict audit. One local
   env/file HMAC key belongs to compliance-data, never operator-api. V2 domains,
-  records, exports and unsigned acceptance codecs remain separate from v1.
+  records, exports and unsigned acceptance codecs remain separate from v1. The
+  coordinator rekeys every provider-controlled public reference before use.
 - Optional format/checksum-validated LEI stays off-chain and participates in
   evidence commitments; no eligibility or sanctions policy requires it.
 - Reg D v4 opts into A-04-v2 while retaining the other v3 elements and the
@@ -130,8 +140,9 @@ passing
 - Counterparty evidence requires explicit operator enablement. Restoring the
   exact issuer trust basis can restore unexpired evidence; revoke individual
   records when reinstatement is unwanted. The reference store is in-process.
-- TokenPolicyRegistry runtime is 24,536 bytes with the pinned compiler, leaving
-  40 bytes below EIP-170. The size regression must remain passing.
+- TokenPolicyRegistry runtime is 24,570 bytes with the pinned compiler, leaving
+  6 bytes below EIP-170. The size regression must remain passing; further growth
+  requires deliberate size reduction.
 - MEMBER, pseudonyms/off-chain wallet mapping before TSV launch, asset cards,
   jurisdictional lists, key management/custody/multisig and external vendors
   remain deferred. Passing this feature does not establish TSV launch readiness.
@@ -150,6 +161,8 @@ passing
 ### Verification
 
 - RFQ/coordinator and host ordering, TTL boundary, persistence/replay and taxonomy tests
+- Typed store failures: alternate diagnostic messages preserve v2/v3 conflict 409,
+  inventory 409 and missing-inventory configuration 500 responses
 - Both endpoint versions: auth/limiter/audit/incident ordering including audit failure;
   deeply nested TTL preserves auth/limiter ordering and bounded rejection;
   both evidence APIs: PUBLISHED/RESERVED replay after catalog policy drift;
@@ -238,6 +251,35 @@ passing
 passing
 
 ### Notes
+
+- 2026-11-10: closed HACK-001 as `passing` by team decision after the
+  2026-10-14 hackathon deadline. This records the delivered demo and the incomplete
+  work explicitly; it does not assert that every original verification item was completed.
+  Not completed before the hackathon ended: judge wallet guide, browser-wallet
+  settlement with the `--evidence` rehearsal, and explorer source verification.
+- The public demo at `https://161.33.155.224` remains an operational task, with
+  acquisition evidence renewal every 30 days via `scripts/refresh-testnet-evidence.sh`.
+  Next renewal must occur before 2026-12-08 00:00 UTC (`1796688000`).
+- 2026-11-10 read-only live verification: `/health` and `/api/state` returned HTTP
+  200, chain ID 10143, source `e7345b3`, startup verification true, and maker/Manifest
+  readiness true. For 5,000,000 tokens, `/api/precheck` returned HTTP 200 for all four
+  scenes: success buy `allowed=true` (zero reason), qualification buy `allowed=false`
+  / `FAIL_NOT_QP`, investor B sell `allowed=false` / `HOLDING_PERIOD_NOT_ELAPSED`
+  (availableAt `1822982925`), and expired-claim buy `allowed=false` /
+  `FAIL_QP_CLAIM_EXPIRED` (evidenceExpiredAt `1791360525`). Maker approval, inventory
+  and allowance checks passed in all four responses. No signing or settlement was performed.
+- 2026-11-10 acquisition renewal: `cast call acquisitionOf` confirmed all five
+  snapshots have `expiresAt=1796688000` and status `VALID`; investor B retains
+  `clockStart=1791446925`. QP claims were intentionally untouched. Renewal transaction
+  hashes and blocks from the operator's Foundry broadcast records:
+
+  | Subject | Transaction hash | Block |
+  | --- | --- | --- |
+  | `maker` | `0xecc681892fc3c8762f4c919fef110e2a3ae906c7f2bac18d814831098b7c1190` | 78557916 |
+  | `investor` | `0x8d193993f60206a8c450a4d47a627252ca31f987dc00c888e3d2892e767347f3` | 78557960 |
+  | `eligibleInvestorB` | `0xaca0c93e24b06337e34f492a0251ae7017c222137dc81deb00d122b27aa4ec48` | 78557990 |
+  | `ineligibleInvestor` | `0x01cf83b2e616cb10a58688f969516c244f365b4dfc4062e688fdb62611ac90e3` | 78558026 |
+  | `expiredInvestor` | `0x7e57d1fb7daca265755b4b6bf5502a5980a7043bb9b08258275337e37edcdd13` | 78558064 |
 
 - Tracks issue #145. Decision Receipts r2/EAS/anchor/verifier work from #139 is
   deferred to the November accelerator round and is not part of this feature.
@@ -380,10 +422,13 @@ passing
   configuration, with explicit reviewed immutable implementation approval.
 - RFQAdapterV3 signs the exact RFQQuoteV3/domain version 3, binding maker/taker,
   token directions, exact amounts, venue, policy, flow and current A-06 aggregate.
-  Conditional primary uses a unique active compiled C-01-v2 distributor.
-- Actual security sender is buyer on tokenIn and seller on tokenOut. Every
-  regulated leg requires current trusted A-06 evidence; dual-regulated statuses
-  must agree. Refresh/revocation/expiry/decay invalidate old commitments.
+  Conditional primary uses a unique active compiled Manifest parameter carrying
+  the immutable primary-distributor schema, without coupling to one C-01 version.
+- Actual security sender is buyer on tokenIn and seller on tokenOut. A regulated
+  leg requires current trusted A-06 evidence only when its active compiled policy
+  contains A-06-v1, whose implementation must equal the pinned source.
+  Applicable dual-leg statuses must agree. Refresh/revocation/expiry/decay
+  invalidate old commitments.
 - Newly deployed AMM adapter version 2/context 1 binds seller/venue/target to the
   registered pool and canonical token order, secondary/self-directed only.
   Pool edits invalidate every venue sharing the adapter; re-registration clears
@@ -411,6 +456,8 @@ passing
   `EngineSelectionV2Test`: buy parity fuzzing, exemptions and fail-closed context
 - Toolkit provenance regressions: reverse Engine binding mismatch/unavailability,
   active compiled B-04 direction checks and unsigned Engine wiring order
+- Policy-scoped A-06 absence/source mismatch and version-neutral primary
+  distributor schema regressions
 - `forge fmt --check`
 - `git diff --check`
 - protected-path diff for public artifacts/runtime/container deployment

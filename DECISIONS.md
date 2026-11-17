@@ -1361,8 +1361,8 @@ contracts and the public RFQ v2 runtime.
    AMM seller/venue/target derive from the registered pool and canonical tokens.
    Caller authentication stays with the Router. Settlement repeats validation
    and retains measured exact fill, atomic rollback, commit and existing events.
-3. Current pinned A-06 evidence authenticates every regulated leg's actual
-   sender: buyer for tokenIn, seller for tokenOut. RFQ signs the exact leg/aggregate
+3. Current pinned A-06 evidence authenticates the actual sender for each leg
+   with compiled affiliate consumers: buyer for tokenIn, seller for tokenOut. RFQ signs the exact leg/aggregate
    commitment specified in `docs/product-specs/execution-context-provenance.md`.
    A-06 remains operator-attested evidence rather than independent fact finding.
 4. Venue evidence is separate from unchanged `VenueConfig`. It pins versions,
@@ -1402,9 +1402,8 @@ contracts and the public RFQ v2 runtime.
   do not gain Corner Store policy enforcement.
 - The following implemented defaults remain **open items, team to confirm**:
   conditional primary distribution from the unique active compiled C-01-v2
-  distributor; matching statuses for dual-regulated pairs; mandatory A-06
-  evidence for every regulated leg; immediate invalidation on any commitment
-  change, including same-status refresh; and reviewed immutable-only activation
+  distributor; matching statuses for evidence-requiring pairs; immediate
+  invalidation on any commitment change, including same-status refresh; and reviewed immutable-only activation
   without proxy-aware verification. Opt-in timing is recorded in D029.
 
 ### Related Files
@@ -1464,7 +1463,7 @@ existing consumers and deployed settlement.
 - Package versions remain 0.1.0 in this unpublished branch. Publication requires
   the normal version/release gate; no release is implied here.
 - **Open item, team to confirm:** migration timing remains opt-in, with separate
-  deployments and RFQ v2 retained on Monad. D028's five other defaults also remain
+  deployments and RFQ v2 retained on Monad. D028's remaining defaults also remain
   open. No migration is performed on an existing public deployment.
 - The v3 live E2E joins both legacy Anvil profiles as a documented manual
   delivery/release gate. Existing CI continues its repository/container gates.
@@ -1562,6 +1561,10 @@ RFQ/TSV and DIRECT. RFQ has no default; TSV is fixed to DIRECT. Reject unset,
 unknown and MEMBER values until the separate P2 implementation. Commit the exact
 64-byte `abi.encode(uint8 track, uint8 topology)` through required A-04-v2
 ManifestPolicyConfig parameters, preserving shared Manifest/RecipeBinding tuples.
+Use ManifestPolicyConfig schema 1 for legacy configurations, schema 2 for RFQ and
+schema 3 for TSV. New schema 7 RFQ onboarding requires schema 2 and at least one
+matching REQUIRED_BLOCKING A-04-v2 RFQ policy; omission, a TSV substitution and
+mixed RFQ/TSV tracks fail closed. Legacy schema 1 Manifests retain their meaning.
 Require REQUIRED_BLOCKING bindings and BLOCK enforcement, including updates and
 mixed legacy/new compositions. Retain every schema 6 context check in schema 7.
 Schemas 1-6 keep their meaning and cannot select A-04-v2; schema 7 identity recipes
@@ -1571,7 +1574,7 @@ cannot substitute A-04-v1.
 
 Full-word decoding rejects noncanonical words, trailing data and malformed lengths.
 The live deployment exposed an EIP-170 size failure; equivalent compact validation
-now leaves TokenPolicyRegistry at 24,536 bytes, only 40 bytes below the limit.
+now leaves TokenPolicyRegistry at 24,570 bytes, only 6 bytes below the limit.
 The deployed-size and composition/fuzz regressions must remain passing. MEMBER
 institution/attestation support and wallet sanctions in both modes are scheduled,
 not implemented. A TSV track declaration alone is not launch readiness.
@@ -1640,6 +1643,9 @@ Use domain-separated HMAC-SHA-256 for v2 identity, source, assessment and eviden
 commitments over canonical JSON. Load exactly one 32-byte hex key from local env
 or file in the compliance-data runtime, and inject only a restricted hashing
 capability into adapters, coordinator, store validation and calldata translation.
+The coordinator rekeys every provider-controlled identity, request, source and
+assessment reference before public audit, persistence, acceptance or calldata
+export, even if the adapter supplied an opaque or keyed-looking value.
 Missing/malformed/unreadable/ambiguous configuration fails startup; no unkeyed
 fallback. Operator-api never receives the key. On-chain acceptance receives only
 public enforcement fields and commitments through unsigned exported calldata.
@@ -1822,6 +1828,14 @@ sibling operation directory; the production Solidity script writes only a
 candidate inside its captured workspace. Validate successful canonical receipts,
 receipt-derived addresses, exact transaction inputs/order, reconstructed runtime
 bytecode, ownership/operator/wiring and Safe state before publication.
+
+Reservation setup is transactional before the operation is returned to the
+caller. A failure while writing operation pointers, probing hard-link/fsync
+semantics or performing the final vacancy check removes the reservation and
+staging directory. If filesystem cleanup itself fails, the typed error reports
+the exact staging and reservation paths and marks cleanup incomplete; signing or
+broadcast has not started and the incomplete setup is not recoverable as an
+execution journal.
 
 Require the staging/output directories and every ancestor to be owned by the
 current uid or root. Reject group/world write permissions on staging/output;
@@ -2072,3 +2086,24 @@ makes no legal conclusion. OPS-004 tooling status cannot authorize a launch.
 
 - `docs/release-assurance.md` and `docs/release-evidence.v1.template.json`
 - `docs/deployment-production.md`, `docs/security.md` and `QUALITY.md`
+## D043: Primary Distributor Authority for EXEC-002
+
+### Status
+
+Pending team decision. C-01-v2-only support is a known implementation limitation,
+not an approved permanent product boundary.
+
+### Context and Options
+
+RFQAdapterV3 and OnchainRFQContextResolver authenticate primary distributors only
+from exact active compiled `C-01-v2` parameters. Primary assets without C-01 or
+using another C-01 version fail closed. The team must choose:
+
+1. Add a Manifest/policy-config distributor commitment independent of C-01.
+2. Explicitly approve C-01-v2-only primary-distribution support.
+
+PR #163 documents the limitation without redesigning distributor authority.
+The owner resolved affiliate evidence separately: require it only for active
+compiled A-06/B-04 consumers, and bind the pinned source to the exact registered
+A-06-v1 implementation at activation and runtime. Existing required-evidence
+failure behavior remains fail closed.

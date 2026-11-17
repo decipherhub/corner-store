@@ -462,6 +462,15 @@ Solidity script writes only `deployments/production-core.candidate.json` in the
 captured workspace.
 Production bypasses the shared reference runtime cleanup path.
 
+Reservation setup is transactional until `reserve()` returns. Failures while
+writing the operation pointers, probing hard-link/fsync support or rechecking the
+final path remove the temporary reservation and staging directory. If that cleanup
+also fails, `ProductionPublicationReserveError` sets `cleanupComplete=false` and
+reports `stagingDirectory` and `reservationDirectory` explicitly. No signer or
+broadcast work has started at this point; inspect and remove only those reported
+paths after verifying their ownership and contents. Do not pass an incomplete
+setup directory to `production-recover` because no execution journal was returned.
+
 This is an explicit filesystem trust boundary similar to OpenSSH StrictModes.
 Publication is safe against other local principals under these owner/mode
 preconditions, with root trusted. Concurrent processes running as the operator's
