@@ -1,7 +1,7 @@
 import {createHash} from "crypto";
 import {readFileSync} from "fs";
 import {resolve} from "path";
-import {AbiCoder, Interface, keccak256, toUtf8Bytes} from "ethers";
+import {AbiCoder, Interface, encodeBytes32String, keccak256, toUtf8Bytes} from "ethers";
 import {
   PolicyAuditArtifactFile,
   PolicyAuditStore,
@@ -397,6 +397,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   for (const [index, element] of c.elements.entries()) {
     assertKnownKeys(element, ["elementId", "implementation", "evidenceType", "defaultAction", "versionHash", "metadataHash", "parameterSchemaId", "parameterSchemaVersion", "maxParameterBytes", "parametersRequired", "register"], `elements[${index}]`);
     if (!isHash32(element?.elementId)) throw new Error(`elements[${index}].elementId must be bytes32`);
+    if (element.elementId.toLowerCase() === encodeBytes32String("A-12-v2").toLowerCase()) throw new Error("A-12-v2 is reference-only pending issue #132 item 13 team/legal decision");
     if (!isAddress(element?.implementation)) throw new Error(`elements[${index}].implementation must be a non-zero address`);
     if (element.evidenceType !== undefined) enumValue(element.evidenceType, EVIDENCE_TYPE, `elements[${index}].evidenceType`);
     if (element.defaultAction !== undefined) enumValue(element.defaultAction, ENFORCEMENT_ACTION, `elements[${index}].defaultAction`);
@@ -432,6 +433,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
     validateUint(recipe?.recipeId, 16, `recipes[${index}].recipeId`);
     validateUint(recipe?.version, 16, `recipes[${index}].version`);
     if (recipe.recipeId === 0 || recipe.version === 0) throw new Error(`recipes[${index}] recipeId/version must be non-zero`);
+    if (recipe.recipeId === 1 && recipe.version === 5) throw new Error("Reg D v5 is reference-only pending issue #132 item 13 team/legal decision");
     if (!isAddress(recipe.implementation)) throw new Error(`recipes[${index}].implementation must be a non-zero address`);
     if (recipeIds.has(recipe.recipeId)) throw new Error("recipes must not contain duplicate recipeId values");
     recipeIds.add(recipe.recipeId);
@@ -462,6 +464,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
     } else if (recipe.alias !== undefined || recipe.normalizedAlias !== undefined || recipe.aliasHash !== undefined || recipe.recipeKey !== undefined || recipe.requiredElements !== undefined) throw new Error("schemaVersion 1 recipes must not include v2 canonical recipe fields");
   }
   validateManifest(c.manifest);
+  if (c.manifest!.issuanceRecipeId === 1 && c.manifest!.issuanceRecipeVersion === 5) throw new Error("Reg D v5 is reference-only pending issue #132 item 13 team/legal decision");
   if (!Array.isArray(c.recipeBindings) || c.recipeBindings.length === 0 || c.recipeBindings.length > 8) throw new Error("recipeBindings must contain 1-8 bindings");
   const bindingIds = new Set<number>();
   let hasBlocking = false;
@@ -473,6 +476,7 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
     validateUint(binding?.priority, 8, `recipeBindings[${index}].priority`);
     const mode = enumValue(binding.mode, RECIPE_BINDING_MODE, `recipeBindings[${index}].mode`);
     if (binding.recipeId === 0 || binding.recipeVersion === 0) throw new Error(`recipeBindings[${index}] recipeId/version must be non-zero`);
+    if (binding.recipeId === 1 && binding.recipeVersion === 5) throw new Error("Reg D v5 is reference-only pending issue #132 item 13 team/legal decision");
     if (!recipeIds.has(binding.recipeId)) throw new Error(`recipeBindings[${index}].recipeId has no registered recipe`);
     if (bindingIds.has(binding.recipeId)) throw new Error("recipeBindings must not contain duplicate recipeId values");
     bindingIds.add(binding.recipeId);

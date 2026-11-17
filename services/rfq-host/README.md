@@ -128,7 +128,10 @@ retry without re-signing, incident
 hook isolation, PII-free audit redaction, bounded metrics, successful quote
 issuance and idempotent replay.
 It also proves unauthenticated requests cannot trigger policy resolution and that
-the server-owned resolved policy is included in the EIP-712 v2 quote.
+the server-owned resolved policy is included in the EIP-712 v2 quote. Disclosure
+coverage includes all three tiers, authenticated taker binding, rejection retries,
+quote replays, missing/malformed policy fallback and whole-response suppression
+for unknown, malformed and sensitive reasons.
 
 The authorization suites additionally verify invalid/max-boundary TTL, zero
 costly-dependency calls for unsupported products, both endpoint versions,

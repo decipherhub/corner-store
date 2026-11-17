@@ -1,5 +1,27 @@
 # Progress
 
+## 2026-11-18 Session: CORE-015 Main Integration Review
+
+CORE-015 remains passing after integrating current main and resolving two
+cross-feature conflicts in PR #161. Reg D v4 already identifies the A-04-v2
+identity-evidence composition, so the separate A-12 reference composition now
+uses immutable family 1/version 5 and the `reg-d-v5` local profile. V4 retains its
+existing meaning and production onboarding rejects only the reference-only v5.
+
+The integrated Router emits `SettlementExecutedV2` from the shared execution
+base after measured settlement and commit. RFQ operational disclosure now carries
+only validated reason identifiers and is enabled only after authentication,
+taker binding, limiting, product authorization and readiness. The first full gate
+also found that production chain verification still expected the generic
+`ElementRegistry`; it now verifies the deployed `ProductionElementRegistry`.
+
+Fresh verification passed `scripts/check.sh` with Foundry 1,211/1,211 across 73
+suites, RFQ service 35/35, RFQ host 30/30, Toolkit 78/78, CLI 19/19, both clean
+adapter conformance projects at 4/4, packed 28-transaction production deployment,
+verification/tampering/recovery and deploy-v3 10/10. Protected public-demo paths
+are unchanged. Remaining decisions are D044 and the broader compliance disclosure
+taxonomy; neither is silently selected by this integration.
+
 ## 2026-11-17 Session: DEPLOY-004 Reservation Review Hardening
 
 DEPLOY-004 remains passing after fixing PR #166's pre-execution reservation
@@ -1501,6 +1523,85 @@ Historical implementation and verification evidence follows.
 
 ## Last Session Summary
 
+- 2026-11-17, PR #161 review fixes: confirmed all three findings. Reconciled
+  `FEATURES.md`/`PROGRESS.md` against `origin/main` #162 while retaining CORE-015;
+  HACK-001 remains closed as `passing` and no feature is active. The review fixes
+  were committed on this branch in `c4923d6`.
+- Final-head Node 20 `scripts/check.sh` passed, including 1,010 Foundry tests and 10 deploy-v3 tests. Log: `/tmp/w132-check-final.log`.
+- Narrowed item 12 to operational RFQ risk disclosure only (three operational
+  codes). Tiered compliance outcomes remain OPEN pending counsel-approved taxonomy.
+  Added D044, PENDING TEAM/LEGAL DECISION, for item 13. Reg D v5/A-12 v2 remain
+  reference-only and non-production-activatable through supported production paths.
+  Production onboarding rejects the element, recipe and Manifest/binding references
+  across schema v1-v5, including existing-object UPDATEs. Production core deploys
+  a registry rejecting A-12-v2 through both overloads; local DeployStack explicitly
+  retains the generic registry. Existing deployments are not retrofitted.
+- Regression evidence: before the fix, the new production registry test failed
+  (0 passed, 1 failed) because registration succeeded, and Toolkit export accepted
+  reference-only A-12-v2. After the fix, deployment tests passed 7/7 and Registry,
+  Recipe, A-12 v2 and Reg D v5 suites passed 27/27. Node 20 Toolkit smoke passed
+  20 export checks, two verifier checks and reader/smoke coverage; CLI and RFQ
+  smoke passed. Initial parallel RFQ-host dependency installation failed during
+  the local RFQ prepare step; sequential retry installed successfully. A new test
+  reader type error was corrected before the passing Toolkit run.
+- `forge fmt --check`, `forge build` (compiler/lint warnings) and `git diff --check`
+  passed. RFQ-host full smoke failed in its unchanged malformed/oversize/rate-limit
+  scenario: mismatched Content-Length returned 400 rather than expected 413.
+  A diagnostic run excluding only that scenario passed the other 19 scenarios,
+  including all disclosure tests. This does not count as a passing full host suite.
+- No fixed-port Anvil launcher, public-network runtime, production broadcast or
+  GitHub action was run. PR #161 stays draft. Next: resolve the existing RFQ-host test failure, and obtain team/legal decisions on
+  item 12 taxonomy and item 13 public disclosure before production adoption.
+
+- 2026-11-10, issue #132 integration: verified the four merged slices together
+  and added `CORE-015: Compliance Reporting and Settlement Reconstruction` as
+  `passing`. Added D024 through D027 for opt-in nonblocking A-12/v4 adoption,
+  canonical settlement reconstruction, restricted public reporting and
+  generic-by-default RFQ disclosure. Added the reporting spec to `docs/README.md`.
+  HACK-001 is closed as `passing` by #162. Counsel questions are explicit open items.
+- The first merged gate failed before formatting because
+  `scripts/check-wave3-element-policies.sh` still required A-12-v1 and the v1
+  constructor. Updated only its expected registration and error text to require
+  A-12-v2, `RedFlagKnowledgeBarV2` and explicit `FLAG_ONLY`. The same complete gate
+  then passed. No contract/service behavior change was needed for integration.
+- Dependency setup passed with writable cache
+  `export npm_config_cache=/private/tmp/corner-store-132-integration/npm-cache`:
+  `npx --yes -p node@20 -p yarn@1.22.22 -c 'cd tools/deploy-v3 && yarn install --frozen-lockfile'`
+  and `npx --yes -p node@20 -c 'for service in rfq rfq-host toolkit cli rfq-demo-backend testnet-rfq-demo operator-api deployment-studio compliance-data; do echo "Installing $service"; npm ci --prefix "services/$service" || exit; done'`.
+  All nine lockfile-based service installs passed; operator-dashboard has no
+  lockfile or dependency install. Lockfiles did not change.
+- `npx --yes -p node@20 -p yarn@1.22.22 -c 'scripts/check.sh'` passed all 23 stages
+  with Foundry 1.7.1: 1,006 passed / 0 failed / 0 skipped across 63 suites,
+  including Reporter 16/16 and canonical Uniswap 5/5. All 10 service smoke suites
+  passed, including the RFQ host's 20 top-level scenarios and both Compliance
+  Data smoke/provider entrypoints. Clean packaged-consumer checks passed, with
+  generated adapter conformance 4/4 in each of two projects; deploy-v3 passed
+  10/10. High-severity lint, format, build, reason parity, wrapper/evidence-refresh
+  regressions, URL rehearsal, showcase plan and whitespace gates passed.
+  Existing compiler/lint warnings remain outside the high-severity gate.
+- `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh'` passed the fresh BUIDL-like
+  chain's 7/7 scenarios and 30 additional explicit PASS checkpoints.
+  `npx --yes -p node@20 -c 'scripts/e2e-anvil.sh --profile reg-d'` passed the fresh
+  Reg D chain's 7/7 scenarios and 20 additional explicit PASS checkpoints. Both
+  completed backend/CLI/Router buy/sell, failed-receipt rollback, maker revoke and
+  restore flows; BUIDL-like also verified QP/expiry isolation. Expected
+  `RFQMakerNotApproved()` rejection output is part of each successful E2E.
+- `npx --yes -p node@20 -p yarn@1.22.22 -c 'npm run test:reporter-runtime --prefix services/toolkit'`
+  passed compiled ABI/SDK parity and four isolated Anvil cases: unknown denial,
+  unregulated pass, simultaneous public/restricted failures and historical read.
+  `forge build tools/deploy-wave3/DeployWave3Elements.s.sol` passed. Final
+  `forge fmt --check` and `git diff --check` passed. Generated deployment,
+  broadcast, dependency and build outputs remain ignored/untracked; only the
+  intended integration script and four documentation files are modified.
+- Next: review the uncommitted integration diff, coordinate the additive minor SDK
+  release and explicit deployment/consumer adoption, and obtain counsel/operator
+  decisions on A-12 review procedures, record categories/retention and disclosure
+  fields, audiences and wording. Align future #139 consumers with canonical event
+  selection. UNVERIFIED here: Docker image gates, public-network/demo health,
+  production provider/custody/retention integrations and production disclosure
+  approval. The opt-in v4 direct-script live suite was verified in its slice and
+  was not rerun by integration; the documented full launcher supports only
+  BUIDL-like and Reg D v3. No public deployment was changed.
 - 2026-11-10 (issue #145): marked HACK-001 `passing` after the hackathon ended
   on 2026-10-14, per team decision. Updated only `FEATURES.md` and `PROGRESS.md`,
   preserving implementation history and recording work not completed before the deadline:

@@ -89,5 +89,14 @@ library Events {
     event ComplianceEvaluated(bytes32 indexed decisionHash, bool allowed, bytes32 reasonCode);
     event ComplianceFlags(bytes32 indexed decisionHash, uint256 flagsBitmap);
     event Executed(bytes32 indexed executionId, address indexed venue, uint256 amountOut);
+    event SettlementExecutedV2(
+        bytes32 indexed executionId,
+        address indexed venue,
+        address tokenIn,
+        address tokenOut,
+        bytes32 indexed policyId,
+        uint256 amountIn,
+        uint256 amountOut
+    );
     event SurveillanceFlag(bytes32 indexed elementId, address indexed subject, bytes32 reasonCode);
 }

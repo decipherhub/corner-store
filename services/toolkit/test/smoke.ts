@@ -1,4 +1,5 @@
 import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
+import {runComplianceReportingTests} from "./compliance-reporting";
 
 import {encodeBytes32String, keccak256} from "ethers";
 import {
@@ -53,7 +54,7 @@ import {
   validatePolicyAuditArtifact,
   validatePolicyAuditArtifactFile
 } from "../src/policy-audit";
-import {assertRecipeVenueCompatibility} from "../src/policy-compatibility";
+import {assertProfileVenueCompatibility, assertRecipeVenueCompatibility} from "../src/policy-compatibility";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -75,6 +76,11 @@ const config = loadConfig(path);
 if (config.asset.profile !== "buidl-like" || !config.venues.rfq) throw new Error("default config regression");
 if (JSON.parse(readFileSync(path, "utf8")).schemaVersion !== 1) throw new Error("version missing");
 validateConfig({...defaultConfig(), asset: {profile: "reg-d"}});
+assertProfileVenueCompatibility("reg-d-v5", false);
+assertThrows(
+  () => assertProfileVenueCompatibility("reg-d-v5", true),
+  "Reg D v5 still rejects AMM because it retains C-01-v2"
+);
 assertThrows(
   () => validateConfig({...defaultConfig(), venues: {amm: true, rfq: true, orderBook: false}}),
   "lockup-restricted profile accepted AMM"
@@ -464,6 +470,18 @@ const onboardingConfig = validateProductionOnboardingConfig({
     riskEvidenceHash: `0x${"04".repeat(32)}`
   }]
 });
+const referenceOnlyElementConfig = {
+  ...onboardingConfig,
+  elements: [{...onboardingConfig.elements[0], elementId: encodeBytes32String("A-12-v2").toUpperCase().replace("0X", "0x")}]
+};
+assertThrows(() => createProductionOnboardingPlan(referenceOnlyElementConfig), "production export rejects reference-only A-12-v2");
+const referenceOnlyRecipeConfig = {
+  ...onboardingConfig,
+  recipes: [{...onboardingConfig.recipes[0], version: 5}],
+  manifest: {...onboardingConfig.manifest, issuanceRecipeVersion: 5},
+  recipeBindings: [{...onboardingConfig.recipeBindings[0], recipeVersion: 5}]
+};
+assertThrows(() => createProductionOnboardingPlan(referenceOnlyRecipeConfig), "production export rejects reference-only Reg D v5 even without element composition");
 const onboardingPlan = createProductionOnboardingPlan(onboardingConfig, "2026-08-23T00:00:00.000Z");
 const onboardingPlanRepeat = createProductionOnboardingPlan(onboardingConfig, "2026-08-24T00:00:00.000Z");
 assert(onboardingPlan.onboardingHash === onboardingPlanRepeat.onboardingHash, "onboarding hash is deterministic across render time");
@@ -745,6 +763,38 @@ const updateConfigV5 = validateProductionOnboardingConfig({
   artifactHash: updateAuditFile.artifactHash,
   manifest: {...v5Draft.manifest, fullManifestHash: updateAuditFile.onchainArtifactHash}
 });
+let referenceOnlyChecks = 0;
+for (const config of [onboardingConfig, onboardingConfigV2Compat, onboardingConfigV3, onboardingConfigV4, updateConfigV5]) {
+  for (const rejected of [
+    {...config, elements: [{...config.elements[0], elementId: encodeBytes32String("A-12-v2").toUpperCase().replace("0X", "0x")}]},
+    {...config, recipes: [{...config.recipes[0], recipeId: 1, version: 5}]},
+    {...config, manifest: {...config.manifest, issuanceRecipeId: 1, issuanceRecipeVersion: 5}},
+    {...config, recipeBindings: [{...config.recipeBindings[0], recipeId: 1, recipeVersion: 5}]}
+  ]) {
+    try {
+      createProductionOnboardingPlan(rejected);
+      throw new Error("reference-only production config accepted");
+    } catch (err: any) {
+      assert(String(err.message).includes("is reference-only pending issue #132 item 13"), `reference-only gate must reject schema ${config.schemaVersion}: ${err.message}`);
+      referenceOnlyChecks++;
+    }
+  }
+}
+console.log(`reference-only production export checks: ${referenceOnlyChecks} passed`);
+const rejectReferenceOnlyRpc = async (): Promise<never> => { throw new Error("RPC must not be called"); };
+const referenceOnlyReader = {
+  chainId: rejectReferenceOnlyRpc,
+  getCode: rejectReferenceOnlyRpc,
+  call: rejectReferenceOnlyRpc,
+  balanceOf: rejectReferenceOnlyRpc,
+  allowance: rejectReferenceOnlyRpc
+};
+const referenceOnlyVerificationPromise = Promise.all([
+  verifyProductionOnboarding(referenceOnlyElementConfig, referenceOnlyReader),
+  verifyProductionPolicyUpdatePreActivation({...updateConfigV5, recipes: [{...updateConfigV5.recipes[0], recipeId: 1, version: 5}]}, referenceOnlyReader)
+].map((result) => result.then(() => { throw new Error("reference-only verification accepted"); }, (err) => {
+  assert(String(err.message).includes("is reference-only pending issue #132 item 13"), "production verification must reject before RPC");
+}))).then(() => console.log("reference-only production verification checks: 2 passed"));
 const updateStore = new LocalPolicyAuditStore(join(dir, "update-onboarding-audit-store"));
 updateStore.put(updateAuditFile);
 const updatePlanV5 = createProductionOnboardingPlan(updateConfigV5, "2026-08-23T00:00:00.000Z", {file: updateAuditFile, store: updateStore});
@@ -995,6 +1045,7 @@ const v5PreVerificationPromise = verifyProductionPolicyUpdatePreActivation(updat
   assert(!result.ready && result.checks.some((check) => check.name === "pending-compiled-plan-hash" && !check.pass), "v5 pre-activation verifier fails closed on pending plan mismatch");
 });
 const onboardingVerificationPromise = Promise.all([
+  referenceOnlyVerificationPromise,
   baseOnboardingVerificationPromise,
   productionBindingFailurePromise,
   v5PostVerificationPromise,
@@ -1160,7 +1211,7 @@ try {
 } catch (err: any) {
   if (!err.message.includes("environment variable")) throw err;
 }
-onboardingVerificationPromise.then(() => {
+Promise.all([onboardingVerificationPromise, runComplianceReportingTests()]).then(() => {
   console.log("corner-store toolkit smoke ok");
 }).catch((err) => {
   console.error(err);

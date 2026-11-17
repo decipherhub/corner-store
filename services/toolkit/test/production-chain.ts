@@ -12,7 +12,7 @@ const bytesHash = (s: string) => `sha256:${createHash("sha256").update(s).digest
 function fixture() {
   const config = {network: {chainId: 31337}, deployer: address(1), operator: address(2), safe: {address: address(3)}, venues: {amm: true, rfq: true}} as ProductionConfig;
   const specs: Array<[string, string, string[]]> = [
-    ["elementReg", "src/registry/ElementRegistry.sol:ElementRegistry", []],
+    ["elementReg", "src/registry/ProductionElementRegistry.sol:ProductionElementRegistry", []],
     ["recipeReg", "src/registry/RecipeRegistry.sol:RecipeRegistry", []],
     ["policyReg", "src/registry/TokenPolicyRegistry.sol:TokenPolicyRegistry", ["recipeReg", "elementReg"]],
     ["operatorReg", "src/registry/OperatorRegistry.sol:OperatorRegistry", []],
