@@ -1829,6 +1829,14 @@ candidate inside its captured workspace. Validate successful canonical receipts,
 receipt-derived addresses, exact transaction inputs/order, reconstructed runtime
 bytecode, ownership/operator/wiring and Safe state before publication.
 
+Reservation setup is transactional before the operation is returned to the
+caller. A failure while writing operation pointers, probing hard-link/fsync
+semantics or performing the final vacancy check removes the reservation and
+staging directory. If filesystem cleanup itself fails, the typed error reports
+the exact staging and reservation paths and marks cleanup incomplete; signing or
+broadcast has not started and the incomplete setup is not recoverable as an
+execution journal.
+
 Require the staging/output directories and every ancestor to be owned by the
 current uid or root. Reject group/world write permissions on staging/output;
 allow writable ancestors only with the sticky bit, which protects operator-owned

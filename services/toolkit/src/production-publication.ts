@@ -1,7 +1,7 @@
 import {createHash, randomUUID} from "crypto";
 import {
   closeSync, constants, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync,
-  readFileSync, readdirSync, realpathSync, rmdirSync, unlinkSync, writeFileSync
+  readFileSync, readdirSync, realpathSync, rmdirSync, rmSync, unlinkSync, writeFileSync
 } from "fs";
 import type {Stats} from "fs";
 import {basename, dirname, join, parse, resolve} from "path";
@@ -70,6 +70,21 @@ function durableFile(path: string, bytes: Buffer | string, boundary?: (phase: Pu
   } finally { closeSync(fd); }
 }
 
+export class ProductionPublicationReserveError extends Error {
+  readonly code = "PUBLICATION_RESERVATION_FAILED";
+  constructor(
+    message: string,
+    readonly output: string,
+    readonly stagingDirectory: string | undefined,
+    readonly reservationDirectory: string,
+    readonly cleanupComplete: boolean,
+    readonly cause: unknown
+  ) {
+    super(message);
+    this.name = "ProductionPublicationReserveError";
+  }
+}
+
 export class ProductionPublication {
   private readonly directoryIdentity: Stats;
   private constructor(
@@ -94,20 +109,44 @@ export class ProductionPublication {
     trustedDirectory(dirname(output));
     safePath(output);
     const reservation = `${output}.reservation`;
-    mkdirSync(reservation, {mode: 0o700});
-    const directory = mkdtempSync(join(dirname(output), `.${basename(output)}.stage-`));
-    const operation = new ProductionPublication(output, directory, reservation, boundary);
-    durableFile(join(directory, "operation.json"), JSON.stringify({schemaVersion: 1, output, directory, reservation}));
-    durableFile(join(reservation, "operation.json"), JSON.stringify({directory}));
-    // Probe required filesystem semantics before any signing or broadcast.
-    const probe = join(directory, "probe");
-    durableFile(probe, "probe");
-    linkSync(probe, join(directory, "probe-link"));
-    syncDirectory(directory);
-    unlinkSync(join(directory, "probe-link")); unlinkSync(probe);
-    syncDirectory(directory); syncDirectory(reservation); syncDirectory(dirname(output));
-    ProductionPublication.assertNoFinal(output);
-    return operation;
+    let reservationCreated = false;
+    let directory: string | undefined;
+    try {
+      mkdirSync(reservation, {mode: 0o700});
+      reservationCreated = true;
+      directory = mkdtempSync(join(dirname(output), `.${basename(output)}.stage-`));
+      const operation = new ProductionPublication(output, directory, reservation, boundary);
+      durableFile(join(directory, "operation.json"), JSON.stringify({schemaVersion: 1, output, directory, reservation}));
+      durableFile(join(reservation, "operation.json"), JSON.stringify({directory}));
+      // Probe required filesystem semantics before any signing or broadcast.
+      const probe = join(directory, "probe");
+      durableFile(probe, "probe");
+      linkSync(probe, join(directory, "probe-link"));
+      syncDirectory(directory);
+      unlinkSync(join(directory, "probe-link")); unlinkSync(probe);
+      syncDirectory(directory); syncDirectory(reservation); syncDirectory(dirname(output));
+      ProductionPublication.assertNoFinal(output);
+      return operation;
+    } catch (cause: any) {
+      let cleanupComplete = true;
+      for (const path of [directory, reservationCreated ? reservation : undefined]) {
+        if (!path || !present(path)) continue;
+        try { rmSync(path, {recursive: true, force: false}); } catch { cleanupComplete = false; }
+      }
+      try { syncDirectory(dirname(output)); } catch {}
+      if ((directory && present(directory)) || (reservationCreated && present(reservation))) cleanupComplete = false;
+      const detail = cleanupComplete
+        ? "temporary reservation state was rolled back"
+        : `manual cleanup required for staging=${directory ?? "not-created"} reservation=${reservation}`;
+      throw new ProductionPublicationReserveError(
+        `production publication reservation failed: ${cause?.message ?? String(cause)}; ${detail}`,
+        output,
+        directory,
+        reservation,
+        cleanupComplete,
+        cause
+      );
+    }
   }
 
   static resume(directory: string): ProductionPublication {

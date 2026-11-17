@@ -1,5 +1,22 @@
 # Progress
 
+## 2026-11-17 Session: DEPLOY-004 Reservation Review Hardening
+
+DEPLOY-004 remains passing after fixing PR #166's pre-execution reservation
+failure boundary. `ProductionPublication.reserve()` now removes its newly created
+staging and reservation directories when operation-pointer writes, probe writes,
+file/directory fsync, hard-link probing or the final vacancy check fails. If that
+rollback also fails, `ProductionPublicationReserveError` reports the exact output,
+staging and reservation paths with `cleanupComplete=false`; no signing or
+broadcast has started and the incomplete setup is not treated as recoverable.
+
+Tests were added first. The original implementation left both directories behind
+on the first injected write failure. After the fix, all six setup failure classes
+roll back completely, the cleanup-failure case returns bounded recovery paths and
+all 22 publication tests pass. `scripts/check.sh` also passes with Foundry 1.7.1,
+including 1,175 contract tests, 78 Toolkit tests and the packed production
+deployment, publication, tampering and recovery gates.
+
 ## 2026-11-17 Session: DATA-004 Review Hardening
 
 DATA-004 remains passing after review hardening for PR #165. Active RFQ onboarding

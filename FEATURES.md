@@ -23,7 +23,9 @@
 - Production artifacts and signable exports reserve destinations and publish
   complete validated envelopes exclusively through fsync and hard-link creation.
   Receipts, reconstructed runtime bytecode, owners/operators and wiring must
-  verify before deployment publication. Recovery revalidates without rebroadcast.
+  verify before deployment publication. Reservation setup rolls back staging and
+  reservation state on failure; typed errors expose exact paths if rollback also
+  fails. Recovery revalidates returned operations without rebroadcast.
 - Publication requires current-uid/root-owned staging/output directories and
   ancestry, without group/world writes except sticky ancestors. Trust is checked
   before reservation and again at publication; mismatch cleanup is best effort
@@ -43,6 +45,8 @@
 - Trust-boundary regressions reject writable/foreign-owned ancestry and output
   directories before reservation, accept sticky ancestors, recheck before linking
   and skip mismatch cleanup in untrusted output directories.
+- Reservation fault injection covers operation/reservation/probe writes, file and
+  directory fsync, hard-link probes, successful rollback and typed cleanup paths.
 - Packed clean Git-backed consumer: real production dry-run/fork, export,
   deployment and verification with one evidenceId; source-only broadcast denial.
 - Existing public artifact listing, pinned hash, CLI/Operator API reads and
@@ -62,6 +66,9 @@ passing
   failed before implementation; all 20 publication cases now pass. Toolkit 74/74,
   CLI 19/19, legacy 2/2 and the full gate passed, including 50 packed production
   assertions and live Anvil deployment/recovery. See the latest PROGRESS entry.
+- Review hardening on 2026-11-17 makes `reserve()` transactional before return;
+  six setup faults leave no reservation/staging state, and failed cleanup returns
+  a typed error with exact operator cleanup paths.
 - Review fixes verified on 2026-11-11: 1,171 Foundry tests, 66 Toolkit/19 CLI
   named tests, 50 packed production assertions and two public compatibility
   cases. Legacy profiles passed 7/7 each; context 12/12; identity 40/40.

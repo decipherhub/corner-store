@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import {execFileSync, spawnSync} from "node:child_process";
 import {chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
-import {join, resolve} from "node:path";
+import {basename, dirname, join, resolve} from "node:path";
 import {after, test} from "node:test";
-import {ProductionPublication, publishProductionBytes} from "../src/production-publication";
+import {ProductionPublication, ProductionPublicationReserveError, publishProductionBytes} from "../src/production-publication";
 
 const root = mkdtempSync(join(tmpdir(), "corner-publication-test-"));
 after(() => rmSync(root, {recursive: true, force: true}));
@@ -121,6 +121,73 @@ test("destination is reserved before generation and a competing process cannot r
   assert(!existsSync(output));
   operation.prepare(bytes, validate); operation.publish(validate);
   assert.deepEqual(readFileSync(output), bytes);
+});
+
+test("reserve rolls back its reservation and staging directory on setup failures", () => {
+  const fs = require("node:fs");
+  const originalWrite = fs.writeFileSync;
+  const originalLink = fs.linkSync;
+  const originalSync = fs.fsyncSync;
+  for (const kind of ["operation-write", "reservation-write", "probe-write", "probe-link", "file-sync", "directory-sync"]) {
+    const output = target();
+    const before = readdirSync(dirname(output)).sort();
+    let writes = 0;
+    try {
+      if (kind.endsWith("write")) fs.writeFileSync = (fd: number, value: Buffer | string) => {
+        writes++;
+        if (writes === ({"operation-write": 1, "reservation-write": 2, "probe-write": 3} as Record<string, number>)[kind]) {
+          throw Object.assign(Error(`injected ${kind}`), {code: "EIO"});
+        }
+        return originalWrite(fd, value);
+      };
+      if (kind === "probe-link") fs.linkSync = () => { throw Object.assign(Error("injected probe-link"), {code: "EIO"}); };
+      if (kind === "file-sync") fs.fsyncSync = (fd: number) => {
+        if (!fs.fstatSync(fd).isDirectory()) throw Object.assign(Error("injected file-sync"), {code: "EIO"});
+        return originalSync(fd);
+      };
+      if (kind === "directory-sync") fs.fsyncSync = (fd: number) => {
+        if (fs.fstatSync(fd).isDirectory()) throw Object.assign(Error("injected directory-sync"), {code: "EIO"});
+        return originalSync(fd);
+      };
+      assert.throws(() => ProductionPublication.reserve(output), new RegExp(`injected ${kind}`));
+      assert.deepEqual(readdirSync(dirname(output)).sort(), before, `${kind} left publication state behind`);
+      assert.equal(existsSync(`${output}.reservation`), false);
+      assert.equal(readdirSync(dirname(output)).some((name) => name.startsWith(`.${basename(output)}.stage-`)), false);
+    } finally {
+      fs.writeFileSync = originalWrite;
+      fs.linkSync = originalLink;
+      fs.fsyncSync = originalSync;
+    }
+  }
+});
+
+test("reserve reports exact cleanup paths when rollback itself cannot complete", () => {
+  const fs = require("node:fs");
+  const originalWrite = fs.writeFileSync;
+  const originalRm = fs.rmSync;
+  const output = target();
+  let failure: ProductionPublicationReserveError | undefined;
+  try {
+    fs.writeFileSync = () => { throw Object.assign(Error("injected setup failure"), {code: "EIO"}); };
+    fs.rmSync = () => { throw Object.assign(Error("injected cleanup failure"), {code: "EIO"}); };
+    assert.throws(() => ProductionPublication.reserve(output), (error: any) => {
+      assert(error instanceof ProductionPublicationReserveError);
+      failure = error;
+      assert.equal(error.code, "PUBLICATION_RESERVATION_FAILED");
+      assert.equal(error.cleanupComplete, false);
+      assert.equal(error.output, output);
+      assert.equal(error.reservationDirectory, `${output}.reservation`);
+      assert.ok(error.stagingDirectory);
+      assert.match(error.stagingDirectory, new RegExp(`\\.${basename(output)}\\.stage-`));
+      assert.match(error.message, /manual cleanup required/);
+      return true;
+    });
+  } finally {
+    fs.writeFileSync = originalWrite;
+    fs.rmSync = originalRm;
+    if (failure?.stagingDirectory) originalRm(failure.stagingDirectory, {recursive: true, force: true});
+    originalRm(`${output}.reservation`, {recursive: true, force: true});
+  }
 });
 
 test("validation and injected write, file fsync, link and directory fsync failures leave no partial final", () => {
