@@ -6,6 +6,7 @@ import {RegD506cRecipe} from "../../../src/compliance/recipes/RegD506cRecipe.sol
 import {RegD506cRecipeV3} from "../../../src/compliance/recipes/RegD506cRecipeV3.sol";
 import {RegD506cRecipeV4} from "../../../src/compliance/recipes/RegD506cRecipeV4.sol";
 import {RegD506cRecipeV5} from "../../../src/compliance/recipes/RegD506cRecipeV5.sol";
+import {RegD506cRecipeV6} from "../../../src/compliance/recipes/RegD506cRecipeV6.sol";
 import {Fund3c7Recipe} from "../../../src/compliance/recipes/Fund3c7Recipe.sol";
 import {ComplianceContext, VenueType, FlowType} from "../../../src/types/ComplianceTypes.sol";
 
@@ -92,6 +93,17 @@ contract RecipesTest is Test {
             assertEq(current[i], previous[i]);
         }
         assertEq(current[9], bytes32("A-12-v2"));
+    }
+
+    function test_regd_v6_uses_provider_neutral_asset_enforcement() public {
+        RegD506cRecipeV6 regdV6 = new RegD506cRecipeV6();
+        assertEq(regdV6.recipeId(), uint16(1));
+        assertEq(regdV6.version(), uint16(6));
+        bytes32[] memory current = regdV6.requiredElements();
+        assertEq(current.length, 9);
+        assertEq(current[3], bytes32("A-04-v2"));
+        assertEq(current[6], bytes32("B-02-v3"));
+        assertEq(current[7], bytes32("C-01-v2"));
     }
 
     function test_fund_isApplicable_gated_on_bit0() public {
