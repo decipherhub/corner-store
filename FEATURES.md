@@ -1269,7 +1269,7 @@ passing
 
 ### State
 
-active
+passing
 
 ## STUDIO-002 — Localized Evidence-Gated Workflow
 
