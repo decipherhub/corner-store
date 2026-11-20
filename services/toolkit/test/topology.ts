@@ -37,7 +37,7 @@ function evidence(c: any): any {
     elements: compiled.bindings.flatMap((b) => b.rules.map((r) => {
       const e = c.elements.find((e: any) => e.elementId === r.elementId);
       const p = c.policyConfig.elementParameters.find((p: any) => p.bindingIndex === b.bindingIndex && p.elementId === r.elementId)?.parameters ?? "0x";
-      return {bindingIndex: b.bindingIndex, elementId: e.elementId, implementation: e.implementation, runtimeCodeHash: hash("element-code"), metadataHash: e.metadataHash ?? hash("metadata"), evidenceType: e.evidenceType === "PROVIDER_ATTESTATION" ? 3 : 2, defaultAction: e.defaultAction === "BLOCK" ? 2 : 0, versionHash: e.versionHash ?? hash("version"), parameterSchemaId: e.parameterSchemaId, parameterSchemaVersion: e.parameterSchemaVersion, parameters: p, parameterHash: keccak256(p)};
+      return {bindingIndex: b.bindingIndex, elementId: e.elementId, implementation: e.implementation, runtimeCodeHash: hash("element-code"), metadataHash: e.metadataHash ?? hash("metadata"), evidenceType: e.evidenceType === "PROVIDER_ATTESTATION" ? 3 : e.evidenceType === "COMPOSITE" ? 4 : 2, defaultAction: e.defaultAction === "BLOCK" ? 2 : 0, versionHash: e.versionHash ?? hash("version"), parameterSchemaId: e.parameterSchemaId, parameterSchemaVersion: e.parameterSchemaVersion, parameters: p, parameterHash: keccak256(p)};
     })),
     recipes: c.recipes.map(({identityPolicy, register, ...r}: any) => ({recipeKey: r.recipeKey, recipeId: r.recipeId, version: r.version, implementation: r.implementation, runtimeCodeHash: hash("recipe-code"), requiredElements: r.requiredElements}))
   });
@@ -197,4 +197,100 @@ test("schema 7 UPDATE export commits RFQ topology through the existing delayed c
   assert.equal(iface.decodeFunctionData("scheduleManifestUpdate", tx.data)[4][1][0][4], parameters());
   assert.ok(plan.transactions.some((t) => t.id === "manifest-update-activate" && t.earliestExecution));
   assert.ok(!plan.transactions.some((t) => t.id.startsWith("context-")));
+});
+
+function assetConfig(): any {
+  const c = config();
+  c.schemaVersion = 8;
+  const previousId = c.elements[1].elementId;
+  Object.assign(c.elements[1], {
+    elementId: toolkit.ASSET_ENFORCEMENT_ELEMENT_ID,
+    evidenceType: "COMPOSITE",
+    defaultAction: "BLOCK",
+    parameterSchemaId: toolkit.ASSET_ENFORCEMENT_SCHEMA_ID,
+    parameterSchemaVersion: toolkit.ASSET_ENFORCEMENT_SCHEMA_VERSION,
+    maxParameterBytes: toolkit.ASSET_ENFORCEMENT_PARAMETER_BYTES,
+    parametersRequired: true
+  });
+  c.recipes[0].requiredElements = c.recipes[0].requiredElements.map((value: string) =>
+    value === previousId ? toolkit.ASSET_ENFORCEMENT_ELEMENT_ID : value
+  );
+  c.enforcementOverrides = c.enforcementOverrides.map((override: any) =>
+    override.elementId === previousId ? {...override, elementId: toolkit.ASSET_ENFORCEMENT_ELEMENT_ID} : override
+  );
+  const binding = {
+    bindingIndex: 0,
+    elementId: toolkit.ASSET_ENFORCEMENT_ELEMENT_ID,
+    adapter: "0x2000000000000000000000000000000000000009",
+    interfaceVersion: 1,
+    runtimeCodeHash: keccak256("0x6000"),
+    bindingDigest: hash("asset-enforcement-binding"),
+    referenceOnly: false
+  };
+  c.assetEnforcement = [binding];
+  c.policyConfig.elementParameters.push({
+    bindingIndex: 0,
+    elementId: toolkit.ASSET_ENFORCEMENT_ELEMENT_ID,
+    schemaId: toolkit.ASSET_ENFORCEMENT_SCHEMA_ID,
+    schemaVersion: toolkit.ASSET_ENFORCEMENT_SCHEMA_VERSION,
+    parameters: toolkit.encodeAssetEnforcementParameters(binding)
+  });
+  return c;
+}
+
+test("schema 8 binds provider-neutral asset enforcement into Manifest policy bytes", () => {
+  const c = assetConfig();
+  assert.equal(toolkit.validateProductionOnboardingConfig(c).schemaVersion, 8);
+  const decoded = toolkit.decodeAssetEnforcementParameters(c.policyConfig.elementParameters[1].parameters);
+  assert.equal(decoded.adapter.toLowerCase(), c.assetEnforcement[0].adapter.toLowerCase());
+
+  for (const mutate of [
+    (value: any) => delete value.assetEnforcement,
+    (value: any) => value.assetEnforcement[0].bindingDigest = hash("drift"),
+    (value: any) => value.assetEnforcement[0].interfaceVersion = 0,
+    (value: any) => value.assetEnforcement[0].runtimeCodeHash = `0x${"00".repeat(32)}`,
+    (value: any) => value.elements[1].evidenceType = "ONCHAIN_STATE",
+    (value: any) => value.policyConfig.elementParameters[1].parameters = "0x"
+  ]) {
+    const invalid = assetConfig();
+    mutate(invalid);
+    assert.throws(() => toolkit.validateProductionOnboardingConfig(invalid), /asset enforcement|assetEnforcement|B-02-v3|parameters/i);
+  }
+});
+
+test("schema 8 production export rejects reference-only adapters and preserves atomic policy activation", () => {
+  const c = assetConfig();
+  const audit = evidence(c);
+  const plan = toolkit.createProductionOnboardingPlan(c, "2026-11-21T00:00:00.000Z", audit);
+  assert.ok(plan.transactions.some((entry) => entry.id === "manifest-register"));
+  assert.ok(!plan.transactions.some((entry) => entry.id.includes("asset-enforcement-bind")));
+
+  const reference = assetConfig();
+  reference.assetEnforcement[0].referenceOnly = true;
+  assert.throws(
+    () => toolkit.createProductionOnboardingPlan(reference, "2026-11-21T00:00:00.000Z", evidence(reference)),
+    /reference-only asset enforcement/i
+  );
+});
+
+test("schema 8 verifier checks adapter code, capability version and configuration digest", async () => {
+  const c = assetConfig();
+  const calls: string[] = [];
+  const reader: any = {
+    chainId: async () => c.chainId,
+    getCode: async (address: string) => address.toLowerCase() === c.assetEnforcement[0].adapter.toLowerCase() ? "0x6000" : "0x6001",
+    call: async (_address: string, _abi: string[], fn: string) => {
+      calls.push(fn);
+      if (fn === "enforcementVersion") return 1;
+      if (fn === "bindingDigest") return c.assetEnforcement[0].bindingDigest;
+      throw new Error("fixture read unavailable");
+    },
+    balanceOf: async () => 0n,
+    allowance: async () => 0n
+  };
+  const result = await toolkit.verifyProductionOnboarding(c, reader);
+  assert.equal(result.checks.find((entry) => entry.name === "asset-enforcement-1-code")?.pass, true);
+  assert.equal(result.checks.find((entry) => entry.name === "asset-enforcement-1-version")?.pass, true);
+  assert.equal(result.checks.find((entry) => entry.name === "asset-enforcement-1-binding")?.pass, true);
+  assert.ok(calls.includes("enforcementVersion") && calls.includes("bindingDigest"));
 });

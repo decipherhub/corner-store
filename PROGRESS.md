@@ -20,6 +20,37 @@ HA and failover, external worker leader election, backup/restore and retention d
 WORM audit storage, KMS/HSM custody and live TA/KYC/provider deployments. These are
 not represented as completed by the SDK package.
 
+## 2026-11-21 Session: CORE-016 Provider-neutral Asset Enforcement
+
+CORE-016 is passing. New opt-in `B-02-v3` accepts a provider-neutral
+`IAssetEnforcement` decision built from the venue-authoritative asset sender,
+recipient and amount. The active policy now commits the adapter address,
+capability version, runtime codehash and asset-specific configuration digest in
+`ManifestPolicyConfig`; there is no separately mutable adapter binding that can
+change an active Manifest's meaning. The existing `B-02-v2` ERC-3643 path is
+unchanged and is exposed through a wrapper rather than reimplemented.
+
+Toolkit onboarding schema 8 validates the readable declaration against the exact
+128-byte policy parameters, rejects the reference allowlist adapter from
+production export and rechecks adapter code, version and binding after deployment.
+All outage, malformed-result, unsupported, drift and issuer rejection cases fail
+closed with bounded public reason categories. D045 records the Manifest-owned
+binding decision; product, security, testing and SDK migration documents describe
+the opt-in boundary.
+
+Fresh verification passed `scripts/check.sh`: 1,223/1,223 Foundry tests plus all
+service, package, clean-project, production dry-run/deploy/verify/recovery and
+deploy-v3 gates. The first full run encountered the existing RFQ file-store
+creation race; its isolated rerun and the final full run passed without RFQ source
+changes. Both `buidl-like` and `reg-d` Anvil E2E profiles passed 7/7 scenarios and
+their interactive backend/CLI/Router RFQ flows. Protected public-testnet, Monad
+and deployment artifact paths have no diff from the original `origin/main` base.
+
+Remaining production risks are external to this feature: selecting and auditing
+a real issuer/TA adapter, validating its operational availability and governance,
+and performing reviewed live-network deployment. No provider, credentials,
+custody integration or private API was added.
+
 ## 2026-11-18 Session: CORE-015 Main Integration Review
 
 CORE-015 remains passing after integrating current main and resolving two

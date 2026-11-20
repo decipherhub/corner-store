@@ -466,6 +466,13 @@ remain unverified. See the [production runbook](./deployment-production.md).
 
 ### Integrated Check
 
+Provider-neutral asset enforcement adds conformance coverage for authoritative
+buy/sell direction, canonical amount, request/result digest binding, runtime code
+and configuration drift, unavailable/malformed adapters, the existing ERC-3643
+B-02-v2 wrapper and a non-ERC-3643 reference allowlist adapter. Toolkit schema 8
+must prove that the same adapter bytes are committed by `ManifestPolicyConfig`
+and re-read during production verification.
+
 ```sh
 scripts/check.sh
 ```

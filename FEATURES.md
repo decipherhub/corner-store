@@ -96,6 +96,44 @@ passing
   remain follow-up work. Docker image gates, live public-network behavior and
   production provider/custody/retention integrations were not verified here.
 
+## CORE-016: Provider-neutral Asset Enforcement
+
+### Behavior
+
+- Opt-in B-02-v3 depends on the provider-neutral `IAssetEnforcement` contract,
+  not ERC-3643 registry/compliance interfaces. The request carries the
+  authoritative asset sender, recipient, amount and a context commitment.
+- Adapter address, capability version, runtime code hash and configuration digest
+  are canonical 128-byte `ManifestPolicyConfig` parameters. They change atomically
+  with the versioned Manifest rather than through mutable Element storage.
+- `Erc3643AssetEnforcement` wraps the unchanged B-02-v2 decision path. A labelled
+  reference allowlist adapter proves the same interface without ERC-3643 fields;
+  production onboarding rejects reference-only adapter export.
+- Missing capability, adapter outage, malformed request/result, code/version/config
+  drift and token rejection all fail closed. Public reasons expose only bounded
+  categories and no provider or identity details.
+- Toolkit onboarding schema 8 validates the human-readable adapter declaration
+  against exact policy bytes and re-verifies deployed code, version and binding.
+  Existing B-02-v2, Anvil, GIWA and public demo profiles remain unchanged.
+
+### Verification
+
+- `forge test --offline --match-path test/unit/compliance/elements/AssetEnforcementV3.t.sol`
+- Engine ManifestPolicyConfig integration and Reg D v6 composition tests
+- Toolkit schema 8 validation/export/verification tests
+- Existing Anvil/GIWA profiles and `scripts/check.sh`
+- `git diff --check` and protected public-demo path comparison
+
+### State
+
+passing
+
+### Notes
+
+- Issue #168; decision D045. No production provider, credentials or private API is
+  selected by this feature.
+- Plan: `docs/exec-plans/completed/CORE-016-provider-neutral-asset-enforcement.md`.
+
 ## DEPLOY-004: Complete and Append-Only Production Evidence
 
 ### Behavior

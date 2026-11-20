@@ -22,6 +22,7 @@ export const ELEMENT_LABELS: Record<string, string> = {
   "B-01-v1": "Asset Classification",
   "B-02-v1": "ERC-3643 Native",
   "B-02-v2": "ERC-3643 Native",
+  "B-02-v3": "Asset Transfer Enforcement",
   "C-01-v1": "Lockup (Rule 144)",
   "C-01-v2": "Lockup (Rule 144)",
   "E-01-v1": "Form D Filing",
@@ -147,6 +148,12 @@ export const ELEMENT_CODE_NAMES: Record<string, Record<number, string>> = {
     4: "TOKEN_FROZEN_PARTY",
     5: "TOKEN_INSUFFICIENT_UNFROZEN",
     6: "TOKEN_TRANSFER_INELIGIBLE"
+  },
+  "B-02-v3": {
+    1: "ASSET_ENFORCEMENT_UNAVAILABLE",
+    2: "ASSET_ENFORCEMENT_BINDING_DRIFT",
+    3: "ASSET_ENFORCEMENT_UNSUPPORTED",
+    4: "ASSET_TRANSFER_REJECTED"
   },
   // C-01-v2 provider-neutral acquisition snapshot outcomes.
   "C-01-v2": {
