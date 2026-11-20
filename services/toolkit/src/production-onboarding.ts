@@ -12,10 +12,18 @@ import {
 } from "./policy-audit";
 import {assertRecipeVenueCompatibility} from "./policy-compatibility";
 import {IdentityPolicyInput, validateIdentityPolicies} from "./identity-policy";
+import {
+  ASSET_ENFORCEMENT_ELEMENT_ID,
+  ASSET_ENFORCEMENT_PARAMETER_BYTES,
+  ASSET_ENFORCEMENT_SCHEMA_ID,
+  ASSET_ENFORCEMENT_SCHEMA_VERSION,
+  AssetEnforcementBindingInput,
+  encodeAssetEnforcementParameters
+} from "./asset-enforcement";
 
 import {VenueContextInput, buildVenueContextTransactions, verifyVenueContext} from "./venue-context";
 
-export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 7;
+export const PRODUCTION_ONBOARDING_SCHEMA_VERSION = 8;
 export const MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION = 1;
 export const POLICY_STATUS = {UNKNOWN: 0, UNREGULATED: 1, ACTIVE: 2, SUSPENDED: 3, PROPOSED: 4, RETIRED: 5} as const;
 export const VENUE_TYPE = {AMM: 0, ORDER_BOOK: 1, RFQ: 2} as const;
@@ -65,6 +73,7 @@ export interface ProductionOnboardingConfig {
   recipeBindings: RecipeBindingInput[];
   enforcementOverrides?: ElementEnforcementOverrideInput[];
   policyConfig?: ManifestPolicyConfigInput;
+  assetEnforcement?: AssetEnforcementBindingInput[];
   venues: VenueInput[];
   rfq?: {
     makers?: {maker: string; approved: boolean}[];
@@ -345,7 +354,7 @@ export function loadProductionOnboardingConfig(path: string): ProductionOnboardi
 export function validateProductionOnboardingConfig(value: unknown): ProductionOnboardingConfig {
   rejectUnsafeEvidence(value, "onboarding");
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("production onboarding config must be an object");
-  assertKnownKeys(value, ["schemaVersion", "chainId", "configHash", "artifactHash", "legalPackageHash", "governance", "addresses", "codeHashes", "lifecycle", "elements", "recipes", "manifest", "recipeBindings", "enforcementOverrides", "policyConfig", "venues", "rfq", "inventory"], "onboarding");
+  assertKnownKeys(value, ["schemaVersion", "chainId", "configHash", "artifactHash", "legalPackageHash", "governance", "addresses", "codeHashes", "lifecycle", "elements", "recipes", "manifest", "recipeBindings", "enforcementOverrides", "policyConfig", "assetEnforcement", "venues", "rfq", "inventory"], "onboarding");
   const c = value as Partial<ProductionOnboardingConfig>;
   const schemaVersion = c.schemaVersion;
   if (typeof schemaVersion !== "number" || !Number.isInteger(schemaVersion) || schemaVersion < MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION || schemaVersion > PRODUCTION_ONBOARDING_SCHEMA_VERSION) throw new Error(`schemaVersion must be between ${MIN_PRODUCTION_ONBOARDING_SCHEMA_VERSION} and ${PRODUCTION_ONBOARDING_SCHEMA_VERSION}`);
@@ -491,6 +500,8 @@ export function validateProductionOnboardingConfig(value: unknown): ProductionOn
   if (!hasBlocking) throw new Error("recipeBindings must include a blocking REQUIRED_BLOCKING or PATH_OPTION binding");
   validateOverrides(c.enforcementOverrides, c.recipeBindings, c.recipes, c.elements, v2);
   if (v5) validatePolicyConfig(c.policyConfig, c.recipeBindings, c.recipes, c.elements, schemaVersion);
+  if (schemaVersion >= 8) validateAssetEnforcement(c as ProductionOnboardingConfig);
+  else if (c.assetEnforcement !== undefined) throw new Error("assetEnforcement requires schemaVersion 8");
   validateIdentityPolicies(c as ProductionOnboardingConfig);
   if (!Array.isArray(c.venues) || c.venues.length === 0) throw new Error("venues must contain at least one venue");
   const venueSeen = new Set<string>();
@@ -571,6 +582,9 @@ export function createProductionOnboardingPlan(
   auditEvidence?: ProductionOnboardingAuditEvidence
 ): ProductionOnboardingPlan {
   const selected = validateProductionOnboardingConfig(config);
+  if (selected.assetEnforcement?.some((binding) => binding.referenceOnly)) {
+    throw new Error("reference-only asset enforcement adapters cannot be exported for production activation");
+  }
   const v2 = isV2Onboarding(selected);
   const v4 = isV4Onboarding(selected);
   const v5 = isV5Onboarding(selected);
@@ -730,6 +744,34 @@ export async function verifyProductionOnboarding(config: ProductionOnboardingCon
   } catch (err: any) { check("chain-id", false, `unavailable: ${err.message}`); }
   for (const [key, address] of Object.entries(selected.addresses)) {
     if (address) await verifyCode(reader, address, `code-${key}`, check, selected.codeHashes?.[key]);
+  }
+  for (const [index, binding] of (selected.assetEnforcement ?? []).entries()) {
+    await verifyCode(reader, binding.adapter, `asset-enforcement-${index + 1}-code`, check, binding.runtimeCodeHash);
+    await verifyCallUint(
+      reader,
+      binding.adapter,
+      ["function enforcementVersion() view returns (uint16)"],
+      "enforcementVersion",
+      [],
+      binding.interfaceVersion,
+      `asset-enforcement-${index + 1}-version`,
+      check
+    );
+    await verifyCallHash(
+      reader,
+      binding.adapter,
+      ["function bindingDigest(address) view returns (bytes32)"],
+      "bindingDigest",
+      [selected.addresses.token],
+      binding.bindingDigest,
+      `asset-enforcement-${index + 1}-binding`,
+      check
+    );
+    check(
+      `asset-enforcement-${index + 1}-production-eligibility`,
+      !binding.referenceOnly,
+      `referenceOnly=${binding.referenceOnly}`
+    );
   }
   if (isV4Onboarding(selected)) {
     try {
@@ -1039,8 +1081,8 @@ function validatePolicyConfig(
   if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("policyConfig is required for schemaVersion 5");
   assertKnownKeys(config, ["schemaVersion", "elementParameters"], "policyConfig");
   const identityTracks = new Set((recipes ?? []).map((recipe) => recipe.identityPolicy?.track).filter(Boolean));
-  if (onboardingSchemaVersion === 7 && identityTracks.size > 1) throw new Error("schemaVersion 7 policyConfig cannot mix RFQ and TSV identity tracks");
-  const expectedSchema = onboardingSchemaVersion === 7 && identityTracks.has("TSV") ? 3 : onboardingSchemaVersion === 7 ? 2 : 1;
+  if (onboardingSchemaVersion >= 7 && identityTracks.size > 1) throw new Error("schemaVersion 7+ policyConfig cannot mix RFQ and TSV identity tracks");
+  const expectedSchema = onboardingSchemaVersion >= 7 && identityTracks.has("TSV") ? 3 : onboardingSchemaVersion >= 7 ? 2 : 1;
   if (config.schemaVersion !== expectedSchema) throw new Error(`policyConfig.schemaVersion must be ${expectedSchema}`);
   if (!Array.isArray(config.elementParameters) || config.elementParameters.length > MAX_POLICY_PARAMETERS) throw new Error(`policyConfig.elementParameters must contain at most ${MAX_POLICY_PARAMETERS} entries`);
   const byRecipe = new Map((recipes ?? []).map((recipe) => [recipe.recipeId, recipe]));
@@ -1076,6 +1118,55 @@ function validatePolicyConfig(
       if (!element.parametersRequired && element.maxParameterBytes === 0 && supplied) throw new Error(`policyConfig supplied parameters to parameterless Element ${elementId}`);
     }
   }
+}
+
+function validateAssetEnforcement(config: ProductionOnboardingConfig): void {
+  if (!Array.isArray(config.assetEnforcement) || config.assetEnforcement.length === 0) {
+    throw new Error("schemaVersion 8 requires assetEnforcement bindings");
+  }
+  const elementId = ASSET_ENFORCEMENT_ELEMENT_ID.toLowerCase();
+  const element = config.elements.find((entry) => entry.elementId.toLowerCase() === elementId);
+  if (
+    !element
+      || (element.evidenceType !== "COMPOSITE" && element.evidenceType !== EVIDENCE_TYPE.COMPOSITE)
+      || (element.defaultAction !== "BLOCK" && element.defaultAction !== ENFORCEMENT_ACTION.BLOCK)
+      || element.parameterSchemaId?.toLowerCase() !== ASSET_ENFORCEMENT_SCHEMA_ID.toLowerCase()
+      || element.parameterSchemaVersion !== ASSET_ENFORCEMENT_SCHEMA_VERSION
+      || element.maxParameterBytes !== ASSET_ENFORCEMENT_PARAMETER_BYTES
+      || element.parametersRequired !== true
+  ) throw new Error("B-02-v3 asset enforcement capability must be COMPOSITE/BLOCK with the exact v1 128-byte schema");
+
+  const recipes = new Map(config.recipes.map((recipe) => [recipe.recipeId, recipe]));
+  const required = new Set<string>();
+  for (const [bindingIndex, binding] of config.recipeBindings.entries()) {
+    const recipe = recipes.get(binding.recipeId)!;
+    if (recipe.requiredElements?.some((id) => id.toLowerCase() === elementId)) required.add(`${bindingIndex}:${elementId}`);
+  }
+  if (required.size === 0) throw new Error("assetEnforcement requires B-02-v3 in a bound recipe");
+
+  const seen = new Set<string>();
+  for (const [index, binding] of config.assetEnforcement.entries()) {
+    assertKnownKeys(binding, ["bindingIndex", "elementId", "adapter", "interfaceVersion", "runtimeCodeHash", "bindingDigest", "referenceOnly"], `assetEnforcement[${index}]`);
+    validateUint(binding.bindingIndex, 8, `assetEnforcement[${index}].bindingIndex`);
+    if (binding.bindingIndex >= config.recipeBindings.length || binding.elementId.toLowerCase() !== elementId) throw new Error(`assetEnforcement[${index}] must target a valid B-02-v3 binding`);
+    if (!isAddress(binding.adapter)) throw new Error(`assetEnforcement[${index}].adapter must be a non-zero address`);
+    validateUint(binding.interfaceVersion, 16, `assetEnforcement[${index}].interfaceVersion`);
+    if (binding.interfaceVersion === 0) throw new Error(`assetEnforcement[${index}].interfaceVersion must be non-zero`);
+    if (!isHash32(binding.runtimeCodeHash) || /^0x0{64}$/i.test(binding.runtimeCodeHash)) throw new Error(`assetEnforcement[${index}].runtimeCodeHash must be non-zero bytes32`);
+    if (!isHash32(binding.bindingDigest) || /^0x0{64}$/i.test(binding.bindingDigest)) throw new Error(`assetEnforcement[${index}].bindingDigest must be non-zero bytes32`);
+    if (typeof binding.referenceOnly !== "boolean") throw new Error(`assetEnforcement[${index}].referenceOnly must be boolean`);
+    const key = `${binding.bindingIndex}:${elementId}`;
+    if (!required.has(key) || seen.has(key)) throw new Error("assetEnforcement bindings must exactly and uniquely match B-02-v3 recipe bindings");
+    seen.add(key);
+    const policyEntry = config.policyConfig?.elementParameters.find((entry) => `${entry.bindingIndex}:${entry.elementId.toLowerCase()}` === key);
+    const expected = encodeAssetEnforcementParameters(binding);
+    if (
+      !policyEntry || policyEntry.schemaId.toLowerCase() !== ASSET_ENFORCEMENT_SCHEMA_ID.toLowerCase()
+        || policyEntry.schemaVersion !== ASSET_ENFORCEMENT_SCHEMA_VERSION
+        || policyEntry.parameters.toLowerCase() !== expected.toLowerCase()
+    ) throw new Error(`assetEnforcement[${index}] must exactly match ManifestPolicyConfig bytes`);
+  }
+  if (seen.size !== required.size) throw new Error("assetEnforcement is missing a B-02-v3 recipe binding");
 }
 
 function assertPolicyAuditReady(
@@ -1351,7 +1442,7 @@ function same(a: string, b: string): boolean { return a.toLowerCase() === b.toLo
 
 function rejectUnsafeEvidence(value: unknown, path: string): void {
   if (typeof value === "string") {
-    const hashLike = /(Hash|hash|elementId|SchemaId|schemaId|reasonCode|fullManifestHash|recipeKey|parameters)$/.test(path) || path.includes(".codeHashes.") || path.includes(".requiredElements[");
+    const hashLike = /(Hash|hash|Digest|digest|elementId|SchemaId|schemaId|reasonCode|fullManifestHash|recipeKey|parameters)$/.test(path) || path.includes(".codeHashes.") || path.includes(".requiredElements[");
     const addressLike = ADDRESS.test(value);
     const decimalAmountLike = /\.(minBalance|minAllowance|factsPacked|coverageScope)$/.test(path);
     if (SECRET_VALUE.test(value) && !hashLike) throw new Error(`${path} must not contain signer secrets or raw private keys`);

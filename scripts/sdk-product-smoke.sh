@@ -62,7 +62,7 @@ const toolkit = require("@corner-store/toolkit");
   assert.equal(signed.typedData.primaryType, "RFQQuoteV3");
   assert.equal(verifyTypedData(signed.typedData.domain, signed.typedData.types, signed.quote, signed.signature), wallet.address);
   assert.equal(rfq.RFQ_DOMAIN_VERSION, "2");
-  assert.equal(toolkit.PRODUCTION_ONBOARDING_SCHEMA_VERSION, 7);
+  assert.equal(toolkit.PRODUCTION_ONBOARDING_SCHEMA_VERSION, 8);
   assert.equal(typeof toolkit.createContextOnboardingTemplate, "function");
   console.log("Packed RFQ v3 and onboarding v7 smoke: 6 assertions passed.");
 })().catch((error) => {console.error(error); process.exitCode = 1;});

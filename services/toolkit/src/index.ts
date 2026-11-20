@@ -19,6 +19,7 @@ export * from "./production-onboarding";
 export * from "./venue-context";
 
 export * from "./identity-policy";
+export * from "./asset-enforcement";
 
 export * from "./identity-evidence";
 
