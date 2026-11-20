@@ -282,7 +282,7 @@ export class PostgresQuoteCoordinatorStore implements QuoteCoordinatorStore {
         await client.query("COMMIT");
         return result;
       } catch (error: any) {
-        await client.query("ROLLBACK");
+        try { await client.query("ROLLBACK"); } catch { /* preserve the original failure */ }
         if (attempt < this.transactionRetries && ["40001", "40P01", "23505"].includes(error?.code)) continue;
         throw error;
       } finally {

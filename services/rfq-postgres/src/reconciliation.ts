@@ -99,6 +99,9 @@ export class PostgresQuoteReconciliationWorker {
         const events = [...await this.reader.quoteEvents(blockNumber, blockNumber)].sort(compareEvents);
         for (const event of events) {
           validateEvent(event, block);
+        }
+        await this.stageBlock(block, events, now);
+        for (const event of events) {
           await this.store.markObserved({
             scope: event.scope,
             nonce: event.nonce,
@@ -106,7 +109,7 @@ export class PostgresQuoteReconciliationWorker {
             now
           });
         }
-        await this.persistBlock(block, events, now);
+        await this.advanceCursor(block, now);
         cursor = {blockNumber: block.number, blockHash: block.hash};
       }
       await this.finalizeCanonical(head, now);
@@ -212,7 +215,18 @@ export class PostgresQuoteReconciliationWorker {
     }
   }
 
-  private async persistBlock(block: ChainBlock, events: readonly QuoteChainEvent[], now: number): Promise<void> {
+  private async stageBlock(block: ChainBlock, events: readonly QuoteChainEvent[], now: number): Promise<void> {
+    const existing = await this.pool.query<{block_hash: string}>(
+      `SELECT block_hash FROM corner_store_rfq.chain_blocks WHERE source_id = $1 AND block_number = $2`,
+      [this.sourceId, block.number]
+    );
+    if (existing.rowCount && existing.rows[0].block_hash.toLowerCase() !== block.hash.toLowerCase()) {
+      await this.rollbackObservationsAfter(block.number - 1, now);
+      await this.pool.query(
+        `DELETE FROM corner_store_rfq.chain_blocks WHERE source_id = $1 AND block_number >= $2`,
+        [this.sourceId, block.number]
+      );
+    }
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -234,11 +248,6 @@ export class PostgresQuoteReconciliationWorker {
             event.scope.maker.toLowerCase(), event.nonce, event.kind]
         );
       }
-      await client.query(
-        `UPDATE corner_store_rfq.chain_cursors SET block_number = $2, block_hash = $3,
-         updated_at = $4, last_success_at = $4, failure_code = NULL WHERE source_id = $1`,
-        [this.sourceId, block.number, block.hash.toLowerCase(), now]
-      );
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -246,6 +255,14 @@ export class PostgresQuoteReconciliationWorker {
     } finally {
       client.release();
     }
+  }
+
+  private async advanceCursor(block: ChainBlock, now: number): Promise<void> {
+    await this.pool.query(
+      `UPDATE corner_store_rfq.chain_cursors SET block_number = $2, block_hash = $3,
+       updated_at = $4, last_success_at = $4, failure_code = NULL WHERE source_id = $1`,
+      [this.sourceId, block.number, block.hash.toLowerCase(), now]
+    );
   }
 
   private async finalizeCanonical(head: ChainBlock, now: number): Promise<void> {

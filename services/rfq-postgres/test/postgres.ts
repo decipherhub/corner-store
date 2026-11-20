@@ -92,20 +92,35 @@ test("PostgreSQL store preserves HA nonce, idempotency, inventory and reorg inva
   assert.equal((await first.getByIdempotencyKeyHash(scope, "reorg-key"))?.state, "PUBLISHED");
   assert.deepEqual(await first.inventory(MAKER, TOKEN_OUT, VENUE), {available: "100", reserved: "25"});
 
-  chain.add(11, hash(111), hash(110), [{
-    transactionHash: hash(101), logIndex: 0, blockNumber: 11, blockHash: hash(111),
+  await pool.query(
+    `INSERT INTO corner_store_rfq.chain_blocks(source_id, block_number, block_hash, parent_hash)
+     VALUES ('rfq-test', 11, $1, $2)`, [hash(211), hash(110)]
+  );
+  await pool.query(
+    `INSERT INTO corner_store_rfq.chain_observations(
+       source_id, transaction_hash, log_index, block_number, block_hash,
+       chain_id, adapter, maker, nonce, kind)
+     VALUES ('rfq-test', $1, 0, 11, $2, 31337, $3, $4, $5, 'fill')`,
+    [hash(201), hash(211), ADAPTER, MAKER, nonce]
+  );
+  await first.markObserved({scope, nonce, observation: {
+    kind: "fill", transactionHash: hash(201), blockNumber: 11, blockHash: hash(211)
+  }, now: 700});
+  chain.add(11, hash(111), hash(110), []);
+  chain.add(12, hash(112), hash(111), [{
+    transactionHash: hash(101), logIndex: 0, blockNumber: 12, blockHash: hash(112),
     scope, nonce, kind: "fill"
   }]);
-  chain.add(12, hash(112), hash(111), []);
   chain.add(13, hash(113), hash(112), []);
-  chain.setHead(13);
+  chain.add(14, hash(114), hash(113), []);
+  chain.setHead(14);
   const restarted = new PostgresQuoteReconciliationWorker({
     pool, store: second, reader: chain, sourceId: "rfq-test", startBlock: 10,
     confirmationDepth: 3, maxLagBlocks: 0, maxStaleSeconds: 60, now: () => 701
   });
   const health = await restarted.runOnce();
   assert.equal(health.ready, true);
-  assert.equal(health.cursorBlock, 13);
+  assert.equal(health.cursorBlock, 14);
   assert.equal((await first.getByIdempotencyKeyHash(scope, "reorg-key"))?.state, "FILLED");
   assert.deepEqual(await first.inventory(MAKER, TOKEN_OUT, VENUE), {available: "100", reserved: "0"});
   await pool.end();
