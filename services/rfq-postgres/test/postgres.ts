@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import {execFile} from "node:child_process";
+import {promisify} from "node:util";
+import {join} from "node:path";
 import test from "node:test";
 import {Pool} from "pg";
 import {
@@ -9,6 +12,8 @@ import {
   RFQChainReader
 } from "../src";
 import {ReserveQuoteInput, RFQStoreError} from "@corner-store/rfq-service";
+
+const execFileAsync = promisify(execFile);
 
 const DATABASE_URL = process.env.CORNER_STORE_TEST_POSTGRES_URL;
 const REQUIRE_POSTGRES = process.env.CORNER_STORE_REQUIRE_POSTGRES === "1";
@@ -33,31 +38,29 @@ test("PostgreSQL store preserves HA nonce, idempotency, inventory and reorg inva
   await first.initialize([{maker: MAKER, token: TOKEN_OUT, venue: VENUE, available: "100"}]);
   await second.initialize();
 
-  const attempts = await Promise.allSettled(Array.from({length: 20}, (_, index) =>
-    (index % 2 ? first : second).reserveOrReturnExisting(reserve(`key-${index}`, `request-${index}`, 100 + index, "10"))
-  ));
-  const fulfilled = attempts.filter((item): item is PromiseFulfilledResult<Awaited<ReturnType<typeof first.reserveOrReturnExisting>>> => item.status === "fulfilled");
-  const rejected = attempts.filter((item): item is PromiseRejectedResult => item.status === "rejected");
+  const attempts = (await Promise.all([runReserveWorker(0), runReserveWorker(1)])).flat();
+  const fulfilled = attempts.filter((item) => item.status === "fulfilled");
+  const rejected = attempts.filter((item) => item.status === "rejected");
   assert.equal(fulfilled.length, 10);
   assert.equal(rejected.length, 10);
-  assert(rejected.every((item) => item.reason instanceof RFQStoreError && item.reason.code === "INVENTORY_UNAVAILABLE"));
-  assert.deepEqual(fulfilled.map((item) => Number(item.value.record.nonce)).sort((a, b) => a - b), [1,2,3,4,5,6,7,8,9,10]);
+  assert(rejected.every((item) => item.code === "INVENTORY_UNAVAILABLE"));
+  assert.deepEqual(fulfilled.map((item) => Number(item.nonce)).sort((a, b) => a - b), [1,2,3,4,5,6,7,8,9,10]);
   assert.deepEqual(await first.inventory(MAKER, TOKEN_OUT, VENUE), {available: "100", reserved: "100"});
 
-  const replay = await second.reserveOrReturnExisting(reserve("key-0", "request-0", 100, "10"));
+  const replay = await second.reserveOrReturnExisting(reserve("sha256:key-0", "sha256:request-0", 100, "10"));
   assert.equal(replay.existing, true);
-  assert.equal(replay.record.nonce, fulfilled.find((item) => item.value.record.idempotencyKeyHash === "key-0")?.value.record.nonce);
+  assert.equal(replay.record.nonce, fulfilled.find((item) => item.key === "sha256:key-0")?.nonce);
   await assert.rejects(
-    second.reserveOrReturnExisting(reserve("key-0", "different", 100, "10")),
+    second.reserveOrReturnExisting(reserve("sha256:key-0", "sha256:different", 100, "10")),
     (error: unknown) => error instanceof RFQStoreError && error.code === "IDEMPOTENCY_CONFLICT"
   );
 
-  for (const item of fulfilled) await first.revoke({scope, nonce: item.value.record.nonce!, now: 500});
+  for (const item of fulfilled) await first.revoke({scope, nonce: item.nonce!, now: 500});
   assert.deepEqual(await first.inventory(MAKER, TOKEN_OUT, VENUE), {available: "100", reserved: "0"});
 
   const quote = await first.reserveOrReturnExisting(reserve("reorg-key", "reorg-request", 600, "25"));
   const nonce = quote.record.nonce!;
-  await first.markSigned({
+  await second.markSigned({
     scope,
     idempotencyKeyHash: "reorg-key",
     requestHash: "reorg-request",
@@ -118,6 +121,22 @@ function reserve(key: string, requestHash: string, createdAt: number, amount: st
     reservationExpiresAt: createdAt + 300,
     createdAt
   };
+}
+
+interface WorkerResult {
+  status: "fulfilled" | "rejected";
+  key: string;
+  nonce?: string;
+  code?: string;
+}
+
+async function runReserveWorker(workerId: number): Promise<WorkerResult[]> {
+  const worker = join(__dirname, "fixtures", "reserve-worker.js");
+  const {stdout} = await execFileAsync(process.execPath, [worker], {
+    env: {...process.env, CORNER_STORE_WORKER_INPUT: JSON.stringify({databaseUrl: DATABASE_URL, workerId, count: 10})},
+    maxBuffer: 1024 * 1024
+  });
+  return JSON.parse(stdout) as WorkerResult[];
 }
 
 class MutableChain implements RFQChainReader {
