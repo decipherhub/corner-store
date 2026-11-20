@@ -1,5 +1,25 @@
 # Progress
 
+## 2026-11-21 Session: RFQ-007 PostgreSQL HA Coordinator
+
+RFQ-007 is passing. A separate optional `@corner-store/rfq-postgres` package now
+implements the RFQ coordinator store with serializable transactions for durable
+idempotency, maker-scoped monotonic nonces and atomic inventory reservations. It
+also persists chain cursors and observations so restart, unfinalized reorg rollback,
+finalized fill/cancel and exactly-once lease release are handled without changing
+the local file reference or public demo paths.
+
+Production RFQ bootstrap contract v2 now requires healthy reconciliation readiness
+before policy lookup or signing. The adapter is independently publishable and a
+clean external project can install and import its packed artifact. GitHub CI passed
+the real PostgreSQL multi-process/restart/reorg suite in 30 seconds and the full
+repository gate in 14 minutes 1 second. RFQ service 35/35 and host 30/30 also pass.
+
+Remaining production evidence belongs to the operator environment: managed database
+HA and failover, external worker leader election, backup/restore and retention drills,
+WORM audit storage, KMS/HSM custody and live TA/KYC/provider deployments. These are
+not represented as completed by the SDK package.
+
 ## 2026-11-18 Session: CORE-015 Main Integration Review
 
 CORE-015 remains passing after integrating current main and resolving two

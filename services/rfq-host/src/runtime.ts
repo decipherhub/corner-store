@@ -16,7 +16,7 @@ import {
 } from "./server";
 import {Hex, QuoteCoordinatorIntent, RFQQuoteCoordinator} from "@corner-store/rfq-service";
 
-export const PRODUCTION_RFQ_BOOTSTRAP_CONTRACT_VERSION = "1.0.0" as const;
+export const PRODUCTION_RFQ_BOOTSTRAP_CONTRACT_VERSION = "2.0.0" as const;
 export const PRODUCTION_RFQ_RUNTIME_CONFIG_VERSION = "1" as const;
 
 const RFQ_ENV_PREFIX = "CORNER_STORE_RFQ_";
@@ -47,6 +47,7 @@ const REQUIRED_READINESS_COMPONENTS: RFQReadinessComponent[] = [
   "audit",
   "authentication",
   "coordinator",
+  "reconciliation",
   "policy",
   "pricing",
   "rate_limit",

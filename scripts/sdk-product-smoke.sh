@@ -21,6 +21,10 @@ RFQ_TARBALL_NAME=$(
   cd "$ROOT_DIR"
   npm pack ./services/rfq --pack-destination "$PACK_DIR" --silent | tail -n 1
 )
+RFQ_POSTGRES_TARBALL_NAME=$(
+  cd "$ROOT_DIR"
+  npm pack ./services/rfq-postgres --pack-destination "$PACK_DIR" --silent | tail -n 1
+)
 CLI_TARBALL_NAME=$(
   cd "$ROOT_DIR"
   npm pack ./services/cli --pack-destination "$PACK_DIR" --silent | tail -n 1
@@ -30,6 +34,7 @@ TOOLKIT_TARBALL_NAME=$(
   npm pack ./services/toolkit --pack-destination "$PACK_DIR" --silent | tail -n 1
 )
 RFQ_TARBALL="$PACK_DIR/$RFQ_TARBALL_NAME"
+RFQ_POSTGRES_TARBALL="$PACK_DIR/$RFQ_POSTGRES_TARBALL_NAME"
 CLI_TARBALL="$PACK_DIR/$CLI_TARBALL_NAME"
 TOOLKIT_TARBALL="$PACK_DIR/$TOOLKIT_TARBALL_NAME"
 
@@ -46,12 +51,13 @@ node "$ROOT_DIR/services/cli/dist/cli/src/index.js" create "$LOCAL_TARGET_DIR" \
 (
   cd "$BOOT_DIR"
   npm init -y >/dev/null
-  npm install --prefer-offline --silent "$CLI_TARBALL" "$TOOLKIT_TARBALL" "$RFQ_TARBALL"
+  npm install --prefer-offline --silent "$CLI_TARBALL" "$TOOLKIT_TARBALL" "$RFQ_TARBALL" "$RFQ_POSTGRES_TARBALL"
   node -e 'const t = require("@corner-store/toolkit"); const c = t.validateConfig(t.defaultConfig()); if (c.schemaVersion !== t.TOOLKIT_SCHEMA_VERSION || t.simulateConfig(c).venues.length === 0) process.exit(1)'
   node - <<'NODE'
 const assert = require("node:assert/strict");
 const {Wallet, verifyTypedData} = require("ethers");
 const rfq = require("@corner-store/rfq-service");
+const postgres = require("@corner-store/rfq-postgres");
 const toolkit = require("@corner-store/toolkit");
 (async () => {
   const wallet = Wallet.createRandom();
@@ -64,7 +70,10 @@ const toolkit = require("@corner-store/toolkit");
   assert.equal(rfq.RFQ_DOMAIN_VERSION, "2");
   assert.equal(toolkit.PRODUCTION_ONBOARDING_SCHEMA_VERSION, 7);
   assert.equal(typeof toolkit.createContextOnboardingTemplate, "function");
-  console.log("Packed RFQ v3 and onboarding v7 smoke: 6 assertions passed.");
+  assert.equal(typeof postgres.PostgresQuoteCoordinatorStore, "function");
+  assert.equal(typeof postgres.PostgresQuoteReconciliationWorker, "function");
+  assert.equal(typeof postgres.migrate, "function");
+  console.log("Packed RFQ v3, PostgreSQL adapter and onboarding v7 smoke: 9 assertions passed.");
 })().catch((error) => {console.error(error); process.exitCode = 1;});
 NODE
   ./node_modules/.bin/corner-store rfq-v3-quote --help >/dev/null

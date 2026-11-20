@@ -28,6 +28,7 @@ const READINESS_COMPONENTS = new Set([
   "audit",
   "authentication",
   "coordinator",
+  "reconciliation",
   "policy",
   "pricing",
   "rate_limit",
@@ -89,6 +90,7 @@ export type RFQReadinessComponent =
   | "audit"
   | "authentication"
   | "coordinator"
+  | "reconciliation"
   | "policy"
   | "pricing"
   | "rate_limit"

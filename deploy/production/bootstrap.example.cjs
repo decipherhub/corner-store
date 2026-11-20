@@ -3,7 +3,7 @@
 // production startup must fail until every external dependency is injected.
 
 module.exports = {
-  contractVersion: "1.0.0",
+  contractVersion: "2.0.0",
   capabilities: {
     durable_coordinator: true,
     external_signer: true,

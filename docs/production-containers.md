@@ -39,7 +39,7 @@ budgets and service discovery belong to the operator platform.
 The RFQ image has no fallback authenticator, signer, pricing engine, risk
 engine, nonce store, inventory store, policy resolver or audit sink. Startup
 requires an absolute CommonJS bootstrap module path. The module must implement
-contract version `1.0.0`, explicitly declare every capability, and return every
+contract version `2.0.0`, explicitly declare every capability, and return every
 dependency below:
 
 | Capability | Required production behavior |
@@ -69,11 +69,15 @@ environment schema remains version 1. See
 catalog/TTL gate runs before shared dependency readiness.
 
 The bootstrap readiness probe must report all of these components:
-`audit`, `authentication`, `coordinator`, `policy`, `pricing`, `rate_limit`,
+`audit`, `authentication`, `coordinator`, `reconciliation`, `policy`, `pricing`, `rate_limit`,
 `risk`, and `signer`. `GET /health` reports process liveness. `GET /ready`
 reports only bounded component names and booleans. Quote issuance calls the same
 probe and returns `503` before policy lookup or signing whenever readiness is
 false, invalid, timed out or unavailable.
+
+Bootstrap contract `2.0.0` is a deliberate breaking boundary from `1.0.0`: every
+production bundle must add the `reconciliation` readiness component. Runtime config remains
+schema `1`; no HTTP quote or signed-quote schema changes.
 
 ### Exact RFQ environment schema
 
