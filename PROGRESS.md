@@ -1,5 +1,25 @@
 # Progress
 
+## 2026-11-21 Session: RFQ-007 PostgreSQL HA Coordinator
+
+RFQ-007 is passing. A separate optional `@corner-store/rfq-postgres` package now
+implements the RFQ coordinator store with serializable transactions for durable
+idempotency, maker-scoped monotonic nonces and atomic inventory reservations. It
+also persists chain cursors and observations so restart, unfinalized reorg rollback,
+finalized fill/cancel and exactly-once lease release are handled without changing
+the local file reference or public demo paths.
+
+Production RFQ bootstrap contract v2 now requires healthy reconciliation readiness
+before policy lookup or signing. The adapter is independently publishable and a
+clean external project can install and import its packed artifact. GitHub CI passed
+the real PostgreSQL multi-process/restart/reorg suite in 30 seconds and the full
+repository gate in 14 minutes 1 second. RFQ service 35/35 and host 30/30 also pass.
+
+Remaining production evidence belongs to the operator environment: managed database
+HA and failover, external worker leader election, backup/restore and retention drills,
+WORM audit storage, KMS/HSM custody and live TA/KYC/provider deployments. These are
+not represented as completed by the SDK package.
+
 ## 2026-11-21 Session: CORE-016 Provider-neutral Asset Enforcement
 
 CORE-016 is passing. New opt-in `B-02-v3` accepts a provider-neutral
@@ -24,7 +44,7 @@ deploy-v3 gates. The first full run encountered the existing RFQ file-store
 creation race; its isolated rerun and the final full run passed without RFQ source
 changes. Both `buidl-like` and `reg-d` Anvil E2E profiles passed 7/7 scenarios and
 their interactive backend/CLI/Router RFQ flows. Protected public-testnet, Monad
-and deployment artifact paths have no diff from `origin/main`.
+and deployment artifact paths have no diff from the original `origin/main` base.
 
 Remaining production risks are external to this feature: selecting and auditing
 a real issuer/TA adapter, validating its operational availability and governance,

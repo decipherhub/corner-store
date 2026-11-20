@@ -28,3 +28,5 @@ deployments/*
 .env.testnet
 services/rfq-host/dist/
 services/rfq-host/node_modules/
+services/rfq-postgres/dist/
+services/rfq-postgres/node_modules/

@@ -24,6 +24,7 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `docs/testnet-deployment.md` | public-testnet RFQ reference deployment, participant approvals and artifact verification |
 | `services/testnet-rfq-demo/` | verified public artifact + Maker quote service + browser-wallet Router settlement |
 | `services/rfq/` | RFQ quote/signing SDK, versioned module contracts와 conformance suite |
+| `services/rfq-postgres/` | optional PostgreSQL transactional quote store and restart-safe chain reconciliation worker |
 | `services/rfq-demo-backend/` | RFQ SDK를 사용하는 local Anvil 전용 demo application |
 | `services/toolkit/` | versioned deployment/integration schema, validation과 scaffold generator |
 | `services/toolkit/src/sdk.ts` | config/artifact를 공유하는 `connectCornerStore()` policy facade |

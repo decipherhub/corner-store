@@ -70,6 +70,17 @@ RFQ production host hardening smoke test:
 cd services/rfq-host && npm ci && npm test
 ```
 
+PostgreSQL RFQ HA integration test:
+
+```bash
+CORNER_STORE_TEST_POSTGRES_URL=postgresql://... \
+CORNER_STORE_REQUIRE_POSTGRES=1 npm run test:postgres --prefix services/rfq-postgres
+```
+
+GitHub Actions supplies a real digest-pinned PostgreSQL service and requires this test.
+Local `scripts/check.sh` builds the optional package but skips its database integration
+test when no explicit test database URL is supplied.
+
 Host smoke는 인증 401/403, malformed/oversize/Content-Length 413,
 hashed-principal rate limit 429, limiter capacity principal-spray 방어, 실제
 coordinator pricing/risk evidence freshness fail-closed, fresh risk rejection 422,
