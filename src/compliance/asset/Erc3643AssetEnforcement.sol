@@ -98,4 +98,3 @@ contract Erc3643AssetEnforcement is IAssetEnforcement {
         }
     }
 }
-

@@ -36,4 +36,3 @@ export function decodeAssetEnforcementParameters(parameters: string): Omit<Asset
     bindingDigest: String(decoded[3])
   };
 }
-

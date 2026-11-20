@@ -55,4 +55,3 @@ contract ReferenceAllowlistAssetEnforcement is IAssetEnforcement, Governed {
         });
     }
 }
-

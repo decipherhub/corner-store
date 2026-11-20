@@ -21,4 +21,3 @@ contract RegD506cRecipeV6 is BaseRecipe {
         e[8] = "E-01-v1";
     }
 }
-

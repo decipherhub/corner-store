@@ -40,4 +40,3 @@ interface IAssetEnforcement {
         view
         returns (AssetEnforcementResult memory result);
 }
-

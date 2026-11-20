@@ -36,4 +36,3 @@ adapter remain external trust boundaries.
 Public decisions expose only four bounded classes: unavailable/malformed,
 binding drift, unsupported capability and asset transfer rejected. They do not
 publish identity, sanctions, compliance-module or provider payload details.
-
