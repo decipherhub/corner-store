@@ -574,7 +574,7 @@
     "updateRule": "Re-review upstream, license, maintenance status and distribution boundary whenever requirements.lock changes."
   },
   "reviewExpires": "2027-02-16",
-  "reviewedAt": "2026-11-18",
+  "reviewedAt": "2026-11-17",
   "schemaVersion": 1,
   "scope": "Python packages pinned by assurance/requirements.lock for Slither-only development and CI assurance"
 }

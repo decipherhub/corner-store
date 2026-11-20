@@ -17,7 +17,10 @@ jobs:
   gate:
     name: ${{ inputs.task }}
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ inputs.deep && 60 || 15 }}
+    # A cold, checksum-verified toolchain install can exceed 15 minutes on a
+    # hosted runner. Keep the PR gate bounded without cancelling provisioning
+    # before the actual assurance task starts.
+    timeout-minutes: ${{ inputs.deep && 90 || 45 }}
     env:
       BASH_ENV: ${{ github.workspace }}/scripts/assurance/env.sh
     steps:
