@@ -54,11 +54,11 @@ assert_image_contract() {
 
 cat >"$TMP_DIR/bootstrap.cjs" <<'EOF'
 const components = [
-  "audit", "authentication", "coordinator", "policy",
+  "audit", "authentication", "coordinator", "reconciliation", "policy",
   "pricing", "rate_limit", "risk", "signer"
 ];
 module.exports = {
-  contractVersion: "1.0.0",
+  contractVersion: "2.0.0",
   capabilities: {
     durable_coordinator: true,
     external_signer: true,
@@ -95,7 +95,7 @@ EOF
 
 cat >"$TMP_DIR/failing-bootstrap.cjs" <<'EOF'
 module.exports = {
-  contractVersion: "1.0.0",
+  contractVersion: "2.0.0",
   capabilities: {
     durable_coordinator: true,
     external_signer: true,

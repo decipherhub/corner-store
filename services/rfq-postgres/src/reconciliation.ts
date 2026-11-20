@@ -143,6 +143,10 @@ export class PostgresQuoteReconciliationWorker {
     };
   }
 
+  async readiness(): Promise<{component: "reconciliation"; ready: boolean}> {
+    return {component: "reconciliation", ready: (await this.health()).ready};
+  }
+
   private async initializeCursor(now: number): Promise<{blockNumber: number; blockHash: `0x${string}`}> {
     if (this.startBlock === 0) throw failure("START_BLOCK_INVALID", "startBlock must be greater than zero for parent-bound cursor initialization");
     const parent = validateBlock(await this.reader.block(this.startBlock - 1));

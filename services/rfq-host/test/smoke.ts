@@ -146,7 +146,7 @@ async function rejectsUnavailableOrZeroPolicyBeforeSigning(): Promise<void> {
 async function readinessFailsClosedBeforePolicyAndSigning(): Promise<void> {
   let policyCalls = 0;
   const config = baseConfig({
-    readiness: readiness({signer: false}),
+    readiness: readiness({reconciliation: false}),
     resolvePolicyId: () => {
       policyCalls += 1;
       return POLICY_ID;
@@ -157,7 +157,7 @@ async function readinessFailsClosedBeforePolicyAndSigning(): Promise<void> {
     const ready = await get(`${ctx.baseUrl}/ready`);
     assert.equal(ready.status, 503);
     assert.equal(ready.body.ready, false);
-    assert.deepEqual(ready.body.components.find((value: any) => value.component === "signer"), {component: "signer", ready: false});
+    assert.deepEqual(ready.body.components.find((value: any) => value.component === "reconciliation"), {component: "reconciliation", ready: false});
     const response = await post(ctx.baseUrl, quoteBody("readiness-a"), GOOD_TOKEN);
     assert.equal(response.status, 503);
     assert.equal(response.body.error, "dependency_unavailable");
@@ -609,7 +609,7 @@ function baseConfig(overrides: Partial<ProductionRFQHostConfig> & {
 }
 
 function readiness(overrides: Partial<Record<string, boolean>> = {}) {
-  const names = ["audit", "authentication", "coordinator", "policy", "pricing", "rate_limit", "risk", "signer"] as const;
+  const names = ["audit", "authentication", "coordinator", "reconciliation", "policy", "pricing", "rate_limit", "risk", "signer"] as const;
   return {
     check: () => {
       const components = names.map((component) => ({component, ready: overrides[component] ?? true}));

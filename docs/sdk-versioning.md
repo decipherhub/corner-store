@@ -215,7 +215,7 @@ publish packages. Apply the release policy above before publishing a version.
 | Coordinator records | Schema 1 | Schema 2, `quoteVersion: 3`, exact domain and context evidence |
 | Local store container | Legacy-only writes remain schema 1 | Reads 1/2; first v3 reservation writes container 2, retaining legacy records/accounting |
 | Host route | `/rfq/quote`, unchanged v2 response | `/rfq/v3/quote` only with `config.v3`; requires `flowType`, derives policy/evidence server-side |
-| Production bootstrap/config | Contract `1.0.0` / config `1` | Same versions plus `v3_context_provenance: true`, v3 dependencies and ready `context` component |
+| Production bootstrap/config | Contract `2.0.0` / config `1`; required ready `reconciliation` component | Same contract/config plus `v3_context_provenance: true`, v3 dependencies and ready `context` component |
 | CLI | Existing quote commands/artifacts | `rfq-v3-quote --request <file>` and explicit v3 artifact addresses |
 | Onboarding | Schema 1-5 under original meanings | Schema 6 with Router/runtime, immutable context and source authority evidence |
 

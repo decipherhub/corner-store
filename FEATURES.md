@@ -1255,6 +1255,8 @@ passing
   처리한다.
 - 체인 cursor, block/event observation과 reorg rollback을 영속화한 reconciliation
   worker가 restart 뒤 이어서 처리하며, lag/reorg 한계를 넘으면 readiness가 fail-closed한다.
+- production RFQ bootstrap contract v2는 `reconciliation` readiness를 필수로 요구하고,
+  false/missing/timeout이면 policy lookup과 signer 호출 전에 quote issuance를 거부한다.
 - migration은 forward-only이고 raw idempotency key, bearer token, signer key 또는 KYC
   원문을 저장하지 않는다.
 

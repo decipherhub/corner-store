@@ -44,8 +44,9 @@ reorg deeper than the configured bound fails closed. `health()` is not ready whe
 is recorded, cursor lag exceeds `maxLagBlocks`, or the last successful pass is stale.
 
 Run one worker per `sourceId` through an operator-owned leader election. Concurrent worker
-leadership is not supplied by this package. Quote issuance must consult worker readiness
-through the host's operator readiness adapter before production use.
+leadership is not supplied by this package. Include `await worker.readiness()` in the host
+readiness report. Production runtime requires the `reconciliation` component, so lag,
+staleness or a recorded worker failure prevents quote issuance.
 
 ## Operations
 
