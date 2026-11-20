@@ -35,6 +35,51 @@ Options requiring a team/legal decision:
 Neither option is selected here. Do not record real surveillance data with the
 reference implementation. PR #161 remains draft.
 
+## D045: Asset enforcement adapters are Manifest-owned capabilities
+
+Date: 2026-11-21
+Status: implemented default for issue #168
+
+### Context
+
+B-02-v2 couples the asset-side check to ERC-3643 token, Identity Registry and
+compliance-module probes. External ATS integrations may settle assets with other
+issuer allowlists or transfer-agent controls. A mutable adapter registry inside
+the Element would make an already active policy change outside the Manifest
+lifecycle.
+
+### Decision
+
+Add opt-in B-02-v3 over `IAssetEnforcement`. The adapter address, interface
+version, runtime code hash and provider configuration digest are exact 128-byte
+`ManifestPolicyConfig` parameters. They are compiled into the policy plan and
+change only through the normal Manifest proposal/update and activation flow.
+
+The request is derived from venue-authoritative asset direction and canonical
+amount. The adapter returns bounded failure, request digest and binding digest.
+Unavailable/malformed calls, version/code/config drift and unsupported capability
+all fail closed. Public reason codes remain coarse.
+
+`Erc3643AssetEnforcement` wraps the existing immutable B-02-v2 behavior.
+`ReferenceAllowlistAssetEnforcement` proves interface neutrality but is explicitly
+reference-only; production export rejects it when so declared. Existing B-02-v2
+recipes and deployments are not silently migrated.
+
+### Consequences
+
+Adapter changes create a new policy/config commitment and invalidate stale policy
+evidence. Corner Store still cannot protect direct transfers or settlement paths
+that bypass its execution boundary. Provider selection, credentials, private APIs
+and operational assurance remain operator-owned production work.
+
+### Related Files
+
+- `src/interfaces/asset/IAssetEnforcement.sol`
+- `src/compliance/elements/AssetEnforcementV3.sol`
+- `src/compliance/asset/Erc3643AssetEnforcement.sol`
+- `services/toolkit/src/asset-enforcement.ts`
+- `docs/product-specs/asset-enforcement.md`
+
 ## D024: Reg D v5 adopts immutable nonblocking A-12 v2 by explicit selection
 
 Date: 2026-11-10

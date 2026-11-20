@@ -4,6 +4,11 @@
 
 - ERC-3643 / ONCHAINID의 identity와 token transfer enforcement는 외부 발행자
   시스템의 책임이다.
+- B-02-v3 asset enforcement adapters are untrusted external decision sources
+  until their interface version, runtime code hash and current binding digest
+  match the exact `ManifestPolicyConfig` bytes. Adapter outage, malformed
+  request/result digests and any binding drift fail closed. Public reasons stay
+  coarse and never include provider or identity payloads.
 - Corner Store는 외부 판정을 임의로 완화하거나 우회하지 않는다.
 - Corner Store의 DEX-level compliance 보장은 `ExecutionRouter`를 통한 실행
   경로에 한정한다. Router 밖에서 발생하는 ERC-3643 직접 전송, 직접 venue 호출,

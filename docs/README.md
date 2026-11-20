@@ -20,6 +20,7 @@
 | [`sdk-integration.md`](./sdk-integration.md)         | modular SDK·scaffold·conformance | Current |
 | [`sdk-versioning.md`](./sdk-versioning.md)           | package semver·release·migration policy | Current |
 | [`product-specs/execution-context-provenance.md`](./product-specs/execution-context-provenance.md) | versioned context authority, RFQ v3 and activation evidence | Current |
+| [`product-specs/asset-enforcement.md`](./product-specs/asset-enforcement.md) | provider-neutral token/TA enforcement capability and Manifest binding | Current |
 | [`deployment-studio.md`](./deployment-studio.md)     | local reference execution + production preflight/plan Studio | Current |
 | [`deployment-production.md`](./deployment-production.md) | production deployment runbook | Current |
 | [`production-containers.md`](./production-containers.md) | production RFQ/Operator API OCI runtime contract | Current |

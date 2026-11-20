@@ -40,6 +40,10 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 ## Domain Boundaries
 
 - ERC-3643과 ONCHAINID는 외부 token/identity trust boundary다.
+- Asset-native transfer restrictions use the provider-neutral
+  `IAssetEnforcement` boundary in opt-in B-02-v3. The exact adapter capability,
+  runtime code and configuration digest are Manifest-owned policy parameters;
+  ERC-3643 B-02-v2 remains the first wrapped implementation, not the interface.
 - Element, Recipe, Manifest, Operator의 이름 기반 4-Layer compliance model을
   사용한다.
 - Manifest는 bounded `RecipeBinding[]`로 Recipe/version/mode를 고정한다. 실행 경로는
