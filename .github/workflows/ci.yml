@@ -45,3 +45,36 @@ jobs:
 
       - name: Build and validate Monad hackathon demo image
         run: scripts/hackathon-monad-container-smoke.sh
+
+  rfq-postgres:
+    name: RFQ PostgreSQL HA invariants
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.6-alpine3.22@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+        env:
+          POSTGRES_DB: corner_store_test
+          POSTGRES_USER: corner_store
+          POSTGRES_PASSWORD: corner_store_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U corner_store -d corner_store_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      CORNER_STORE_REQUIRE_POSTGRES: "1"
+      CORNER_STORE_TEST_POSTGRES_URL: postgresql://corner_store:corner_store_test@127.0.0.1:5432/corner_store_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: false
+          persist-credentials: false
+      - name: Install RFQ package dependencies
+        run: npm ci --prefix services/rfq
+      - name: Run PostgreSQL coordinator integration tests
+        run: |
+          npm ci --prefix services/rfq-postgres
+          npm run test:postgres --prefix services/rfq-postgres
