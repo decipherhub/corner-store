@@ -68,7 +68,7 @@
     },
     {
       "path": "src/libraries/Events.sol",
-      "sha256": "a54d9ff3be7904533f9c6a7ea2bba4e0c6f149287db1787f4d631236ff9b7f77",
+      "sha256": "57fb608d9ca8d940417bcafee9198f944f3f69618f6a1c5b1c777ad05b89be33",
       "reason": "Event declarations only; no executable Solidity statements."
     },
     {
