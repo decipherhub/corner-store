@@ -1,5 +1,34 @@
 # Progress
 
+## 2026-11-22 Session: OPS-004 Reconciliation After SDK-008 Merge
+
+OPS-004 remains the sole active feature. `origin/main` advanced with the SDK-008
+external settlement gate, so the branch was merged (only `PROGRESS.md` conflicted,
+both sides kept) and the assurance data was reconciled.
+
+Slither was re-captured after the merge: 206 findings, 87 Medium or higher. 81
+suppression fingerprints carried unchanged, 4 were re-fingerprinted (two Router
+reentrancy-balance entries with a rewritten justification for the new
+`_executeVenue` dispatch hook, `regulatedAmount` and `affiliateEvidenceHash`
+unchanged), 2 `arbitrary-send-erc20` entries were added for
+`ReferenceExternalSettlementTarget.settle` (the seller-side one is marked
+accepted risk). All 87 stay `pending-human-review`; the gate still fails closed
+with "suppression lacks human approval". Treating all entries as approved in
+memory, the review reports no stale and no unlisted fingerprints.
+
+The five `ExecutionRouterBase.sol` sentinel hashes were refreshed (hash only;
+every mutation site is unchanged). The PR mutation set killed 16/16. Harness
+tests 32/32, `forge test --offline` 1283/1283.
+
+The coverage gate does not complete: under the coverage-only `--ir-minimum`
+build, `ExternalSettlementGate.t.sol:test_pauseAndReplayRemainGateInvariants`
+fails with `TimelockNotReady` (it passes in the normal build), so `forge coverage`
+exits non-zero before any floor is evaluated. No test, floor or gate was changed.
+A diagnostic run excluding that test measured execution branch coverage at 87.5%
+against the 90% floor, with the shortfall in `ReferenceExternalSettlementTarget`
+and `UniswapV3Adapter`. This needs a human decision. The human Slither review,
+hosted CI and external release evidence remain outstanding.
+
 ## 2026-11-21 Session: OPS-004 Hosted Provisioning Timeout
 
 OPS-004 remains the sole active feature. Since the tool-integrity change on
