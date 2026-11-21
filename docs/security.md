@@ -161,6 +161,25 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
 
 ## Venue Integration Security
 
+- `ExternalSettlementGate` is the single supported external ATS/OMS path in v1.
+  Its target must be the exact reviewed runtime registered as both compatibility
+  adapter and target, declare the gate binding, repeat context validation at
+  settlement and reject direct calls. A `gateEnforced()` claim alone does not
+  prove access control; code-hash governance review and direct-call conformance
+  are mandatory.
+- The settlement target, not an end-user request, is authoritative for buyer,
+  seller, token legs, venue, flow, affiliate status and exact amounts. The gate
+  preserves central pause, caller/nonce binding, venue evidence, finite caps,
+  buyer balance measurement and atomic commit. Transfer-fee/rebasing tokens and
+  partial fills remain unsupported.
+- OMS precheck is read-only and advisory at an explicit block. Restricted or
+  redacted diagnostics collapse to a generic result and never expose sanctions,
+  AML or surveillance details. Only the fresh on-chain gate decision authorizes
+  final settlement.
+- `ComplianceEngine` currently authorizes one commit dispatcher. Deploy a
+  dedicated Engine or explicitly rebind it to the gate; do not claim simultaneous
+  Router and external-gate settlement through one Engine.
+
 - `C-01-*` holding-period family와 AMM의 조합은 경고가 아니라 hard rejection이다.
   SDK profile validation, production onboarding/Safe export, CLI onboarding,
   `CornerStoreFactory`와 on-chain Engine이 같은 규칙을 적용한다. Factory는 등록 venue뿐

@@ -183,7 +183,9 @@ chain/address/runtime code-hash mismatch는 Toolkit/CLI의
 `production-onboarding-verify` regression으로 별도 고정한다.
 `dex-integration` clean project는 추가로 generated Solidity Adapter를 build하고
 real Router 기반 allow/reject/direct-call/atomic rollback 4-scenario conformance를
-실행한다.
+실행한다. 같은 project는 public Toolkit의 external settlement activation/precheck
+surface를 TypeScript에서 compile하고, `IExecutionAdapter` 없이 gate-only target이
+settle/commit하며 direct target call이 거부되는 별도 Foundry conformance도 실행한다.
 동일 smoke는 packed CLI만 설치한 clean bootstrap project에서 `sandbox` template도
 생성해 bundled contract/service source, non-root multi-stage image, deployment
 readiness dependency와 `docker compose config`를 검증한다. Docker daemon이 있는

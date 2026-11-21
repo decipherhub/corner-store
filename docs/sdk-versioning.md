@@ -293,3 +293,25 @@ outstanding v3 records separately; do not downgrade a schema 2 store by hand.
 Reference signing uses one local env/file key; key management, multisig and
 custody expansion remain deferred. The six team-to-confirm defaults remain open
 in the provenance specification and D028/D029.
+
+### Opt-in external settlement gate migration
+
+SDK-008 is additive and leaves `ExecutionRouter`, `ExecutionRouterV2`, every
+existing adapter, signature and demo artifact unchanged. Development package
+versions remain `0.1.0`; publishing requires the normal release policy.
+
+| Boundary | Preserved path | External ATS/OMS opt-in |
+| --- | --- | --- |
+| Dispatcher | Existing Router deployment | Separate `ExternalSettlementGate` |
+| Venue contract | `IExecutionAdapter.execute` | `IExternalSettlementTarget.settle`; adapter version 4/context version 1 |
+| Matching/custody | Existing adapter-specific behavior | Customer-owned; not implemented by the gate |
+| Precheck | Existing report/preview surfaces | Authenticated explicit-block advisory result only |
+| Activation | Existing onboarding schemas | Separate unsigned activation/verification API |
+| Engine commit authority | Existing Engine Router | One deliberate gate binding or a dedicated Engine; never both simultaneously |
+
+Register the target as both compatibility adapter and target, approve its exact
+runtime/version and pin context evidence only after immutable gate/registry wiring
+is final. Run the generated clean-project conformance and read-only verification
+before routing traffic. Rollback restores the previously reviewed Engine dispatcher
+and venue configuration through governance; it never reinterprets an existing
+adapter or decision record.

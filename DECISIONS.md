@@ -2415,3 +2415,45 @@ The owner resolved affiliate evidence separately: require it only for active
 compiled A-06/B-04 consumers, and bind the pinned source to the exact registered
 A-06-v1 implementation at activation and runtime. Existing required-evidence
 failure behavior remains fail closed.
+
+## D044: External venues integrate through one measured settlement gate
+
+Date: 2026-11-21. Issue #169. Status: implemented default.
+
+### Context
+
+Existing ATS/OMS systems already own matching and may not adopt the reference
+Router adapter API. Implementing mixin, gate and Uniswap v4 hook variants at once
+would create multiple enforcement contracts and inconsistent bypass boundaries.
+An off-chain precheck alone cannot serialize stateful limits or authorize a fill.
+
+### Decision
+
+Support one additive `ExternalSettlementGate` path first. It reuses RouterV2's
+caller, pause, nonce, context-evidence, fresh evaluation, finite cap, measurement
+and atomic commit lifecycle, but dispatches to an approved
+`IExternalSettlementTarget` that does not implement `IExecutionAdapter`.
+
+The target is authoritative for the exact parties, token legs, venue, flow and
+amounts, repeats validation during settlement and rejects every caller except the
+gate. Registry compatibility fields bind both adapter and target to the same
+reviewed runtime. Toolkit OMS precheck is authenticated, PII-free, explicit-block
+and always advisory. Activation is unsigned and verification is read-only.
+
+One Engine keeps one authorized commit dispatcher. A gate therefore uses a
+dedicated Engine or an explicit Router-binding replacement. Mixin, v4 hook,
+delegated callers, partial fills and multi-dispatcher authorization are deferred.
+
+### Consequences
+
+External venues get a small stable integration surface without routing matching or
+custody through the reference DEX. Exact full-fill and standard-token assumptions
+remain. Code-hash review, gate-only target enforcement, ATS licensing and
+production operations stay customer/operator responsibilities.
+
+### Related Files
+
+- `src/execution/ExternalSettlementGate.sol`
+- `src/interfaces/execution/IExternalSettlementTarget.sol`
+- `services/toolkit/src/external-settlement.ts`
+- `docs/product-specs/external-settlement-gate.md`

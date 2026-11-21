@@ -47,11 +47,16 @@ test("PostgreSQL store preserves HA nonce, idempotency, inventory and reorg inva
   assert.deepEqual(fulfilled.map((item) => Number(item.nonce)).sort((a, b) => a - b), [1,2,3,4,5,6,7,8,9,10]);
   assert.deepEqual(await first.inventory(MAKER, TOKEN_OUT, VENUE), {available: "100", reserved: "100"});
 
-  const replay = await second.reserveOrReturnExisting(reserve("sha256:key-0", "sha256:request-0", 100, "10"));
+  const replaySource = fulfilled[0];
+  assert(replaySource, "at least one reservation must succeed");
+  const replayIndex = Number(replaySource.key.slice("sha256:key-".length));
+  const replay = await second.reserveOrReturnExisting(
+    reserve(replaySource.key, `sha256:request-${replayIndex}`, 100 + replayIndex, "10")
+  );
   assert.equal(replay.existing, true);
-  assert.equal(replay.record.nonce, fulfilled.find((item) => item.key === "sha256:key-0")?.nonce);
+  assert.equal(replay.record.nonce, replaySource.nonce);
   await assert.rejects(
-    second.reserveOrReturnExisting(reserve("sha256:key-0", "sha256:different", 100, "10")),
+    second.reserveOrReturnExisting(reserve(replaySource.key, "sha256:different", 100 + replayIndex, "10")),
     (error: unknown) => error instanceof RFQStoreError && error.code === "IDEMPOTENCY_CONFLICT"
   );
 

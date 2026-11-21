@@ -3100,3 +3100,40 @@ passing
 - `RedFlagKnowledgeBar`의 기존 flag-not-block 동작은 변경하지 않는다.
 - 실제 broadcast/E2E는 active Recipe를 변경하지 않는 opt-in 등록 metadata 수정이고
   배포 키가 필요한 경로이므로 실행하지 않는다.
+
+## SDK-008 — External Settlement Gate and OMS Precheck
+
+### Behavior
+
+- 기존 ATS/OMS가 Corner Store reference Router나 `IExecutionAdapter`를 구현하지
+  않고도 전용 settlement gate를 통해 `evaluate → settle → measured commit`을
+  원자적으로 실행한다.
+- settlement target은 등록된 주문의 buyer, seller, token legs, venue, flow와
+  exact amounts를 authoritative source로 사용하고 gate 외 직접 결제를 거부한다.
+- 기존 central pause, caller/nonce binding, venue/context evidence, finite amount,
+  measured settlement와 stateful commit 불변식을 그대로 재사용한다.
+- OMS precheck는 explicit block의 PII-free read-only 진단만 제공하며 advisory임을
+  타입과 결과에 명시한다. 최종 gate 판정은 항상 fresh하고 authoritative하다.
+- Toolkit은 unsigned activation calls와 fail-closed verification을 제공하며 signing,
+  broadcast, matching, custody, OMS 또는 venue 운영을 소유하지 않는다.
+- legacy Router, reference adapters, Anvil/GIWA/Monad demo는 변경 없이 유지하고
+  mixin과 Uniswap v4 hook은 후속 범위로 남긴다.
+
+### Verification
+
+- external target direct-call rejection and exact settlement/commit tests
+- concurrent-advisory-precheck then single valid final settlement test
+- pause, nonce/replay, max amount, context/config drift and atomic rollback tests
+- Toolkit precheck/activation unit tests
+- external clean-project install/build/conformance
+- `scripts/check.sh` and existing Anvil profiles
+- `git diff --check`
+
+### State
+
+passing
+
+### Notes
+
+- Issue #169.
+- Completed plan: `docs/exec-plans/completed/SDK-008-external-settlement-gate.md`.

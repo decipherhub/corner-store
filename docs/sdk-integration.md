@@ -88,6 +88,32 @@ The generated `package.json` scripts map to the same CLI commands:
 | `npm test` | build the generated project and run `corner-store test-module dist/module-conformance.js` |
 | `npm run policy:explain` | compile/simulate/explain the shared config and show missing artifact remediation |
 
+## Existing ATS or OMS Settlement Gate
+
+Use `ExternalSettlementGate` when an existing venue owns matching and settlement
+and should not implement the reference Router adapter API. The customer target
+implements `IExternalSettlementTarget`, pins its authoritative order fields and
+rejects every caller except the configured gate. It does not implement
+`IExecutionAdapter`.
+
+`precheckExternalSettlement()` provides a PII-free advisory OMS result at an
+explicit block. Its return type always carries `advisory: true`; it cannot reserve,
+consume a nonce or authorize settlement. The gate performs a fresh evaluation,
+exact target validation, canonical balance measurement and stateful commit in one
+transaction.
+
+`buildExternalSettlementActivationPlan()` returns deterministic unsigned calls
+for Engine dispatcher binding, venue registration, reviewed target runtime and
+context evidence. `verifyExternalSettlementActivation()` rechecks the deployment
+read-only. One Engine has one commit dispatcher, so an operator must use a dedicated
+Engine or explicitly replace its Router binding; parallel Router and gate commits
+through one Engine are unsupported.
+
+The `dex-integration` clean project compiles the public Toolkit surface and runs
+an external-gate conformance test in addition to the legacy adapter starter. The
+full contract is in
+[`product-specs/external-settlement-gate.md`](./product-specs/external-settlement-gate.md).
+
 `deploy` uses `DeployStack.s.sol`. It is a dry-run unless `--broadcast` is
 passed. Docker is not required for deployment.
 
@@ -135,6 +161,9 @@ The `dex-integration` template additionally generates:
 - `corner-store.venue.json`: versioned integration and responsibility descriptor;
 - `test/CornerStoreVenueAdapter.t.sol`: common allow/reject/direct-call/rollback
   conformance using the real `ExecutionRouter` ordering.
+- `src/external-settlement.ts`: public Toolkit activation/precheck entrypoint;
+- `test/CornerStoreExternalSettlementGate.t.sol`: gate-only target settlement and
+  direct-call rejection conformance without `IExecutionAdapter`.
 
 The starter deliberately delegates settlement to the external venue. Integrators
 must implement and audit token movement, callback origin checks, venue-specific

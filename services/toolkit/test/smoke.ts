@@ -1,5 +1,6 @@
 import {existsSync, mkdtempSync, readFileSync, writeFileSync} from "fs";
 import {runComplianceReportingTests} from "./compliance-reporting";
+import {runExternalSettlementTests} from "./external-settlement";
 
 import {encodeBytes32String, keccak256} from "ethers";
 import {
@@ -1094,9 +1095,12 @@ if (
   !library.files.includes("corner-store.scenario.json") ||
   !library.files.includes("contracts/CornerStoreVenueAdapter.sol") ||
   !library.files.includes("test/CornerStoreVenueAdapter.t.sol") ||
+  !library.files.includes("test/CornerStoreExternalSettlementGate.t.sol") ||
   !library.files.includes("src/venue-client.ts") ||
+  !library.files.includes("src/external-settlement.ts") ||
   !library.files.includes("src/policy.ts") ||
-  !readFileSync(join(libraryTarget, "src/index.ts"), "utf8").includes('export * from "@corner-store/rfq-service"')
+  !readFileSync(join(libraryTarget, "src/index.ts"), "utf8").includes('export * from "@corner-store/rfq-service"') ||
+  !readFileSync(join(libraryTarget, "src/external-settlement.ts"), "utf8").includes("buildExternalSettlementActivationPlan")
 ) {
   throw new Error("standalone library-only scaffold regression");
 }
@@ -1211,7 +1215,7 @@ try {
 } catch (err: any) {
   if (!err.message.includes("environment variable")) throw err;
 }
-Promise.all([onboardingVerificationPromise, runComplianceReportingTests()]).then(() => {
+Promise.all([onboardingVerificationPromise, runComplianceReportingTests(), runExternalSettlementTests()]).then(() => {
   console.log("corner-store toolkit smoke ok");
 }).catch((err) => {
   console.error(err);

@@ -133,7 +133,9 @@ function generatedFiles(
     files["foundry.toml"] = dexFoundryConfig();
     files["contracts/CornerStoreVenueAdapter.sol"] = venueAdapterSource();
     files["test/CornerStoreVenueAdapter.t.sol"] = venueAdapterTestSource();
+    files["test/CornerStoreExternalSettlementGate.t.sol"] = externalSettlementGateTestSource();
     files["src/venue-client.ts"] = venueClientSource();
+    if (toolkitDependency) files["src/external-settlement.ts"] = externalSettlementClientSource();
   }
   if (manifest.deployment.dockerCompose && project.template !== "sandbox") {
     files["Dockerfile"] = dockerfile(vendoredSdk);
@@ -475,6 +477,8 @@ function venueDescriptor(): unknown {
     venueType: "AMM",
     adapterSource: "contracts/CornerStoreVenueAdapter.sol",
     conformanceTest: "test/CornerStoreVenueAdapter.t.sol",
+    externalSettlementGate: "corner-store/src/execution/ExternalSettlementGate.sol",
+    externalSettlementConformanceTest: "test/CornerStoreExternalSettlementGate.t.sol",
     policyBinding: "registry-configured",
     settlementTarget: "external-venue",
     productionResponsibilities: [
@@ -486,6 +490,25 @@ function venueDescriptor(): unknown {
       "independent audit and deployment review"
     ]
   };
+}
+
+function externalSettlementClientSource(): string {
+  return `import {
+  ExternalSettlementActivationInput,
+  buildExternalSettlementActivationPlan,
+  precheckExternalSettlement
+} from "@corner-store/toolkit";
+
+// The plan is unsigned and never broadcasts. Submit its calls through the
+// customer's reviewed governance workflow, then run Toolkit verification.
+export function buildSettlementGateActivation(input: ExternalSettlementActivationInput) {
+  return buildExternalSettlementActivationPlan(input);
+}
+
+// OMS results remain advisory. Final authorization always occurs inside the
+// on-chain ExternalSettlementGate immediately before settlement.
+export {precheckExternalSettlement};
+`;
 }
 
 function dexFoundryConfig(): string {
@@ -695,6 +718,141 @@ contract CornerStoreVenueAdapterConformanceTest is Test {
         decision.reasonCode = allowed ? bytes32(0) : bytes32("REJECTED");
         decision.maxAmount = type(uint256).max;
         decision.allowedVenueTypes = uint256(1) << uint256(VenueType.AMM);
+    }
+}
+`;
+}
+
+function externalSettlementGateTestSource(): string {
+  return `// SPDX-License-Identifier: GPL-3.0
+pragma solidity 0.8.17;
+
+import {Test} from "forge-std/Test.sol";
+import {ExternalSettlementGate} from "corner-store/src/execution/ExternalSettlementGate.sol";
+import {ReferenceExternalSettlementTarget} from "corner-store/src/execution/targets/ReferenceExternalSettlementTarget.sol";
+import {VenueRegistry} from "corner-store/src/execution/VenueRegistry.sol";
+import {VenueSelector} from "corner-store/src/execution/VenueSelector.sol";
+import {OperatorRegistry} from "corner-store/src/registry/OperatorRegistry.sol";
+import {Affiliate} from "corner-store/src/compliance/elements/Affiliate.sol";
+import {ContextEvidence} from "corner-store/src/execution/ContextEvidence.sol";
+import {MockComplianceEngine} from "corner-store/test/mocks/MockComplianceEngine.sol";
+import {MockERC20} from "corner-store/test/mocks/MockERC20.sol";
+import {ExecutionRequest} from "corner-store/src/types/ExecutionTypes.sol";
+import {CompiledElementRule, ComplianceContext, ComplianceDecision, FlowType, PolicyStatus, VenueType} from "corner-store/src/types/ComplianceTypes.sol";
+import {CustodyModel, VenueConfig, VenueContextEvidence} from "corner-store/src/types/VenueTypes.sol";
+import {Errors} from "corner-store/src/libraries/Errors.sol";
+
+contract ExternalSettlementConformanceEngine is MockComplianceEngine {
+    address public immutable policyReg;
+    constructor(address registry) { policyReg = registry; }
+}
+
+contract ExternalSettlementConformancePolicyRegistry {
+    mapping(address => PolicyStatus) public statusOf;
+
+    function setStatus(address asset, PolicyStatus status) external { statusOf[asset] = status; }
+    function compiledBindingCountOf(address) external pure returns (uint256) { return 0; }
+    function compiledRulesOf(address, uint256) external pure returns (CompiledElementRule[] memory rules) {
+        return new CompiledElementRule[](0);
+    }
+}
+
+contract CornerStoreExternalSettlementGateConformanceTest is Test {
+    address internal constant BUYER = address(0xB0B);
+    address internal constant SELLER = address(0x515E);
+    address internal constant VENUE = address(0xA75);
+    bytes32 internal constant ORDER_ID = keccak256("external-order");
+
+    ExternalSettlementGate internal gate;
+    ReferenceExternalSettlementTarget internal target;
+    ExternalSettlementConformanceEngine internal engine;
+    MockERC20 internal tokenIn;
+    MockERC20 internal tokenOut;
+
+    function setUp() public {
+        vm.warp(30 days);
+        ExternalSettlementConformancePolicyRegistry policy = new ExternalSettlementConformancePolicyRegistry();
+        Affiliate affiliate = new Affiliate();
+        VenueRegistry venues = new VenueRegistry();
+        engine = new ExternalSettlementConformanceEngine(address(policy));
+        gate = new ExternalSettlementGate(engine, venues, new VenueSelector(), new OperatorRegistry());
+        target = new ReferenceExternalSettlementTarget(address(gate), venues);
+        tokenIn = new MockERC20("Input", "IN");
+        tokenOut = new MockERC20("Output", "OUT");
+        tokenIn.mint(BUYER, 1_000);
+        tokenOut.mint(SELLER, 1_000);
+        vm.prank(BUYER); tokenIn.approve(address(target), type(uint256).max);
+        vm.prank(SELLER); tokenOut.approve(address(target), type(uint256).max);
+        policy.setStatus(address(tokenIn), PolicyStatus.UNREGULATED);
+        policy.setStatus(address(tokenOut), PolicyStatus.UNREGULATED);
+
+        VenueConfig memory cfg = VenueConfig(VenueType.ORDER_BOOK, address(target), address(target), address(this), CustodyModel.NONE, true);
+        venues.registerVenue(VENUE, cfg);
+        venues.setContextImplementation(address(target).codehash, 4, 1, true);
+        venues.setVenueContextEvidence(VENUE, VenueContextEvidence({
+            adapterVersion: 4,
+            contextVersion: 1,
+            adapterCodeHash: address(target).codehash,
+            affiliateSource: address(affiliate),
+            affiliateSourceCodeHash: address(affiliate).codehash,
+            policyRegistry: address(policy),
+            policyRegistryCodeHash: address(policy).codehash,
+            configurationHash: ContextEvidence.configurationHash(cfg)
+        }));
+        target.registerInstruction(ORDER_ID, ReferenceExternalSettlementTarget.SettlementInstruction({
+            buyer: BUYER,
+            seller: SELLER,
+            tokenIn: address(tokenIn),
+            tokenOut: address(tokenOut),
+            amountIn: 100,
+            amountOut: 90,
+            venue: VENUE,
+            venueType: VenueType.ORDER_BOOK,
+            flowType: FlowType.SECONDARY_TRADE,
+            sellerIsAffiliate: false,
+            validUntil: uint64(block.timestamp + 1 hours)
+        }));
+        ComplianceDecision memory decision;
+        decision.allowed = true;
+        decision.maxAmount = type(uint256).max;
+        decision.allowedVenueTypes = uint256(1) << uint256(VenueType.ORDER_BOOK);
+        engine.setDecision(decision);
+    }
+
+    function test_gateSettlesAndCommitsWithoutIExecutionAdapter() public {
+        vm.prank(BUYER);
+        gate.execute(_request());
+        assertTrue(engine.committed());
+        assertTrue(target.instructionSettled(ORDER_ID));
+        assertEq(tokenIn.balanceOf(BUYER), 900);
+        assertEq(tokenOut.balanceOf(BUYER), 90);
+    }
+
+    function test_directTargetBypassIsRejected() public {
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        target.settle(_request());
+        assertFalse(target.instructionSettled(ORDER_ID));
+    }
+
+    function _request() internal view returns (ExecutionRequest memory request) {
+        request.context = ComplianceContext({
+            initiator: BUYER,
+            buyer: BUYER,
+            seller: SELLER,
+            tokenIn: address(tokenIn),
+            tokenOut: address(tokenOut),
+            amountIn: 100,
+            amountOut: 90,
+            venueType: VenueType.ORDER_BOOK,
+            venue: VENUE,
+            flowType: FlowType.SECONDARY_TRADE,
+            sellerIsAffiliate: false
+        });
+        request.amountOutMin = 90;
+        request.deadline = uint64(block.timestamp + 1 hours);
+        request.nonce = 1;
+        request.venueData = abi.encode(ORDER_ID);
     }
 }
 `;
