@@ -239,6 +239,17 @@ class ToolIntegrityTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'content mismatch'):
                 install_archive(archive, destination, archive_hash)
 
+    def test_archive_tree_digest_rejects_duplicate_member_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / 'tool.tar.gz'
+            with tarfile.open(archive, 'w:gz') as tar:
+                for name, payload in (('./bin/tool', b'first'), ('bin/tool', b'second')):
+                    info = tarfile.TarInfo(name)
+                    info.size = len(payload)
+                    tar.addfile(info, io.BytesIO(payload))
+            with self.assertRaisesRegex(RuntimeError, 'duplicate tool archive member'):
+                archive_tree_digest(archive)
+
 
 class MutationTests(unittest.TestCase):
     def test_forge_event_stream_selects_test_results(self):

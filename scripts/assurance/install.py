@@ -28,23 +28,27 @@ def _tree_record(kind, name, mode, payload):
 def archive_tree_digest(archive):
     """Derive an installed-tree identity directly from the checksum-pinned archive."""
     result = hashlib.sha256()
+    records = {}
     with tarfile.open(archive) as tar:
-        members = []
-        for member in tar.getmembers():
+        # Hash members in archive order: a backward seek re-decompresses the whole stream.
+        for member in tar:
             name = member.name.removeprefix('./').rstrip('/')
             if not name or member.isdir() or not _stable_path(name):
                 continue
-            members.append((name, member))
-        for name, member in sorted(members):
+            if name in records:
+                raise RuntimeError('duplicate tool archive member: ' + name)
             if member.issym():
-                result.update(_tree_record('symlink', name, member.mode, member.linkname.encode()))
+                record = _tree_record('symlink', name, member.mode, member.linkname.encode())
             elif member.isfile() or member.islnk():
                 stream = tar.extractfile(member)
                 if stream is None:
                     raise RuntimeError('unreadable tool archive member: ' + name)
-                result.update(_tree_record('file', name, member.mode, hashlib.sha256(stream.read()).digest()))
+                record = _tree_record('file', name, member.mode, hashlib.sha256(stream.read()).digest())
             else:
                 raise RuntimeError('unsupported tool archive member: ' + name)
+            records[name] = record
+    for name in sorted(records):
+        result.update(records[name])
     return result.hexdigest()
 
 

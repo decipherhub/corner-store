@@ -1,5 +1,27 @@
 # Progress
 
+## 2026-11-21 Session: OPS-004 Hosted Provisioning Timeout
+
+OPS-004 remains the sole active feature. Since the tool-integrity change on
+2026-11-18, every hosted assurance job was cancelled by its 45-minute timeout
+before the gate ran: each `install.py` / `verify_tools.py` invocation spent about
+10 minutes in `archive_tree_digest`. It read gzip tar members in sorted-name order,
+and each backward seek re-decompressed the stream from the start.
+
+`archive_tree_digest` now reads members once in archive order and folds the
+per-member records in sorted-name order, so the digest is unchanged. Duplicate
+normalized member names, which previously failed with an incidental `TypeError`,
+are rejected explicitly. No toolchain pin, gate, workflow or timeout changed.
+
+Validation: old and new digests are identical on the pinned Darwin Python, Foundry,
+Node and Yarn archives (Node: 77.1s before, 0.5s after). The pinned Linux Python,
+Foundry and Node archives were checksum-matched and take 0.6 to 0.8s each with the
+new code. `verify_tools.py` against the provisioned Darwin tools passes in about 3s,
+`install.py --offline` passes, and the gate-harness suite passes 32/32 including a
+new duplicate-name regression. Hosted Linux timing is UNVERIFIED until the next CI
+run. Next work is unchanged: human Slither review, hosted CI/Docker and external
+release evidence.
+
 ## 2026-11-21 Session: OPS-004 Branch Coverage Margin
 
 OPS-004 remains the sole active feature. Added 19 tests in the existing
