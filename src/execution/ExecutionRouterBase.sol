@@ -99,7 +99,7 @@ abstract contract ExecutionRouterBase is IExecutionRouter, Governed, ReentrancyG
         //    their reported amount is not accepted as the accounting source of truth.
         uint256 tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer);
         uint256 tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer);
-        ExecutionResult memory r = IExecutionAdapter(cfg.adapter).execute(req, d);
+        ExecutionResult memory r = _executeVenue(req, d, cfg);
 
         // 7a. Measure the actual settlement at the payer/recipient boundary. The
         //     current execution contract supports exact full fills of standard,
@@ -149,6 +149,17 @@ abstract contract ExecutionRouterBase is IExecutionRouter, Governed, ReentrancyG
     }
 
     function _beforeEvaluate(ExecutionRequest calldata req) internal view virtual {}
+
+    /// @dev Versioned execution surfaces may replace the dispatch boundary while
+    /// preserving this contract's authentication, measurement and commit lifecycle.
+    /// The legacy Router path remains an IExecutionAdapter call by default.
+    function _executeVenue(ExecutionRequest calldata req, ComplianceDecision memory decision, VenueConfig memory cfg)
+        internal
+        virtual
+        returns (ExecutionResult memory)
+    {
+        return IExecutionAdapter(cfg.adapter).execute(req, decision);
+    }
 
     function _resolveVenue(ExecutionRequest calldata req) internal view returns (VenueConfig memory cfg) {
         cfg = venueReg.venueOf(req.context.venue);

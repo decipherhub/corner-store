@@ -37,6 +37,13 @@ The Toolkit prepares and verifies operator-owned deployment inputs. It never own
 signer custody, submits Safe transactions, or treats ERC-3643/ONCHAINID evidence as
 trusted without the configured production checks.
 
+For an existing ATS/OMS, `precheckExternalSettlement()` returns an authenticated,
+PII-free advisory result at an explicit block. It never authorizes a trade.
+`buildExternalSettlementActivationPlan()` prepares unsigned Engine/venue/evidence
+calls and `verifyExternalSettlementActivation()` checks the installed gate and
+target read-only. The final on-chain gate always evaluates again, measures exact
+buyer balance deltas and commits atomically.
+
 Production onboarding schema v8 adds the opt-in `B-02-v3` asset-enforcement
 boundary. Each readable `assetEnforcement` declaration must exactly match the
 128-byte adapter/version/runtime-codehash/config-digest tuple stored in
