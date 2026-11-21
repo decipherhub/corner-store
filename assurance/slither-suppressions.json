@@ -3,6 +3,17 @@
   "status": "candidate suppressions; human approval required",
   "suppressions": [
     {
+      "fingerprint": "00c2f90509c3175030b2c32ad9104d5996a33929d11685c09d0a601930324533",
+      "detector": "reentrancy-balance",
+      "impact": "High",
+      "finding": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = IExecutionAdapter(cfg.adapter).execute(req,d) (src/execution/ExecutionRouterBase.sol#102)\n\tBalance read before the call:\n\t- tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#100)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountIn`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenInBefore`",
+      "justification": "ExecutionRouterBase.execute is nonReentrant across adapter dispatch and commit. The pre/post balance difference is the intended measurement, checked against approved exact amounts and adapter output before commit. Existing same/distinct nonce reentry and delta rollback tests exercise the lock and accounting. Token onboarding prohibits fee/rebase behavior; pool/adapter governance remains trusted.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
       "fingerprint": "013797fb326816cd8ea04ce433fb0a12330d219034f732ff7640b016e3ad4d49",
       "detector": "uninitialized-local",
       "impact": "Medium",
@@ -18,7 +29,7 @@
       "detector": "incorrect-equality",
       "impact": "Medium",
       "finding": "QualifiedPurchaser._evaluate(address,address) (src/compliance/elements/QualifiedPurchaser.sol#176-226) uses a dangerous strict equality:\n\t- c.basis == QpBasis.NONE || ! c.signatureValid (src/compliance/elements/QualifiedPurchaser.sol#180)",
-      "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.NONE || ! c.signatureValid (src/compliance/elements/QualifiedPurchaser.sol#180)",
+      "justification": "This comparison selects an explicit QpBasis enum case. The basis == NONE || !signatureValid predicate is the first rejection in _evaluate, before the issuer-trust and freshness checks, and no balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.NONE || ! c.signatureValid (src/compliance/elements/QualifiedPurchaser.sol#180)",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -30,17 +41,6 @@
       "impact": "Medium",
       "finding": "DeployProductionCore._writeArtifact(ProductionCoreDeployer.Deployment,address,address,address,bool,bool,string,string,string,string) (script/DeployProductionCore.s.sol#48-96) ignores return value by vm.serializeUint(key,chainId,block.chainid) (script/DeployProductionCore.s.sol#66)",
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeUint(key,chainId,block.chainid) (script/DeployProductionCore.s.sol#66)",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
-      "fingerprint": "0541b2317fcebd038f4aab8b9b1ad12b065826feb8dc8d13db3d35cc3f6b3899",
-      "detector": "uninitialized-local",
-      "impact": "Medium",
-      "finding": "TokenPolicyRegistry._rejectUnknownParameters(ManifestPolicyConfig,uint256,bytes32[]).found (src/registry/TokenPolicyRegistry.sol#683) is a local variable never initialized",
-      "justification": "False is the initial membership search result for each parameter. A matching required ID sets true; unmatched parameters reject.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -135,17 +135,6 @@
       "status": "pending-human-review"
     },
     {
-      "fingerprint": "24159954fe937eab6f5cb61f771b04a4f1782357748b1b0bcae7a6e62543feff",
-      "detector": "reentrancy-balance",
-      "impact": "High",
-      "finding": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-140):\n\tExternal call allowing reentrancy:\n\t- r = IExecutionAdapter(cfg.adapter).execute(req,d) (src/execution/ExecutionRouterBase.sol#102)\n\tBalance read before the call:\n\t- tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#101)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountOut`\n\t- realizedAmountOut < req.amountOutMin (src/execution/ExecutionRouterBase.sol#128)\n\t\t- stale variable `realizedAmountOut`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenOutBefore`",
-      "justification": "ExecutionRouterBase.execute is nonReentrant across adapter dispatch and commit. The pre/post balance difference is the intended measurement, checked against approved exact amounts and adapter output before commit. Existing same/distinct nonce reentry and delta rollback tests exercise the lock and accounting. Token onboarding prohibits fee/rebase behavior; pool/adapter governance remains trusted.",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
       "fingerprint": "2fdb33cf5f3b4e50698d9c9218b2b3814210b51a44494e4930f3d3e17c6c9c76",
       "detector": "unused-return",
       "impact": "Medium",
@@ -173,6 +162,17 @@
       "impact": "Medium",
       "finding": "DeployProductionCore._writeArtifact(ProductionCoreDeployer.Deployment,address,address,address,bool,bool,string,string,string,string) (script/DeployProductionCore.s.sol#48-96) ignores return value by vm.serializeUint(key,schemaVersion,1) (script/DeployProductionCore.s.sol#62)",
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeUint(key,schemaVersion,1) (script/DeployProductionCore.s.sol#62)",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "33d5e58545391f9883a7a7a89fe6712c282cf0265c33233753fba9e757005e23",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "TokenPolicyRegistry._rejectUnusedOrDuplicateOverrides(ElementEnforcementOverride[],uint256,bytes32[]).member (src/registry/TokenPolicyRegistry.sol#610) is a local variable never initialized",
+      "justification": "False is the initial membership search result for each override. Matching required IDs set true; unmatched overrides reject.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -212,33 +212,22 @@
       "status": "pending-human-review"
     },
     {
-      "fingerprint": "451149d49b8275c6197a5fa4a315294ec22f8fcf2e839115531a100bf38cd2ea",
-      "detector": "reentrancy-balance",
-      "impact": "High",
-      "finding": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-140):\n\tExternal call allowing reentrancy:\n\t- r = IExecutionAdapter(cfg.adapter).execute(req,d) (src/execution/ExecutionRouterBase.sol#102)\n\tBalance read before the call:\n\t- tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#100)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountIn`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenInBefore`",
-      "justification": "ExecutionRouterBase.execute is nonReentrant across adapter dispatch and commit. The pre/post balance difference is the intended measurement, checked against approved exact amounts and adapter output before commit. Existing same/distinct nonce reentry and delta rollback tests exercise the lock and accounting. Token onboarding prohibits fee/rebase behavior; pool/adapter governance remains trusted.",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
-      "fingerprint": "485567a80118d5b2a7a1e386c8826dea7a9b2f41e49c9bb9609bd553a6b0b78b",
-      "detector": "uninitialized-local",
-      "impact": "Medium",
-      "finding": "TokenPolicyRegistry._validateAndHashPolicyConfig(ManifestPolicyConfig,RecipeBinding[]).totalBytes (src/registry/TokenPolicyRegistry.sol#635) is a local variable never initialized",
-      "justification": "Zero is the deliberate sum identity. Each parameter length is added with checked arithmetic and compared with MAX_TOTAL_PARAMETER_BYTES.",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
       "fingerprint": "4f876495336f0b5c7f51067df17a53f5e11e1f684a8b737693adb400319f4c6f",
       "detector": "incorrect-equality",
       "impact": "Medium",
       "finding": "QualifiedPurchaser._evaluate(address,address) (src/compliance/elements/QualifiedPurchaser.sol#176-226) uses a dangerous strict equality:\n\t- c.basis == QpBasis.FAMILY_COMPANY (src/compliance/elements/QualifiedPurchaser.sol#202)",
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.FAMILY_COMPANY (src/compliance/elements/QualifiedPurchaser.sol#202)",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "4f8f93fc7d8ac01aae9efc315e4c890bc3fccd819098efc2378589405038a54d",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "ExecutionRouterBase.execute(ExecutionRequest).regulatedAmount (src/execution/ExecutionRouterBase.sol#80) is a local variable never initialized",
+      "justification": "Each matching token axis assigns amountIn/amountOut. The unmatched-token branch reverts InvalidAmountCapToken before comparing this local.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -300,6 +289,28 @@
       "status": "pending-human-review"
     },
     {
+      "fingerprint": "5e7d47f8e52368c10fdae708cbc4be29cac1affbc494a18a4a592e7fa51e722f",
+      "detector": "incorrect-equality",
+      "impact": "Medium",
+      "finding": "ComplianceReporter._merge(RequirementStatus,RequirementStatus) (src/compliance/ComplianceReporter.sol#184-191) uses a dangerous strict equality:\n\t- a == RequirementStatus.FAIL || b == RequirementStatus.FAIL (src/compliance/ComplianceReporter.sol#185)",
+      "justification": "Strict equality compares RequirementStatus enum values to implement the FAIL > UNDETERMINED > PASS > NOT_APPLICABLE merge precedence. No balance or manipulable timestamp equality gates anything here. Reviewed predicate: a == RequirementStatus.FAIL || b == RequirementStatus.FAIL",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "5f29d29b16498ed38331ddbec62ee1a090874422b135d41d20cb3a6017453368",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "ContextEvidence._requiresAffiliateEvidence(address,ITokenPolicyRegistry,address).required (src/execution/ContextEvidence.sol#116) is a local variable never initialized",
+      "justification": "required defaults to false and becomes true only when a compiled rule carries AFFILIATE_ELEMENT_ID; when it stays false the function returns false before any registry check.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
       "fingerprint": "623993bc11af99df70ca2fe3bb97b63775aa6036e111d9262a97865728295d0d",
       "detector": "unused-return",
       "impact": "Medium",
@@ -327,17 +338,6 @@
       "impact": "Medium",
       "finding": "QualifiedPurchaser._evaluate(address,address) (src/compliance/elements/QualifiedPurchaser.sol#176-226) uses a dangerous strict equality:\n\t- c.basis == QpBasis.TRUST (src/compliance/elements/QualifiedPurchaser.sol#209)",
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.TRUST (src/compliance/elements/QualifiedPurchaser.sol#209)",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
-      "fingerprint": "6f81cf6fb2b73d94cf09a227e6354d4df98930e065f7bb1c68c86c9de9cd461d",
-      "detector": "uninitialized-local",
-      "impact": "Medium",
-      "finding": "TokenPolicyRegistry._rejectUnusedOrDuplicateOverrides(ElementEnforcementOverride[],uint256,bytes32[]).member (src/registry/TokenPolicyRegistry.sol#601) is a local variable never initialized",
-      "justification": "False is the initial membership search result for each override. Matching required IDs set true; unmatched overrides reject.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -381,7 +381,7 @@
       "detector": "arbitrary-send-erc20",
       "impact": "High",
       "finding": "UniswapV3Adapter.uniswapV3SwapCallback(int256,int256,bytes) (src/execution/adapters/amm/UniswapV3Adapter.sol#129-148) uses arbitrary from in transferFrom: IERC20(tokenIn).safeTransferFrom(payer,msg.sender,amountOwed) (src/execution/adapters/amm/UniswapV3Adapter.sol#147)",
-      "justification": "The callback requires registeredPool[msg.sender] and canonical token0/token1 direction with exactly one positive owed delta. Pool registration is owner-controlled and canonical pool onboarding remains the trust boundary. Only a registered pool can request the allowance debit. Existing AMM callback-origin/token-direction and real Uniswap tests cover this boundary.",
+      "justification": "ACCEPTED RISK, explicit human sign-off required. The callback requires registeredPool[msg.sender] and canonical token0/token1 direction with exactly one positive owed delta, but it has no active-swap binding: a registered pool may pull tokenIn from any payer that approved the adapter. The bound is owner-controlled pool registration plus the canonical pool only calling back the caller of its own swap; a malicious or non-canonical registered pool is not contained.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -432,6 +432,17 @@
       "status": "pending-human-review"
     },
     {
+      "fingerprint": "89d718b4c0901f5976bb163f67c855a2e24dedafa11a2e772d084a5adfabc41d",
+      "detector": "reentrancy-balance",
+      "impact": "High",
+      "finding": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = IExecutionAdapter(cfg.adapter).execute(req,d) (src/execution/ExecutionRouterBase.sol#102)\n\tBalance read before the call:\n\t- tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#101)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountOut`\n\t- realizedAmountOut < req.amountOutMin (src/execution/ExecutionRouterBase.sol#128)\n\t\t- stale variable `realizedAmountOut`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenOutBefore`",
+      "justification": "ExecutionRouterBase.execute is nonReentrant across adapter dispatch and commit. The pre/post balance difference is the intended measurement, checked against approved exact amounts and adapter output before commit. Existing same/distinct nonce reentry and delta rollback tests exercise the lock and accounting. Token onboarding prohibits fee/rebase behavior; pool/adapter governance remains trusted.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
       "fingerprint": "8b79e93c2c09b839068ebeae37e6d8f5f421a36ab20fe98f7130c0ade6a8cf31",
       "detector": "incorrect-equality",
       "impact": "Medium",
@@ -465,17 +476,6 @@
       "status": "pending-human-review"
     },
     {
-      "fingerprint": "8faa1931679dc35d27d6d39bf1b0b21670c2372506d51a7a8639014e4e1b3bd7",
-      "detector": "uninitialized-local",
-      "impact": "Medium",
-      "finding": "TokenPolicyRegistry._validateBindings(RecipeBinding[]).hasBlockingBinding (src/registry/TokenPolicyRegistry.sol#742) is a local variable never initialized",
-      "justification": "False is the initial search result. REQUIRED_BLOCKING or PATH_OPTION sets true; an all FLAG_ONLY plan must retain false and reject.",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
       "fingerprint": "9322153750b2515180d931da59e792dc674ba15a2b987956e5fe298af7fd7139",
       "detector": "incorrect-equality",
       "impact": "Medium",
@@ -503,6 +503,17 @@
       "impact": "Medium",
       "finding": "UniswapV3Adapter.execute(ExecutionRequest,ComplianceDecision) (src/execution/adapters/amm/UniswapV3Adapter.sol#100-125) ignores return value by targetPool.swap(req.context.buyer,zeroForOne,int256(req.context.amountIn),sqrtPriceLimitX96,cb) (src/execution/adapters/amm/UniswapV3Adapter.sol#114-120)",
       "justification": "AMM settlement measures actual tokenOut balance delta after swap; the Router independently checks both exact token deltas. Trusting swap return amounts instead would weaken the existing accounting invariant.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "9ebfcd983c44dbd0a3a2c197361068a6fdc5b60b477ea3de39b3a47b485b55c9",
+      "detector": "incorrect-equality",
+      "impact": "Medium",
+      "finding": "ComplianceReporter._merge(RequirementStatus,RequirementStatus) (src/compliance/ComplianceReporter.sol#184-191) uses a dangerous strict equality:\n\t- a == RequirementStatus.PASS || b == RequirementStatus.PASS (src/compliance/ComplianceReporter.sol#189)",
+      "justification": "Strict equality compares RequirementStatus enum values to implement the FAIL > UNDETERMINED > PASS > NOT_APPLICABLE merge precedence. No balance or manipulable timestamp equality gates anything here. Reviewed predicate: a == RequirementStatus.PASS || b == RequirementStatus.PASS",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -586,6 +597,17 @@
       "status": "pending-human-review"
     },
     {
+      "fingerprint": "a982ce3cf008a6f5231e8068e958e7ae8d7670b048c30f70f1f7be8d6e6b632a",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "ComplianceReporter.report(ComplianceContext).results (src/compliance/ComplianceReporter.sol#49) is a local variable never initialized",
+      "justification": "The Results struct is zero-initialized by design: count 0 and restricted false are the intended starting values, and rows, complete and restrictedStatus are assigned immediately after the declaration, before any use.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
       "fingerprint": "aa52ec00166313571912ae01f573c62913fd33ab5bd72a9acbc8db437d979dfc",
       "detector": "unused-return",
       "impact": "Medium",
@@ -597,11 +619,11 @@
       "status": "pending-human-review"
     },
     {
-      "fingerprint": "adcb69e6775dd6b7bac162215222d496aa287d5ea4c5679fe681ade2e942c4c3",
-      "detector": "uninitialized-local",
+      "fingerprint": "aab17e173291ea83bdf90134705a0b59201ca57100075e175574fe05f683071f",
+      "detector": "unused-return",
       "impact": "Medium",
-      "finding": "ExecutionRouterBase.execute(ExecutionRequest).regulatedAmount (src/execution/ExecutionRouterBase.sol#80) is a local variable never initialized",
-      "justification": "Each matching token axis assigns amountIn/amountOut. The unmatched-token branch reverts InvalidAmountCapToken before comparing this local.",
+      "finding": "Erc3643AssetEnforcement.willAllow(AssetEnforcementRequest) (src/compliance/asset/Erc3643AssetEnforcement.sol#59-99) ignores return value by (allowed) = legacyElement.check(request.to,request.from,request.asset,request.amount,abi.encode(ctx),bytes()) (src/compliance/asset/Erc3643AssetEnforcement.sol#85-98)",
+      "justification": "check returns (allowed, reason); only the boolean verdict is consumed because AssetEnforcementResult has no reason field. A reverting check is caught and returns allowed=false with failure UNAVAILABLE, so the ignored member is not an authorization result.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -623,7 +645,18 @@
       "detector": "unused-return",
       "impact": "Medium",
       "finding": "ComplianceEngine._policyHashes(address,ManifestCore,RecipeBinding[]) (src/compliance/ComplianceEngine.sol#576-633) ignores return value by (binding,recipeKey,None) = policyReg.compiledBindingOf(token,i) (src/compliance/ComplianceEngine.sol#606)",
-      "justification": "compiledBindingOf returns binding, recipeKey and compiled rules. The first two values are bound here; rules are fetched through compiledRulesOf with matching parameters and every Element is hashed below. The unused tuple member is not an authorization result.",
+      "justification": "compiledBindingOf returns binding, recipeKey and the per-binding plan hash. The first two values are bound here; the ignored plan hash is safe because the aggregate compiledPlanHashOf(token), hashed at the start of _policyHashes, already commits every binding plan hash, and every compiled rule and Element is still hashed below.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "c1765f65c133e1ec6d4e992d47760df7e052acfc0b33843e2339b8e7f6ecbcc8",
+      "detector": "incorrect-equality",
+      "impact": "Medium",
+      "finding": "ComplianceReporter._merge(RequirementStatus,RequirementStatus) (src/compliance/ComplianceReporter.sol#184-191) uses a dangerous strict equality:\n\t- a == RequirementStatus.UNDETERMINED || b == RequirementStatus.UNDETERMINED (src/compliance/ComplianceReporter.sol#186)",
+      "justification": "Strict equality compares RequirementStatus enum values to implement the FAIL > UNDETERMINED > PASS > NOT_APPLICABLE merge precedence. No balance or manipulable timestamp equality gates anything here. Reviewed predicate: a == RequirementStatus.UNDETERMINED || b == RequirementStatus.UNDETERMINED",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -668,6 +701,17 @@
       "impact": "Medium",
       "finding": "LockupV2._check(address,address,address,uint256,bytes,bytes) (src/compliance/elements/LockupV2.sol#57-85) ignores return value by (from,None) = AssetFlow.resolve(asset,context) (src/compliance/elements/LockupV2.sol#67)",
       "justification": "AssetFlow.resolve validates membership/direction and supplies actual sender. Lockup checks sender acquisition age; recipient is intentionally unused for this property.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "ca99cc3956b9eed4478ca8811e44f15545b1b5720a03e1e02086c574694bcf31",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "TokenPolicyRegistry._validateBindings(RecipeBinding[]).hasBlockingBinding (src/registry/TokenPolicyRegistry.sol#777) is a local variable never initialized",
+      "justification": "False is the initial search result. REQUIRED_BLOCKING or PATH_OPTION sets true; an all FLAG_ONLY plan must retain false and reject.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -723,6 +767,17 @@
       "impact": "Medium",
       "finding": "QualifiedPurchaser._evaluate(address,address) (src/compliance/elements/QualifiedPurchaser.sol#176-226) uses a dangerous strict equality:\n\t- c.basis == QpBasis.NATURAL || c.basis == QpBasis.INSTITUTIONAL || c.basis == QpBasis.QIB (src/compliance/elements/QualifiedPurchaser.sol#194)",
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.NATURAL || c.basis == QpBasis.INSTITUTIONAL || c.basis == QpBasis.QIB (src/compliance/elements/QualifiedPurchaser.sol#194)",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "db1324831a5366774ed0d7116b090167e00cfb2b08c647af50469e5826377504",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "RFQAdapterV3._validatePrimary(RFQQuoteV3).distributor (src/execution/adapters/rfq/RFQAdapterV3.sol#190) is a local variable never initialized",
+      "justification": "Zero denotes no primary distributor found. Distributor discovery matches compiled parameters by PRIMARY_DISTRIBUTOR_SCHEMA_ID with schema version 1 and 32-byte encoding; nonzero values assign it, conflicting values revert, and a zero or non-maker distributor rejects before primary distribution is accepted.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -817,6 +872,39 @@
       "status": "pending-human-review"
     },
     {
+      "fingerprint": "efef817c361cbe7059a78e73bb9927c16f1fcf1a94c4ed05251adcd649704e30",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "TokenPolicyRegistry._rejectUnknownParameters(ManifestPolicyConfig,uint256,bytes32[]).found (src/registry/TokenPolicyRegistry.sol#718) is a local variable never initialized",
+      "justification": "False is the initial membership search result for each parameter. A matching required ID sets true; unmatched parameters reject.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "f3a15d3a770c14ff41ef48c0b771d56fe90e716c45547ddcd6716674cbf774f1",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "Erc3643AssetEnforcement.willAllow(AssetEnforcementRequest).currentBinding (src/compliance/asset/Erc3643AssetEnforcement.sol#65) is a local variable never initialized",
+      "justification": "currentBinding is assigned from bindingDigest in the try branch; the catch branch returns UNAVAILABLE immediately, so no path reads it unassigned.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "f594ad2cf7b9406b303ff9d307509a33df9a6e525f9436bd456e5d791a9a9b74",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "ComplianceReporter._reportBinding(ComplianceContext,address,RecipeBinding,uint8,bytes,ComplianceReporter.Results).reason (src/compliance/ComplianceReporter.sol#110) is a local variable never initialized",
+      "justification": "reason defaults to bytes32(0) and is assigned only when the binding is applicable and _check returns one; a FAIL with a zero reason is replaced by ReasonCodes.encode, and non-PASS rows intentionally carry no reason.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
       "fingerprint": "f6eaacfbaf8a45241fa6aafbd7f4e61976f3b05fec2cbfb41249f00450cd45ed",
       "detector": "unused-return",
       "impact": "Medium",
@@ -833,17 +921,6 @@
       "impact": "Medium",
       "finding": "DeployProductionCore._writeArtifact(ProductionCoreDeployer.Deployment,address,address,address,bool,bool,string,string,string,string) (script/DeployProductionCore.s.sol#48-96) ignores return value by vm.serializeBytes32(key,elementRegCodeHash,bytes32(deployed.elementReg.codehash)) (script/DeployProductionCore.s.sol#84)",
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,elementRegCodeHash,bytes32(deployed.elementReg.codehash)) (script/DeployProductionCore.s.sol#84)",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
-      "fingerprint": "fcdeaa37a2aa8b64872d6c6fb47c79c36b5aeb57c5f46146099a10dc687555c7",
-      "detector": "uninitialized-local",
-      "impact": "Medium",
-      "finding": "RFQAdapterV3._validatePrimary(RFQQuoteV3).distributor (src/execution/adapters/rfq/RFQAdapterV3.sol#186) is a local variable never initialized",
-      "justification": "Zero denotes no C-01-v2 distributor found. Nonzero canonical parameters assign it; conflicts and zero/no-match reject before accepting primary distribution.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
