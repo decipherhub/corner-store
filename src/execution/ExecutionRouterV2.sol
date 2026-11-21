@@ -31,7 +31,7 @@ contract ExecutionRouterV2 is ExecutionRouterBase {
         if (address(policyReg).code.length == 0) revert Errors.InvalidContextEvidence();
     }
 
-    function _beforeEvaluate(ExecutionRequest calldata req) internal view override {
+    function _beforeEvaluate(ExecutionRequest calldata req) internal view virtual override {
         VenueConfig memory cfg = _resolveVenue(req);
         VenueContextEvidence memory evidence = venueReg.contextEvidenceOf(req.context.venue);
         if (evidence.adapterCodeHash == bytes32(0) || evidence.policyRegistry != address(policyReg)) {

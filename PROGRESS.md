@@ -1,5 +1,28 @@
 # Progress
 
+## 2026-11-21 Session: SDK-008 External Settlement Gate and OMS Precheck
+
+SDK-008 is passing. Existing ATS/OMS deployments can now use a dedicated
+`ExternalSettlementGate` without implementing the Corner Store reference Router or
+`IExecutionAdapter`. The gate preserves caller, pause, nonce, venue/context evidence,
+finite-amount, measured-settlement and stateful-commit checks. Its reference target
+uses operator-registered one-shot instructions as the authoritative buyer, seller,
+token, amount, venue and flow source, and rejects direct settlement outside the gate.
+
+The public Toolkit now provides a PII-free advisory OMS precheck, deterministic
+unsigned activation calls and fail-closed activation verification. The DEX integration
+scaffold includes a clean-project external-gate conformance test and optional Toolkit
+helper. Matching, custody, signing, broadcast, OMS operation, mixins and Uniswap v4
+hooks remain outside this feature; one Engine still has one commit dispatcher and must
+be dedicated or deliberately rebound during activation.
+
+Fresh verification passed `scripts/check.sh` with Foundry 1,233/1,233 plus all service,
+Toolkit, CLI, clean-project, production dry-run/deploy/verify/recovery and deploy-v3
+gates. The standalone consumer passed both legacy adapter 4/4 and external settlement
+gate 2/2 conformance tests. Both `buidl-like` and `reg-d` Anvil E2E profiles passed
+7/7 scenarios and their backend/CLI/Router RFQ flows. PostgreSQL integration tests
+remain environment-gated and were skipped because no database URL was configured.
+
 ## 2026-11-21 Session: RFQ-007 PostgreSQL HA Coordinator
 
 RFQ-007 is passing. A separate optional `@corner-store/rfq-postgres` package now

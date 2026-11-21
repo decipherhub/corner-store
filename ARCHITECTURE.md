@@ -34,6 +34,7 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 | `services/operator-dashboard/` | Operator API를 소비하는 read-only snapshot/proposal review 화면 |
 | `services/compliance-data/` | provider-neutral TA lot, person-group state와 reject/surveillance audit SDK |
 | `services/toolkit/src/policy-audit.ts` | canonical PII-free policy artifact와 operator-owned immutable store port/reference adapter |
+| `services/toolkit/src/external-settlement.ts` | external ATS/OMS advisory precheck와 unsigned settlement-gate activation/verification |
 | `tools/deploy-v3/` | 독립적으로 유지하는 vendored Uniswap v3 배포 도구 |
 | `lib/` | Foundry 의존성 |
 | `scripts/` | 저장소 setup, 검증과 정리 명령 |
@@ -72,8 +73,9 @@ Execution Integration Kit로 구성한다. Corner Store reference DEX는 이 공
 - compliance evaluation은 venue 실행과 분리한다.
 - execution routing은 법률 규칙이나 matching 로직을 직접 소유하지 않는다.
 - venue adapter는 정책을 정의하지 않는다.
-- Corner Store의 DEX-level compliance 보장은 `ExecutionRouter`가 실행한
-  router-mediated trade에 한정한다.
+- Corner Store의 DEX-level compliance 보장은 `ExecutionRouter` 또는
+  `ExternalSettlementGate`가 fresh evaluate, measured settlement와 commit을 같은
+  트랜잭션으로 실행한 trade에 한정한다.
 - ERC-3643 직접 전송, 직접 pool/venue 호출, wrapper/vault/custodian을 통한 경제적
   소유권 이전은 자동으로 Corner Store 4-Layer evaluation과 `commit()`을 거치지
   않는다.
@@ -119,6 +121,13 @@ ExecutionRouter
   → ComplianceEngine.evaluate()
   → Adapter
   → Venue/Pool/RFQ
+  → ComplianceEngine.commit()
+
+ExternalSettlementGate
+  → authoritative target context validation
+  → ComplianceEngine.evaluate()
+  → gate-only ATS/OMS settlement target
+  → measured settlement
   → ComplianceEngine.commit()
 ```
 
@@ -173,6 +182,8 @@ Adapter/configuration의 의존 방향이 드러나게 구성한다.
 - compliance 구현은 `src/compliance`와 `src/registry`에 둔다.
 - Router/venue registry/selector와 공통 adapter interface는 `src/execution`에 둔다.
 - 구체 reference venue adapter는 `src/execution/adapters/<venue>/`에 둔다.
+- 외부 ATS/OMS의 gate-only settlement target contract는
+  `src/execution/targets`에 두고 matching/custody 구현과 분리한다.
 - RFQ offchain quote signer reference는 `services/rfq`에 둔다.
 - RFQ module 의미와 conformance는 `services/rfq`, integrator가 선택한 module
   binding/scaffold는 `services/toolkit`, 명령 rendering은 `services/cli`에 둔다.

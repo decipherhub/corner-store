@@ -2,7 +2,7 @@ import {AbiCoder, Interface, encodeBytes32String, keccak256, toUtf8Bytes} from "
 import type {OnboardingReader, OnboardingTx, ProductionOnboardingCheck, ProductionOnboardingConfig, VenueInput} from "./production-onboarding";
 
 export interface VenueContextInput {
-  adapterVersion: 2 | 3;
+  adapterVersion: 2 | 3 | 4;
   contextVersion: 1;
   adapterCodeHash: string;
   affiliateSource: string;
