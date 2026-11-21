@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import {execFileSync, spawn, ChildProcess} from "node:child_process";
+import {createHash} from "node:crypto";
 import {cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join, resolve} from "node:path";
 
 const repo = resolve(__dirname, "../../../../..");
 const root = realpathSync(mkdtempSync(join(tmpdir(), "corner-production-packed-")));
-const env = {...process.env, npm_config_cache: join(root, "npm-cache")};
+const env: NodeJS.ProcessEnv = {...process.env, npm_config_cache: join(root, "npm-cache")};
 const run = (cmd: string, args: string[], cwd = root) => execFileSync(cmd, args, {cwd, env, encoding: "utf8", maxBuffer: 128 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"]}).trim();
 async function main(): Promise<void> {
 try {
@@ -76,10 +77,17 @@ async function productionConsumer(root: string, cli: string, bundled: string, to
   git("init", "-q"); git("add", ".");
   git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "isolated production source fixture");
   const localHome = join(root, "signer-home");
-  const solc = join(localHome, ".svm/0.8.17/solc-0.8.17"); mkdirSync(dirname(solc), {recursive: true});
-  const existingHome = require("node:os").homedir();
-  const candidates = [join(existingHome, ".svm/0.8.17/solc-0.8.17"), join(existingHome, ".local/share/svm/0.8.17/solc-0.8.17"), join(existingHome, "Library/Application Support/svm/0.8.17/solc-0.8.17")];
-  const installedSolc = candidates.find(existsSync); assert(installedSolc, "pinned Solc is required"); cpSync(installedSolc, solc);
+  let solc: string;
+  if (env.FOUNDRY_SOLC !== undefined) {
+    assert(env.FOUNDRY_SOLC && existsSync(env.FOUNDRY_SOLC), "FOUNDRY_SOLC must point to an executable solc 0.8.17");
+    solc = realpathSync(env.FOUNDRY_SOLC);
+    assert.equal(run(solc, ["--version"]).match(/^Version: (\d+\.\d+\.\d+)\+/m)?.[1], "0.8.17", "FOUNDRY_SOLC must report exactly solc 0.8.17");
+  } else {
+    solc = join(localHome, ".svm/0.8.17/solc-0.8.17"); mkdirSync(dirname(solc), {recursive: true});
+    const existingHome = require("node:os").homedir();
+    const candidates = [join(existingHome, ".svm/0.8.17/solc-0.8.17"), join(existingHome, ".local/share/svm/0.8.17/solc-0.8.17"), join(existingHome, "Library/Application Support/svm/0.8.17/solc-0.8.17")];
+    const installedSolc = candidates.find(existsSync); assert(installedSolc, "pinned Solc is required"); cpSync(installedSolc, solc);
+  }
   const testEnv = {...env, HOME: localHome};
   const command = (args: string[], cwd = consumer) => execFileSync(process.execPath, [cli, ...args, "--contracts", contracts], {cwd, env: testEnv, encoding: "utf8", maxBuffer: 128 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"]});
   const fails = (args: string[], pattern: RegExp, cwd = consumer) => {
@@ -109,7 +117,7 @@ contract Safe {
   function getOwners() external view returns(address[] memory result) { result = new address[](1); result[0] = owner; }
   function getThreshold() external pure returns(uint256) { return 1; }
 }`);
-    run("forge", ["build", "--root", safeRoot, "--offline"]);
+    run("forge", ["build", "--root", safeRoot, "--offline", "--use", solc]);
     const signer = new NonceManager(wallet.connect(provider));
     const deploy = async (name: string, args: any[]) => {
       const file = JSON.parse(readFileSync(join(safeRoot, `out/Safe.sol/${name}.json`), "utf8"));
@@ -134,6 +142,7 @@ contract Safe {
     fails(["production-plan", path, "--out", "unsigned.json"], /occupied|exist/i);
     const captured = toolkit.buildProductionIdentity(contracts, config, {keepWorkspace: true});
     try {
+      check(captured.build.tools.solc.sha256 === `sha256:${createHash("sha256").update(readFileSync(solc)).digest("hex")}`, "production evidence must commit the selected Solc bytes");
       check(captured.identity.evidenceId === plan.evidenceId, "packed CLI and Toolkit identities must match");
       const blockNumber = Number(await provider.send("eth_blockNumber", []));
       const fork = await node(["--fork-url", live.url, "--fork-block-number", String(blockNumber)]); forkProvider = fork.provider;

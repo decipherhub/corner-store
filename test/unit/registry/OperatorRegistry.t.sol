@@ -131,4 +131,37 @@ contract OperatorRegistryTest is Test {
         vm.expectRevert(Errors.NotAuthorized.selector);
         reg.setVenueSuspended(venue, true, bytes32("HALT"));
     }
+
+    function test_duplicateRecoverySchedulesCannotReplacePendingActions() public {
+        reg.setGlobalPaused(true, bytes32("halt"));
+        reg.setAssetSuspended(venue, true, bytes32("halt"));
+        reg.setVenueSuspended(venue, true, bytes32("halt"));
+        reg.scheduleGlobalUnpause(bytes32("reviewed"));
+        reg.scheduleAssetUnpause(venue, bytes32("reviewed"));
+        reg.scheduleVenueUnpause(venue, bytes32("reviewed"));
+        vm.expectRevert(Errors.PendingActionExists.selector);
+        reg.scheduleGlobalUnpause(bytes32("replacement"));
+        vm.expectRevert(Errors.PendingActionExists.selector);
+        reg.scheduleAssetUnpause(venue, bytes32("replacement"));
+        vm.expectRevert(Errors.PendingActionExists.selector);
+        reg.scheduleVenueUnpause(venue, bytes32("replacement"));
+        vm.prank(operator);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        reg.setGlobalPaused(false, bytes32(0));
+        vm.prank(operator);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        reg.setAssetSuspended(venue, false, bytes32(0));
+        vm.warp(vm.getBlockTimestamp() + reg.MIN_UNPAUSE_DELAY());
+        reg.setGlobalPaused(false, bytes32(0));
+        reg.setAssetSuspended(venue, false, bytes32(0));
+        reg.setVenueSuspended(venue, false, bytes32(0));
+        assertFalse(reg.isGlobalPaused());
+        assertFalse(reg.isAssetSuspended(venue));
+        assertFalse(reg.isVenueSuspended(venue));
+        reg.setGlobalPaused(true, bytes32("halt"));
+        reg.scheduleGlobalUnpause(bytes32("reviewed"));
+        vm.warp(vm.getBlockTimestamp() + reg.MIN_UNPAUSE_DELAY());
+        reg.executeGlobalUnpause();
+        assertFalse(reg.isGlobalPaused());
+    }
 }

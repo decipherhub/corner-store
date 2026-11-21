@@ -720,6 +720,70 @@ contract TokenPolicyRegistryTest is Test {
         reg.registerManifest(token, _manifest(), _parameterBindings(), _emptyOverrides(), duplicate);
     }
 
+    function test_register_rejectsTooManyPolicyParameters() public {
+        ManifestPolicyConfig memory config = _policyConfig(100);
+        config.elementParameters = new ElementPolicyParameter[](257);
+        vm.expectRevert(abi.encodeWithSelector(Errors.TooManyPolicyParameters.selector, uint256(257), uint256(256)));
+        reg.registerManifest(token, _manifest(), _bindings(), _emptyOverrides(), config);
+    }
+
+    function test_register_rejectsOutOfRangeAndZeroElementParameters() public {
+        ManifestPolicyConfig memory config = _policyConfig(100);
+        config.elementParameters[0].bindingIndex = 1;
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidPolicyParameter.selector, uint256(1), PARAM_ELEMENT_ID));
+        reg.registerManifest(token, _manifest(), _bindings(), _emptyOverrides(), config);
+        config.elementParameters[0].bindingIndex = 0;
+        config.elementParameters[0].elementId = bytes32(0);
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidPolicyParameter.selector, uint256(0), bytes32(0)));
+        reg.registerManifest(token, _manifest(), _bindings(), _emptyOverrides(), config);
+    }
+
+    function test_register_rejectsTotalPolicyBytesAboveLimit() public {
+        ManifestPolicyConfig memory config = _policyConfig(100);
+        config.elementParameters[0].parameters = new bytes(16_385);
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.PolicyParametersTooLarge.selector, uint256(16_385), uint256(16_384))
+        );
+        reg.registerManifest(token, _manifest(), _bindings(), _emptyOverrides(), config);
+    }
+
+    function test_register_rejectsParameterForElementOutsideRecipe() public {
+        ManifestPolicyConfig memory config = _policyConfig(100);
+        vm.expectRevert(abi.encodeWithSelector(Errors.InvalidPolicyParameter.selector, uint256(0), PARAM_ELEMENT_ID));
+        reg.registerManifest(token, _manifest(), _bindings(), _emptyOverrides(), config);
+    }
+
+    function test_register_explicitDefaultOverridePreservesBlockAction() public {
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](1);
+        overrides_[0] = ElementEnforcementOverride(0, ELEMENT_ID, EnforcementOverrideMode.USE_ELEMENT_DEFAULT);
+        reg.registerManifest(token, _manifest(), _bindings(), overrides_);
+        CompiledElementRule[] memory rules = reg.compiledRulesOf(token, 0);
+        assertEq(rules.length, 1);
+        assertEq(rules[0].elementId, ELEMENT_ID);
+        assertEq(uint256(rules[0].action), uint256(EnforcementAction.BLOCK));
+    }
+
+    function test_register_rejectsDriftedRecipeVersion() public {
+        bytes32 key = recipeReg.recipeKeyOf(7);
+        address recipe = recipeReg.recipeOf(key, 1);
+        vm.mockCall(recipe, abi.encodeWithSelector(IRecipe.version.selector), abi.encode(uint16(2)));
+        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeVersionMismatch.selector, uint16(7), uint16(1), uint16(2)));
+        reg.registerManifest(token, _manifest(), _bindings());
+    }
+
+    function test_register_rejectsDriftedRecipeElementCount() public {
+        address recipe = recipeReg.recipeOf(recipeReg.recipeKeyOf(7), 1);
+        for (uint256 i = 0; i < 2; i++) {
+            uint256 count = i == 0 ? 0 : 33;
+            bytes32[] memory elements = new bytes32[](count);
+            vm.mockCall(recipe, abi.encodeWithSelector(IRecipe.requiredElements.selector), abi.encode(elements));
+            vm.expectRevert(
+                abi.encodeWithSelector(Errors.TooManyRecipeElements.selector, uint16(7), count, uint256(32))
+            );
+            reg.registerManifest(token, _manifest(), _bindings());
+        }
+    }
+
     function test_manifestUpdate_swapsConfigAndCompiledParametersAtomically() public {
         elementReg.registerElement(
             PARAM_ELEMENT_ID,
@@ -934,5 +998,37 @@ contract TokenPolicyRegistryTest is Test {
         vm.prank(operator);
         vm.expectRevert(Errors.InvalidManifestTransition.selector);
         reg.setFact(token, 0x0F);
+    }
+
+    function test_semanticUpdatesRequireLiveStatusAndCannotReplacePendingApproval() public {
+        ManifestCore memory next = _manifest();
+        next.fullManifestHash = keccak256("next");
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
+        _scheduleManifestUpdate(token, next, bytes32("update"));
+        vm.expectRevert(Errors.InvalidManifestTransition.selector);
+        reg.activateManifestUpdate(token);
+        _activate(token);
+        _scheduleManifestUpdate(token, next, bytes32("reviewed"));
+        vm.expectRevert(Errors.PendingActionExists.selector);
+        _scheduleManifestUpdate(token, next, bytes32("replacement"));
+        reg.cancelManifestUpdate(token);
+        vm.prank(operator);
+        reg.suspendManifest(token, bytes32("halt"));
+        reg.scheduleManifestResume(token, bytes32("reviewed"));
+        vm.expectRevert(Errors.PendingActionExists.selector);
+        reg.scheduleManifestResume(token, bytes32("replacement"));
+        assertEq(uint8(reg.statusOf(token)), uint8(PolicyStatus.SUSPENDED));
+    }
+
+    function test_bindingsRejectZeroVersionAndUnexpectedPathGroup() public {
+        RecipeBinding[] memory bindings = _bindings();
+        bindings[0].recipeVersion = 0;
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+        bindings[0].recipeVersion = 1;
+        bindings[0].pathGroupId = 1;
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerManifest(token, _manifest(), bindings);
+        assertEq(uint8(reg.statusOf(token)), uint8(PolicyStatus.UNKNOWN));
     }
 }

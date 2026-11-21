@@ -10,3 +10,20 @@ fs_permissions = [
   { access = "read-write", path = "./deployments" },
   { access = "read", path = "./tools/deploy-v3/node_modules/@uniswap/v3-core/artifacts" },
 ]
+
+[profile.default.fuzz]
+seed = "0x156"
+
+[profile.default.invariant]
+runs = 64
+depth = 32
+fail_on_revert = true
+check_interval = 1
+failure_persist_dir = "cache/invariant"
+
+[profile.nightly.invariant]
+runs = 1024
+depth = 128
+fail_on_revert = true
+check_interval = 1
+failure_persist_dir = "cache/invariant"

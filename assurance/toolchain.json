@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "versions": {
+    "python": "3.12.12",
+    "slither-analyzer": "0.11.6",
+    "foundry": "1.7.1",
+    "solc": "0.8.17",
+    "node": "20.20.2",
+    "yarn": "1.22.22"
+  },
+  "platforms": {
+    "Darwin-arm64": {
+      "python": [
+        "https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.12.12%2B20251014-aarch64-apple-darwin-install_only.tar.gz",
+        "6ceba34fe78802853a30bde6f303a0a54f71f6ab07a673da34e90c0aa06c786e"
+      ],
+      "foundry": [
+        "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_darwin_arm64.tar.gz",
+        "eacdc67718fac857cad9e19c7f6729dd80de731d09df81856391d093cfcab547"
+      ],
+      "solc": [
+        "https://raw.githubusercontent.com/alloy-rs/solc-builds/203ef20a24a6c2cb763e1c8c4c1836e85db2512d/macosx/aarch64/solc-v0.8.17",
+        "f5a38e9f870ef2e00e714630213bb25e50e080f6b772a7253738e647621ba4e6"
+      ],
+      "node": [
+        "https://nodejs.org/dist/v20.20.2/node-v20.20.2-darwin-arm64.tar.gz",
+        "466e05f3477c20dfb723054dfebffe55bc74660ee77f612166fca121dacb65b6"
+      ]
+    },
+    "Linux-x86_64": {
+      "python": [
+        "https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.12.12%2B20251014-x86_64-unknown-linux-gnu-install_only.tar.gz",
+        "1ab2b6594d1c3d76cbebea09d6bc3e6ba68d8eb3b6322080375c4cc3dd188f34"
+      ],
+      "foundry": [
+        "https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_linux_amd64.tar.gz",
+        "cf7e688ed0c4c48adffca788b496076e31060b67ac5afe1e43dbb5499c20c88b"
+      ],
+      "solc": [
+        "https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/linux-amd64/solc-linux-amd64-v0.8.17+commit.8df45f5f",
+        "99f2070b776e9714f1f76c43c229cf99b8978a92938ee8d2364c6de11c1a03d4"
+      ],
+      "node": [
+        "https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.gz",
+        "19e56f0825510207dd904f087fe52faa0a4eb6b2aab5f0ea7a33830d04888b8b"
+      ]
+    }
+  },
+  "yarn": [
+    "https://registry.npmjs.org/yarn/-/yarn-1.22.22.tgz",
+    "c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca"
+  ]
+}

@@ -79,6 +79,49 @@ contract AMMAdapterTest is Test {
         assertEq(token1.balanceOf(address(adapter)), 0, "adapter holds no tokenOut");
     }
 
+    function test_swap_nonCustodial_oneForZero() public {
+        token0.mint(address(pool), 100 ether);
+        token1.mint(BUYER, 100 ether);
+        vm.prank(BUYER);
+        token1.approve(address(adapter), 100 ether);
+        ExecutionRequest memory req = _req(abi.encode(false, uint160(0)));
+        req.context.tokenIn = address(token1);
+        req.context.tokenOut = address(token0);
+        uint256 buyerOutBefore = token0.balanceOf(BUYER);
+        uint256 poolInBefore = token1.balanceOf(address(pool));
+
+        vm.prank(ROUTER);
+        ExecutionResult memory result = adapter.execute(req, _emptyDecision);
+
+        assertEq(result.amountOut, 100 ether);
+        assertEq(result.executionId, keccak256(abi.encode(req, block.number)));
+        assertEq(token0.balanceOf(BUYER), buyerOutBefore + 100 ether);
+        assertEq(token1.balanceOf(BUYER), 0);
+        assertEq(token1.balanceOf(address(pool)), poolInBefore + 100 ether);
+        assertEq(token0.balanceOf(address(adapter)), 0);
+        assertEq(token1.balanceOf(address(adapter)), 0);
+    }
+
+    function test_preflightRejectsStaleRegistryConfiguration() public {
+        VenueConfig memory stale = cfg;
+        cfg.custody = CustodyModel.NONE;
+        venues.registerVenue(address(pool), cfg);
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        adapter.validateContext(_req(""), stale);
+    }
+
+    function test_revert_callbackWithInvalidDeltaSigns() public {
+        int256[3] memory delta0 = [int256(1), int256(0), int256(-1)];
+        int256[3] memory delta1 = [int256(1), int256(0), int256(-1)];
+        for (uint256 i = 0; i < delta0.length; i++) {
+            vm.prank(address(pool));
+            vm.expectRevert(Errors.AMMPoolTokenMismatch.selector);
+            adapter.uniswapV3SwapCallback(delta0[i], delta1[i], abi.encode(BUYER, address(token0)));
+        }
+        assertEq(token0.balanceOf(BUYER), 1_000 ether);
+        assertEq(token0.balanceOf(address(pool)), 0);
+    }
+
     function test_swap_settableRate() public {
         pool.setRate(2, 1); // 2x out
         ExecutionRequest memory req = _req("");

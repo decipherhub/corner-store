@@ -114,4 +114,27 @@ contract RecipeRegistryTest is Test {
         vm.expectRevert();
         reg.registerRecipe(7, 1, recipe);
     }
+
+    function test_invalidRecipeMetadataAndLegacyAliasReplacementReject() public {
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerRecipe(0, 1, recipe);
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerRecipe(7, 0, recipe);
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerRecipe(7, 1, address(0));
+        vm.expectRevert(Errors.InvalidRecipeBinding.selector);
+        reg.registerRecipe(7, 1, address(123));
+        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeVersionMismatch.selector, uint16(8), uint16(1), uint16(1)));
+        reg.registerRecipe(8, 1, recipe);
+        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeVersionMismatch.selector, uint16(7), uint16(2), uint16(1)));
+        reg.registerRecipe(7, 2, recipe);
+        reg.registerRecipe(7, 1, recipe);
+        bytes32 original = reg.recipeKeyOf(7);
+        bytes32 aliasHash = keccak256("replacement");
+        bytes32 key = reg.deriveRecipeKey(aliasHash);
+        address next = address(new RecipeRegistryRecipeMock(7, 2));
+        vm.expectRevert(abi.encodeWithSelector(Errors.RecipeAliasCollision.selector, aliasHash, original));
+        reg.registerRecipe(aliasHash, key, 7, 2, next);
+        assertEq(reg.recipeKeyOf(7), original);
+    }
 }
