@@ -20,14 +20,35 @@ The five `ExecutionRouterBase.sol` sentinel hashes were refreshed (hash only;
 every mutation site is unchanged). The PR mutation set killed 16/16. Harness
 tests 32/32, `forge test --offline` 1283/1283.
 
-The coverage gate does not complete: under the coverage-only `--ir-minimum`
-build, `ExternalSettlementGate.t.sol:test_pauseAndReplayRemainGateInvariants`
-fails with `TimelockNotReady` (it passes in the normal build), so `forge coverage`
-exits non-zero before any floor is evaluated. No test, floor or gate was changed.
-A diagnostic run excluding that test measured execution branch coverage at 87.5%
-against the 90% floor, with the shortfall in `ReferenceExternalSettlementTarget`
-and `UniswapV3Adapter`. This needs a human decision. The human Slither review,
-hosted CI and external release evidence remain outstanding.
+After an independent source review, four of those justifications were reworded:
+the seller leg needs a cooperating buyer and never establishes seller consent, the
+buyer leg is bound to the authenticated initiator, and the Router balance checks
+rely on reviewed targets beyond the reference `onlyGate` target.
+
+The coverage gate initially did not complete. Under the coverage-only
+`--ir-minimum` build,
+`ExternalSettlementGate.t.sol:test_pauseAndReplayRemainGateInvariants` failed
+with `TimelockNotReady`: both relative warps read the same cached
+`block.timestamp`, so the second warp did not advance time. Both now read
+`vm.getBlockTimestamp()`. A diagnostic run had also measured execution branch
+coverage at 87.5% against the 90% floor, so 10 tests were added to the same suite
+for `ReferenceExternalSettlementTarget` registration, cancellation, expiry, replay
+and context-mismatch rejections, each asserting the exact error and unchanged
+nonce, balances or instruction state. No source, floor, exemption or gate changed.
+
+| Module | Line | Branch | Floors |
+| --- | --- | --- | --- |
+| execution | 416/418, 99.52% | 89/96, 92.71% | 95 / 90 |
+| registry | 576/590, 97.63% | 114/119, 95.80% | 95 / 90 |
+| compliance | 1613/1691, 95.39% | 376/437, 86.04% | 90 / 85 |
+
+Validation: the real coverage gate passes (primary 1,292/1,292, production size
+check 1/1); `forge fmt --check` passes; full `forge test --offline` 1,293/1,293
+across 81 suites. Remaining execution branch misses are in `UniswapV3Adapter`
+(suspected IR mapping artifacts, UNVERIFIED) and one defensive `RFQAdapterV3`
+rejection; none were forced. Live Anvil E2Es and the expanded mutation set were
+not rerun locally. The human Slither review, hosted CI and external release
+evidence remain outstanding.
 
 ## 2026-11-21 Session: OPS-004 Hosted Provisioning Timeout
 
