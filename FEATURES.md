@@ -2544,6 +2544,9 @@ active
 
 ### Notes
 
+- Test-only coverage margin verification: compliance 86.04%, execution 91.95%
+  and registry 95.80%; full Foundry suite 1,273/1,273. Details and remaining
+  release checks are in `PROGRESS.md`; this does not change the feature state.
 - Sole active feature. D040-D042 are adopted defaults, team-to-confirm.
 - The assurance environment applies once per resolved worktree root across
   nested Bash processes, preserving caller PATH and exported-variable overrides.

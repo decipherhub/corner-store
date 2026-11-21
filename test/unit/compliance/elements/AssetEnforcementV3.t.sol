@@ -142,6 +142,96 @@ contract AssetEnforcementV3Test is Test {
         return element.check(buyer, seller, asset, amount, context, parameters);
     }
 
+    function test_short_parameters_fail_closed_as_malformed() public view {
+        (bool passed, bytes32 reason) = element.check(buyer, seller, asset, 100, _context(true, 100), hex"01");
+        assertFalse(passed);
+        assertEq(reason, _code(1));
+    }
+
+    function test_zero_binding_fields_fail_closed_as_unsupported() public view {
+        for (uint256 i = 0; i < 3; i++) {
+            bytes memory invalid = _parameters(
+                address(adapter),
+                i == 0 ? 0 : 1,
+                i == 1 ? bytes32(0) : address(adapter).codehash,
+                i == 2 ? bytes32(0) : adapter.digest()
+            );
+            (bool passed, bytes32 reason) = element.check(buyer, seller, asset, 100, _context(true, 100), invalid);
+            assertFalse(passed);
+            assertEq(reason, _code(3));
+        }
+    }
+
+    function test_version_and_binding_outages_fail_closed() public {
+        for (uint256 i = 0; i < 2; i++) {
+            adapter.configureReverts(i == 0, i == 1, false);
+            (bool passed, bytes32 reason) = _check(100, _context(true, 100));
+            assertFalse(passed);
+            assertEq(reason, _code(1));
+        }
+    }
+
+    function test_result_binding_drift_fails_closed() public {
+        adapter.configureMalformed(false, true);
+        (bool passed, bytes32 reason) = _check(100, _context(true, 100));
+        assertFalse(passed);
+        assertEq(reason, _code(2));
+    }
+
+    function test_adapter_failure_categories_fail_closed() public {
+        for (uint256 i = 0; i <= uint256(AssetEnforcementFailure.TOKEN_REJECTED); i++) {
+            AssetEnforcementFailure failure = AssetEnforcementFailure(i);
+            adapter.configureResult(false, failure);
+            (bool passed, bytes32 reason) = _check(100, _context(true, 100));
+            uint32 expectedCode = failure == AssetEnforcementFailure.UNSUPPORTED
+                ? 3
+                : failure == AssetEnforcementFailure.CONFIGURATION_DRIFT
+                    ? 2
+                    : failure == AssetEnforcementFailure.TOKEN_REJECTED ? 4 : 1;
+            assertFalse(passed);
+            assertEq(reason, _code(expectedCode));
+        }
+    }
+
+    function test_allowed_with_failure_is_malformed() public {
+        adapter.configureResult(true, AssetEnforcementFailure.TOKEN_REJECTED);
+        (bool passed, bytes32 reason) = _check(100, _context(true, 100));
+        assertFalse(passed);
+        assertEq(reason, _code(1));
+    }
+
+    function test_erc3643_wrapper_rejects_missing_legacy_code() public {
+        vm.expectRevert(bytes("legacy element missing"));
+        new Erc3643AssetEnforcement(address(0xDEAD));
+    }
+
+    function test_erc3643_wrapper_binding_outage_returns_unavailable() public {
+        Erc3643NativeV2 legacy = new Erc3643NativeV2();
+        Erc3643AssetEnforcement erc3643 = new Erc3643AssetEnforcement(address(legacy));
+        AssetEnforcementRequest memory request =
+            AssetEnforcementRequest(asset, seller, buyer, 100, keccak256("context"));
+        vm.mockCallRevert(address(legacy), abi.encodeWithSelector(legacy.erc3643Native.selector, asset), hex"deadbeef");
+        AssetEnforcementResult memory result = erc3643.willAllow(request);
+        assertFalse(result.allowed);
+        assertEq(uint256(result.failure), uint256(AssetEnforcementFailure.UNAVAILABLE));
+        assertEq(result.requestDigest, keccak256(abi.encode(request)));
+        assertEq(result.bindingDigest, bytes32(0));
+    }
+
+    function test_erc3643_wrapper_check_outage_preserves_binding() public {
+        Erc3643NativeV2 legacy = new Erc3643NativeV2();
+        Erc3643AssetEnforcement erc3643 = new Erc3643AssetEnforcement(address(legacy));
+        AssetEnforcementRequest memory request =
+            AssetEnforcementRequest(asset, seller, buyer, 100, keccak256("context"));
+        bytes32 binding = erc3643.bindingDigest(asset);
+        vm.mockCallRevert(address(legacy), abi.encodeWithSelector(legacy.check.selector), hex"deadbeef");
+        AssetEnforcementResult memory result = erc3643.willAllow(request);
+        assertFalse(result.allowed);
+        assertEq(uint256(result.failure), uint256(AssetEnforcementFailure.UNAVAILABLE));
+        assertEq(result.requestDigest, keccak256(abi.encode(request)));
+        assertEq(result.bindingDigest, binding);
+    }
+
     function test_tokenOut_uses_authoritative_seller_to_buyer_and_amount() public view {
         (bool passed, bytes32 reason) = _check(100, _context(true, 100));
         assertTrue(passed);

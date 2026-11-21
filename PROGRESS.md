@@ -1,5 +1,46 @@
 # Progress
 
+## 2026-11-21 Session: OPS-004 Branch Coverage Margin
+
+OPS-004 remains the sole active feature. Added 19 tests in the existing
+AssetEnforcementV3, AMMAdapter and TokenPolicyRegistry suites. They assert exact
+fail-closed reason codes, wrapper request/binding digests, registry errors and
+compiled enforcement actions, plus reverse AMM settlement balances and execution ID.
+No production source, assurance configuration or CI/script changes were made.
+
+Fresh baseline and final coverage use the pinned Foundry 1.7.1 and Solc 0.8.17
+binaries from an already provisioned `.assurance/tools/` directory, with explicit
+`FOUNDRY_SOLC`. Both run `forge coverage --offline --ir-minimum --report lcov
+--report summary --no-match-test test_identityPolicyRegistry_fitsEip170
+--report-file <local-report>`. The final run isolates output/cache directories.
+The unchanged PredicateValidation source and tests also run without IR or
+optimization in a local isolated workspace; its exact LCOV record replaces the
+primary record through `replace_coverage_source`. The unchanged `coverage_gate`
+function evaluates every configured scope and hash-bound exemption.
+
+| Module | Before | After | Requested minimum |
+| --- | --- | --- | --- |
+| compliance | 368/437, 84.21% | 376/437, 86.04% | 85.5% |
+| execution | 78/87, 89.66% | 80/87, 91.95% | 90.5% |
+| registry | 107/119, 89.92% | 114/119, 95.80% | 90.5% |
+
+Validation: targeted suites 105/105; `forge fmt --check` and `git diff --check`
+exit 0; `forge build --offline` succeeds with existing warnings; full
+`forge test --offline` 1,273/1,273 across 80 suites, including the production
+EIP-170 test. Its standalone JSON invocation also passes exactly 1/1 and the
+unchanged classifier accepts it. Primary coverage passes 1,272/1,272, supplemental coverage 5/5,
+and all configured line/branch floors pass. Local logs, LCOV, scope reports and
+an annotated remaining-branch inventory are under ignored
+`.assurance/reports/coverage/`.
+
+No suspected production bug was found. Defensive unreachable guards and
+instrumentation misses were not forced with storage edits or harness overrides.
+Measurement and gate evaluation were first reproduced directly with the pinned
+binaries rather than through the provisioning wrapper. Separate live Anvil E2Es were not
+run for this test-only change; the full Foundry integration/invariant suites ran.
+Other OPS-004 release checks remain outstanding as recorded below. Next work is
+the existing human Slither review, hosted CI/Docker and external release evidence.
+
 ## 2026-11-21 Session: RFQ-007 PostgreSQL HA Coordinator
 
 RFQ-007 is passing. A separate optional `@corner-store/rfq-postgres` package now
