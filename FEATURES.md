@@ -96,6 +96,44 @@ passing
   remain follow-up work. Docker image gates, live public-network behavior and
   production provider/custody/retention integrations were not verified here.
 
+## CORE-016: Provider-neutral Asset Enforcement
+
+### Behavior
+
+- Opt-in B-02-v3 depends on the provider-neutral `IAssetEnforcement` contract,
+  not ERC-3643 registry/compliance interfaces. The request carries the
+  authoritative asset sender, recipient, amount and a context commitment.
+- Adapter address, capability version, runtime code hash and configuration digest
+  are canonical 128-byte `ManifestPolicyConfig` parameters. They change atomically
+  with the versioned Manifest rather than through mutable Element storage.
+- `Erc3643AssetEnforcement` wraps the unchanged B-02-v2 decision path. A labelled
+  reference allowlist adapter proves the same interface without ERC-3643 fields;
+  production onboarding rejects reference-only adapter export.
+- Missing capability, adapter outage, malformed request/result, code/version/config
+  drift and token rejection all fail closed. Public reasons expose only bounded
+  categories and no provider or identity details.
+- Toolkit onboarding schema 8 validates the human-readable adapter declaration
+  against exact policy bytes and re-verifies deployed code, version and binding.
+  Existing B-02-v2, Anvil, GIWA and public demo profiles remain unchanged.
+
+### Verification
+
+- `forge test --offline --match-path test/unit/compliance/elements/AssetEnforcementV3.t.sol`
+- Engine ManifestPolicyConfig integration and Reg D v6 composition tests
+- Toolkit schema 8 validation/export/verification tests
+- Existing Anvil/GIWA profiles and `scripts/check.sh`
+- `git diff --check` and protected public-demo path comparison
+
+### State
+
+passing
+
+### Notes
+
+- Issue #168; decision D045. No production provider, credentials or private API is
+  selected by this feature.
+- Plan: `docs/exec-plans/completed/CORE-016-provider-neutral-asset-enforcement.md`.
+
 ## DEPLOY-004: Complete and Append-Only Production Evidence
 
 ### Behavior
@@ -1236,6 +1274,34 @@ passing
 
 ### Verification
 
+- `npm test --prefix services/rfq`
+- `git diff --check`
+
+### State
+
+passing
+
+## RFQ-007 — PostgreSQL HA Quote Coordinator Store
+
+### Behavior
+
+- `@corner-store/rfq-postgres`는 core `QuoteCoordinatorStore` 포트를 구현하는 선택형
+  PostgreSQL 패키지다. RFQ SDK와 local file reference에는 database dependency를
+  추가하지 않는다.
+- idempotency conflict detection, maker-scoped monotonic nonce allocation, ordered
+  inventory reservation과 quote lifecycle update는 bounded serializable transaction으로
+  처리한다.
+- 체인 cursor, block/event observation과 reorg rollback을 영속화한 reconciliation
+  worker가 restart 뒤 이어서 처리하며, lag/reorg 한계를 넘으면 readiness가 fail-closed한다.
+- production RFQ bootstrap contract v2는 `reconciliation` readiness를 필수로 요구하고,
+  false/missing/timeout이면 policy lookup과 signer 호출 전에 quote issuance를 거부한다.
+- migration은 forward-only이고 raw idempotency key, bearer token, signer key 또는 KYC
+  원문을 저장하지 않는다.
+
+### Verification
+
+- 실제 PostgreSQL을 사용하는 multi-client nonce/idempotency/inventory/restart/reorg test
+- `npm test --prefix services/rfq-postgres`
 - `npm test --prefix services/rfq`
 - `git diff --check`
 

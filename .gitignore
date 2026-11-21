@@ -31,3 +31,5 @@ services/rfq-host/node_modules/
 .assurance/
 scripts/assurance/__pycache__/
 lcov.info
+services/rfq-postgres/dist/
+services/rfq-postgres/node_modules/

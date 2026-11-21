@@ -1,5 +1,56 @@
 # Progress
 
+## 2026-11-21 Session: RFQ-007 PostgreSQL HA Coordinator
+
+RFQ-007 is passing. A separate optional `@corner-store/rfq-postgres` package now
+implements the RFQ coordinator store with serializable transactions for durable
+idempotency, maker-scoped monotonic nonces and atomic inventory reservations. It
+also persists chain cursors and observations so restart, unfinalized reorg rollback,
+finalized fill/cancel and exactly-once lease release are handled without changing
+the local file reference or public demo paths.
+
+Production RFQ bootstrap contract v2 now requires healthy reconciliation readiness
+before policy lookup or signing. The adapter is independently publishable and a
+clean external project can install and import its packed artifact. GitHub CI passed
+the real PostgreSQL multi-process/restart/reorg suite in 30 seconds and the full
+repository gate in 14 minutes 1 second. RFQ service 35/35 and host 30/30 also pass.
+
+Remaining production evidence belongs to the operator environment: managed database
+HA and failover, external worker leader election, backup/restore and retention drills,
+WORM audit storage, KMS/HSM custody and live TA/KYC/provider deployments. These are
+not represented as completed by the SDK package.
+
+## 2026-11-21 Session: CORE-016 Provider-neutral Asset Enforcement
+
+CORE-016 is passing. New opt-in `B-02-v3` accepts a provider-neutral
+`IAssetEnforcement` decision built from the venue-authoritative asset sender,
+recipient and amount. The active policy now commits the adapter address,
+capability version, runtime codehash and asset-specific configuration digest in
+`ManifestPolicyConfig`; there is no separately mutable adapter binding that can
+change an active Manifest's meaning. The existing `B-02-v2` ERC-3643 path is
+unchanged and is exposed through a wrapper rather than reimplemented.
+
+Toolkit onboarding schema 8 validates the readable declaration against the exact
+128-byte policy parameters, rejects the reference allowlist adapter from
+production export and rechecks adapter code, version and binding after deployment.
+All outage, malformed-result, unsupported, drift and issuer rejection cases fail
+closed with bounded public reason categories. D045 records the Manifest-owned
+binding decision; product, security, testing and SDK migration documents describe
+the opt-in boundary.
+
+Fresh verification passed `scripts/check.sh`: 1,223/1,223 Foundry tests plus all
+service, package, clean-project, production dry-run/deploy/verify/recovery and
+deploy-v3 gates. The first full run encountered the existing RFQ file-store
+creation race; its isolated rerun and the final full run passed without RFQ source
+changes. Both `buidl-like` and `reg-d` Anvil E2E profiles passed 7/7 scenarios and
+their interactive backend/CLI/Router RFQ flows. Protected public-testnet, Monad
+and deployment artifact paths have no diff from the original `origin/main` base.
+
+Remaining production risks are external to this feature: selecting and auditing
+a real issuer/TA adapter, validating its operational availability and governance,
+and performing reviewed live-network deployment. No provider, credentials,
+custody integration or private API was added.
+
 ## 2026-11-18 Session: OPS-004 Main Reconciliation and Review Hardening
 
 OPS-004 remains the sole active feature after reconciling current `main` and the

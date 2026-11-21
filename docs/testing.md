@@ -71,6 +71,17 @@ RFQ production host hardening smoke test:
 cd services/rfq-host && npm ci && npm test
 ```
 
+PostgreSQL RFQ HA integration test:
+
+```bash
+CORNER_STORE_TEST_POSTGRES_URL=postgresql://... \
+CORNER_STORE_REQUIRE_POSTGRES=1 npm run test:postgres --prefix services/rfq-postgres
+```
+
+GitHub Actions supplies a real digest-pinned PostgreSQL service and requires this test.
+Local `scripts/check.sh` builds the optional package but skips its database integration
+test when no explicit test database URL is supplied.
+
 Host smoke는 인증 401/403, malformed/oversize/Content-Length 413,
 hashed-principal rate limit 429, limiter capacity principal-spray 방어, 실제
 coordinator pricing/risk evidence freshness fail-closed, fresh risk rejection 422,
@@ -454,6 +465,13 @@ Ledger/hardware signing, actual power-loss durability and other filesystems
 remain unverified. See the [production runbook](./deployment-production.md).
 
 ### Integrated Check
+
+Provider-neutral asset enforcement adds conformance coverage for authoritative
+buy/sell direction, canonical amount, request/result digest binding, runtime code
+and configuration drift, unavailable/malformed adapters, the existing ERC-3643
+B-02-v2 wrapper and a non-ERC-3643 reference allowlist adapter. Toolkit schema 8
+must prove that the same adapter bytes are committed by `ManifestPolicyConfig`
+and re-read during production verification.
 
 ```sh
 scripts/check.sh

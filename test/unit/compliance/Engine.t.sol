@@ -16,6 +16,8 @@ import {IdentityUniqueness} from "../../../src/compliance/elements/IdentityUniqu
 import {UsTaxResident} from "../../../src/compliance/elements/UsTaxResident.sol";
 import {AssetClassification} from "../../../src/compliance/elements/AssetClassification.sol";
 import {Erc3643NativeV2} from "../../../src/compliance/elements/Erc3643NativeV2.sol";
+import {AssetEnforcementV3} from "../../../src/compliance/elements/AssetEnforcementV3.sol";
+import {ReferenceAllowlistAssetEnforcement} from "../../../src/compliance/asset/ReferenceAllowlistAssetEnforcement.sol";
 import {FormDFiling} from "../../../src/compliance/elements/FormDFiling.sol";
 import {MinimumTradeAmount} from "../../../src/compliance/elements/MinimumTradeAmount.sol";
 import {IAcquisitionSource} from "../../../src/interfaces/compliance/IAcquisitionSource.sol";
@@ -559,6 +561,37 @@ contract EngineTest is Test {
         ComplianceDecision memory rejected = engine.evaluate(below);
         assertFalse(rejected.allowed);
         assertEq(rejected.reasonCode, ReasonCodes.encode(0, minimum.ELEMENT_ID(), 1));
+    }
+
+    function test_providerNeutralAssetEnforcement_isBoundByManifestPolicyConfig() public {
+        AssetEnforcementV3 assetEnforcement = new AssetEnforcementV3();
+        ReferenceAllowlistAssetEnforcement allowlist = new ReferenceAllowlistAssetEnforcement();
+        allowlist.setAllowed(RWA, SELLER, BUYER, true);
+        elementReg.registerElement(bytes32("B-02-v3"), address(assetEnforcement));
+        _registerSingleElementRecipe(14, bytes32("B-02-v3"));
+
+        bytes memory parameters =
+            abi.encode(address(allowlist), uint16(1), address(allowlist).codehash, allowlist.bindingDigest(RWA));
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 1;
+        config.elementParameters = new ElementPolicyParameter[](1);
+        config.elementParameters[0] = ElementPolicyParameter({
+            bindingIndex: 0,
+            elementId: bytes32("B-02-v3"),
+            schemaId: assetEnforcement.PARAMETER_SCHEMA_ID(),
+            schemaVersion: assetEnforcement.PARAMETER_SCHEMA_VERSION(),
+            parameters: parameters
+        });
+        ElementEnforcementOverride[] memory overrides_ = new ElementEnforcementOverride[](0);
+        policyReg.registerManifest(RWA, _activeManifest(0, 0), _singleBinding(14, 1), overrides_, config);
+        policyReg.approveManifest(RWA);
+        _registerCashUnregulated();
+
+        assertTrue(engine.evaluate(_ctxBuy()).allowed);
+        allowlist.setAllowed(RWA, SELLER, BUYER, false);
+        ComplianceDecision memory drifted = engine.evaluate(_ctxBuy());
+        assertFalse(drifted.allowed);
+        assertEq(drifted.reasonCode, ReasonCodes.encode(0, bytes32("B-02-v3"), 2));
     }
 
     function test_elementLevelFlagOnly_in_requiredBinding_setsBit_without_blocking_or_commit() public {

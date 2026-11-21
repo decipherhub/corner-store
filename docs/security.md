@@ -4,6 +4,11 @@
 
 - ERC-3643 / ONCHAINID의 identity와 token transfer enforcement는 외부 발행자
   시스템의 책임이다.
+- B-02-v3 asset enforcement adapters are untrusted external decision sources
+  until their interface version, runtime code hash and current binding digest
+  match the exact `ManifestPolicyConfig` bytes. Adapter outage, malformed
+  request/result digests and any binding drift fail closed. Public reasons stay
+  coarse and never include provider or identity payloads.
 - Corner Store는 외부 판정을 임의로 완화하거나 우회하지 않는다.
 - Corner Store의 DEX-level compliance 보장은 `ExecutionRouter`를 통한 실행
   경로에 한정한다. Router 밖에서 발생하는 ERC-3643 직접 전송, 직접 venue 호출,
@@ -76,6 +81,7 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   변경은 실행 권한과 분리한다.
 - privileged action은 명시적인 owner/role 검사를 가져야 한다.
 - production multisig와 governance는 외부 운영 결정 전 임의로 확정하지 않는다.
+
 - 위험 중단(global/asset/venue pause, Manifest suspend)은 operator가 즉시 수행한다.
   unpause, Manifest resume와 semantic update는 owner 예약과 timelock을 거친다.
 - 배포 후 `TokenPolicyRegistry.owner()`가 Factory인 구조에서는 governance가 Factory
@@ -86,6 +92,17 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   않는다. 실행 절차는
   [`operations/element-emergency-replacement.md`](./operations/element-emergency-replacement.md)를
   따른다.
+
+### RFQ PostgreSQL boundary
+
+- `services/rfq-postgres` stores only PII-free quote state, hashed idempotency/signer
+  references, nonce scopes, inventory leases and bounded chain reconciliation evidence.
+- Database credentials, TLS, managed failover, backup encryption and runtime role separation
+  are operator-owned. Credentials must not enter configuration artifacts, audit records or
+  repository files.
+- Production quote readiness must fail closed when the reconciliation cursor is stale,
+  over its lag bound, or records a reorg/RPC failure. The optional package exposes health;
+  operator bootstrap remains responsible for wiring it into host readiness.
 
 ## Input Validation
 

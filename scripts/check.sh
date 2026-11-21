@@ -60,6 +60,15 @@ echo "==> Running production RFQ host hardening smoke test"
   npm test
 )
 
+echo "==> Building optional PostgreSQL RFQ coordinator package"
+(
+  cd services/rfq-postgres
+  if [ ! -x node_modules/.bin/tsc ]; then
+    npm ci
+  fi
+  npm test
+)
+
 echo "==> Installing CLI dependencies required by Toolkit production evidence tests"
 (
   cd services/cli

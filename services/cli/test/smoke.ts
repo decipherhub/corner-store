@@ -424,12 +424,12 @@ async function main() {
   // illustrative elements (A-06:4, A-12:8, E-03:9, F-01:3, F-03:4, F-04:5) are
   // also enumerated; the remaining 6 legacy single-code Elements (A-02, A-05,
   // C-01-v1, E-01, F-02-v1, BUIDL-MIN-v1) contribute 1 each. The versioned
-  // replacements add B-02-v2's 6-code taxonomy, C-01-v2's 4-code acquisition
-  // taxonomy, F-02-v2, and
+  // replacements add B-02-v2's 6-code taxonomy, provider-neutral B-02-v3's
+  // 4 coarse codes, C-01-v2's 4-code acquisition taxonomy, F-02-v2, and
   // generic MIN-AMOUNT-v1 adds one named threshold code.
   const CODES_PER_ELEMENT =
-    10 + 1 + 9 + 9 + 1 + 6 + 6 + 6 + 1 + 4 + 1 + 9 + 1 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 1 + 1; // = 132
-  assert(tableSize() === 4 * CODES_PER_ELEMENT + 28 + 6 + 2, "reason table size");
+    10 + 1 + 9 + 9 + 1 + 6 + 6 + 6 + 4 + 1 + 4 + 1 + 9 + 1 + 1 + 8 + 2 + 5 + 6 + 7 + 4 + 4 + 8 + 9 + 3 + 4 + 5 + 1 + 1; // = 136
+  assert(tableSize() === 4 * CODES_PER_ELEMENT + 29 + 6 + 2, "reason table size");
 
   const jur = decodeReason(A02_RECIPE1);
   assert(jur.label.includes("Jurisdiction") && jur.label.includes("A-02-v1"), "decodes A-02 to Jurisdiction");

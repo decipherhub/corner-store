@@ -196,6 +196,39 @@ monotonic revocation semantics transactionally. Key management, multisig and
 custody remain deferred. See the [P2 schedule](./product-specs/identity-p2-schedule.md)
 for MEMBER, pseudonyms, cards and jurisdictional sanctions bundles.
 
+### Opt-in asset enforcement / onboarding schema 8 migration
+
+CORE-016 adds a provider-neutral asset-owned transfer restriction boundary
+without changing `B-02-v2` or existing onboarding schemas.
+
+| Boundary | Preserved path | Explicit asset-enforcement opt-in |
+| --- | --- | --- |
+| Asset Element | `B-02-v2` ERC-3643 declaration/live wiring | Separately deployed `B-02-v3` with `IAssetEnforcement` |
+| Recipe | Existing Recipe versions | A new Recipe version that explicitly requires `B-02-v3` |
+| Manifest parameters | Existing parameter entries remain unchanged | Exact 128-byte adapter, interface version, runtime codehash and asset binding digest tuple |
+| Onboarding | Schemas 1-7 retain their meanings | Schema 8 requires a readable declaration matching the Manifest bytes exactly |
+| Production eligibility | Existing adapters and release review | Reference-only adapters are rejected by production plan export |
+
+1. Deploy and review an adapter implementing `IAssetEnforcement`. The included
+   ERC-3643 adapter delegates to the existing `B-02-v2` machine; the allowlist
+   adapter is reference-only and must not be exported for production activation.
+2. Register `B-02-v3` and a new immutable Recipe version. Do not replace or
+   relabel `B-02-v2` in an existing Recipe.
+3. Encode the reviewed adapter address, interface version, runtime codehash and
+   asset-specific binding digest in `ManifestPolicyConfig`. Copy the same values
+   into the schema 8 `assetEnforcement` declaration. Validation rejects any
+   mismatch or incomplete coverage.
+4. Use the normal REGISTER or delayed UPDATE lifecycle. There is deliberately no
+   separate mutable adapter-binding call: changing the adapter or its committed
+   configuration requires a new reviewed Manifest activation.
+5. Run production verification after deployment. It rechecks runtime code,
+   `enforcementVersion()` and `bindingDigest(asset)` and fails closed on drift.
+
+`referenceOnly` is an onboarding/release classification, not an onchain security
+claim. The onchain binding is the adapter address, runtime codehash, interface
+version and configuration digest; production review remains responsible for
+classifying the implementation and its external trust assumptions.
+
 ### Opt-in execution context / RFQ v3 migration
 
 EXEC-002 adds new exports and deployments without changing legacy defaults.
@@ -215,7 +248,7 @@ publish packages. Apply the release policy above before publishing a version.
 | Coordinator records | Schema 1 | Schema 2, `quoteVersion: 3`, exact domain and context evidence |
 | Local store container | Legacy-only writes remain schema 1 | Reads 1/2; first v3 reservation writes container 2, retaining legacy records/accounting |
 | Host route | `/rfq/quote`, unchanged v2 response | `/rfq/v3/quote` only with `config.v3`; requires `flowType`, derives policy/evidence server-side |
-| Production bootstrap/config | Contract `1.0.0` / config `1` | Same versions plus `v3_context_provenance: true`, v3 dependencies and ready `context` component |
+| Production bootstrap/config | Contract `2.0.0` / config `1`; required ready `reconciliation` component | Same contract/config plus `v3_context_provenance: true`, v3 dependencies and ready `context` component |
 | CLI | Existing quote commands/artifacts | `rfq-v3-quote --request <file>` and explicit v3 artifact addresses |
 | Onboarding | Schema 1-5 under original meanings | Schema 6 with Router/runtime, immutable context and source authority evidence |
 

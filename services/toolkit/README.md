@@ -37,6 +37,14 @@ The Toolkit prepares and verifies operator-owned deployment inputs. It never own
 signer custody, submits Safe transactions, or treats ERC-3643/ONCHAINID evidence as
 trusted without the configured production checks.
 
+Production onboarding schema v8 adds the opt-in `B-02-v3` asset-enforcement
+boundary. Each readable `assetEnforcement` declaration must exactly match the
+128-byte adapter/version/runtime-codehash/config-digest tuple stored in
+`ManifestPolicyConfig`; there is no separate mutable adapter-binding transaction.
+Production plan export rejects adapters classified as reference-only, and
+post-deployment verification rechecks the adapter code, interface version and
+asset-specific binding digest.
+
 See `docs/sdk-integration.md` and `docs/sdk-versioning.md` in the Corner Store
 repository for integration, compatibility and migration policy.
 
