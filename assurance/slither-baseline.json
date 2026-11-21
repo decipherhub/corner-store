@@ -161,55 +161,6 @@
   "findings": [
     {
       "confidence": "Medium",
-      "description": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = IExecutionAdapter(cfg.adapter).execute(req,d) (src/execution/ExecutionRouterBase.sol#102)\n\tBalance read before the call:\n\t- tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#100)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountIn`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenInBefore`\n",
-      "detector": "reentrancy-balance",
-      "fingerprint": "00c2f90509c3175030b2c32ad9104d5996a33929d11685c09d0a601930324533",
-      "impact": "High",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 5920,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 1773,
-          "symbol": "execute"
-        },
-        {
-          "kind": "node",
-          "length": 138,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 6524,
-          "symbol": "realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut"
-        },
-        {
-          "kind": "node",
-          "length": 62,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 6235,
-          "symbol": "tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore"
-        },
-        {
-          "kind": "node",
-          "length": 73,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 5394,
-          "symbol": "r = IExecutionAdapter(cfg.adapter).execute(req,d)"
-        },
-        {
-          "kind": "node",
-          "length": 80,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 5212,
-          "symbol": "tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer)"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
       "description": "HolderCount.onTransfer(address,address,uint256).newHolder (src/compliance/elements/HolderCount.sol#218) is a local variable never initialized\n",
       "detector": "uninitialized-local",
       "fingerprint": "013797fb326816cd8ea04ce433fb0a12330d219034f732ff7640b016e3ad4d49",
@@ -894,6 +845,71 @@
     },
     {
       "confidence": "Medium",
+      "description": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = _executeVenue(req,d,cfg) (src/execution/ExecutionRouterBase.sol#102)\n\t\t- IExecutionAdapter(cfg.adapter).execute(req,decision) (src/execution/ExecutionRouterBase.sol#161)\n\tBalance read before the call:\n\t- tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#101)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountOut`\n\t- realizedAmountOut < req.amountOutMin (src/execution/ExecutionRouterBase.sol#128)\n\t\t- stale variable `realizedAmountOut`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenOutBefore`\n",
+      "detector": "reentrancy-balance",
+      "fingerprint": "2ca0d49531e89bfc80b78e8e52aa3070756a3914621362389935e8e2e6384f93",
+      "impact": "High",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 5900,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 1773,
+          "symbol": "execute"
+        },
+        {
+          "kind": "node",
+          "length": 138,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 6504,
+          "symbol": "realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut"
+        },
+        {
+          "kind": "node",
+          "length": 36,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 6844,
+          "symbol": "realizedAmountOut < req.amountOutMin"
+        },
+        {
+          "kind": "node",
+          "length": 53,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 5394,
+          "symbol": "r = _executeVenue(req,d,cfg)"
+        },
+        {
+          "kind": "node",
+          "length": 60,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 8211,
+          "symbol": "IExecutionAdapter(cfg.adapter).execute(req,decision)"
+        },
+        {
+          "kind": "node",
+          "length": 62,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 6215,
+          "symbol": "tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore"
+        },
+        {
+          "kind": "node",
+          "length": 82,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 5302,
+          "symbol": "tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
       "description": "OrderBookAdapter.setRouter(address).router_ (src/execution/adapters/orderbook/OrderBookAdapter.sol#25) lacks a zero-check on :\n\t\t- router = router_ (src/execution/adapters/orderbook/OrderBookAdapter.sol#26)\n",
       "detector": "missing-zero-check",
       "fingerprint": "2e66983d5386329e5f177a1d9d73e776fa367727f7a809cb818b019451905d3a",
@@ -1145,6 +1161,31 @@
     },
     {
       "confidence": "Medium",
+      "description": "ReferenceExternalSettlementTarget.registerInstruction(bytes32,ReferenceExternalSettlementTarget.SettlementInstruction) (src/execution/targets/ReferenceExternalSettlementTarget.sol#71-84) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- instructionId == bytes32(0) || instruction.buyer == address(0) || instruction.seller == address(0) || instruction.tokenIn == address(0) || instruction.tokenOut == address(0) || instruction.tokenIn == instruction.tokenOut || instruction.amountIn == 0 || instruction.amountOut == 0 || instruction.venue == address(0) || instruction.validUntil <= block.timestamp || _instructions[instructionId].buyer != address(0) (src/execution/targets/ReferenceExternalSettlementTarget.sol#76-80)\n",
+      "detector": "timestamp",
+      "fingerprint": "3ece132ff273c3351469460829c28e391897991511c24ec262aec5b37585d51c",
+      "impact": "Low",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 860,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 2850,
+          "symbol": "registerInstruction"
+        },
+        {
+          "kind": "node",
+          "length": 475,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 3015,
+          "symbol": "instructionId == bytes32(0) || instruction.buyer == address(0) || instruction.seller == address(0) || instruction.tokenIn == address(0) || instruction.tokenOut == address(0) || instruction.tokenIn == instruction.tokenOut || instruction.amountIn == 0 || instruction.amountOut == 0 || instruction.venue == address(0) || instruction.validUntil <= block.timestamp || _instructions[instructionId].buyer != address(0)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
       "description": "DeployProductionCore._writeArtifact(ProductionCoreDeployer.Deployment,address,address,address,bool,bool,string,string,string,string) (script/DeployProductionCore.s.sol#48-96) ignores return value by vm.serializeAddress(key,operator,operator) (script/DeployProductionCore.s.sol#70)\n",
       "detector": "unused-return",
       "fingerprint": "3ef27ac80153739fec125334079e9f3b9f99ca6b5e129f2cf2bff3b8077e29cd",
@@ -1240,6 +1281,31 @@
           "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
           "start": 25812,
           "symbol": "(binding,recipeKey,None) = policyReg.compiledBindingOf(token,i)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- block.timestamp > req.deadline (src/execution/ExecutionRouterBase.sol#42)\n",
+      "detector": "timestamp",
+      "fingerprint": "43ce6750adf8db0d3c950bd3708c84fc2c87ec63bd7080331d6de2c713a85241",
+      "impact": "Low",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 5900,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 1773,
+          "symbol": "execute"
+        },
+        {
+          "kind": "node",
+          "length": 30,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 1913,
+          "symbol": "block.timestamp > req.deadline"
         }
       ]
     },
@@ -1461,23 +1527,6 @@
     },
     {
       "confidence": "Medium",
-      "description": "ExecutionRouterBase.execute(ExecutionRequest).regulatedAmount (src/execution/ExecutionRouterBase.sol#80) is a local variable never initialized\n",
-      "detector": "uninitialized-local",
-      "fingerprint": "4f8f93fc7d8ac01aae9efc315e4c890bc3fccd819098efc2378589405038a54d",
-      "impact": "Medium",
-      "locations": [
-        {
-          "kind": "variable",
-          "length": 23,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 4247,
-          "symbol": "regulatedAmount"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
       "description": "Lockup._check(address,address,address,uint256,bytes,bytes) (src/compliance/elements/Lockup.sol#48-66) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- snapshot.expiresAt == 0 || block.timestamp > snapshot.expiresAt (src/compliance/elements/Lockup.sol#61)\n\t- passed = snapshot.clockStart != 0 && block.timestamp >= uint256(snapshot.clockStart) + lockupSeconds (src/compliance/elements/Lockup.sol#64)\n",
       "detector": "timestamp",
       "fingerprint": "51e1a220ae56e87d49e82bb82cbf9ac38494e906dedf9814107143530c637ff1",
@@ -1639,23 +1688,6 @@
           "source_sha256": "2051bbb6131d1eef1548cef7439ffe6c7cd20be5b77e3f085aff32fa79886947",
           "start": 11656,
           "symbol": "claim.maxAge != 0 && block.timestamp > claim.verifiedAt && block.timestamp - uint256(claim.verifiedAt) > uint256(claim.maxAge)"
-        }
-      ]
-    },
-    {
-      "confidence": "High",
-      "description": "ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149) has a high cyclomatic complexity (18).\n",
-      "detector": "cyclomatic-complexity",
-      "fingerprint": "56c4b4114c83b8a65f307e1e32afdc5a69fd556fb6b9fd92e44892deed37e9be",
-      "impact": "Informational",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 5920,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 1773,
-          "symbol": "execute"
         }
       ]
     },
@@ -1823,887 +1855,6 @@
           "source_sha256": "9f1486f4af6a3f3e59f082e9edf3530f75f4413e2e21734657d6e9363bc9ddd6",
           "start": 9656,
           "symbol": "metadata = elements.metadataOf(rules[j].elementId)"
-        }
-      ]
-    },
-    {
-      "confidence": "High",
-      "description": "Version constraint 0.8.17 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)\n\t- VerbatimInvalidDeduplication\n\t- FullInlinerNonExpressionSplitArgumentEvaluationOrder\n\t- MissingSideEffectsOnSelectorAccess.\nIt is used by:\n\t- 0.8.17 (script/DeployProductionCore.s.sol#2)\n\t- 0.8.17 (script/ProductionCoreDeployer.sol#2)\n\t- 0.8.17 (src/auth/Governed.sol#2)\n\t- 0.8.17 (src/compliance/ComplianceEngine.sol#2)\n\t- 0.8.17 (src/compliance/ComplianceReporter.sol#2)\n\t- 0.8.17 (src/compliance/asset/Erc3643AssetEnforcement.sol#2)\n\t- 0.8.17 (src/compliance/asset/ReferenceAllowlistAssetEnforcement.sol#2)\n\t- 0.8.17 (src/compliance/elements/AccreditedInvestor.sol#2)\n\t- 0.8.17 (src/compliance/elements/Affiliate.sol#2)\n\t- 0.8.17 (src/compliance/elements/AssetClassification.sol#2)\n\t- 0.8.17 (src/compliance/elements/AssetEnforcementV3.sol#2)\n\t- 0.8.17 (src/compliance/elements/BadActorDisqualification.sol#2)\n\t- 0.8.17 (src/compliance/elements/BaseElement.sol#2)\n\t- 0.8.17 (src/compliance/elements/BaseStatefulElement.sol#2)\n\t- 0.8.17 (src/compliance/elements/BuidlMinimumInvestment.sol#2)\n\t- 0.8.17 (src/compliance/elements/ClaimFreshness.sol#2)\n\t- 0.8.17 (src/compliance/elements/EngineSelection.sol#2)\n\t- 0.8.17 (src/compliance/elements/EngineSelectionV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/EntityEligibility.sol#2)\n\t- 0.8.17 (src/compliance/elements/EquityOwnerLookThrough.sol#2)\n\t- 0.8.17 (src/compliance/elements/Erc3643Native.sol#2)\n\t- 0.8.17 (src/compliance/elements/Erc3643NativeV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/FormDFiling.sol#2)\n\t- 0.8.17 (src/compliance/elements/FraudSurveillance.sol#2)\n\t- 0.8.17 (src/compliance/elements/HolderCount.sol#2)\n\t- 0.8.17 (src/compliance/elements/IdentityUniqueness.sol#2)\n\t- 0.8.17 (src/compliance/elements/IdentityUniquenessV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/Jurisdiction.sol#2)\n\t- 0.8.17 (src/compliance/elements/Lockup.sol#2)\n\t- 0.8.17 (src/compliance/elements/LockupV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/MinimumTradeAmount.sol#2)\n\t- 0.8.17 (src/compliance/elements/OperatorSelfDealing.sol#2)\n\t- 0.8.17 (src/compliance/elements/QualifiedPurchaser.sol#2)\n\t- 0.8.17 (src/compliance/elements/RedFlagKnowledgeBar.sol#2)\n\t- 0.8.17 (src/compliance/elements/RedFlagKnowledgeBarV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/RegMIssuerBuying.sol#2)\n\t- 0.8.17 (src/compliance/elements/Sanctions.sol#2)\n\t- 0.8.17 (src/compliance/elements/SurveillanceFlag.sol#2)\n\t- 0.8.17 (src/compliance/elements/SurveillanceFlagV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/TransferRestrictionMetadata.sol#2)\n\t- 0.8.17 (src/compliance/elements/UsTaxResident.sol#2)\n\t- 0.8.17 (src/compliance/libraries/AssetFlow.sol#2)\n\t- 0.8.17 (src/compliance/libraries/IdentityPolicy.sol#2)\n\t- 0.8.17 (src/compliance/recipes/BaseRecipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/BuidlLikeFundRecipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/Fund3c7Recipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipeV3.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipeV4.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipeV5.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipeV6.sol#2)\n\t- 0.8.17 (src/demo/BuidlLikeDemoAsset.sol#2)\n\t- 0.8.17 (src/demo/DemoAmmReferenceRecipe.sol#2)\n\t- 0.8.17 (src/execution/ContextEvidence.sol#2)\n\t- 0.8.17 (src/execution/ExecutionRouter.sol#2)\n\t- 0.8.17 (src/execution/ExecutionRouterBase.sol#2)\n\t- 0.8.17 (src/execution/ExecutionRouterV2.sol#2)\n\t- 0.8.17 (src/execution/VenueRegistry.sol#2)\n\t- 0.8.17 (src/execution/VenueSelector.sol#2)\n\t- 0.8.17 (src/execution/adapters/amm/UniswapV3Adapter.sol#2)\n\t- 0.8.17 (src/execution/adapters/orderbook/OrderBookAdapter.sol#2)\n\t- 0.8.17 (src/execution/adapters/rfq/RFQAdapter.sol#2)\n\t- 0.8.17 (src/execution/adapters/rfq/RFQAdapterV3.sol#2)\n\t- 0.8.17 (src/execution/adapters/rfq/RFQTypes.sol#2)\n\t- 0.8.17 (src/execution/adapters/rfq/RFQV3Types.sol#2)\n\t- 0.8.17 (src/factory/CornerStoreFactory.sol#2)\n\t- 0.8.17 (src/factory/UniswapV3VenueFactory.sol#2)\n\t- 0.8.17 (src/interfaces/asset/IAssetEnforcement.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IAcquisitionSource.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IComplianceElement.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IComplianceEngine.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IComplianceReporter.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IElementRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IIdentityEvidenceV2.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/ILookThroughSource.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IOperatorRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IRecipe.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IRecipeRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/ITokenPolicyRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IExecutionAdapter.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IExecutionContextVerifier.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IExecutionRouter.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IVenueRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IVenueSelector.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IAMMAdapter.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IMakerAuthorizer.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IOrderBookAdapter.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IPool.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IRFQAdapter.sol#2)\n\t- 0.8.17 (src/libraries/DecisionHashLib.sol#2)\n\t- 0.8.17 (src/libraries/Errors.sol#2)\n\t- 0.8.17 (src/libraries/Events.sol#2)\n\t- 0.8.17 (src/libraries/PolicyHashLib.sol#2)\n\t- 0.8.17 (src/libraries/PredicateValidation.sol#2)\n\t- 0.8.17 (src/libraries/ReasonCodes.sol#2)\n\t- 0.8.17 (src/logging/ComplianceLogger.sol#2)\n\t- 0.8.17 (src/logging/ExecutionLogger.sol#2)\n\t- 0.8.17 (src/registry/AttestedAcquisitionSource.sol#2)\n\t- 0.8.17 (src/registry/ElementRegistry.sol#2)\n\t- 0.8.17 (src/registry/MakerAuthorizer.sol#2)\n\t- 0.8.17 (src/registry/OperatorRegistry.sol#2)\n\t- 0.8.17 (src/registry/ProductionElementRegistry.sol#2)\n\t- 0.8.17 (src/registry/RecipeRegistry.sol#2)\n\t- 0.8.17 (src/registry/TokenPolicyRegistry.sol#2)\n\t- 0.8.17 (src/types/ComplianceReportTypes.sol#2)\n\t- 0.8.17 (src/types/ComplianceTypes.sol#2)\n\t- 0.8.17 (src/types/ExecutionTypes.sol#2)\n\t- 0.8.17 (src/types/VenueTypes.sol#2)\n",
-      "detector": "solc-version",
-      "fingerprint": "5cd71393247c0e6bfbb1000138de5c7226e6336d9751661d998406bf03ae56fa",
-      "impact": "Informational",
-      "locations": [
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "script/DeployProductionCore.s.sol",
-          "source_sha256": "16a279ab861010c49846ff20bb8299cf2681adae692f2e3d5367fd58dbc88b7f",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "script/ProductionCoreDeployer.sol",
-          "source_sha256": "28b84c01b5f96c64fde5256cac053747c32d77f30778b6293e16954d2940ca1f",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/auth/Governed.sol",
-          "source_sha256": "35edacbc5fff2da62dd1e0941910418bc0f79148cb554e15c066aee54a5625d4",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/ComplianceEngine.sol",
-          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/ComplianceReporter.sol",
-          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/asset/Erc3643AssetEnforcement.sol",
-          "source_sha256": "82eb828b442dce8ee9f3773dcc396c7348b443a2cbc9b071161f37bdff753cac",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/asset/ReferenceAllowlistAssetEnforcement.sol",
-          "source_sha256": "a53f49012bb6732570f7c505b25a5ecec0cdbfe71d89769a5403f8308c0902b1",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/AccreditedInvestor.sol",
-          "source_sha256": "5ccd7b941da5b7cc9d06c1d8b0f617b809893522109aa539e63f08387f252e7a",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/Affiliate.sol",
-          "source_sha256": "e9b27f993758475e3b11d09e5314b80a77d23a3a27a5b5dec3c3bd4bcc37662d",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/AssetClassification.sol",
-          "source_sha256": "24805c834e07ea861f09d320f7ab08484df3b1e1205130e95fcf06fb14637f15",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/AssetEnforcementV3.sol",
-          "source_sha256": "c305d30829cfde0ced7db64e11b390fd8fee99dccd5c47b6b03a9fa5d5588b79",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/BadActorDisqualification.sol",
-          "source_sha256": "debe4609c336f8637baea3904615db63d286e66826bb7276d6bc61b21d889716",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/BaseElement.sol",
-          "source_sha256": "5033db1533f24a51dd0bce276accacee0f98f53009e068440ba95f3e586ba0e8",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/BaseStatefulElement.sol",
-          "source_sha256": "c106fe61bdbe1e3447a5612b6629194462540eb11358fee9e130a751bbea7d2c",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/BuidlMinimumInvestment.sol",
-          "source_sha256": "d9dfd22581fdc91b787a1a3b444d26a9ef20f0537a1b47bc0798dd644230746b",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/ClaimFreshness.sol",
-          "source_sha256": "a440525d57688ae6a26f1c888fd573da5884b0433c45abd59d651cd8de70fef2",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/EngineSelection.sol",
-          "source_sha256": "8c92f355676ff3270d07e9edbec5d4c56902ca6a71d7c75559fa6ffbbd08d2e0",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/EngineSelectionV2.sol",
-          "source_sha256": "25dd9c4d936fe21a1e97243428ed5da05d4fda39e17180f01306ec0de8ca86e1",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/EntityEligibility.sol",
-          "source_sha256": "18b40206e21eb94114b73c3a57cb264e827dcd40fa83c73dfeb0754adad08573",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/EquityOwnerLookThrough.sol",
-          "source_sha256": "738b921f8d5be9693060d4685afb34523b4dd1cc9d8514737037c535ec0c910e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/Erc3643Native.sol",
-          "source_sha256": "f2447ae24b37077888c2deb65fdb13116b8e3c6c3e85b025914995d4d9ef0687",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/Erc3643NativeV2.sol",
-          "source_sha256": "aa492ccabcbfa246662722cf35fc02aeb97ae928deef232775aece20c6e11392",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/FormDFiling.sol",
-          "source_sha256": "ef6d4a1dd02faf6312ee972a9f2c036dedf7d6d636c498126a6f1fc957aa96c0",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/FraudSurveillance.sol",
-          "source_sha256": "a8b069a72eb051ceb96c51e78fc63cf66a178ec5416f0e514930b6a028d64b09",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/HolderCount.sol",
-          "source_sha256": "6f7d960a8c96fecedc14d36db8d4d6576495cd1ccfaf894af7bee6c90f0edeb9",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/IdentityUniqueness.sol",
-          "source_sha256": "2051bbb6131d1eef1548cef7439ffe6c7cd20be5b77e3f085aff32fa79886947",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/IdentityUniquenessV2.sol",
-          "source_sha256": "5be7a92a068bc787ae9ab2cebdbc33897f689d4edb284ef6d96c8b8292c297af",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/Jurisdiction.sol",
-          "source_sha256": "2cc2784c35d0ed1b539552e1c1f18811b55f8d1144625592ae7a50acd5394f9e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/Lockup.sol",
-          "source_sha256": "d5e9b8d0bfc6f341eaf3177dfd2878010244c245d45d1b32fe03b569708f25ce",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/LockupV2.sol",
-          "source_sha256": "f8ecc2aaacf4379dcb2ca3067327f22aa68977ae4bcc879e5e1bf1393b20d5cd",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/MinimumTradeAmount.sol",
-          "source_sha256": "ab257839d7e8ccfb1f0c22cbc5ec2c6abaf202ffedcbd24cd75a7b95bc70c625",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/OperatorSelfDealing.sol",
-          "source_sha256": "5f062f72d5340115c13915ea15a1cdc86a0054633b6912de454dfb248afc0408",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/QualifiedPurchaser.sol",
-          "source_sha256": "596a7750a6a13f64a786ead40ba1aec60dcfcfc5a3dcf8cea9b768569b1d63fb",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/RedFlagKnowledgeBar.sol",
-          "source_sha256": "05ec9bea44ea66a36cdb98d46e36e39dd671385b62b75432d8b1e637ad51ac4c",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/RedFlagKnowledgeBarV2.sol",
-          "source_sha256": "3e8a64fb8e74f278370d6e83ce4d0ffe8ab72d11a299ae55845fb85ebca451fa",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/RegMIssuerBuying.sol",
-          "source_sha256": "2c8b8009575b5ef5243535fb93d481f5ac5facbaf6e6d034b15a884aa890581b",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/Sanctions.sol",
-          "source_sha256": "7f6be491bbda0778c0be2b082eddf9800e5d724f7bf9ae9f581fd27f381675a0",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/SurveillanceFlag.sol",
-          "source_sha256": "cfd4c2304636e8607049a015b1a1e4aea0e5e64406eb073564891aea3f195602",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/SurveillanceFlagV2.sol",
-          "source_sha256": "f201b64a7933fd2ea26d5c3c9344ab0b3be88d02926de7ad7f9cbbf84e2568da",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/TransferRestrictionMetadata.sol",
-          "source_sha256": "bb8a6b3e97ec4f2ec5143ef1d7c261fbd86dde9fbe008c0ef5125d57b7545091",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/elements/UsTaxResident.sol",
-          "source_sha256": "06886509e696735013afe8b0830d5c980635f1b3ce2d266ea47378a8dc155a49",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/libraries/AssetFlow.sol",
-          "source_sha256": "2f657b7f4b9251c44aa1877edac0c417dbbc56147bb9bd23713350bec88ae960",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/libraries/IdentityPolicy.sol",
-          "source_sha256": "13539706f754c3cd6b1521add5c70bcd94898b20c5a5421d062e4a6d9409261e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/recipes/BaseRecipe.sol",
-          "source_sha256": "913fff4b8f40c9f568fab037373326d1ccb8b36e54caf56740f3d3c3eaa05876",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/recipes/BuidlLikeFundRecipe.sol",
-          "source_sha256": "95be574178966006c7e387f56b0506c818cc9dbc049eba5c3e46742975b566e1",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/recipes/Fund3c7Recipe.sol",
-          "source_sha256": "ff580d7ed76e35793e10c77c041691b2bbe93107839351bed7c893c8267ce1ab",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol",
-          "source_sha256": "d3d7b6f0d98c79adeb610b1b581a19643af532c670c4d1c20f9ae6fb267f297b",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/recipes/RegD506cRecipe.sol",
-          "source_sha256": "deafaeea2fd70ff2e3c926c29d2dd37fc301f5af572a563cdcc078334c3ea33e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/recipes/RegD506cRecipeV3.sol",
-          "source_sha256": "08b4f3996c66c14a46515cecc6fbd7fd2e0a3122f1193483106ea8be02e472f4",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/recipes/RegD506cRecipeV4.sol",
-          "source_sha256": "62f3e18d168939b4336197e3ae7ca3a932549b99a70be9b6d0c385e486cc4b0b",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/recipes/RegD506cRecipeV5.sol",
-          "source_sha256": "9e5cc9e93530b70a69f308c23c2b0d35ce8d0ae93ee1b4100405870af80499bd",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/compliance/recipes/RegD506cRecipeV6.sol",
-          "source_sha256": "ad54f7d50ceca92a9277f8ec07fbc860a66d53be61e5a0207edf383e3dc95b5f",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/demo/BuidlLikeDemoAsset.sol",
-          "source_sha256": "cedac3d26ed32d3cf8e38db343ae2d8646d67f4993e68791399490f105864325",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/demo/DemoAmmReferenceRecipe.sol",
-          "source_sha256": "20699b235bbd5128b27e83f49b6518aadc263def94492ca16fb1031e227e86db",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/ContextEvidence.sol",
-          "source_sha256": "78b2a80e29401ae7d636e0c847d5d22758c06c51d060060562afecb112fa0a24",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/ExecutionRouter.sol",
-          "source_sha256": "3e7291bb398ac0bed83a97aa8409333629443e6c1336191db63ecb5f8d750d40",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/ExecutionRouterV2.sol",
-          "source_sha256": "570ee786ac7c902fb08ee6a2d0c0700d7a45cd7865fff92d749172f019b064b8",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/VenueRegistry.sol",
-          "source_sha256": "c13adc5e95757ccdb3b2f2c8a3b01eacc7802ae6799383848132cebd4fac1af6",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/VenueSelector.sol",
-          "source_sha256": "efc8ba9c740ca36b17c9f9bbb39d4ef3d65e9a047a7d284ae3523061dfa2e00a",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/adapters/amm/UniswapV3Adapter.sol",
-          "source_sha256": "7d791c0b834673b962652b1e35982294bf63863d8f58f2168e267653de592e4e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/adapters/orderbook/OrderBookAdapter.sol",
-          "source_sha256": "5bdad11bb58ee1ec4eafdabb117091c08a381bc9196c2f7b598b03eef6aff444",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
-          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
-          "source_sha256": "9f1486f4af6a3f3e59f082e9edf3530f75f4413e2e21734657d6e9363bc9ddd6",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/adapters/rfq/RFQTypes.sol",
-          "source_sha256": "28a20ba88c8b5c1faa586aec302983139b93a85bc7571c4bd961c5aa1dffd099",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/execution/adapters/rfq/RFQV3Types.sol",
-          "source_sha256": "286666926bfe656a31b27a5716c3a9a047d8614d05d03432cbdca3dc0020e43e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/factory/CornerStoreFactory.sol",
-          "source_sha256": "6fb471bb90b45439e317de7171abdad124a57abf477b4f3c3f488ab3cecfafc1",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/factory/UniswapV3VenueFactory.sol",
-          "source_sha256": "509b506a46214e291f15a3c64ac8c6522cfe5183acd83351426c57714aff5b17",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/asset/IAssetEnforcement.sol",
-          "source_sha256": "e1fd888839b79c7ac0ce16e4a63644046db0bc20f7723856770eda47a0ae498c",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/IAcquisitionSource.sol",
-          "source_sha256": "99bb6da7e5b3512f877887053ee031ec9072c8f194598761dec233544c9d82d7",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/IComplianceElement.sol",
-          "source_sha256": "4f50f0abeac2d4ccafb71ee6413fceb11e56f65a88acb6ecde5f109c70c7847e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/IComplianceEngine.sol",
-          "source_sha256": "12a8052087942b0340069a24147be730aa929ed722e756c9a86d150e098734ef",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/IComplianceReporter.sol",
-          "source_sha256": "29cf7cc5a0e01b403f6289d60d484d7a8ec584ad7c0dbd238ce4bed9a63cef84",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/IElementRegistry.sol",
-          "source_sha256": "a1ed543f6a10e07cb94af85550dea2b344f650b397ec2eb06af5519a5d3103b2",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/IIdentityEvidenceV2.sol",
-          "source_sha256": "3c4a00cb46e48fbad9102f77c117db3643c6703a7d558ed6db7d2e0a82ea5d2b",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/ILookThroughSource.sol",
-          "source_sha256": "4800dbffcb1f4f608dd4a0374ce1c1373ab90ea2d122e89ce27e40dec03b9f82",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/IOperatorRegistry.sol",
-          "source_sha256": "eee915e0974008f7fd6b18e78b700df9fadb30f042b83ab1d799d162c007c55c",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/IRecipe.sol",
-          "source_sha256": "425852326be9e723f170e142d085e4156f261fc30d2601e57862677c048b5801",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/IRecipeRegistry.sol",
-          "source_sha256": "bed2c107d4b5a9d770b25a91c6a5188d9fdda2e5f472789de597e3144806fea4",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/compliance/ITokenPolicyRegistry.sol",
-          "source_sha256": "9719a89423da16a61cd5964e6134543ae37c809f161be6c6124a9c285ec9a03b",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/IExecutionAdapter.sol",
-          "source_sha256": "65cbc6db3881a467e33359d1cac771c055d19b837dd4e3b8f34a750ef519dc6e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/IExecutionContextVerifier.sol",
-          "source_sha256": "170cd9561b6070b1f3d3e5e92ae1f63a0a62fbba76e17b3c1d100570a7f0351c",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/IExecutionRouter.sol",
-          "source_sha256": "d84e19e88ec55f64a443cdba8a7ed6d9650716f6f0574b39c8481773b8af1dd0",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/IVenueRegistry.sol",
-          "source_sha256": "ef0308767cd5a058556e92bdc84c72f08b1fee930d28ace66e0b6c61880d89f8",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/IVenueSelector.sol",
-          "source_sha256": "a0ee426ff379f65b5de83904d4866d0e0c967c68e14bbf9fff88e7849332ddb8",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/adapters/IAMMAdapter.sol",
-          "source_sha256": "9f309b92476933ffd67807d5cfb72417d79da546f2b3664870227d15d04dc3c3",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/adapters/IMakerAuthorizer.sol",
-          "source_sha256": "1975ae66ca76963a864528694f13af1785646d52b60d2249a7a5add5bd744019",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/adapters/IOrderBookAdapter.sol",
-          "source_sha256": "e44e41081cf031bec4f706f9a7c07353ddbf68d026ca83380ca76451c9ca8d4b",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/adapters/IPool.sol",
-          "source_sha256": "d555c9f42548a04576571b183848ac59b777a2b17c179f9ecc2ae548d0a6ad12",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/interfaces/execution/adapters/IRFQAdapter.sol",
-          "source_sha256": "d77a8acbc83ab79779d8f4be6b8993ca8ff8dd021a5c3b5259a4bbbf8bbd35ec",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/libraries/DecisionHashLib.sol",
-          "source_sha256": "053fd1460e3fcce2129bace96e8f6ae09824072f56146064dcc6ef4e7f5294bc",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/libraries/Errors.sol",
-          "source_sha256": "7c9085f7fa3c30168c8b5b948916889c01cca919038d92273c2e0cf77a4e8760",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/libraries/Events.sol",
-          "source_sha256": "57fb608d9ca8d940417bcafee9198f944f3f69618f6a1c5b1c777ad05b89be33",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/libraries/PolicyHashLib.sol",
-          "source_sha256": "3223ac48d8b0f4f09ebbc86d04d5de08ba3967a3a88f402a29cf41a273c3391e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/libraries/PredicateValidation.sol",
-          "source_sha256": "af877ba59ec85bb0bab6e982a61185be7f95841e661a70418a6156c23c494d36",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/libraries/ReasonCodes.sol",
-          "source_sha256": "ac2b287e82399ca2d01d9059f9f60caf60aa03f951120160379785091e31a9ed",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/logging/ComplianceLogger.sol",
-          "source_sha256": "45397b40eeccbc76b999efd9ab7fa0861cfeace2ff085f98cc486c99536dd092",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/logging/ExecutionLogger.sol",
-          "source_sha256": "748ce85a320bea22238ce6a0f38c51224a03dd8f2b77ad576d64d20ca5eec3fe",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/registry/AttestedAcquisitionSource.sol",
-          "source_sha256": "f32be23d16c65c1e9efe23745c1ab5d16fe4b8099671d73fffae45768c916478",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/registry/ElementRegistry.sol",
-          "source_sha256": "55ae6d25a14dbf135ca28af22152dbe68cd33a54acc23b1387fc7934516ea1eb",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/registry/MakerAuthorizer.sol",
-          "source_sha256": "51f058084cbeaf8dfceea3fbb88734e7b36d11effcf873c0186ab544b9763d8e",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/registry/OperatorRegistry.sol",
-          "source_sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/registry/ProductionElementRegistry.sol",
-          "source_sha256": "5f5ca1c8f0aa323123d5c4f14c073f11fa9f70ed425dfb081d8cb6c361df7e62",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/registry/RecipeRegistry.sol",
-          "source_sha256": "025055c34cf0a7458d9d573f0cd048d5981fb829aae481328bfa4c7db5a92f35",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/registry/TokenPolicyRegistry.sol",
-          "source_sha256": "48286fe482fb835238a4c8afd9df5f0390a6b369090a916506852b8ab55b02e9",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/types/ComplianceReportTypes.sol",
-          "source_sha256": "a80829ee80043fb8290727324fa26539b4db361ee026dc61f851c9aa56d6d592",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/types/ComplianceTypes.sol",
-          "source_sha256": "66a9164f7e1527681ac689302f9984b27a24e13ac8dccf3e11762964a52b7cd9",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/types/ExecutionTypes.sol",
-          "source_sha256": "0b2f7d1c5bb669a5ce561b051e95aa844475ff68a918b1b33f25566c4bf29c7b",
-          "start": 36,
-          "symbol": "0.8.17"
-        },
-        {
-          "kind": "pragma",
-          "length": 23,
-          "path": "src/types/VenueTypes.sol",
-          "source_sha256": "bbc1e81db845afb8ddd8e4be43a7b1e6ff1a5e585a44b4bb845efaf6c4cfe617",
-          "start": 36,
-          "symbol": "0.8.17"
         }
       ]
     },
@@ -3043,6 +2194,63 @@
     },
     {
       "confidence": "Medium",
+      "description": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = _executeVenue(req,d,cfg) (src/execution/ExecutionRouterBase.sol#102)\n\t\t- IExecutionAdapter(cfg.adapter).execute(req,decision) (src/execution/ExecutionRouterBase.sol#161)\n\tBalance read before the call:\n\t- tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#100)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountIn`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenInBefore`\n",
+      "detector": "reentrancy-balance",
+      "fingerprint": "6d516d4d3f1de883f45d39db4e457bba602d7d1bfadcd3cad75f62f87e934974",
+      "impact": "High",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 5900,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 1773,
+          "symbol": "execute"
+        },
+        {
+          "kind": "node",
+          "length": 138,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 6504,
+          "symbol": "realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut"
+        },
+        {
+          "kind": "node",
+          "length": 53,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 5394,
+          "symbol": "r = _executeVenue(req,d,cfg)"
+        },
+        {
+          "kind": "node",
+          "length": 60,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 8211,
+          "symbol": "IExecutionAdapter(cfg.adapter).execute(req,decision)"
+        },
+        {
+          "kind": "node",
+          "length": 62,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 6215,
+          "symbol": "tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore"
+        },
+        {
+          "kind": "node",
+          "length": 80,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 5212,
+          "symbol": "tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
       "description": "ComplianceReporter._merge(RequirementStatus,RequirementStatus) (src/compliance/ComplianceReporter.sol#184-191) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- a == RequirementStatus.FAIL || b == RequirementStatus.FAIL (src/compliance/ComplianceReporter.sol#185)\n\t- a == RequirementStatus.UNDETERMINED || b == RequirementStatus.UNDETERMINED (src/compliance/ComplianceReporter.sol#186)\n\t- a == RequirementStatus.PASS || b == RequirementStatus.PASS (src/compliance/ComplianceReporter.sol#189)\n",
       "detector": "timestamp",
       "fingerprint": "6dada11e3acf03ab6690918f9eb6571489cfbc2466ec66151f37f4d5ed3f2c95",
@@ -3104,6 +2312,31 @@
           "source_sha256": "596a7750a6a13f64a786ead40ba1aec60dcfcfc5a3dcf8cea9b768569b1d63fb",
           "start": 9409,
           "symbol": "c.basis == QpBasis.TRUST"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "ExecutionRouterV2._beforeEvaluate(ExecutionRequest) (src/execution/ExecutionRouterV2.sol#34-48) ignores return value by ContextEvidence.affiliateEvidenceHash(req.context,policyReg,evidence.affiliateSource) (src/execution/ExecutionRouterV2.sol#46)\n",
+      "detector": "unused-return",
+      "fingerprint": "714d44d6cb430d4195774e5acb69a19007005993de5b078d20a3088bb3c0cb33",
+      "impact": "Medium",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 987,
+          "path": "src/execution/ExecutionRouterV2.sol",
+          "source_sha256": "cb1bbf9f2da576ef82950bd075799ce12debc52b3f2fa9389079d402b6537a16",
+          "start": 1571,
+          "symbol": "_beforeEvaluate"
+        },
+        {
+          "kind": "node",
+          "length": 87,
+          "path": "src/execution/ExecutionRouterV2.sol",
+          "source_sha256": "cb1bbf9f2da576ef82950bd075799ce12debc52b3f2fa9389079d402b6537a16",
+          "start": 2420,
+          "symbol": "ContextEvidence.affiliateEvidenceHash(req.context,policyReg,evidence.affiliateSource)"
         }
       ]
     },
@@ -3304,6 +2537,31 @@
           "source_sha256": "7d791c0b834673b962652b1e35982294bf63863d8f58f2168e267653de592e4e",
           "start": 7016,
           "symbol": "IERC20(tokenIn).safeTransferFrom(payer,msg.sender,amountOwed)"
+        }
+      ]
+    },
+    {
+      "confidence": "High",
+      "description": "ReferenceExternalSettlementTarget.settle(ExecutionRequest) (src/execution/targets/ReferenceExternalSettlementTarget.sol#102-110) uses arbitrary from in transferFrom: IERC20(req.context.tokenIn).safeTransferFrom(req.context.buyer,req.context.seller,req.context.amountIn) (src/execution/targets/ReferenceExternalSettlementTarget.sol#105)\n",
+      "detector": "arbitrary-send-erc20",
+      "fingerprint": "7f201a2858acb91c96af509066ce2f1ee07a8496359baf720fc5b13439c876cb",
+      "impact": "High",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 716,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 4362,
+          "symbol": "settle"
+        },
+        {
+          "kind": "node",
+          "length": 105,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 4612,
+          "symbol": "IERC20(req.context.tokenIn).safeTransferFrom(req.context.buyer,req.context.seller,req.context.amountIn)"
         }
       ]
     },
@@ -3529,31 +2787,6 @@
       ]
     },
     {
-      "confidence": "Medium",
-      "description": "ExecutionRouterV2._beforeEvaluate(ExecutionRequest) (src/execution/ExecutionRouterV2.sol#34-48) ignores return value by ContextEvidence.affiliateEvidenceHash(req.context,policyReg,evidence.affiliateSource) (src/execution/ExecutionRouterV2.sol#46)\n",
-      "detector": "unused-return",
-      "fingerprint": "8748d6b6b207e4cef0f6adafb4e8e5dd7446089c9fca4bcb92b41cc6a3b04fb2",
-      "impact": "Medium",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 979,
-          "path": "src/execution/ExecutionRouterV2.sol",
-          "source_sha256": "570ee786ac7c902fb08ee6a2d0c0700d7a45cd7865fff92d749172f019b064b8",
-          "start": 1571,
-          "symbol": "_beforeEvaluate"
-        },
-        {
-          "kind": "node",
-          "length": 87,
-          "path": "src/execution/ExecutionRouterV2.sol",
-          "source_sha256": "570ee786ac7c902fb08ee6a2d0c0700d7a45cd7865fff92d749172f019b064b8",
-          "start": 2412,
-          "symbol": "ContextEvidence.affiliateEvidenceHash(req.context,policyReg,evidence.affiliateSource)"
-        }
-      ]
-    },
-    {
       "confidence": "High",
       "description": "CommonBase.CONSOLE (lib/forge-std/src/Base.sol#14) is never used in DeployProductionCore (script/DeployProductionCore.s.sol#15-110)\n",
       "detector": "unused-state",
@@ -3575,63 +2808,6 @@
           "source_sha256": "76b05dda37981797d3d403f29fc6cad79b46e2fc11da47d649ff13acb69158b2",
           "start": 564,
           "symbol": "CONSOLE"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
-      "description": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = IExecutionAdapter(cfg.adapter).execute(req,d) (src/execution/ExecutionRouterBase.sol#102)\n\tBalance read before the call:\n\t- tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#101)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountOut`\n\t- realizedAmountOut < req.amountOutMin (src/execution/ExecutionRouterBase.sol#128)\n\t\t- stale variable `realizedAmountOut`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenOutBefore`\n",
-      "detector": "reentrancy-balance",
-      "fingerprint": "89d718b4c0901f5976bb163f67c855a2e24dedafa11a2e772d084a5adfabc41d",
-      "impact": "High",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 5920,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 1773,
-          "symbol": "execute"
-        },
-        {
-          "kind": "node",
-          "length": 138,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 6524,
-          "symbol": "realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut"
-        },
-        {
-          "kind": "node",
-          "length": 36,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 6864,
-          "symbol": "realizedAmountOut < req.amountOutMin"
-        },
-        {
-          "kind": "node",
-          "length": 62,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 6235,
-          "symbol": "tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore"
-        },
-        {
-          "kind": "node",
-          "length": 73,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 5394,
-          "symbol": "r = IExecutionAdapter(cfg.adapter).execute(req,d)"
-        },
-        {
-          "kind": "node",
-          "length": 82,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 5302,
-          "symbol": "tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer)"
         }
       ]
     },
@@ -4378,201 +3554,10 @@
       ]
     },
     {
-      "confidence": "Medium",
-      "description": "HolderCount.onTransfer(address,address,uint256).idTo (src/compliance/elements/HolderCount.sol#217) is a local variable never initialized\n",
-      "detector": "uninitialized-local",
-      "fingerprint": "b1d9cc08838bc00615c3105577b8280bbf660ed79a69575aa4fa8b614a5eb65c",
-      "impact": "Medium",
-      "locations": [
-        {
-          "kind": "variable",
-          "length": 12,
-          "path": "src/compliance/elements/HolderCount.sol",
-          "source_sha256": "6f7d960a8c96fecedc14d36db8d4d6576495cd1ccfaf894af7bee6c90f0edeb9",
-          "start": 10082,
-          "symbol": "idTo"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
-      "description": "Reentrancy in RFQAdapter.execute(ExecutionRequest,ComplianceDecision) (src/execution/adapters/rfq/RFQAdapter.sol#64-84):\n\tExternal calls:\n\t- IERC20(quote.tokenIn).safeTransferFrom(quote.taker,quote.maker,quote.amountIn) (src/execution/adapters/rfq/RFQAdapter.sol#76)\n\t- IERC20(quote.tokenOut).safeTransferFrom(quote.maker,quote.taker,quote.amountOut) (src/execution/adapters/rfq/RFQAdapter.sol#77)\n\tEvent emitted after the call(s):\n\t- RFQFilled(quoteHash,quote.maker,quote.taker,quote.amountIn,quote.amountOut) (src/execution/adapters/rfq/RFQAdapter.sol#79)\n",
-      "detector": "reentrancy-events",
-      "fingerprint": "b48558e67266630c8424af4a7b1e103affdf65802f2336b85fac07e643d5e173",
-      "impact": "Low",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 886,
-          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
-          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
-          "start": 2857,
-          "symbol": "execute"
-        },
-        {
-          "kind": "node",
-          "length": 80,
-          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
-          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
-          "start": 3312,
-          "symbol": "IERC20(quote.tokenIn).safeTransferFrom(quote.taker,quote.maker,quote.amountIn)"
-        },
-        {
-          "kind": "node",
-          "length": 82,
-          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
-          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
-          "start": 3402,
-          "symbol": "IERC20(quote.tokenOut).safeTransferFrom(quote.maker,quote.taker,quote.amountOut)"
-        },
-        {
-          "kind": "node",
-          "length": 84,
-          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
-          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
-          "start": 3495,
-          "symbol": "RFQFilled(quoteHash,quote.maker,quote.taker,quote.amountIn,quote.amountOut)"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
-      "description": "ComplianceEngine._policyHashes(address,ManifestCore,RecipeBinding[]) (src/compliance/ComplianceEngine.sol#576-633) ignores return value by (binding,recipeKey,None) = policyReg.compiledBindingOf(token,i) (src/compliance/ComplianceEngine.sol#606)\n",
-      "detector": "unused-return",
-      "fingerprint": "b53d24ebb5c47d916c3a1d5aa2350d98bcf12d21a840bace6cdd5eb6f0fdf8ee",
-      "impact": "Medium",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 2740,
-          "path": "src/compliance/ComplianceEngine.sol",
-          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
-          "start": 24643,
-          "symbol": "_policyHashes"
-        },
-        {
-          "kind": "node",
-          "length": 90,
-          "path": "src/compliance/ComplianceEngine.sol",
-          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
-          "start": 25812,
-          "symbol": "(binding,recipeKey,None) = policyReg.compiledBindingOf(token,i)"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
-      "description": "OperatorRegistry._requireReady(uint64) (src/registry/OperatorRegistry.sol#161-164) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- readyAt == 0 (src/registry/OperatorRegistry.sol#162)\n\t- block.timestamp < readyAt (src/registry/OperatorRegistry.sol#163)\n",
-      "detector": "timestamp",
-      "fingerprint": "b6aa8a58b2accaad35e457774d543359a7cb5d0cce662f942980fe6445c68b70",
-      "impact": "Low",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 205,
-          "path": "src/registry/OperatorRegistry.sol",
-          "source_sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",
-          "start": 6957,
-          "symbol": "_requireReady"
-        },
-        {
-          "kind": "node",
-          "length": 12,
-          "path": "src/registry/OperatorRegistry.sol",
-          "source_sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",
-          "start": 7024,
-          "symbol": "readyAt == 0"
-        },
-        {
-          "kind": "node",
-          "length": 25,
-          "path": "src/registry/OperatorRegistry.sol",
-          "source_sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",
-          "start": 7089,
-          "symbol": "block.timestamp < readyAt"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
-      "description": "ComplianceEngine.commit(ComplianceContext) (src/compliance/ComplianceEngine.sol#426-447) has external calls inside a loop: IStatefulElement(element).onTransfer(ctx.buyer,ctx.seller,rwaAmount) (src/compliance/ComplianceEngine.sol#443-444)\n",
-      "detector": "calls-loop",
-      "fingerprint": "b8520b7e696da2c5c42659c9bea2a428d5b694d92bfe150138aee0922e4e3555",
-      "impact": "Low",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 1323,
-          "path": "src/compliance/ComplianceEngine.sol",
-          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
-          "start": 17585,
-          "symbol": "commit"
-        },
-        {
-          "kind": "node",
-          "length": 138,
-          "path": "src/compliance/ComplianceEngine.sol",
-          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
-          "start": 18739,
-          "symbol": "IStatefulElement(element).onTransfer(ctx.buyer,ctx.seller,rwaAmount)"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
-      "description": "ComplianceReporter._applicability(RecipeBinding,bytes) (src/compliance/ComplianceReporter.sol#138-158) has external calls inside a loop: key = recipeReg.recipeKeyOf(binding.recipeId) (src/compliance/ComplianceReporter.sol#143)\n\tCalls stack containing the loop:\n\t\tComplianceReporter.report(ComplianceContext)\n\t\tComplianceReporter._reportToken(ComplianceContext,address,ComplianceReporter.Results)\n\t\tComplianceReporter._reportBinding(ComplianceContext,address,RecipeBinding,uint8,bytes,ComplianceReporter.Results)\n",
-      "detector": "calls-loop",
-      "fingerprint": "b9f8e4c0ae6676e5eeef9d6370500a692fcb6ff1f3f95a29a533d0a1bbeede27",
-      "impact": "Low",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 944,
-          "path": "src/compliance/ComplianceReporter.sol",
-          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
-          "start": 6019,
-          "symbol": "_applicability"
-        },
-        {
-          "kind": "node",
-          "length": 53,
-          "path": "src/compliance/ComplianceReporter.sol",
-          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
-          "start": 6174,
-          "symbol": "key = recipeReg.recipeKeyOf(binding.recipeId)"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
-      "description": "ComplianceReporter._check(ComplianceContext,address,bytes32,bytes) (src/compliance/ComplianceReporter.sol#160-178) has external calls inside a loop: element == address(0) || element.codehash != elementReg.runtimeCodeHashOf(id) (src/compliance/ComplianceReporter.sol#166)\n\tCalls stack containing the loop:\n\t\tComplianceReporter.report(ComplianceContext)\n\t\tComplianceReporter._reportToken(ComplianceContext,address,ComplianceReporter.Results)\n\t\tComplianceReporter._reportBinding(ComplianceContext,address,RecipeBinding,uint8,bytes,ComplianceReporter.Results)\n",
-      "detector": "calls-loop",
-      "fingerprint": "ba353319305a2e7419f85d52b6e47a01f3e37ca68824abe8c0901d15a8ec6607",
-      "impact": "Low",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 874,
-          "path": "src/compliance/ComplianceReporter.sol",
-          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
-          "start": 6969,
-          "symbol": "_check"
-        },
-        {
-          "kind": "node",
-          "length": 77,
-          "path": "src/compliance/ComplianceReporter.sol",
-          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
-          "start": 7213,
-          "symbol": "element == address(0) || element.codehash != elementReg.runtimeCodeHashOf(id)"
-        }
-      ]
-    },
-    {
       "confidence": "High",
-      "description": "4 different versions of Solidity are used:\n\t- Version constraint >=0.8.13<0.9.0 is used by:\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/Base.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/Script.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdChains.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdCheats.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdConstants.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdJson.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdMath.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdStorage.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdStyle.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdUtils.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/Vm.sol#4)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/console.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/console2.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/interfaces/IMulticall3.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/safeconsole.sol#2)\n\t- Version constraint ^0.8.0 is used by:\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/access/Ownable.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/security/ReentrancyGuard.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/token/ERC20/extensions/draft-IERC20Permit.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/Context.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/Strings.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/cryptography/SignatureChecker.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#4)\n\t- Version constraint ^0.8.1 is used by:\n\t\t-^0.8.1 (lib/openzeppelin-contracts/contracts/utils/Address.sol#4)\n\t- Version constraint 0.8.17 is used by:\n\t\t-0.8.17 (script/DeployProductionCore.s.sol#2)\n\t\t-0.8.17 (script/ProductionCoreDeployer.sol#2)\n\t\t-0.8.17 (src/auth/Governed.sol#2)\n\t\t-0.8.17 (src/compliance/ComplianceEngine.sol#2)\n\t\t-0.8.17 (src/compliance/ComplianceReporter.sol#2)\n\t\t-0.8.17 (src/compliance/asset/Erc3643AssetEnforcement.sol#2)\n\t\t-0.8.17 (src/compliance/asset/ReferenceAllowlistAssetEnforcement.sol#2)\n\t\t-0.8.17 (src/compliance/elements/AccreditedInvestor.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Affiliate.sol#2)\n\t\t-0.8.17 (src/compliance/elements/AssetClassification.sol#2)\n\t\t-0.8.17 (src/compliance/elements/AssetEnforcementV3.sol#2)\n\t\t-0.8.17 (src/compliance/elements/BadActorDisqualification.sol#2)\n\t\t-0.8.17 (src/compliance/elements/BaseElement.sol#2)\n\t\t-0.8.17 (src/compliance/elements/BaseStatefulElement.sol#2)\n\t\t-0.8.17 (src/compliance/elements/BuidlMinimumInvestment.sol#2)\n\t\t-0.8.17 (src/compliance/elements/ClaimFreshness.sol#2)\n\t\t-0.8.17 (src/compliance/elements/EngineSelection.sol#2)\n\t\t-0.8.17 (src/compliance/elements/EngineSelectionV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/EntityEligibility.sol#2)\n\t\t-0.8.17 (src/compliance/elements/EquityOwnerLookThrough.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Erc3643Native.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Erc3643NativeV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/FormDFiling.sol#2)\n\t\t-0.8.17 (src/compliance/elements/FraudSurveillance.sol#2)\n\t\t-0.8.17 (src/compliance/elements/HolderCount.sol#2)\n\t\t-0.8.17 (src/compliance/elements/IdentityUniqueness.sol#2)\n\t\t-0.8.17 (src/compliance/elements/IdentityUniquenessV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Jurisdiction.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Lockup.sol#2)\n\t\t-0.8.17 (src/compliance/elements/LockupV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/MinimumTradeAmount.sol#2)\n\t\t-0.8.17 (src/compliance/elements/OperatorSelfDealing.sol#2)\n\t\t-0.8.17 (src/compliance/elements/QualifiedPurchaser.sol#2)\n\t\t-0.8.17 (src/compliance/elements/RedFlagKnowledgeBar.sol#2)\n\t\t-0.8.17 (src/compliance/elements/RedFlagKnowledgeBarV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/RegMIssuerBuying.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Sanctions.sol#2)\n\t\t-0.8.17 (src/compliance/elements/SurveillanceFlag.sol#2)\n\t\t-0.8.17 (src/compliance/elements/SurveillanceFlagV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/TransferRestrictionMetadata.sol#2)\n\t\t-0.8.17 (src/compliance/elements/UsTaxResident.sol#2)\n\t\t-0.8.17 (src/compliance/libraries/AssetFlow.sol#2)\n\t\t-0.8.17 (src/compliance/libraries/IdentityPolicy.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/BaseRecipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/BuidlLikeFundRecipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/Fund3c7Recipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipeV3.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipeV4.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipeV5.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipeV6.sol#2)\n\t\t-0.8.17 (src/demo/BuidlLikeDemoAsset.sol#2)\n\t\t-0.8.17 (src/demo/DemoAmmReferenceRecipe.sol#2)\n\t\t-0.8.17 (src/execution/ContextEvidence.sol#2)\n\t\t-0.8.17 (src/execution/ExecutionRouter.sol#2)\n\t\t-0.8.17 (src/execution/ExecutionRouterBase.sol#2)\n\t\t-0.8.17 (src/execution/ExecutionRouterV2.sol#2)\n\t\t-0.8.17 (src/execution/VenueRegistry.sol#2)\n\t\t-0.8.17 (src/execution/VenueSelector.sol#2)\n\t\t-0.8.17 (src/execution/adapters/amm/UniswapV3Adapter.sol#2)\n\t\t-0.8.17 (src/execution/adapters/orderbook/OrderBookAdapter.sol#2)\n\t\t-0.8.17 (src/execution/adapters/rfq/RFQAdapter.sol#2)\n\t\t-0.8.17 (src/execution/adapters/rfq/RFQAdapterV3.sol#2)\n\t\t-0.8.17 (src/execution/adapters/rfq/RFQTypes.sol#2)\n\t\t-0.8.17 (src/execution/adapters/rfq/RFQV3Types.sol#2)\n\t\t-0.8.17 (src/factory/CornerStoreFactory.sol#2)\n\t\t-0.8.17 (src/factory/UniswapV3VenueFactory.sol#2)\n\t\t-0.8.17 (src/interfaces/asset/IAssetEnforcement.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IAcquisitionSource.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IComplianceElement.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IComplianceEngine.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IComplianceReporter.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IElementRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IIdentityEvidenceV2.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/ILookThroughSource.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IOperatorRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IRecipe.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IRecipeRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/ITokenPolicyRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IExecutionAdapter.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IExecutionContextVerifier.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IExecutionRouter.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IVenueRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IVenueSelector.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IAMMAdapter.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IMakerAuthorizer.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IOrderBookAdapter.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IPool.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IRFQAdapter.sol#2)\n\t\t-0.8.17 (src/libraries/DecisionHashLib.sol#2)\n\t\t-0.8.17 (src/libraries/Errors.sol#2)\n\t\t-0.8.17 (src/libraries/Events.sol#2)\n\t\t-0.8.17 (src/libraries/PolicyHashLib.sol#2)\n\t\t-0.8.17 (src/libraries/PredicateValidation.sol#2)\n\t\t-0.8.17 (src/libraries/ReasonCodes.sol#2)\n\t\t-0.8.17 (src/logging/ComplianceLogger.sol#2)\n\t\t-0.8.17 (src/logging/ExecutionLogger.sol#2)\n\t\t-0.8.17 (src/registry/AttestedAcquisitionSource.sol#2)\n\t\t-0.8.17 (src/registry/ElementRegistry.sol#2)\n\t\t-0.8.17 (src/registry/MakerAuthorizer.sol#2)\n\t\t-0.8.17 (src/registry/OperatorRegistry.sol#2)\n\t\t-0.8.17 (src/registry/ProductionElementRegistry.sol#2)\n\t\t-0.8.17 (src/registry/RecipeRegistry.sol#2)\n\t\t-0.8.17 (src/registry/TokenPolicyRegistry.sol#2)\n\t\t-0.8.17 (src/types/ComplianceReportTypes.sol#2)\n\t\t-0.8.17 (src/types/ComplianceTypes.sol#2)\n\t\t-0.8.17 (src/types/ExecutionTypes.sol#2)\n\t\t-0.8.17 (src/types/VenueTypes.sol#2)\n",
+      "description": "4 different versions of Solidity are used:\n\t- Version constraint >=0.8.13<0.9.0 is used by:\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/Base.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/Script.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdChains.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdCheats.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdConstants.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdJson.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdMath.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdStorage.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdStyle.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/StdUtils.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/Vm.sol#4)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/console.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/console2.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/interfaces/IMulticall3.sol#2)\n\t\t->=0.8.13<0.9.0 (lib/forge-std/src/safeconsole.sol#2)\n\t- Version constraint ^0.8.0 is used by:\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/access/Ownable.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/security/ReentrancyGuard.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/token/ERC20/extensions/draft-IERC20Permit.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/Context.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/Strings.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/cryptography/EIP712.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/cryptography/SignatureChecker.sol#4)\n\t\t-^0.8.0 (lib/openzeppelin-contracts/contracts/utils/math/Math.sol#4)\n\t- Version constraint ^0.8.1 is used by:\n\t\t-^0.8.1 (lib/openzeppelin-contracts/contracts/utils/Address.sol#4)\n\t- Version constraint 0.8.17 is used by:\n\t\t-0.8.17 (script/DeployProductionCore.s.sol#2)\n\t\t-0.8.17 (script/ProductionCoreDeployer.sol#2)\n\t\t-0.8.17 (src/auth/Governed.sol#2)\n\t\t-0.8.17 (src/compliance/ComplianceEngine.sol#2)\n\t\t-0.8.17 (src/compliance/ComplianceReporter.sol#2)\n\t\t-0.8.17 (src/compliance/asset/Erc3643AssetEnforcement.sol#2)\n\t\t-0.8.17 (src/compliance/asset/ReferenceAllowlistAssetEnforcement.sol#2)\n\t\t-0.8.17 (src/compliance/elements/AccreditedInvestor.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Affiliate.sol#2)\n\t\t-0.8.17 (src/compliance/elements/AssetClassification.sol#2)\n\t\t-0.8.17 (src/compliance/elements/AssetEnforcementV3.sol#2)\n\t\t-0.8.17 (src/compliance/elements/BadActorDisqualification.sol#2)\n\t\t-0.8.17 (src/compliance/elements/BaseElement.sol#2)\n\t\t-0.8.17 (src/compliance/elements/BaseStatefulElement.sol#2)\n\t\t-0.8.17 (src/compliance/elements/BuidlMinimumInvestment.sol#2)\n\t\t-0.8.17 (src/compliance/elements/ClaimFreshness.sol#2)\n\t\t-0.8.17 (src/compliance/elements/EngineSelection.sol#2)\n\t\t-0.8.17 (src/compliance/elements/EngineSelectionV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/EntityEligibility.sol#2)\n\t\t-0.8.17 (src/compliance/elements/EquityOwnerLookThrough.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Erc3643Native.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Erc3643NativeV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/FormDFiling.sol#2)\n\t\t-0.8.17 (src/compliance/elements/FraudSurveillance.sol#2)\n\t\t-0.8.17 (src/compliance/elements/HolderCount.sol#2)\n\t\t-0.8.17 (src/compliance/elements/IdentityUniqueness.sol#2)\n\t\t-0.8.17 (src/compliance/elements/IdentityUniquenessV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Jurisdiction.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Lockup.sol#2)\n\t\t-0.8.17 (src/compliance/elements/LockupV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/MinimumTradeAmount.sol#2)\n\t\t-0.8.17 (src/compliance/elements/OperatorSelfDealing.sol#2)\n\t\t-0.8.17 (src/compliance/elements/QualifiedPurchaser.sol#2)\n\t\t-0.8.17 (src/compliance/elements/RedFlagKnowledgeBar.sol#2)\n\t\t-0.8.17 (src/compliance/elements/RedFlagKnowledgeBarV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/RegMIssuerBuying.sol#2)\n\t\t-0.8.17 (src/compliance/elements/Sanctions.sol#2)\n\t\t-0.8.17 (src/compliance/elements/SurveillanceFlag.sol#2)\n\t\t-0.8.17 (src/compliance/elements/SurveillanceFlagV2.sol#2)\n\t\t-0.8.17 (src/compliance/elements/TransferRestrictionMetadata.sol#2)\n\t\t-0.8.17 (src/compliance/elements/UsTaxResident.sol#2)\n\t\t-0.8.17 (src/compliance/libraries/AssetFlow.sol#2)\n\t\t-0.8.17 (src/compliance/libraries/IdentityPolicy.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/BaseRecipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/BuidlLikeFundRecipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/Fund3c7Recipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipe.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipeV3.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipeV4.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipeV5.sol#2)\n\t\t-0.8.17 (src/compliance/recipes/RegD506cRecipeV6.sol#2)\n\t\t-0.8.17 (src/demo/BuidlLikeDemoAsset.sol#2)\n\t\t-0.8.17 (src/demo/DemoAmmReferenceRecipe.sol#2)\n\t\t-0.8.17 (src/execution/ContextEvidence.sol#2)\n\t\t-0.8.17 (src/execution/ExecutionRouter.sol#2)\n\t\t-0.8.17 (src/execution/ExecutionRouterBase.sol#2)\n\t\t-0.8.17 (src/execution/ExecutionRouterV2.sol#2)\n\t\t-0.8.17 (src/execution/ExternalSettlementGate.sol#2)\n\t\t-0.8.17 (src/execution/VenueRegistry.sol#2)\n\t\t-0.8.17 (src/execution/VenueSelector.sol#2)\n\t\t-0.8.17 (src/execution/adapters/amm/UniswapV3Adapter.sol#2)\n\t\t-0.8.17 (src/execution/adapters/orderbook/OrderBookAdapter.sol#2)\n\t\t-0.8.17 (src/execution/adapters/rfq/RFQAdapter.sol#2)\n\t\t-0.8.17 (src/execution/adapters/rfq/RFQAdapterV3.sol#2)\n\t\t-0.8.17 (src/execution/adapters/rfq/RFQTypes.sol#2)\n\t\t-0.8.17 (src/execution/adapters/rfq/RFQV3Types.sol#2)\n\t\t-0.8.17 (src/execution/targets/ReferenceExternalSettlementTarget.sol#2)\n\t\t-0.8.17 (src/factory/CornerStoreFactory.sol#2)\n\t\t-0.8.17 (src/factory/UniswapV3VenueFactory.sol#2)\n\t\t-0.8.17 (src/interfaces/asset/IAssetEnforcement.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IAcquisitionSource.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IComplianceElement.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IComplianceEngine.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IComplianceReporter.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IElementRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IIdentityEvidenceV2.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/ILookThroughSource.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IOperatorRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IRecipe.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/IRecipeRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/compliance/ITokenPolicyRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IExecutionAdapter.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IExecutionContextVerifier.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IExecutionRouter.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IExternalSettlementTarget.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IVenueRegistry.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/IVenueSelector.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IAMMAdapter.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IMakerAuthorizer.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IOrderBookAdapter.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IPool.sol#2)\n\t\t-0.8.17 (src/interfaces/execution/adapters/IRFQAdapter.sol#2)\n\t\t-0.8.17 (src/libraries/DecisionHashLib.sol#2)\n\t\t-0.8.17 (src/libraries/Errors.sol#2)\n\t\t-0.8.17 (src/libraries/Events.sol#2)\n\t\t-0.8.17 (src/libraries/PolicyHashLib.sol#2)\n\t\t-0.8.17 (src/libraries/PredicateValidation.sol#2)\n\t\t-0.8.17 (src/libraries/ReasonCodes.sol#2)\n\t\t-0.8.17 (src/logging/ComplianceLogger.sol#2)\n\t\t-0.8.17 (src/logging/ExecutionLogger.sol#2)\n\t\t-0.8.17 (src/registry/AttestedAcquisitionSource.sol#2)\n\t\t-0.8.17 (src/registry/ElementRegistry.sol#2)\n\t\t-0.8.17 (src/registry/MakerAuthorizer.sol#2)\n\t\t-0.8.17 (src/registry/OperatorRegistry.sol#2)\n\t\t-0.8.17 (src/registry/ProductionElementRegistry.sol#2)\n\t\t-0.8.17 (src/registry/RecipeRegistry.sol#2)\n\t\t-0.8.17 (src/registry/TokenPolicyRegistry.sol#2)\n\t\t-0.8.17 (src/types/ComplianceReportTypes.sol#2)\n\t\t-0.8.17 (src/types/ComplianceTypes.sol#2)\n\t\t-0.8.17 (src/types/ExecutionTypes.sol#2)\n\t\t-0.8.17 (src/types/VenueTypes.sol#2)\n",
       "detector": "pragma",
-      "fingerprint": "baa0ddadc59fb284b83811f84b84506a6a9a7dd2e25132d382fb826ba864a65f",
+      "fingerprint": "af896fde3e0f1d76dc5d010a585502747c753dc829f10ac71434da18a8c7fa48",
       "impact": "Informational",
       "locations": [
         {
@@ -5131,7 +4116,7 @@
           "kind": "pragma",
           "length": 23,
           "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
           "start": 36,
           "symbol": "0.8.17"
         },
@@ -5139,7 +4124,15 @@
           "kind": "pragma",
           "length": 23,
           "path": "src/execution/ExecutionRouterV2.sol",
-          "source_sha256": "570ee786ac7c902fb08ee6a2d0c0700d7a45cd7865fff92d749172f019b064b8",
+          "source_sha256": "cb1bbf9f2da576ef82950bd075799ce12debc52b3f2fa9389079d402b6537a16",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/ExternalSettlementGate.sol",
+          "source_sha256": "7c937958fa7fdeef181ce66f59c633841cebfe7dbe30eee18b2a955d5e80f861",
           "start": 36,
           "symbol": "0.8.17"
         },
@@ -5204,6 +4197,14 @@
           "length": 23,
           "path": "src/execution/adapters/rfq/RFQV3Types.sol",
           "source_sha256": "286666926bfe656a31b27a5716c3a9a047d8614d05d03432cbdca3dc0020e43e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
           "start": 36,
           "symbol": "0.8.17"
         },
@@ -5340,6 +4341,14 @@
           "length": 23,
           "path": "src/interfaces/execution/IExecutionRouter.sol",
           "source_sha256": "d84e19e88ec55f64a443cdba8a7ed6d9650716f6f0574b39c8481773b8af1dd0",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/IExternalSettlementTarget.sol",
+          "source_sha256": "724a16258637bd192a4b8a11d7d176766f787602e832e1380543a256ff6ade38",
           "start": 36,
           "symbol": "0.8.17"
         },
@@ -5675,6 +4684,1102 @@
     },
     {
       "confidence": "Medium",
+      "description": "HolderCount.onTransfer(address,address,uint256).idTo (src/compliance/elements/HolderCount.sol#217) is a local variable never initialized\n",
+      "detector": "uninitialized-local",
+      "fingerprint": "b1d9cc08838bc00615c3105577b8280bbf660ed79a69575aa4fa8b614a5eb65c",
+      "impact": "Medium",
+      "locations": [
+        {
+          "kind": "variable",
+          "length": 12,
+          "path": "src/compliance/elements/HolderCount.sol",
+          "source_sha256": "6f7d960a8c96fecedc14d36db8d4d6576495cd1ccfaf894af7bee6c90f0edeb9",
+          "start": 10082,
+          "symbol": "idTo"
+        }
+      ]
+    },
+    {
+      "confidence": "High",
+      "description": "Version constraint 0.8.17 contains known severe issues (https://solidity.readthedocs.io/en/latest/bugs.html)\n\t- VerbatimInvalidDeduplication\n\t- FullInlinerNonExpressionSplitArgumentEvaluationOrder\n\t- MissingSideEffectsOnSelectorAccess.\nIt is used by:\n\t- 0.8.17 (script/DeployProductionCore.s.sol#2)\n\t- 0.8.17 (script/ProductionCoreDeployer.sol#2)\n\t- 0.8.17 (src/auth/Governed.sol#2)\n\t- 0.8.17 (src/compliance/ComplianceEngine.sol#2)\n\t- 0.8.17 (src/compliance/ComplianceReporter.sol#2)\n\t- 0.8.17 (src/compliance/asset/Erc3643AssetEnforcement.sol#2)\n\t- 0.8.17 (src/compliance/asset/ReferenceAllowlistAssetEnforcement.sol#2)\n\t- 0.8.17 (src/compliance/elements/AccreditedInvestor.sol#2)\n\t- 0.8.17 (src/compliance/elements/Affiliate.sol#2)\n\t- 0.8.17 (src/compliance/elements/AssetClassification.sol#2)\n\t- 0.8.17 (src/compliance/elements/AssetEnforcementV3.sol#2)\n\t- 0.8.17 (src/compliance/elements/BadActorDisqualification.sol#2)\n\t- 0.8.17 (src/compliance/elements/BaseElement.sol#2)\n\t- 0.8.17 (src/compliance/elements/BaseStatefulElement.sol#2)\n\t- 0.8.17 (src/compliance/elements/BuidlMinimumInvestment.sol#2)\n\t- 0.8.17 (src/compliance/elements/ClaimFreshness.sol#2)\n\t- 0.8.17 (src/compliance/elements/EngineSelection.sol#2)\n\t- 0.8.17 (src/compliance/elements/EngineSelectionV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/EntityEligibility.sol#2)\n\t- 0.8.17 (src/compliance/elements/EquityOwnerLookThrough.sol#2)\n\t- 0.8.17 (src/compliance/elements/Erc3643Native.sol#2)\n\t- 0.8.17 (src/compliance/elements/Erc3643NativeV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/FormDFiling.sol#2)\n\t- 0.8.17 (src/compliance/elements/FraudSurveillance.sol#2)\n\t- 0.8.17 (src/compliance/elements/HolderCount.sol#2)\n\t- 0.8.17 (src/compliance/elements/IdentityUniqueness.sol#2)\n\t- 0.8.17 (src/compliance/elements/IdentityUniquenessV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/Jurisdiction.sol#2)\n\t- 0.8.17 (src/compliance/elements/Lockup.sol#2)\n\t- 0.8.17 (src/compliance/elements/LockupV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/MinimumTradeAmount.sol#2)\n\t- 0.8.17 (src/compliance/elements/OperatorSelfDealing.sol#2)\n\t- 0.8.17 (src/compliance/elements/QualifiedPurchaser.sol#2)\n\t- 0.8.17 (src/compliance/elements/RedFlagKnowledgeBar.sol#2)\n\t- 0.8.17 (src/compliance/elements/RedFlagKnowledgeBarV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/RegMIssuerBuying.sol#2)\n\t- 0.8.17 (src/compliance/elements/Sanctions.sol#2)\n\t- 0.8.17 (src/compliance/elements/SurveillanceFlag.sol#2)\n\t- 0.8.17 (src/compliance/elements/SurveillanceFlagV2.sol#2)\n\t- 0.8.17 (src/compliance/elements/TransferRestrictionMetadata.sol#2)\n\t- 0.8.17 (src/compliance/elements/UsTaxResident.sol#2)\n\t- 0.8.17 (src/compliance/libraries/AssetFlow.sol#2)\n\t- 0.8.17 (src/compliance/libraries/IdentityPolicy.sol#2)\n\t- 0.8.17 (src/compliance/recipes/BaseRecipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/BuidlLikeFundRecipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/Fund3c7Recipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipe.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipeV3.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipeV4.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipeV5.sol#2)\n\t- 0.8.17 (src/compliance/recipes/RegD506cRecipeV6.sol#2)\n\t- 0.8.17 (src/demo/BuidlLikeDemoAsset.sol#2)\n\t- 0.8.17 (src/demo/DemoAmmReferenceRecipe.sol#2)\n\t- 0.8.17 (src/execution/ContextEvidence.sol#2)\n\t- 0.8.17 (src/execution/ExecutionRouter.sol#2)\n\t- 0.8.17 (src/execution/ExecutionRouterBase.sol#2)\n\t- 0.8.17 (src/execution/ExecutionRouterV2.sol#2)\n\t- 0.8.17 (src/execution/ExternalSettlementGate.sol#2)\n\t- 0.8.17 (src/execution/VenueRegistry.sol#2)\n\t- 0.8.17 (src/execution/VenueSelector.sol#2)\n\t- 0.8.17 (src/execution/adapters/amm/UniswapV3Adapter.sol#2)\n\t- 0.8.17 (src/execution/adapters/orderbook/OrderBookAdapter.sol#2)\n\t- 0.8.17 (src/execution/adapters/rfq/RFQAdapter.sol#2)\n\t- 0.8.17 (src/execution/adapters/rfq/RFQAdapterV3.sol#2)\n\t- 0.8.17 (src/execution/adapters/rfq/RFQTypes.sol#2)\n\t- 0.8.17 (src/execution/adapters/rfq/RFQV3Types.sol#2)\n\t- 0.8.17 (src/execution/targets/ReferenceExternalSettlementTarget.sol#2)\n\t- 0.8.17 (src/factory/CornerStoreFactory.sol#2)\n\t- 0.8.17 (src/factory/UniswapV3VenueFactory.sol#2)\n\t- 0.8.17 (src/interfaces/asset/IAssetEnforcement.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IAcquisitionSource.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IComplianceElement.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IComplianceEngine.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IComplianceReporter.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IElementRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IIdentityEvidenceV2.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/ILookThroughSource.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IOperatorRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IRecipe.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/IRecipeRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/compliance/ITokenPolicyRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IExecutionAdapter.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IExecutionContextVerifier.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IExecutionRouter.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IExternalSettlementTarget.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IVenueRegistry.sol#2)\n\t- 0.8.17 (src/interfaces/execution/IVenueSelector.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IAMMAdapter.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IMakerAuthorizer.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IOrderBookAdapter.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IPool.sol#2)\n\t- 0.8.17 (src/interfaces/execution/adapters/IRFQAdapter.sol#2)\n\t- 0.8.17 (src/libraries/DecisionHashLib.sol#2)\n\t- 0.8.17 (src/libraries/Errors.sol#2)\n\t- 0.8.17 (src/libraries/Events.sol#2)\n\t- 0.8.17 (src/libraries/PolicyHashLib.sol#2)\n\t- 0.8.17 (src/libraries/PredicateValidation.sol#2)\n\t- 0.8.17 (src/libraries/ReasonCodes.sol#2)\n\t- 0.8.17 (src/logging/ComplianceLogger.sol#2)\n\t- 0.8.17 (src/logging/ExecutionLogger.sol#2)\n\t- 0.8.17 (src/registry/AttestedAcquisitionSource.sol#2)\n\t- 0.8.17 (src/registry/ElementRegistry.sol#2)\n\t- 0.8.17 (src/registry/MakerAuthorizer.sol#2)\n\t- 0.8.17 (src/registry/OperatorRegistry.sol#2)\n\t- 0.8.17 (src/registry/ProductionElementRegistry.sol#2)\n\t- 0.8.17 (src/registry/RecipeRegistry.sol#2)\n\t- 0.8.17 (src/registry/TokenPolicyRegistry.sol#2)\n\t- 0.8.17 (src/types/ComplianceReportTypes.sol#2)\n\t- 0.8.17 (src/types/ComplianceTypes.sol#2)\n\t- 0.8.17 (src/types/ExecutionTypes.sol#2)\n\t- 0.8.17 (src/types/VenueTypes.sol#2)\n",
+      "detector": "solc-version",
+      "fingerprint": "b2fa66df12aafc9697ec8eaf02573cbfc98fe2c948d5ff17fef4142dbab3867b",
+      "impact": "Informational",
+      "locations": [
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "script/DeployProductionCore.s.sol",
+          "source_sha256": "16a279ab861010c49846ff20bb8299cf2681adae692f2e3d5367fd58dbc88b7f",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "script/ProductionCoreDeployer.sol",
+          "source_sha256": "28b84c01b5f96c64fde5256cac053747c32d77f30778b6293e16954d2940ca1f",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/auth/Governed.sol",
+          "source_sha256": "35edacbc5fff2da62dd1e0941910418bc0f79148cb554e15c066aee54a5625d4",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/ComplianceEngine.sol",
+          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/ComplianceReporter.sol",
+          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/asset/Erc3643AssetEnforcement.sol",
+          "source_sha256": "82eb828b442dce8ee9f3773dcc396c7348b443a2cbc9b071161f37bdff753cac",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/asset/ReferenceAllowlistAssetEnforcement.sol",
+          "source_sha256": "a53f49012bb6732570f7c505b25a5ecec0cdbfe71d89769a5403f8308c0902b1",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/AccreditedInvestor.sol",
+          "source_sha256": "5ccd7b941da5b7cc9d06c1d8b0f617b809893522109aa539e63f08387f252e7a",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/Affiliate.sol",
+          "source_sha256": "e9b27f993758475e3b11d09e5314b80a77d23a3a27a5b5dec3c3bd4bcc37662d",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/AssetClassification.sol",
+          "source_sha256": "24805c834e07ea861f09d320f7ab08484df3b1e1205130e95fcf06fb14637f15",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/AssetEnforcementV3.sol",
+          "source_sha256": "c305d30829cfde0ced7db64e11b390fd8fee99dccd5c47b6b03a9fa5d5588b79",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/BadActorDisqualification.sol",
+          "source_sha256": "debe4609c336f8637baea3904615db63d286e66826bb7276d6bc61b21d889716",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/BaseElement.sol",
+          "source_sha256": "5033db1533f24a51dd0bce276accacee0f98f53009e068440ba95f3e586ba0e8",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/BaseStatefulElement.sol",
+          "source_sha256": "c106fe61bdbe1e3447a5612b6629194462540eb11358fee9e130a751bbea7d2c",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/BuidlMinimumInvestment.sol",
+          "source_sha256": "d9dfd22581fdc91b787a1a3b444d26a9ef20f0537a1b47bc0798dd644230746b",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/ClaimFreshness.sol",
+          "source_sha256": "a440525d57688ae6a26f1c888fd573da5884b0433c45abd59d651cd8de70fef2",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/EngineSelection.sol",
+          "source_sha256": "8c92f355676ff3270d07e9edbec5d4c56902ca6a71d7c75559fa6ffbbd08d2e0",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/EngineSelectionV2.sol",
+          "source_sha256": "25dd9c4d936fe21a1e97243428ed5da05d4fda39e17180f01306ec0de8ca86e1",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/EntityEligibility.sol",
+          "source_sha256": "18b40206e21eb94114b73c3a57cb264e827dcd40fa83c73dfeb0754adad08573",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/EquityOwnerLookThrough.sol",
+          "source_sha256": "738b921f8d5be9693060d4685afb34523b4dd1cc9d8514737037c535ec0c910e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/Erc3643Native.sol",
+          "source_sha256": "f2447ae24b37077888c2deb65fdb13116b8e3c6c3e85b025914995d4d9ef0687",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/Erc3643NativeV2.sol",
+          "source_sha256": "aa492ccabcbfa246662722cf35fc02aeb97ae928deef232775aece20c6e11392",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/FormDFiling.sol",
+          "source_sha256": "ef6d4a1dd02faf6312ee972a9f2c036dedf7d6d636c498126a6f1fc957aa96c0",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/FraudSurveillance.sol",
+          "source_sha256": "a8b069a72eb051ceb96c51e78fc63cf66a178ec5416f0e514930b6a028d64b09",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/HolderCount.sol",
+          "source_sha256": "6f7d960a8c96fecedc14d36db8d4d6576495cd1ccfaf894af7bee6c90f0edeb9",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/IdentityUniqueness.sol",
+          "source_sha256": "2051bbb6131d1eef1548cef7439ffe6c7cd20be5b77e3f085aff32fa79886947",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/IdentityUniquenessV2.sol",
+          "source_sha256": "5be7a92a068bc787ae9ab2cebdbc33897f689d4edb284ef6d96c8b8292c297af",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/Jurisdiction.sol",
+          "source_sha256": "2cc2784c35d0ed1b539552e1c1f18811b55f8d1144625592ae7a50acd5394f9e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/Lockup.sol",
+          "source_sha256": "d5e9b8d0bfc6f341eaf3177dfd2878010244c245d45d1b32fe03b569708f25ce",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/LockupV2.sol",
+          "source_sha256": "f8ecc2aaacf4379dcb2ca3067327f22aa68977ae4bcc879e5e1bf1393b20d5cd",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/MinimumTradeAmount.sol",
+          "source_sha256": "ab257839d7e8ccfb1f0c22cbc5ec2c6abaf202ffedcbd24cd75a7b95bc70c625",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/OperatorSelfDealing.sol",
+          "source_sha256": "5f062f72d5340115c13915ea15a1cdc86a0054633b6912de454dfb248afc0408",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/QualifiedPurchaser.sol",
+          "source_sha256": "596a7750a6a13f64a786ead40ba1aec60dcfcfc5a3dcf8cea9b768569b1d63fb",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/RedFlagKnowledgeBar.sol",
+          "source_sha256": "05ec9bea44ea66a36cdb98d46e36e39dd671385b62b75432d8b1e637ad51ac4c",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/RedFlagKnowledgeBarV2.sol",
+          "source_sha256": "3e8a64fb8e74f278370d6e83ce4d0ffe8ab72d11a299ae55845fb85ebca451fa",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/RegMIssuerBuying.sol",
+          "source_sha256": "2c8b8009575b5ef5243535fb93d481f5ac5facbaf6e6d034b15a884aa890581b",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/Sanctions.sol",
+          "source_sha256": "7f6be491bbda0778c0be2b082eddf9800e5d724f7bf9ae9f581fd27f381675a0",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/SurveillanceFlag.sol",
+          "source_sha256": "cfd4c2304636e8607049a015b1a1e4aea0e5e64406eb073564891aea3f195602",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/SurveillanceFlagV2.sol",
+          "source_sha256": "f201b64a7933fd2ea26d5c3c9344ab0b3be88d02926de7ad7f9cbbf84e2568da",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/TransferRestrictionMetadata.sol",
+          "source_sha256": "bb8a6b3e97ec4f2ec5143ef1d7c261fbd86dde9fbe008c0ef5125d57b7545091",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/elements/UsTaxResident.sol",
+          "source_sha256": "06886509e696735013afe8b0830d5c980635f1b3ce2d266ea47378a8dc155a49",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/libraries/AssetFlow.sol",
+          "source_sha256": "2f657b7f4b9251c44aa1877edac0c417dbbc56147bb9bd23713350bec88ae960",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/libraries/IdentityPolicy.sol",
+          "source_sha256": "13539706f754c3cd6b1521add5c70bcd94898b20c5a5421d062e4a6d9409261e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/recipes/BaseRecipe.sol",
+          "source_sha256": "913fff4b8f40c9f568fab037373326d1ccb8b36e54caf56740f3d3c3eaa05876",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/recipes/BuidlLikeFundRecipe.sol",
+          "source_sha256": "95be574178966006c7e387f56b0506c818cc9dbc049eba5c3e46742975b566e1",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/recipes/Fund3c7Recipe.sol",
+          "source_sha256": "ff580d7ed76e35793e10c77c041691b2bbe93107839351bed7c893c8267ce1ab",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol",
+          "source_sha256": "d3d7b6f0d98c79adeb610b1b581a19643af532c670c4d1c20f9ae6fb267f297b",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/recipes/RegD506cRecipe.sol",
+          "source_sha256": "deafaeea2fd70ff2e3c926c29d2dd37fc301f5af572a563cdcc078334c3ea33e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/recipes/RegD506cRecipeV3.sol",
+          "source_sha256": "08b4f3996c66c14a46515cecc6fbd7fd2e0a3122f1193483106ea8be02e472f4",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/recipes/RegD506cRecipeV4.sol",
+          "source_sha256": "62f3e18d168939b4336197e3ae7ca3a932549b99a70be9b6d0c385e486cc4b0b",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/recipes/RegD506cRecipeV5.sol",
+          "source_sha256": "9e5cc9e93530b70a69f308c23c2b0d35ce8d0ae93ee1b4100405870af80499bd",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/compliance/recipes/RegD506cRecipeV6.sol",
+          "source_sha256": "ad54f7d50ceca92a9277f8ec07fbc860a66d53be61e5a0207edf383e3dc95b5f",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/demo/BuidlLikeDemoAsset.sol",
+          "source_sha256": "cedac3d26ed32d3cf8e38db343ae2d8646d67f4993e68791399490f105864325",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/demo/DemoAmmReferenceRecipe.sol",
+          "source_sha256": "20699b235bbd5128b27e83f49b6518aadc263def94492ca16fb1031e227e86db",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/ContextEvidence.sol",
+          "source_sha256": "78b2a80e29401ae7d636e0c847d5d22758c06c51d060060562afecb112fa0a24",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/ExecutionRouter.sol",
+          "source_sha256": "3e7291bb398ac0bed83a97aa8409333629443e6c1336191db63ecb5f8d750d40",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/ExecutionRouterV2.sol",
+          "source_sha256": "cb1bbf9f2da576ef82950bd075799ce12debc52b3f2fa9389079d402b6537a16",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/ExternalSettlementGate.sol",
+          "source_sha256": "7c937958fa7fdeef181ce66f59c633841cebfe7dbe30eee18b2a955d5e80f861",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/VenueRegistry.sol",
+          "source_sha256": "c13adc5e95757ccdb3b2f2c8a3b01eacc7802ae6799383848132cebd4fac1af6",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/VenueSelector.sol",
+          "source_sha256": "efc8ba9c740ca36b17c9f9bbb39d4ef3d65e9a047a7d284ae3523061dfa2e00a",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/adapters/amm/UniswapV3Adapter.sol",
+          "source_sha256": "7d791c0b834673b962652b1e35982294bf63863d8f58f2168e267653de592e4e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/adapters/orderbook/OrderBookAdapter.sol",
+          "source_sha256": "5bdad11bb58ee1ec4eafdabb117091c08a381bc9196c2f7b598b03eef6aff444",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
+          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/adapters/rfq/RFQAdapterV3.sol",
+          "source_sha256": "9f1486f4af6a3f3e59f082e9edf3530f75f4413e2e21734657d6e9363bc9ddd6",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/adapters/rfq/RFQTypes.sol",
+          "source_sha256": "28a20ba88c8b5c1faa586aec302983139b93a85bc7571c4bd961c5aa1dffd099",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/adapters/rfq/RFQV3Types.sol",
+          "source_sha256": "286666926bfe656a31b27a5716c3a9a047d8614d05d03432cbdca3dc0020e43e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/factory/CornerStoreFactory.sol",
+          "source_sha256": "6fb471bb90b45439e317de7171abdad124a57abf477b4f3c3f488ab3cecfafc1",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/factory/UniswapV3VenueFactory.sol",
+          "source_sha256": "509b506a46214e291f15a3c64ac8c6522cfe5183acd83351426c57714aff5b17",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/asset/IAssetEnforcement.sol",
+          "source_sha256": "e1fd888839b79c7ac0ce16e4a63644046db0bc20f7723856770eda47a0ae498c",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/IAcquisitionSource.sol",
+          "source_sha256": "99bb6da7e5b3512f877887053ee031ec9072c8f194598761dec233544c9d82d7",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/IComplianceElement.sol",
+          "source_sha256": "4f50f0abeac2d4ccafb71ee6413fceb11e56f65a88acb6ecde5f109c70c7847e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/IComplianceEngine.sol",
+          "source_sha256": "12a8052087942b0340069a24147be730aa929ed722e756c9a86d150e098734ef",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/IComplianceReporter.sol",
+          "source_sha256": "29cf7cc5a0e01b403f6289d60d484d7a8ec584ad7c0dbd238ce4bed9a63cef84",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/IElementRegistry.sol",
+          "source_sha256": "a1ed543f6a10e07cb94af85550dea2b344f650b397ec2eb06af5519a5d3103b2",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/IIdentityEvidenceV2.sol",
+          "source_sha256": "3c4a00cb46e48fbad9102f77c117db3643c6703a7d558ed6db7d2e0a82ea5d2b",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/ILookThroughSource.sol",
+          "source_sha256": "4800dbffcb1f4f608dd4a0374ce1c1373ab90ea2d122e89ce27e40dec03b9f82",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/IOperatorRegistry.sol",
+          "source_sha256": "eee915e0974008f7fd6b18e78b700df9fadb30f042b83ab1d799d162c007c55c",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/IRecipe.sol",
+          "source_sha256": "425852326be9e723f170e142d085e4156f261fc30d2601e57862677c048b5801",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/IRecipeRegistry.sol",
+          "source_sha256": "bed2c107d4b5a9d770b25a91c6a5188d9fdda2e5f472789de597e3144806fea4",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/compliance/ITokenPolicyRegistry.sol",
+          "source_sha256": "9719a89423da16a61cd5964e6134543ae37c809f161be6c6124a9c285ec9a03b",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/IExecutionAdapter.sol",
+          "source_sha256": "65cbc6db3881a467e33359d1cac771c055d19b837dd4e3b8f34a750ef519dc6e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/IExecutionContextVerifier.sol",
+          "source_sha256": "170cd9561b6070b1f3d3e5e92ae1f63a0a62fbba76e17b3c1d100570a7f0351c",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/IExecutionRouter.sol",
+          "source_sha256": "d84e19e88ec55f64a443cdba8a7ed6d9650716f6f0574b39c8481773b8af1dd0",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/IExternalSettlementTarget.sol",
+          "source_sha256": "724a16258637bd192a4b8a11d7d176766f787602e832e1380543a256ff6ade38",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/IVenueRegistry.sol",
+          "source_sha256": "ef0308767cd5a058556e92bdc84c72f08b1fee930d28ace66e0b6c61880d89f8",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/IVenueSelector.sol",
+          "source_sha256": "a0ee426ff379f65b5de83904d4866d0e0c967c68e14bbf9fff88e7849332ddb8",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/adapters/IAMMAdapter.sol",
+          "source_sha256": "9f309b92476933ffd67807d5cfb72417d79da546f2b3664870227d15d04dc3c3",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/adapters/IMakerAuthorizer.sol",
+          "source_sha256": "1975ae66ca76963a864528694f13af1785646d52b60d2249a7a5add5bd744019",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/adapters/IOrderBookAdapter.sol",
+          "source_sha256": "e44e41081cf031bec4f706f9a7c07353ddbf68d026ca83380ca76451c9ca8d4b",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/adapters/IPool.sol",
+          "source_sha256": "d555c9f42548a04576571b183848ac59b777a2b17c179f9ecc2ae548d0a6ad12",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/interfaces/execution/adapters/IRFQAdapter.sol",
+          "source_sha256": "d77a8acbc83ab79779d8f4be6b8993ca8ff8dd021a5c3b5259a4bbbf8bbd35ec",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/libraries/DecisionHashLib.sol",
+          "source_sha256": "053fd1460e3fcce2129bace96e8f6ae09824072f56146064dcc6ef4e7f5294bc",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/libraries/Errors.sol",
+          "source_sha256": "7c9085f7fa3c30168c8b5b948916889c01cca919038d92273c2e0cf77a4e8760",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/libraries/Events.sol",
+          "source_sha256": "57fb608d9ca8d940417bcafee9198f944f3f69618f6a1c5b1c777ad05b89be33",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/libraries/PolicyHashLib.sol",
+          "source_sha256": "3223ac48d8b0f4f09ebbc86d04d5de08ba3967a3a88f402a29cf41a273c3391e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/libraries/PredicateValidation.sol",
+          "source_sha256": "af877ba59ec85bb0bab6e982a61185be7f95841e661a70418a6156c23c494d36",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/libraries/ReasonCodes.sol",
+          "source_sha256": "ac2b287e82399ca2d01d9059f9f60caf60aa03f951120160379785091e31a9ed",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/logging/ComplianceLogger.sol",
+          "source_sha256": "45397b40eeccbc76b999efd9ab7fa0861cfeace2ff085f98cc486c99536dd092",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/logging/ExecutionLogger.sol",
+          "source_sha256": "748ce85a320bea22238ce6a0f38c51224a03dd8f2b77ad576d64d20ca5eec3fe",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/registry/AttestedAcquisitionSource.sol",
+          "source_sha256": "f32be23d16c65c1e9efe23745c1ab5d16fe4b8099671d73fffae45768c916478",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/registry/ElementRegistry.sol",
+          "source_sha256": "55ae6d25a14dbf135ca28af22152dbe68cd33a54acc23b1387fc7934516ea1eb",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/registry/MakerAuthorizer.sol",
+          "source_sha256": "51f058084cbeaf8dfceea3fbb88734e7b36d11effcf873c0186ab544b9763d8e",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/registry/OperatorRegistry.sol",
+          "source_sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/registry/ProductionElementRegistry.sol",
+          "source_sha256": "5f5ca1c8f0aa323123d5c4f14c073f11fa9f70ed425dfb081d8cb6c361df7e62",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/registry/RecipeRegistry.sol",
+          "source_sha256": "025055c34cf0a7458d9d573f0cd048d5981fb829aae481328bfa4c7db5a92f35",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/registry/TokenPolicyRegistry.sol",
+          "source_sha256": "48286fe482fb835238a4c8afd9df5f0390a6b369090a916506852b8ab55b02e9",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/types/ComplianceReportTypes.sol",
+          "source_sha256": "a80829ee80043fb8290727324fa26539b4db361ee026dc61f851c9aa56d6d592",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/types/ComplianceTypes.sol",
+          "source_sha256": "66a9164f7e1527681ac689302f9984b27a24e13ac8dccf3e11762964a52b7cd9",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/types/ExecutionTypes.sol",
+          "source_sha256": "0b2f7d1c5bb669a5ce561b051e95aa844475ff68a918b1b33f25566c4bf29c7b",
+          "start": 36,
+          "symbol": "0.8.17"
+        },
+        {
+          "kind": "pragma",
+          "length": 23,
+          "path": "src/types/VenueTypes.sol",
+          "source_sha256": "bbc1e81db845afb8ddd8e4be43a7b1e6ff1a5e585a44b4bb845efaf6c4cfe617",
+          "start": 36,
+          "symbol": "0.8.17"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "Reentrancy in RFQAdapter.execute(ExecutionRequest,ComplianceDecision) (src/execution/adapters/rfq/RFQAdapter.sol#64-84):\n\tExternal calls:\n\t- IERC20(quote.tokenIn).safeTransferFrom(quote.taker,quote.maker,quote.amountIn) (src/execution/adapters/rfq/RFQAdapter.sol#76)\n\t- IERC20(quote.tokenOut).safeTransferFrom(quote.maker,quote.taker,quote.amountOut) (src/execution/adapters/rfq/RFQAdapter.sol#77)\n\tEvent emitted after the call(s):\n\t- RFQFilled(quoteHash,quote.maker,quote.taker,quote.amountIn,quote.amountOut) (src/execution/adapters/rfq/RFQAdapter.sol#79)\n",
+      "detector": "reentrancy-events",
+      "fingerprint": "b48558e67266630c8424af4a7b1e103affdf65802f2336b85fac07e643d5e173",
+      "impact": "Low",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 886,
+          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
+          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
+          "start": 2857,
+          "symbol": "execute"
+        },
+        {
+          "kind": "node",
+          "length": 80,
+          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
+          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
+          "start": 3312,
+          "symbol": "IERC20(quote.tokenIn).safeTransferFrom(quote.taker,quote.maker,quote.amountIn)"
+        },
+        {
+          "kind": "node",
+          "length": 82,
+          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
+          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
+          "start": 3402,
+          "symbol": "IERC20(quote.tokenOut).safeTransferFrom(quote.maker,quote.taker,quote.amountOut)"
+        },
+        {
+          "kind": "node",
+          "length": 84,
+          "path": "src/execution/adapters/rfq/RFQAdapter.sol",
+          "source_sha256": "51550fa367ded65042488d84c42b80adc67c7ceb3118495842671dea114c0674",
+          "start": 3495,
+          "symbol": "RFQFilled(quoteHash,quote.maker,quote.taker,quote.amountIn,quote.amountOut)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "ComplianceEngine._policyHashes(address,ManifestCore,RecipeBinding[]) (src/compliance/ComplianceEngine.sol#576-633) ignores return value by (binding,recipeKey,None) = policyReg.compiledBindingOf(token,i) (src/compliance/ComplianceEngine.sol#606)\n",
+      "detector": "unused-return",
+      "fingerprint": "b53d24ebb5c47d916c3a1d5aa2350d98bcf12d21a840bace6cdd5eb6f0fdf8ee",
+      "impact": "Medium",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 2740,
+          "path": "src/compliance/ComplianceEngine.sol",
+          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
+          "start": 24643,
+          "symbol": "_policyHashes"
+        },
+        {
+          "kind": "node",
+          "length": 90,
+          "path": "src/compliance/ComplianceEngine.sol",
+          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
+          "start": 25812,
+          "symbol": "(binding,recipeKey,None) = policyReg.compiledBindingOf(token,i)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "OperatorRegistry._requireReady(uint64) (src/registry/OperatorRegistry.sol#161-164) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- readyAt == 0 (src/registry/OperatorRegistry.sol#162)\n\t- block.timestamp < readyAt (src/registry/OperatorRegistry.sol#163)\n",
+      "detector": "timestamp",
+      "fingerprint": "b6aa8a58b2accaad35e457774d543359a7cb5d0cce662f942980fe6445c68b70",
+      "impact": "Low",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 205,
+          "path": "src/registry/OperatorRegistry.sol",
+          "source_sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",
+          "start": 6957,
+          "symbol": "_requireReady"
+        },
+        {
+          "kind": "node",
+          "length": 12,
+          "path": "src/registry/OperatorRegistry.sol",
+          "source_sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",
+          "start": 7024,
+          "symbol": "readyAt == 0"
+        },
+        {
+          "kind": "node",
+          "length": 25,
+          "path": "src/registry/OperatorRegistry.sol",
+          "source_sha256": "8d9574229f3285dc3c49009e7dfc474d94437fc2c1eeb62e4f79fe6823c12cda",
+          "start": 7089,
+          "symbol": "block.timestamp < readyAt"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "ComplianceEngine.commit(ComplianceContext) (src/compliance/ComplianceEngine.sol#426-447) has external calls inside a loop: IStatefulElement(element).onTransfer(ctx.buyer,ctx.seller,rwaAmount) (src/compliance/ComplianceEngine.sol#443-444)\n",
+      "detector": "calls-loop",
+      "fingerprint": "b8520b7e696da2c5c42659c9bea2a428d5b694d92bfe150138aee0922e4e3555",
+      "impact": "Low",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 1323,
+          "path": "src/compliance/ComplianceEngine.sol",
+          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
+          "start": 17585,
+          "symbol": "commit"
+        },
+        {
+          "kind": "node",
+          "length": 138,
+          "path": "src/compliance/ComplianceEngine.sol",
+          "source_sha256": "4fc972ff4fd1a6c0c1cfda2a2bedd9129bc0f9f8bb50a8b668e43127d6997ee7",
+          "start": 18739,
+          "symbol": "IStatefulElement(element).onTransfer(ctx.buyer,ctx.seller,rwaAmount)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "ComplianceReporter._applicability(RecipeBinding,bytes) (src/compliance/ComplianceReporter.sol#138-158) has external calls inside a loop: key = recipeReg.recipeKeyOf(binding.recipeId) (src/compliance/ComplianceReporter.sol#143)\n\tCalls stack containing the loop:\n\t\tComplianceReporter.report(ComplianceContext)\n\t\tComplianceReporter._reportToken(ComplianceContext,address,ComplianceReporter.Results)\n\t\tComplianceReporter._reportBinding(ComplianceContext,address,RecipeBinding,uint8,bytes,ComplianceReporter.Results)\n",
+      "detector": "calls-loop",
+      "fingerprint": "b9f8e4c0ae6676e5eeef9d6370500a692fcb6ff1f3f95a29a533d0a1bbeede27",
+      "impact": "Low",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 944,
+          "path": "src/compliance/ComplianceReporter.sol",
+          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
+          "start": 6019,
+          "symbol": "_applicability"
+        },
+        {
+          "kind": "node",
+          "length": 53,
+          "path": "src/compliance/ComplianceReporter.sol",
+          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
+          "start": 6174,
+          "symbol": "key = recipeReg.recipeKeyOf(binding.recipeId)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "ComplianceReporter._check(ComplianceContext,address,bytes32,bytes) (src/compliance/ComplianceReporter.sol#160-178) has external calls inside a loop: element == address(0) || element.codehash != elementReg.runtimeCodeHashOf(id) (src/compliance/ComplianceReporter.sol#166)\n\tCalls stack containing the loop:\n\t\tComplianceReporter.report(ComplianceContext)\n\t\tComplianceReporter._reportToken(ComplianceContext,address,ComplianceReporter.Results)\n\t\tComplianceReporter._reportBinding(ComplianceContext,address,RecipeBinding,uint8,bytes,ComplianceReporter.Results)\n",
+      "detector": "calls-loop",
+      "fingerprint": "ba353319305a2e7419f85d52b6e47a01f3e37ca68824abe8c0901d15a8ec6607",
+      "impact": "Low",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 874,
+          "path": "src/compliance/ComplianceReporter.sol",
+          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
+          "start": 6969,
+          "symbol": "_check"
+        },
+        {
+          "kind": "node",
+          "length": 77,
+          "path": "src/compliance/ComplianceReporter.sol",
+          "source_sha256": "3252464053a13b9a64c6200a8c6fd41e25751e9ae1107890190fde94bf477f12",
+          "start": 7213,
+          "symbol": "element == address(0) || element.codehash != elementReg.runtimeCodeHashOf(id)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
       "description": "QualifiedPurchaser.qp(address) (src/compliance/elements/QualifiedPurchaser.sol#158-160) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- claimOf[user].basis != QpBasis.NONE (src/compliance/elements/QualifiedPurchaser.sol#159)\n",
       "detector": "timestamp",
       "fingerprint": "bce0fbeb30f7d1843598a06e18a1c2f483a596ab2c262458f94e16ec91510aa3",
@@ -5946,31 +6051,6 @@
           "source_sha256": "48286fe482fb835238a4c8afd9df5f0390a6b369090a916506852b8ab55b02e9",
           "start": 31904,
           "symbol": "hasBlockingBinding"
-        }
-      ]
-    },
-    {
-      "confidence": "Medium",
-      "description": "ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- block.timestamp > req.deadline (src/execution/ExecutionRouterBase.sol#42)\n",
-      "detector": "timestamp",
-      "fingerprint": "cbd53c7b4cd6ed0dde8e1ecac59dadb4ffca371ba82ab310126ab4841d8a7e23",
-      "impact": "Low",
-      "locations": [
-        {
-          "kind": "function",
-          "length": 5920,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 1773,
-          "symbol": "execute"
-        },
-        {
-          "kind": "node",
-          "length": 30,
-          "path": "src/execution/ExecutionRouterBase.sol",
-          "source_sha256": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-          "start": 1913,
-          "symbol": "block.timestamp > req.deadline"
         }
       ]
     },
@@ -6609,6 +6689,89 @@
     },
     {
       "confidence": "High",
+      "description": "ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149) has a high cyclomatic complexity (18).\n",
+      "detector": "cyclomatic-complexity",
+      "fingerprint": "e49a4f5a30a9908cd65e76a14baaf4c04a1000dd7d01e7f348f949f40942b9d2",
+      "impact": "Informational",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 5900,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 1773,
+          "symbol": "execute"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "Reentrancy in ReferenceExternalSettlementTarget.settle(ExecutionRequest) (src/execution/targets/ReferenceExternalSettlementTarget.sol#102-110):\n\tExternal calls:\n\t- IERC20(req.context.tokenIn).safeTransferFrom(req.context.buyer,req.context.seller,req.context.amountIn) (src/execution/targets/ReferenceExternalSettlementTarget.sol#105)\n\t- IERC20(req.context.tokenOut).safeTransferFrom(req.context.seller,req.context.buyer,req.context.amountOut) (src/execution/targets/ReferenceExternalSettlementTarget.sol#106)\n\tEvent emitted after the call(s):\n\t- InstructionSettled(instructionId,executionId) (src/execution/targets/ReferenceExternalSettlementTarget.sol#108)\n",
+      "detector": "reentrancy-events",
+      "fingerprint": "e5778045816fe39296a1115382fa44458d18ba6bf65e9b34dea94b24af3b3074",
+      "impact": "Low",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 716,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 4362,
+          "symbol": "settle"
+        },
+        {
+          "kind": "node",
+          "length": 105,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 4612,
+          "symbol": "IERC20(req.context.tokenIn).safeTransferFrom(req.context.buyer,req.context.seller,req.context.amountIn)"
+        },
+        {
+          "kind": "node",
+          "length": 107,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 4727,
+          "symbol": "IERC20(req.context.tokenOut).safeTransferFrom(req.context.seller,req.context.buyer,req.context.amountOut)"
+        },
+        {
+          "kind": "node",
+          "length": 51,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 4952,
+          "symbol": "InstructionSettled(instructionId,executionId)"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "ReferenceExternalSettlementTarget._validate(ExecutionRequest,VenueConfig) (src/execution/targets/ReferenceExternalSettlementTarget.sol#112-133) uses timestamp for comparisons\n\tDangerous comparisons:\n\t- instruction.buyer == address(0) || instructionCancelled[instructionId] || instructionSettled[instructionId] || block.timestamp > instruction.validUntil || ! cfg.active || cfg.adapter != address(this) || cfg.target != address(this) || cfg.venueType != instruction.venueType (src/execution/targets/ReferenceExternalSettlementTarget.sol#121-123)\n",
+      "detector": "timestamp",
+      "fingerprint": "e581fad60b63c3d388535a445152c2b4a4ed50de4e7376d09cc96f89fd330b7d",
+      "impact": "Low",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 1391,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 5084,
+          "symbol": "_validate"
+        },
+        {
+          "kind": "node",
+          "length": 303,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 5482,
+          "symbol": "instruction.buyer == address(0) || instructionCancelled[instructionId] || instructionSettled[instructionId] || block.timestamp > instruction.validUntil || ! cfg.active || cfg.adapter != address(this) || cfg.target != address(this) || cfg.venueType != instruction.venueType"
+        }
+      ]
+    },
+    {
+      "confidence": "High",
       "description": "IdentityPolicy.valid(bytes) (src/compliance/libraries/IdentityPolicy.sol#8-13) uses assembly\n\t- INLINE ASM (src/compliance/libraries/IdentityPolicy.sol#9-12)\n",
       "detector": "assembly",
       "fingerprint": "e8ec2d64fb9dc718fe8b8d031a468b64c1a2a545028b66e164b99dcd05f65642",
@@ -6998,6 +7161,31 @@
       ]
     },
     {
+      "confidence": "High",
+      "description": "ReferenceExternalSettlementTarget.settle(ExecutionRequest) (src/execution/targets/ReferenceExternalSettlementTarget.sol#102-110) uses arbitrary from in transferFrom: IERC20(req.context.tokenOut).safeTransferFrom(req.context.seller,req.context.buyer,req.context.amountOut) (src/execution/targets/ReferenceExternalSettlementTarget.sol#106)\n",
+      "detector": "arbitrary-send-erc20",
+      "fingerprint": "f4f09f4e86d9744dd9f09ebedccb746e2008d590cce68d04f1f7cb00bd70c6e5",
+      "impact": "High",
+      "locations": [
+        {
+          "kind": "function",
+          "length": 716,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 4362,
+          "symbol": "settle"
+        },
+        {
+          "kind": "node",
+          "length": 107,
+          "path": "src/execution/targets/ReferenceExternalSettlementTarget.sol",
+          "source_sha256": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
+          "start": 4727,
+          "symbol": "IERC20(req.context.tokenOut).safeTransferFrom(req.context.seller,req.context.buyer,req.context.amountOut)"
+        }
+      ]
+    },
+    {
       "confidence": "Medium",
       "description": "ComplianceReporter._reportBinding(ComplianceContext,address,RecipeBinding,uint8,bytes,ComplianceReporter.Results).reason (src/compliance/ComplianceReporter.sol#110) is a local variable never initialized\n",
       "detector": "uninitialized-local",
@@ -7078,6 +7266,23 @@
           "source_sha256": "16a279ab861010c49846ff20bb8299cf2681adae692f2e3d5367fd58dbc88b7f",
           "start": 3852,
           "symbol": "vm.serializeBytes32(key,elementRegCodeHash,bytes32(deployed.elementReg.codehash))"
+        }
+      ]
+    },
+    {
+      "confidence": "Medium",
+      "description": "ExecutionRouterBase.execute(ExecutionRequest).regulatedAmount (src/execution/ExecutionRouterBase.sol#80) is a local variable never initialized\n",
+      "detector": "uninitialized-local",
+      "fingerprint": "f75f331fecfe409542016defffdd965125691eac1daf66e3dc93f05fa30a8adb",
+      "impact": "Medium",
+      "locations": [
+        {
+          "kind": "variable",
+          "length": 23,
+          "path": "src/execution/ExecutionRouterBase.sol",
+          "source_sha256": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+          "start": 4247,
+          "symbol": "regulatedAmount"
         }
       ]
     },
@@ -7323,8 +7528,9 @@
     "src/demo/DemoAmmReferenceRecipe.sol": "20699b235bbd5128b27e83f49b6518aadc263def94492ca16fb1031e227e86db",
     "src/execution/ContextEvidence.sol": "78b2a80e29401ae7d636e0c847d5d22758c06c51d060060562afecb112fa0a24",
     "src/execution/ExecutionRouter.sol": "3e7291bb398ac0bed83a97aa8409333629443e6c1336191db63ecb5f8d750d40",
-    "src/execution/ExecutionRouterBase.sol": "0637f9f6376591fc2ac403544e26e203164fa664e0cba12d1ddfb77bbc361086",
-    "src/execution/ExecutionRouterV2.sol": "570ee786ac7c902fb08ee6a2d0c0700d7a45cd7865fff92d749172f019b064b8",
+    "src/execution/ExecutionRouterBase.sol": "c1dc07fd0a4cd5ecf685950aa1233173ba516c395a1acf32f2ee3296cb61db80",
+    "src/execution/ExecutionRouterV2.sol": "cb1bbf9f2da576ef82950bd075799ce12debc52b3f2fa9389079d402b6537a16",
+    "src/execution/ExternalSettlementGate.sol": "7c937958fa7fdeef181ce66f59c633841cebfe7dbe30eee18b2a955d5e80f861",
     "src/execution/VenueRegistry.sol": "c13adc5e95757ccdb3b2f2c8a3b01eacc7802ae6799383848132cebd4fac1af6",
     "src/execution/VenueSelector.sol": "efc8ba9c740ca36b17c9f9bbb39d4ef3d65e9a047a7d284ae3523061dfa2e00a",
     "src/execution/adapters/amm/UniswapV3Adapter.sol": "7d791c0b834673b962652b1e35982294bf63863d8f58f2168e267653de592e4e",
@@ -7333,6 +7539,7 @@
     "src/execution/adapters/rfq/RFQAdapterV3.sol": "9f1486f4af6a3f3e59f082e9edf3530f75f4413e2e21734657d6e9363bc9ddd6",
     "src/execution/adapters/rfq/RFQTypes.sol": "28a20ba88c8b5c1faa586aec302983139b93a85bc7571c4bd961c5aa1dffd099",
     "src/execution/adapters/rfq/RFQV3Types.sol": "286666926bfe656a31b27a5716c3a9a047d8614d05d03432cbdca3dc0020e43e",
+    "src/execution/targets/ReferenceExternalSettlementTarget.sol": "d11eb6fbaef338fcc6b92e8c4d5b34421940954e5f057e130ad4ecef9e400684",
     "src/factory/CornerStoreFactory.sol": "6fb471bb90b45439e317de7171abdad124a57abf477b4f3c3f488ab3cecfafc1",
     "src/factory/UniswapV3VenueFactory.sol": "509b506a46214e291f15a3c64ac8c6522cfe5183acd83351426c57714aff5b17",
     "src/interfaces/asset/IAssetEnforcement.sol": "e1fd888839b79c7ac0ce16e4a63644046db0bc20f7723856770eda47a0ae498c",
@@ -7350,6 +7557,7 @@
     "src/interfaces/execution/IExecutionAdapter.sol": "65cbc6db3881a467e33359d1cac771c055d19b837dd4e3b8f34a750ef519dc6e",
     "src/interfaces/execution/IExecutionContextVerifier.sol": "170cd9561b6070b1f3d3e5e92ae1f63a0a62fbba76e17b3c1d100570a7f0351c",
     "src/interfaces/execution/IExecutionRouter.sol": "d84e19e88ec55f64a443cdba8a7ed6d9650716f6f0574b39c8481773b8af1dd0",
+    "src/interfaces/execution/IExternalSettlementTarget.sol": "724a16258637bd192a4b8a11d7d176766f787602e832e1380543a256ff6ade38",
     "src/interfaces/execution/IVenueRegistry.sol": "ef0308767cd5a058556e92bdc84c72f08b1fee930d28ace66e0b6c61880d89f8",
     "src/interfaces/execution/IVenueSelector.sol": "a0ee426ff379f65b5de83904d4866d0e0c967c68e14bbf9fff88e7849332ddb8",
     "src/interfaces/execution/adapters/IAMMAdapter.sol": "9f309b92476933ffd67807d5cfb72417d79da546f2b3664870227d15d04dc3c3",

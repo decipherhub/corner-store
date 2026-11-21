@@ -3,17 +3,6 @@
   "status": "candidate suppressions; human approval required",
   "suppressions": [
     {
-      "fingerprint": "00c2f90509c3175030b2c32ad9104d5996a33929d11685c09d0a601930324533",
-      "detector": "reentrancy-balance",
-      "impact": "High",
-      "finding": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = IExecutionAdapter(cfg.adapter).execute(req,d) (src/execution/ExecutionRouterBase.sol#102)\n\tBalance read before the call:\n\t- tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#100)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountIn`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenInBefore`",
-      "justification": "ACCEPTED RISK, explicit human sign-off required. The Router-local nonReentrant guard blocks nested execution through this Router, and reference adapters accept only their configured Router. The exact pre/post checks intentionally measure net buyer balances; they rely on truthful standard tokens and reviewed adapters/pools, and do not isolate cross-Router activity or prove intermediate settlement.",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
       "fingerprint": "013797fb326816cd8ea04ce433fb0a12330d219034f732ff7640b016e3ad4d49",
       "detector": "uninitialized-local",
       "impact": "Medium",
@@ -135,6 +124,17 @@
       "status": "pending-human-review"
     },
     {
+      "fingerprint": "2ca0d49531e89bfc80b78e8e52aa3070756a3914621362389935e8e2e6384f93",
+      "detector": "reentrancy-balance",
+      "impact": "High",
+      "finding": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = _executeVenue(req,d,cfg) (src/execution/ExecutionRouterBase.sol#102)\n\t\t- IExecutionAdapter(cfg.adapter).execute(req,decision) (src/execution/ExecutionRouterBase.sol#161)\n\tBalance read before the call:\n\t- tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#101)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountOut`\n\t- realizedAmountOut < req.amountOutMin (src/execution/ExecutionRouterBase.sol#128)\n\t\t- stale variable `realizedAmountOut`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenOutBefore`",
+      "justification": "ACCEPTED RISK, explicit human sign-off required. The Router-local nonReentrant guard blocks nested execution through this Router. Dispatch now goes through the virtual _executeVenue hook: the reference Router still calls its configured IExecutionAdapter, which accepts only its configured Router, and ExternalSettlementGate calls the operator-registered target's settle, which is onlyGate and gate-enforced. The exact pre/post checks intentionally measure net buyer balances; they rely on truthful standard tokens and reviewed adapters, targets and pools, and do not isolate cross-Router activity or prove intermediate settlement.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
       "fingerprint": "2fdb33cf5f3b4e50698d9c9218b2b3814210b51a44494e4930f3d3e17c6c9c76",
       "detector": "unused-return",
       "impact": "Medium",
@@ -217,17 +217,6 @@
       "impact": "Medium",
       "finding": "QualifiedPurchaser._evaluate(address,address) (src/compliance/elements/QualifiedPurchaser.sol#176-226) uses a dangerous strict equality:\n\t- c.basis == QpBasis.FAMILY_COMPANY (src/compliance/elements/QualifiedPurchaser.sol#202)",
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.FAMILY_COMPANY (src/compliance/elements/QualifiedPurchaser.sol#202)",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
-      "fingerprint": "4f8f93fc7d8ac01aae9efc315e4c890bc3fccd819098efc2378589405038a54d",
-      "detector": "uninitialized-local",
-      "impact": "Medium",
-      "finding": "ExecutionRouterBase.execute(ExecutionRequest).regulatedAmount (src/execution/ExecutionRouterBase.sol#80) is a local variable never initialized",
-      "justification": "Each matching token axis assigns amountIn/amountOut. The unmatched-token branch reverts InvalidAmountCapToken before comparing this local.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -333,11 +322,33 @@
       "status": "pending-human-review"
     },
     {
+      "fingerprint": "6d516d4d3f1de883f45d39db4e457bba602d7d1bfadcd3cad75f62f87e934974",
+      "detector": "reentrancy-balance",
+      "impact": "High",
+      "finding": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = _executeVenue(req,d,cfg) (src/execution/ExecutionRouterBase.sol#102)\n\t\t- IExecutionAdapter(cfg.adapter).execute(req,decision) (src/execution/ExecutionRouterBase.sol#161)\n\tBalance read before the call:\n\t- tokenInBefore = IERC20(req.context.tokenIn).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#100)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountIn`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenInBefore`",
+      "justification": "ACCEPTED RISK, explicit human sign-off required. The Router-local nonReentrant guard blocks nested execution through this Router. Dispatch now goes through the virtual _executeVenue hook: the reference Router still calls its configured IExecutionAdapter, which accepts only its configured Router, and ExternalSettlementGate calls the operator-registered target's settle, which is onlyGate and gate-enforced. The exact pre/post checks intentionally measure net buyer balances; they rely on truthful standard tokens and reviewed adapters, targets and pools, and do not isolate cross-Router activity or prove intermediate settlement.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
       "fingerprint": "6e7ac970681a646a5e14415788dfcc6c85e909bdb2e007048d54c0af67ae591d",
       "detector": "incorrect-equality",
       "impact": "Medium",
       "finding": "QualifiedPurchaser._evaluate(address,address) (src/compliance/elements/QualifiedPurchaser.sol#176-226) uses a dangerous strict equality:\n\t- c.basis == QpBasis.TRUST (src/compliance/elements/QualifiedPurchaser.sol#209)",
       "justification": "This comparison selects an explicit QpBasis or LookThroughStatus enum case, after signature/trust/freshness checks. No balance or manipulable timestamp equality gates eligibility. Reviewed predicate: c.basis == QpBasis.TRUST (src/compliance/elements/QualifiedPurchaser.sol#209)",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "714d44d6cb430d4195774e5acb69a19007005993de5b078d20a3088bb3c0cb33",
+      "detector": "unused-return",
+      "impact": "Medium",
+      "finding": "ExecutionRouterV2._beforeEvaluate(ExecutionRequest) (src/execution/ExecutionRouterV2.sol#34-48) ignores return value by ContextEvidence.affiliateEvidenceHash(req.context,policyReg,evidence.affiliateSource) (src/execution/ExecutionRouterV2.sol#46)",
+      "justification": "affiliateEvidenceHash is invoked for its validation/revert behavior before evaluation. RFQAdapterV3 separately compares its returned commitment against the signed quote. RouterV2 does not use a commitment as an authorization result.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -388,6 +399,17 @@
       "status": "pending-human-review"
     },
     {
+      "fingerprint": "7f201a2858acb91c96af509066ce2f1ee07a8496359baf720fc5b13439c876cb",
+      "detector": "arbitrary-send-erc20",
+      "impact": "High",
+      "finding": "ReferenceExternalSettlementTarget.settle(ExecutionRequest) (src/execution/targets/ReferenceExternalSettlementTarget.sol#102-110) uses arbitrary from in transferFrom: IERC20(req.context.tokenIn).safeTransferFrom(req.context.buyer,req.context.seller,req.context.amountIn) (src/execution/targets/ReferenceExternalSettlementTarget.sol#105)",
+      "justification": "The reference target is test-only and settle is onlyGate. The gate authenticates msg.sender to initiator, and _validate binds initiator, buyer, seller, tokens, amounts, venue and flow to an operator-registered one-shot instruction before any transfer. The buyer pull uses the authenticated initiator as payer, and the target must hold the buyer's explicit ERC20 allowance.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
       "fingerprint": "838bfcafadca6b674581563d5a36257daa99225ec5e7b885f3602f02c8c5aa25",
       "detector": "unused-return",
       "impact": "Medium",
@@ -415,28 +437,6 @@
       "impact": "Medium",
       "finding": "DeployProductionCore._writeArtifact(ProductionCoreDeployer.Deployment,address,address,address,bool,bool,string,string,string,string) (script/DeployProductionCore.s.sol#48-96) ignores return value by vm.serializeUint(key,createdAt,block.timestamp) (script/DeployProductionCore.s.sol#67)",
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeUint(key,createdAt,block.timestamp) (script/DeployProductionCore.s.sol#67)",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
-      "fingerprint": "8748d6b6b207e4cef0f6adafb4e8e5dd7446089c9fca4bcb92b41cc6a3b04fb2",
-      "detector": "unused-return",
-      "impact": "Medium",
-      "finding": "ExecutionRouterV2._beforeEvaluate(ExecutionRequest) (src/execution/ExecutionRouterV2.sol#34-48) ignores return value by ContextEvidence.affiliateEvidenceHash(req.context,policyReg,evidence.affiliateSource) (src/execution/ExecutionRouterV2.sol#46)",
-      "justification": "affiliateEvidenceHash is invoked for its validation/revert behavior before evaluation. RFQAdapterV3 separately compares its returned commitment against the signed quote. RouterV2 does not use a commitment as an authorization result.",
-      "reviewer": "Codex source review; human team confirmation pending",
-      "tracking_issue": "#156",
-      "expiry": "2026-12-11",
-      "status": "pending-human-review"
-    },
-    {
-      "fingerprint": "89d718b4c0901f5976bb163f67c855a2e24dedafa11a2e772d084a5adfabc41d",
-      "detector": "reentrancy-balance",
-      "impact": "High",
-      "finding": "Reentrancy in ExecutionRouterBase.execute(ExecutionRequest) (src/execution/ExecutionRouterBase.sol#40-149):\n\tExternal call allowing reentrancy:\n\t- r = IExecutionAdapter(cfg.adapter).execute(req,d) (src/execution/ExecutionRouterBase.sol#102)\n\tBalance read before the call:\n\t- tokenOutBefore = IERC20(req.context.tokenOut).balanceOf(req.context.buyer) (src/execution/ExecutionRouterBase.sol#101)\n\tPossible stale balance used after the call in a condition:\n\t- realizedAmountIn != req.context.amountIn || realizedAmountOut != req.context.amountOut || r.amountOut != realizedAmountOut (src/execution/ExecutionRouterBase.sol#120-121)\n\t\t- stale variable `realizedAmountOut`\n\t- realizedAmountOut < req.amountOutMin (src/execution/ExecutionRouterBase.sol#128)\n\t\t- stale variable `realizedAmountOut`\n\t- tokenInAfter > tokenInBefore || tokenOutAfter < tokenOutBefore (src/execution/ExecutionRouterBase.sol#113)\n\t\t- stale variable `tokenOutBefore`",
-      "justification": "ACCEPTED RISK, explicit human sign-off required. The Router-local nonReentrant guard blocks nested execution through this Router, and reference adapters accept only their configured Router. The exact pre/post checks intentionally measure net buyer balances; they rely on truthful standard tokens and reviewed adapters/pools, and do not isolate cross-Router activity or prove intermediate settlement.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
@@ -894,6 +894,17 @@
       "status": "pending-human-review"
     },
     {
+      "fingerprint": "f4f09f4e86d9744dd9f09ebedccb746e2008d590cce68d04f1f7cb00bd70c6e5",
+      "detector": "arbitrary-send-erc20",
+      "impact": "High",
+      "finding": "ReferenceExternalSettlementTarget.settle(ExecutionRequest) (src/execution/targets/ReferenceExternalSettlementTarget.sol#102-110) uses arbitrary from in transferFrom: IERC20(req.context.tokenOut).safeTransferFrom(req.context.seller,req.context.buyer,req.context.amountOut) (src/execution/targets/ReferenceExternalSettlementTarget.sol#106)",
+      "justification": "ACCEPTED RISK, explicit human sign-off required: the seller-side pull in the reference target is authorized by operator registration of the one-shot instruction (seller, token, amount, venue, expiry) plus the seller's ERC20 allowance to the target, not by a seller signature. The bound is operator trust in registered instructions, onlyGate, one-shot settlement and measured balance checks in the gate. A compromised or careless operator can pull tokens from any seller that approved the target. Reference-only; production venues must bind the seller to their own order store or signed order.",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
       "fingerprint": "f594ad2cf7b9406b303ff9d307509a33df9a6e525f9436bd456e5d791a9a9b74",
       "detector": "uninitialized-local",
       "impact": "Medium",
@@ -921,6 +932,17 @@
       "impact": "Medium",
       "finding": "DeployProductionCore._writeArtifact(ProductionCoreDeployer.Deployment,address,address,address,bool,bool,string,string,string,string) (script/DeployProductionCore.s.sol#48-96) ignores return value by vm.serializeBytes32(key,elementRegCodeHash,bytes32(deployed.elementReg.codehash)) (script/DeployProductionCore.s.sol#84)",
       "justification": "Vm.serialize methods accumulate fields under the same object key; the final serializeBytes32 result is captured and passed to writeJson. Intermediate returned snapshots are deliberately unused. Reviewed call: vm.serializeBytes32(key,elementRegCodeHash,bytes32(deployed.elementReg.codehash)) (script/DeployProductionCore.s.sol#84)",
+      "reviewer": "Codex source review; human team confirmation pending",
+      "tracking_issue": "#156",
+      "expiry": "2026-12-11",
+      "status": "pending-human-review"
+    },
+    {
+      "fingerprint": "f75f331fecfe409542016defffdd965125691eac1daf66e3dc93f05fa30a8adb",
+      "detector": "uninitialized-local",
+      "impact": "Medium",
+      "finding": "ExecutionRouterBase.execute(ExecutionRequest).regulatedAmount (src/execution/ExecutionRouterBase.sol#80) is a local variable never initialized",
+      "justification": "Each matching token axis assigns amountIn/amountOut. The unmatched-token branch reverts InvalidAmountCapToken before comparing this local.",
       "reviewer": "Codex source review; human team confirmation pending",
       "tracking_issue": "#156",
       "expiry": "2026-12-11",
