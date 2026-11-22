@@ -81,9 +81,10 @@ this compatibility adjustment cannot suppress analyzer errors or findings.
 
 Baseline membership grants no suppression. `slither-suppressions.json` separately
 records each candidate medium/high exception, its exact source/function fingerprint,
-severity, rationale, reviewer, issue and expiry. Every current candidate is marked
-`pending-human-review` and therefore fails the gate until a human reviewer changes
-that exact entry to `approved`. The proposed initial review window ends
+severity, rationale, reviewer, issue and expiry. An entry marked
+`pending-human-review` fails the gate until a human reviewer changes that exact
+entry to `approved`. heijiLee approved all 87 current entries on 2026-11-22,
+including five recorded as accepted risk. The initial review window ends
 2026-12-11. An expiry is exclusive: the gate fails on that day. New or upgraded
 medium/high findings, changed fingerprints, stale/duplicate suppressions and
 incomplete review records fail closed. Low/informational findings remain visible.

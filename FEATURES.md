@@ -2554,8 +2554,8 @@ active
   without requiring a user-home SVM installation; invalid overrides fail closed.
 - Active plan: `docs/exec-plans/active/OPS-004-production-assurance-gates.md`.
 - Local results and remaining UNVERIFIED checks are recorded in `PROGRESS.md`.
-  Human approval of Slither suppressions, hosted CI and unavailable Docker checks
-  prevent a passing claim. The public demo and #160's invariant test are untouched.
+  Slither suppressions are human-approved (2026-11-22). Unavailable Docker checks
+  and external release evidence prevent a passing claim. The public demo and #160's invariant test are untouched.
 - Release contract: `docs/release-assurance.md` and
   `docs/release-evidence.v1.template.json`. Actual external audit and recovery
   artifacts remain MISSING; the template is not completed production evidence.

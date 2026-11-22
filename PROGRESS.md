@@ -1,5 +1,20 @@
 # Progress
 
+## 2026-11-22 Session: OPS-004 Human Slither Suppression Approval
+
+OPS-004 remains the sole active feature. heijiLee approved all 87 Slither
+suppression entries on 2026-11-22. Each entry now records `approved` and the
+approving reviewer; fingerprints, detectors, severities, rationales, tracking issue
+and the exclusive 2026-12-11 expiry are unchanged. Five entries are approved as
+accepted risk rather than false positives: the `UniswapV3Adapter` swap callback,
+`Erc3643AssetEnforcement.willAllow`, the two `ExecutionRouterBase.execute` balance
+measurements and the seller leg of `ReferenceExternalSettlementTarget.settle`.
+
+Validation: the real local Slither gate passes with the approved file and the
+gate-harness suite passes 32/32. Container checks and external release evidence
+remain outstanding, and every entry must be re-reviewed before 2026-12-11 or when
+its source fingerprint changes.
+
 ## 2026-11-22 Session: OPS-004 Reconciliation After SDK-008 Merge
 
 OPS-004 remains the sole active feature. `origin/main` advanced with the SDK-008

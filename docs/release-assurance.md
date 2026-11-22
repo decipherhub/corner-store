@@ -100,8 +100,9 @@ or reduced floor is implied. Coverage percentages are not a security proof.
 
 Baseline membership does not suppress a Slither finding. Each medium/high
 suppression binds detector, source/function fingerprint, severity, rationale,
-reviewer, tracking issue and exclusive expiry. The initial reviewer is Codex;
-human confirmation is pending. The initial window expires on 2026-12-11.
+reviewer, tracking issue and exclusive expiry. Codex and Sonnet reviewed the
+sources and heijiLee approved all 87 entries on 2026-11-22. The initial window
+expires on 2026-12-11.
 New/upgraded findings, changed sources, duplicate/stale/expired suppressions,
 partial analysis or analyzer errors fail. Low/informational findings stay visible.
 The hash-checked Slither overload compatibility casts apply only to disposable
@@ -165,7 +166,7 @@ evidence contract adds no new signing system or production transaction authority
 ## Current evidence boundary
 
 Local development measurements are in [PROGRESS.md](../PROGRESS.md). OPS-004
-remains active while human suppression approval and hosted/container verification
-are pending. The template intentionally remains **BLOCKED** with
+remains active while container verification and external release evidence are
+pending. The template intentionally remains **BLOCKED** with
 manual and frozen-release evidence **MISSING**. No external audit, recovery drill,
 hosted required-check configuration or production launch is claimed complete.

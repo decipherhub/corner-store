@@ -527,8 +527,8 @@ scripts/assurance/run.sh e2e-identity
 
 Mutation requires 100% assertion kills for 16 PR or 22 expanded reviewed compiling
 sentinels, with passing mapped baselines. Analyzer baseline membership grants no
-suppression; all 78 current medium/high findings have individual candidate
-rationales but remain `pending-human-review`, with exclusive expiry 2026-12-11.
+suppression; all 87 current medium/high findings have individual rationales
+approved by a human reviewer on 2026-11-22, with exclusive expiry 2026-12-11.
 Source drift, new/upgraded findings, invalid/expired review and incomplete
 analysis fail. All production sources/deployment entry points and 102 Slither
 detectors are required. Retain raw/normalized reports and compatibility casts.
