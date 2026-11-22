@@ -144,6 +144,24 @@ contract RFQAdapterTest is Test {
         req = _request(q, _sign(q, MAKER_PK), routerNonce);
     }
 
+    function test_v2DomainUsesVersionChainAndAdapter() public view {
+        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        bytes32 domain = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256("CornerStoreRFQ"),
+                keccak256("2"),
+                block.chainid,
+                address(adapter)
+            )
+        );
+        bytes32 quoteType = keccak256(
+            "RFQQuote(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,address venue,bytes32 policyId,uint256 nonce,uint64 expiry)"
+        );
+        bytes32 expected = keccak256(abi.encodePacked(hex"1901", domain, keccak256(abi.encode(quoteType, q))));
+        assertEq(adapter.hashQuote(q), expected);
+    }
+
     function test_execute_validSignedQuoteThroughRouter() public {
         (, ExecutionRequest memory req) = _validRequest(1, 1);
 
@@ -165,7 +183,7 @@ contract RFQAdapterTest is Test {
         vm.warp(block.timestamp + makerAuthorizer.AUTHORIZATION_DELAY());
         makerAuthorizer.executeDelegateAuthorization(maker, delegate);
 
-        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        RFQQuote memory q = _quote(1, uint64(vm.getBlockTimestamp() + 1 hours));
         ExecutionRequest memory req = _request(q, _sign(q, DELEGATE_PK), 1);
 
         vm.prank(taker);
@@ -183,7 +201,7 @@ contract RFQAdapterTest is Test {
         vm.warp(block.timestamp + makerAuthorizer.AUTHORIZATION_DELAY());
         makerAuthorizer.executeDelegateAuthorization(maker, delegate);
 
-        RFQQuote memory q = _quote(1, uint64(block.timestamp + 1 hours));
+        RFQQuote memory q = _quote(1, uint64(vm.getBlockTimestamp() + 1 hours));
         ExecutionRequest memory req = _request(q, _sign(q, DELEGATE_PK), 1);
         makerAuthorizer.revokeDelegate(maker, delegate, bytes32("compromised"));
 
@@ -480,5 +498,10 @@ contract RFQAdapterTest is Test {
 
         assertEq(vm.getRecordedLogs().length, 0, "cancelling an already-filled nonce must not emit");
         assertTrue(adapter.usedQuoteNonce(maker, 1), "filled nonce remains used");
+    }
+
+    function test_constructorRejectsMissingAuthorizer() public {
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        new RFQAdapter(MakerAuthorizer(address(0)));
     }
 }

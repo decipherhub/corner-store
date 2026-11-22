@@ -1,0 +1,46 @@
+name: Production assurance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '37 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    uses: ./.github/workflows/assurance-job.yml
+    with:
+      task: coverage
+  slither:
+    uses: ./.github/workflows/assurance-job.yml
+    with:
+      task: slither
+  mutation:
+    uses: ./.github/workflows/assurance-job.yml
+    with:
+      task: mutation
+      deep: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [e2e-buidl, e2e-context, e2e-identity]
+    uses: ./.github/workflows/assurance-job.yml
+    with:
+      task: ${{ matrix.task }}
+  deep-invariants:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/assurance-job.yml
+    with:
+      task: invariants
+      deep: true
+  reg-d:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/assurance-job.yml
+    with:
+      task: e2e-reg-d

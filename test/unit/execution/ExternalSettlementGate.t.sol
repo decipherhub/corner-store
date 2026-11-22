@@ -110,6 +110,8 @@ contract ExternalSettlementGateTest is Test {
     address internal constant VENUE = address(0xA75);
     bytes32 internal constant INSTRUCTION_1 = keccak256("instruction-1");
 
+    event InstructionCancelled(bytes32 indexed instructionId);
+
     function setUp() public {
         vm.warp(200 days);
         venues = new VenueRegistry();
@@ -206,6 +208,142 @@ contract ExternalSettlementGateTest is Test {
         return gate.execute(req);
     }
 
+    function test_targetRejectsZeroDependencies() public {
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        new ReferenceExternalSettlementTarget(address(0), venues);
+        vm.expectRevert(Errors.ZeroAddress.selector);
+        new ReferenceExternalSettlementTarget(address(gate), VenueRegistry(address(0)));
+    }
+
+    function test_registerInstructionRejectsInvalidFields() public {
+        bytes32 id = keccak256("invalid-instruction");
+        ReferenceExternalSettlementTarget.SettlementInstruction memory instruction = target.instructionOf(INSTRUCTION_1);
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        target.registerInstruction(bytes32(0), instruction);
+
+        for (uint256 i; i < 10; ++i) {
+            instruction = target.instructionOf(INSTRUCTION_1);
+            if (i == 0) instruction.buyer = address(0);
+            else if (i == 1) instruction.seller = address(0);
+            else if (i == 2) instruction.tokenIn = address(0);
+            else if (i == 3) instruction.tokenOut = address(0);
+            else if (i == 4) instruction.tokenOut = instruction.tokenIn;
+            else if (i == 5) instruction.amountIn = 0;
+            else if (i == 6) instruction.amountOut = 0;
+            else if (i == 7) instruction.venue = address(0);
+            else if (i == 8) instruction.validUntil = uint64(vm.getBlockTimestamp());
+            else instruction.validUntil = uint64(vm.getBlockTimestamp() - 1);
+            vm.expectRevert(Errors.InvalidExecutionContext.selector);
+            target.registerInstruction(id, instruction);
+            assertEq(target.instructionOf(id).buyer, address(0));
+        }
+    }
+
+    function test_registerInstructionRejectsDuplicateWithoutReplacingInstruction() public {
+        ReferenceExternalSettlementTarget.SettlementInstruction memory instruction = target.instructionOf(INSTRUCTION_1);
+        instruction.amountOut = 201;
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        target.registerInstruction(INSTRUCTION_1, instruction);
+        assertEq(target.instructionOf(INSTRUCTION_1).amountOut, 200);
+    }
+
+    function test_instructionMutationRequiresOperator() public {
+        bytes32 id = keccak256("unauthorized-instruction");
+        ReferenceExternalSettlementTarget.SettlementInstruction memory instruction = target.instructionOf(INSTRUCTION_1);
+        vm.prank(BUYER);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        target.registerInstruction(id, instruction);
+        assertEq(target.instructionOf(id).buyer, address(0));
+
+        vm.prank(SELLER);
+        vm.expectRevert(Errors.NotAuthorized.selector);
+        target.cancelInstruction(INSTRUCTION_1);
+        assertFalse(target.instructionCancelled(INSTRUCTION_1));
+    }
+
+    function test_cancelInstructionEmitsAndRejectsSettlementWithoutConsumingNonce() public {
+        vm.expectEmit(true, false, false, true, address(target));
+        emit InstructionCancelled(INSTRUCTION_1);
+        target.cancelInstruction(INSTRUCTION_1);
+        assertTrue(target.instructionCancelled(INSTRUCTION_1));
+
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        _execute(_request(INSTRUCTION_1, address(tokenOut), 100, 200, 1));
+        assertFalse(target.instructionSettled(INSTRUCTION_1));
+        assertFalse(gate.usedNonce(BUYER, 1));
+        assertEq(engine.commitCount(), 0);
+        assertEq(tokenIn.balanceOf(BUYER), 10_000);
+        assertEq(tokenIn.balanceOf(SELLER), 0);
+        assertEq(tokenOut.balanceOf(BUYER), 0);
+        assertEq(tokenOut.balanceOf(SELLER), 10_000);
+    }
+
+    function test_cancelInstructionRejectsUnknownAndSettledInstructions() public {
+        bytes32 unknownId = keccak256("unknown-instruction");
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        target.cancelInstruction(unknownId);
+        assertFalse(target.instructionCancelled(unknownId));
+
+        _execute(_request(INSTRUCTION_1, address(tokenOut), 100, 200, 1));
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        target.cancelInstruction(INSTRUCTION_1);
+        assertTrue(target.instructionSettled(INSTRUCTION_1));
+        assertFalse(target.instructionCancelled(INSTRUCTION_1));
+    }
+
+    function test_invalidInstructionDataRejectsWithoutConsumingNonce() public {
+        ExecutionRequest memory req = _request(INSTRUCTION_1, address(tokenOut), 100, 200, 1);
+        req.venueData = hex"01";
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        _execute(req);
+        assertFalse(gate.usedNonce(BUYER, 1));
+
+        req.venueData = abi.encode(keccak256("unknown-instruction"));
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        _execute(req);
+        assertFalse(gate.usedNonce(BUYER, 1));
+        assertFalse(target.instructionSettled(INSTRUCTION_1));
+    }
+
+    function test_expiredInstructionRejectsWithoutConsumingNonce() public {
+        vm.warp(uint256(target.instructionOf(INSTRUCTION_1).validUntil) + 1);
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        _execute(_request(INSTRUCTION_1, address(tokenOut), 100, 200, 1));
+        assertFalse(gate.usedNonce(BUYER, 1));
+        assertFalse(target.instructionSettled(INSTRUCTION_1));
+    }
+
+    function test_settledInstructionRejectsFreshNonce() public {
+        _execute(_request(INSTRUCTION_1, address(tokenOut), 100, 200, 1));
+        vm.expectRevert(Errors.InvalidExecutionContext.selector);
+        _execute(_request(INSTRUCTION_1, address(tokenOut), 100, 200, 2));
+        assertFalse(gate.usedNonce(BUYER, 2));
+        assertTrue(target.instructionSettled(INSTRUCTION_1));
+        assertEq(engine.commitCount(), 1);
+        assertEq(tokenIn.balanceOf(BUYER), 9_900);
+        assertEq(tokenOut.balanceOf(BUYER), 200);
+    }
+
+    function test_validateContextRejectsEveryAuthoritativeFieldMismatch() public {
+        VenueConfig memory cfg = venues.venueOf(VENUE);
+        for (uint256 i; i < 11; ++i) {
+            ExecutionRequest memory req = _request(INSTRUCTION_1, address(tokenOut), 100, 200, 1);
+            if (i == 0) req.context.initiator = SELLER;
+            else if (i == 1) req.context.buyer = SELLER;
+            else if (i == 2) req.context.seller = BUYER;
+            else if (i == 3) req.context.tokenIn = address(tokenOut);
+            else if (i == 4) req.context.tokenOut = address(tokenIn);
+            else if (i == 5) req.context.amountIn = 101;
+            else if (i == 6) req.context.amountOut = 201;
+            else if (i == 7) req.context.venue = address(0xBAD);
+            else if (i == 8) req.context.venueType = VenueType.AMM;
+            else if (i == 9) req.context.flowType = FlowType.PRIMARY_DISTRIBUTION;
+            else req.context.sellerIsAffiliate = true;
+            vm.expectRevert(Errors.InvalidExecutionContext.selector);
+            target.validateContext(req, cfg);
+        }
+    }
+
     function test_externalTargetSettlesWithoutExecutionAdapterAndCommitsMeasuredAmounts() public {
         ExecutionResult memory result = _execute(_request(INSTRUCTION_1, address(tokenOut), 100, 200, 1));
         assertEq(result.amountOut, 200);
@@ -282,9 +420,9 @@ contract ExternalSettlementGateTest is Test {
         _execute(_request(INSTRUCTION_1, address(tokenOut), 100, 200, 1));
         assertFalse(gate.usedNonce(BUYER, 1));
 
-        vm.warp(block.timestamp + operators.MIN_UNPAUSE_DELAY());
+        vm.warp(vm.getBlockTimestamp() + operators.MIN_UNPAUSE_DELAY());
         operators.scheduleVenueUnpause(VENUE, keccak256("recover"));
-        vm.warp(block.timestamp + operators.MIN_UNPAUSE_DELAY());
+        vm.warp(vm.getBlockTimestamp() + operators.MIN_UNPAUSE_DELAY());
         operators.executeVenueUnpause(VENUE);
         _execute(_request(INSTRUCTION_1, address(tokenOut), 100, 200, 1));
         vm.expectRevert(Errors.NonceUsed.selector);

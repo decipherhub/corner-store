@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import {execFileSync, spawnSync} from "node:child_process";
+import {createHash} from "node:crypto";
 import {cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync} from "node:fs";
 import {tmpdir} from "node:os";
-import {dirname, join, resolve} from "node:path";
+import {delimiter, dirname, join, resolve} from "node:path";
 import {after, test} from "node:test";
 import {cmdProductionSourceHash, cmdProductionPlan, cmdProductionDeploy, cmdProductionVerify} from "../src/commands";
 import {bindProductionRecord, captureProductionSource, copyProductionSource} from "../../toolkit/src/production-evidence";
@@ -39,6 +40,32 @@ function inConsumer<T>(fn: () => T): T {
   const cwd = process.cwd(); process.chdir(consumer);
   try { return fn(); } finally { process.chdir(cwd); }
 }
+
+test("CLI honors FOUNDRY_SOLC with an empty HOME and rejects invalid overrides without svm fallback", () => {
+  const home = join(root, "empty-home"); mkdirSync(home);
+  const solc = join(root, "pinned-solc");
+  cpSync(process.env.FOUNDRY_SOLC ?? join(repo, ".assurance/tools/solc/solc"), solc);
+  const tools = join(root, "tools"); mkdirSync(tools);
+  const wrong = join(tools, "solc");
+  writeFileSync(wrong, '#!/bin/sh\nprintf "Version: 0.8.18+fixture\\n"\n', {mode: 0o755});
+  const env = {...process.env, HOME: home, FOUNDRY_SOLC: solc, PATH: `${tools}${delimiter}${process.env.PATH}`};
+  const cli = resolve(__dirname, "../src/index.js");
+  const plan = () => spawnSync(process.execPath, [cli, "production-plan", "production.json", "--contracts", contracts], {cwd: consumer, env, encoding: "utf8", maxBuffer: 128 * 1024 * 1024});
+  const selected = plan();
+  assert.equal(selected.status, 0, selected.stderr);
+  assert.equal(JSON.parse(selected.stdout).build.tools.solc.sha256, `sha256:${createHash("sha256").update(readFileSync(solc)).digest("hex")}`);
+  const svm = join(home, ".svm/0.8.17/solc-0.8.17"); mkdirSync(dirname(svm), {recursive: true}); cpSync(solc, svm);
+  for (const override of [wrong, join(home, "missing-solc"), ""]) {
+    env.FOUNDRY_SOLC = override;
+    const rejected = plan();
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /FOUNDRY_SOLC/);
+  }
+  delete (env as NodeJS.ProcessEnv).FOUNDRY_SOLC;
+  const fallback = plan();
+  assert.equal(fallback.status, 0, fallback.stderr);
+  assert.equal(JSON.parse(fallback.stdout).build.tools.solc.sha256, JSON.parse(selected.stdout).build.tools.solc.sha256);
+});
 
 test("CLI source-hash includes versioned manifest and explicit source-only provenance", () => {
   const value = output(() => cmdProductionSourceHash({contracts}));
