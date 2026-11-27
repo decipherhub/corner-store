@@ -47,10 +47,10 @@
   balance/period-volume increase and read-only backend mutation rejection.
 - Operator API, RFQ demo backend and dashboard tests: passed.
 - Existing `buidl-like` and `reg-d` RFQ Anvil E2E profiles: passed.
-- `scripts/check.sh` reached and passed the functional repository/service/E2E
-  gates. Its production-evidence version assertion did not accept the current
-  environment's Forge 1.4 nightly because that gate requires pinned Forge 1.7.1;
-  a complete pinned-toolchain check is therefore not claimed.
+- `scripts/check.sh`: passed with the repository-pinned Foundry 1.7.1 and Node
+  20 toolchain, including 1,261 Foundry tests, service/package checks,
+  clean-project conformance, production dry-run/deploy/verify/recovery and the
+  vendored deploy-v3 suite.
 
 ### State
 

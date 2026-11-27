@@ -338,9 +338,10 @@ canonical Uniswap v3 테스트는 vendored `tools/deploy-v3` 설치물이 준비
 
 DEMO-017 검증에서는 28개 TSV Foundry 테스트, Operator API/RFQ demo
 backend/dashboard 테스트, TSV Router/AMM E2E와 기존 `buidl-like`/`reg-d` RFQ
-E2E가 통과했다. `scripts/check.sh`의 기능 gate도 통과했지만 production-evidence
-version check는 pinned Forge 1.7.1을 요구하고 현재 base environment는 Forge 1.4
-nightly이므로, 이 환경에서 전체 check가 green이라고 기록하지 않는다.
+E2E가 통과했다. repository-pinned Foundry 1.7.1과 Node 20 환경의
+`scripts/check.sh`도 1,261개 Foundry 테스트, service/package, clean-project
+conformance, production dry-run/deploy/verify/recovery와 vendored deploy-v3까지
+전체 통과했다.
 
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패

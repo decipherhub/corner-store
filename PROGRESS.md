@@ -28,10 +28,10 @@ responsibilities and fails closed when the TSV runtime snapshot is unavailable.
 
 Fresh verification passed all 28 TSV Foundry tests, Operator API, RFQ demo backend
 and dashboard tests, the real TSV Router/AMM E2E, and the existing `buidl-like` and
-`reg-d` RFQ Anvil E2E profiles. `scripts/check.sh` passed the functional repository,
-service and E2E gates but its production-evidence assertion requires pinned Forge
-1.7.1 while the current base environment provides Forge 1.4 nightly. A completely
-green pinned-toolchain `scripts/check.sh` run is therefore not claimed.
+`reg-d` RFQ Anvil E2E profiles. `scripts/check.sh` passed with the repository-pinned
+Foundry 1.7.1 and Node 20 toolchain: 1,261 Foundry tests plus the service/package,
+clean-project conformance, production dry-run/deploy/verify/recovery and vendored
+deploy-v3 gates all completed successfully.
 
 Issue #177 still owns HTTPS publication and post-upgrade verification. The feature
 does not encode SEC eligibility, real market data, tier/ADV calculations,
