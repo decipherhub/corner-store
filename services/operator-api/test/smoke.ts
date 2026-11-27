@@ -39,6 +39,18 @@ async function main(): Promise<void> {
     tsvStyleGovernance: "0x0000000000000000000000000000000000000046",
     tsvStyleOperator: "0x0000000000000000000000000000000000000046",
     tsvStyleAuthorityModel: "venue-operator-test-key",
+    tsvStylePeriodVolume: "250000000000000000000",
+    tsvStyleLastSettlement: {
+      transactionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      executionId: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      blockNumber: 42,
+      timestamp: 1795766400,
+      buyer: "0x0000000000000000000000000000000000000047",
+      asset: "tORRN",
+      amount: "250",
+      policyId: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    tsvStyleBlockedProbe: {attemptedAmount: "1", reason: "TSV-VOL period limit exceeded", reverted: true, recordedOnChain: false},
     rwaToken: "0x0000000000000000000000000000000000000044",
     quote: "0x0000000000000000000000000000000000000045",
     poolRwaBalance: "1000000000000000000000"
@@ -83,6 +95,9 @@ async function main(): Promise<void> {
   }
   if (tsvStyle.body.authority.cornerStoreControlsVenue !== false || tsvStyle.body.authority.model !== "venue-operator-test-key") {
     throw new Error("TSV-style authority boundary regression");
+  }
+  if (tsvStyle.body.periodVolume !== "250" || tsvStyle.body.tradeLog.length !== 1 || !tsvStyle.body.blockedProbe.reverted) {
+    throw new Error("TSV-style settlement evidence regression");
   }
   const metrics = await get("/metrics", "test-token");
   if (metrics.status !== 200 || !String(metrics.body).includes("corner_store_operator_requests_total")) throw new Error("metrics regression");

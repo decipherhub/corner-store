@@ -109,15 +109,61 @@ INVESTOR=$(node -p 'require("./deployments/anvil-e2e.json").investor')
 VOLUME=$(node -p 'require("./deployments/anvil-e2e.json").tsvStyleVolumeLimit')
 BEFORE_BALANCE=$(cast call "$RWA" 'balanceOf(address)(uint256)' "$INVESTOR" --rpc-url "$RPC" | awk '{print $1}')
 BEFORE_VOLUME=$(cast call "$VOLUME" 'currentPeriodVolume()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
-node services/cli/dist/cli/src/index.js --rpc "$RPC" --artifact deployments/anvil-e2e.json \
-  --account 1 buy 100 --venue amm >/dev/null
+TRADE_OUTPUT=$(node services/cli/dist/cli/src/index.js --rpc "$RPC" --artifact deployments/anvil-e2e.json \
+  --account 1 buy 250 --venue amm)
+printf '%s\n' "$TRADE_OUTPUT" >/dev/null
 AFTER_BALANCE=$(cast call "$RWA" 'balanceOf(address)(uint256)' "$INVESTOR" --rpc-url "$RPC" | awk '{print $1}')
 AFTER_VOLUME=$(cast call "$VOLUME" 'currentPeriodVolume()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
 node -e '
 const [beforeBalance, afterBalance, beforeVolume, afterVolume] = process.argv.slice(1).map(BigInt);
 if (afterBalance <= beforeBalance || afterVolume <= beforeVolume) process.exit(1);
 ' "$BEFORE_BALANCE" "$AFTER_BALANCE" "$BEFORE_VOLUME" "$AFTER_VOLUME"
-echo "    PASS: recipient balance and TSV period volume increased"
+
+set +e
+BLOCKED_OUTPUT=$(node services/cli/dist/cli/src/index.js --rpc "$RPC" --artifact deployments/anvil-e2e.json \
+  --account 1 buy 1 --venue amm 2>&1)
+BLOCKED_STATUS=$?
+set -e
+if [ "$BLOCKED_STATUS" -eq 0 ]; then
+  echo "ERROR: trade above the TSV demo period limit unexpectedly settled" >&2
+  exit 1
+fi
+POST_BLOCK_BALANCE=$(cast call "$RWA" 'balanceOf(address)(uint256)' "$INVESTOR" --rpc-url "$RPC" | awk '{print $1}')
+POST_BLOCK_VOLUME=$(cast call "$VOLUME" 'currentPeriodVolume()(uint256)' --rpc-url "$RPC" | awk '{print $1}')
+test "$POST_BLOCK_BALANCE" = "$AFTER_BALANCE"
+test "$POST_BLOCK_VOLUME" = "$AFTER_VOLUME"
+
+TX_HASH=$(printf '%s\n' "$TRADE_OUTPUT" | sed -n 's/.*execute: \(0x[0-9a-fA-F]*\).*/\1/p' | head -n 1)
+BLOCK_NUMBER=$(printf '%s\n' "$TRADE_OUTPUT" | sed -n 's/.*(block \([0-9][0-9]*\), status.*/\1/p' | head -n 1)
+ENGINE=$(node -p 'require("./deployments/anvil-e2e.json").engine')
+POLICY_ID=$(cast call "$ENGINE" 'policyHashesOf(address)(bytes32,bytes32,bytes32)' "$RWA" --rpc-url "$RPC" | tail -n 1 | awk '{print $1}')
+BLOCK_TIMESTAMP=$(cast block "$BLOCK_NUMBER" --field timestamp --rpc-url "$RPC" | awk '{print $1}')
+node - "$TX_HASH" "$BLOCK_NUMBER" "$BLOCK_TIMESTAMP" "$INVESTOR" "$POLICY_ID" "$AFTER_VOLUME" <<'NODE'
+const fs = require("fs");
+const [txHash, blockNumber, timestamp, buyer, policyId, periodVolume] = process.argv.slice(2);
+if (!/^0x[0-9a-fA-F]{64}$/.test(txHash || "")) throw Error("missing TSV settlement transaction hash");
+const path = "deployments/anvil-e2e.json";
+const artifact = JSON.parse(fs.readFileSync(path, "utf8"));
+artifact.tsvStylePeriodVolume = periodVolume;
+artifact.tsvStyleLastSettlement = {
+  transactionHash: txHash,
+  executionId: txHash,
+  blockNumber: Number(blockNumber),
+  timestamp: Number(timestamp),
+  buyer,
+  asset: "tORRN",
+  amount: "250",
+  policyId
+};
+artifact.tsvStyleBlockedProbe = {
+  attemptedAmount: "1",
+  reason: "TSV-VOL period limit exceeded",
+  reverted: true,
+  recordedOnChain: false
+};
+fs.writeFileSync(path, `${JSON.stringify(artifact, null, 2)}\n`);
+NODE
+echo "    PASS: exact period limit settled; the next trade reverted without asset movement"
 
 echo "==> Starting read-only evidence backend"
 npm run build --prefix services/rfq-demo-backend >/dev/null

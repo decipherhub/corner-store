@@ -103,6 +103,17 @@ export function createOperatorApi(options: OperatorApiOptions): Server {
 
 function tsvStyleSnapshot(artifact: any): Record<string, unknown> {
   if (!artifact?.tsvStyleEnabled) return {enabled: false, source: "not-configured"};
+  const settlement = artifact.tsvStyleLastSettlement;
+  const tradeLog = settlement ? [{
+    executionId: settlement.executionId,
+    transactionHash: settlement.transactionHash,
+    blockNumber: settlement.blockNumber,
+    timestamp: settlement.timestamp,
+    buyer: settlement.buyer,
+    asset: settlement.asset,
+    amount: settlement.amount,
+    policyId: settlement.policyId
+  }] : [];
   return {
     enabled: true,
     source: "deployment-artifact",
@@ -123,9 +134,11 @@ function tsvStyleSnapshot(artifact: any): Record<string, unknown> {
     },
     quoteAsset: {name: "Demo USD", symbol: "qUSD", address: artifact.quote},
     liquidity: undefined,
-    periodVolume: undefined,
+    periodVolume: formatWholeTokens(artifact.tsvStylePeriodVolume, 18),
     periodLimit: formatWholeTokens(artifact.tsvStylePeriodLimit, 18),
-    tradeLog: [],
+    settlement,
+    blockedProbe: artifact.tsvStyleBlockedProbe,
+    tradeLog,
     evidence: {
       recipeRegistered: Number(artifact.tsvStyleRecipeId) === 40,
       identityEvidence: artifact.tsvStyleIdentityEvidence,

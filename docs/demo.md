@@ -43,17 +43,25 @@ scripts/e2e-tsv-style.sh
 scripts/demo.sh --profile tsv-style
 ```
 
-`scripts/e2e-tsv-style.sh` deploys the dedicated profile, executes one real
-`Router -> AMM` settlement, verifies the recipient balance and period-volume
-counter, and starts the backend in read-only mode long enough to prove mutation
-is rejected. `scripts/demo.sh --profile tsv-style` keeps the same loopback-only
-boundary and adds the Operator API and dashboard.
+`scripts/e2e-tsv-style.sh` deploys the dedicated profile, settles exactly the
+250-share demo-period limit, then proves the next trade reverts without changing
+the recipient balance or period-volume counter. It stores the successful
+transaction hash, block, policy id and measured volume as local demo evidence and
+starts the backend in read-only mode long enough to prove mutation is rejected.
+`scripts/demo.sh --profile tsv-style` keeps the same loopback-only boundary and
+adds the Operator API and dashboard.
 
 The dashboard uses only the `/api/v1/tsv-style` runtime snapshot for live Venue B
 evidence. If the snapshot is missing or mismatched, it displays an unavailable
 state and disables actions. It never substitutes presentation fixtures for live
 settlement evidence. Venue A/RFQ remains a separate `buidl-like` or `reg-d`
 deployment rather than a second active venue inside the TSV profile.
+
+The role selector exposes the four approved presentation scenes: Venue onboarding
+(STEP 8), Tokenizer asset-path comparison and D020 pool rejection (STEP 9),
+Investor successful-settlement receipt (STEP 10), and Venue limits/stoppages
+(STEP 11). The rejected follow-up is labelled runner evidence because a reverted
+transaction does not create an on-chain decision record.
 
 ## How To Run
 

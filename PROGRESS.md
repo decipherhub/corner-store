@@ -46,6 +46,16 @@ venue operator. The production boundary remains venue-owned with no Corner Store
 control key. Uniswap v4 `beforeSwap` hook integration is explicitly deferred until
 after GASOK; the current demo remains on its existing reference AMM path.
 
+The STEP 8–11 visual delivery is now connected to fresh runtime evidence rather
+than static fixture claims. The runner settles exactly 250 tORRN, confirms that a
+follow-up order reverts without changing balances or the volume counter, and writes
+the successful transaction/policy/block evidence into the local artifact. The
+Operator API exposes that receipt read-only. The dashboard now presents venue
+onboarding, asset-path comparison and pool-binding rejection, an Investor receipt,
+and limits/stoppages with explicit operator/Corner Store/engine ownership. A real
+Chrome run passed all four desktop scenes and the 390×844 receipt layout with no
+horizontal overflow, console errors or page errors.
+
 ## 2026-11-21 Session: SDK-008 External Settlement Gate and OMS Precheck
 
 SDK-008 is passing. Existing ATS/OMS deployments can now use a dedicated

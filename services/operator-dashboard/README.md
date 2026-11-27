@@ -101,7 +101,9 @@ existing Investor or Admin behavior:
   enforcement, Maker and trade-log views and links to the external settlement
   gate integration contract.
 - **Venue B · TSV-style operator** shows the illustrative AMM onboarding, pool,
-  limits/halt and trade-log views. The UI reads optional `tsvStyle` fields from
+  limits/halt and trade-log views. Its STEP 8–11 flow also includes the Tokenizer
+  asset-path comparison and a read-only Investor settlement receipt. The UI reads
+  optional `tsvStyle` fields from
   `/demo/state`; when that runtime payload is absent it says `Runtime not
   connected`, leaves controls disabled and never presents fixture values as live
   settlement evidence.
@@ -117,6 +119,10 @@ operator owns deployment, governance, parameter, fee and pause authority; Corner
 Store supplies rule-check code and settled-trade policy records and retains no
 venue control key. Blocked attempts revert with a reason code and are not shown as
 fabricated on-chain decision records.
+
+The local TSV runner fills the exact 250-share demo limit and verifies that the
+next order reverts without asset or counter movement. Only the successful fill is
+shown as settlement evidence; the failed probe is labelled as runner evidence.
 
 The selector also exposes a **Tokenizer · issuer / transfer agent** presentation.
 It reuses the current demo asset, investor-record and holder-balance evidence

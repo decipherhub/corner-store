@@ -35,6 +35,11 @@
   addresses; Corner Store retains no deployment, owner/operator, upgrade, pause,
   fee or parameter-setting key. A venue-owned Uniswap v4 `beforeSwap` hook remains
   a post-GASOK integration item rather than a claim of this v3-shaped demo.
+- The STEP 8–11 presentation is backed by the same local run: Venue onboarding
+  shows the rule-set/authority split, Tokenizer compares RFQ-only and AMM paths,
+  Investor shows a successful-settlement receipt, and Venue limits shows the
+  exact-limit settlement plus a reverted follow-up attempt. Reverted evidence is
+  explicitly runner evidence and is not presented as an on-chain decision record.
 - This feature does not determine eligibility under an SEC exemption. Real market
   data, tier/ADV calculations, affiliated-venue aggregation, public trade
   reporting, primary-market halt feeds, books/records and external hosting remain
@@ -48,9 +53,12 @@
   13/13 passed.
 - Other Foundry integration suites: 131 passed.
 - `forge fmt --check` for the touched Solidity files and `git diff --check`: passed.
-- `scripts/e2e-tsv-style.sh`: passed a real `Router -> AMM` settlement, recipient
-  balance/period-volume increase and read-only backend mutation rejection.
+- `scripts/e2e-tsv-style.sh`: passed a real `Router -> AMM` settlement at the
+  exact 250-share demo limit, rejected the next trade without asset movement,
+  persisted the settlement receipt and proved read-only backend mutation rejection.
 - Operator API, RFQ demo backend and dashboard tests: passed.
+- Headless Chrome at 1440×900 and 390×844: STEP 8–11 roles, receipt, limit/revert
+  evidence, responsive layout and zero console/page errors passed.
 - Existing `buidl-like` and `reg-d` RFQ Anvil E2E profiles: passed.
 - `scripts/check.sh`: passed with the repository-pinned Foundry 1.7.1 and Node
   20 toolchain, including 1,261 Foundry tests, service/package checks,
