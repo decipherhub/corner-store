@@ -89,10 +89,45 @@ export function createOperatorApi(options: OperatorApiOptions): Server {
     if (path === "/metrics") return sendMetrics(res, metrics.requests, metrics.unauthorized, index.list().length);
     if (path === "/api/v1/config") return send(res, 200, sanitizeConfig(config));
     if (path === "/api/v1/deployment") return send(res, 200, artifact ?? {configured: false});
+    if (path === "/api/v1/tsv-style") return send(res, 200, tsvStyleSnapshot(artifact));
     if (path === "/api/v1/manifest") return send(res, 200, manifest ?? {configured: false});
     if (path === "/api/v1/events") return send(res, 200, {events: index.list(), source: options.eventsPath ? "file-index" : "in-memory-index"});
     return send(res, 404, {error: "not found"});
   });
+}
+
+function tsvStyleSnapshot(artifact: any): Record<string, unknown> {
+  if (!artifact?.tsvStyleEnabled) return {enabled: false, source: "not-configured"};
+  return {
+    enabled: true,
+    source: "deployment-artifact",
+    readOnly: true,
+    executionEnabled: false,
+    venue: artifact.tsvStyleVenue,
+    recipe: {id: artifact.tsvStyleRecipeId, version: artifact.tsvStyleRecipeVersion},
+    asset: {
+      name: "Demo Tokenized Listed Stock",
+      symbol: "tDLS",
+      address: artifact.rwaToken
+    },
+    quoteAsset: {name: "Demo USD", symbol: "qUSD", address: artifact.quote},
+    liquidity: undefined,
+    periodVolume: undefined,
+    periodLimit: formatWholeTokens(artifact.tsvStylePeriodLimit, 18),
+    tradeLog: [],
+    evidence: {
+      recipeRegistered: Number(artifact.tsvStyleRecipeId) === 40,
+      identityEvidence: artifact.tsvStyleIdentityEvidence,
+      pairedAssetElement: artifact.tsvStylePairedAssetElement,
+      volumeLimitElement: artifact.tsvStyleVolumeLimit
+    }
+  };
+}
+
+function formatWholeTokens(value: unknown, decimals: number): string | undefined {
+  if (typeof value !== "string" && typeof value !== "number") return undefined;
+  const raw = BigInt(value);
+  return String(raw / (10n ** BigInt(decimals)));
 }
 
 function authorized(req: IncomingMessage, expected: string): boolean {

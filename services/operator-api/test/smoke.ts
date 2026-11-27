@@ -20,7 +20,21 @@ async function main(): Promise<void> {
   writeFileSync(manifestPath, JSON.stringify({configured: true, status: 2, version: 1, recipeBindingCount: 2}));
   const index = new EventIndex();
   index.add({blockNumber: 2, transactionHash: "0xabc", name: "ManifestActivated", args: {token: "0x1"}});
-  const server = createOperatorApi({configPath, manifestPath, index, authToken: "test-token"});
+  const artifactPath = join(dir, "demo-artifact.json");
+  writeFileSync(artifactPath, JSON.stringify({
+    tsvStyleEnabled: true,
+    tsvStyleVenue: "0x0000000000000000000000000000000000000040",
+    tsvStyleRecipeId: 40,
+    tsvStyleRecipeVersion: 1,
+    tsvStylePeriodLimit: "250000000000000000000",
+    tsvStyleIdentityEvidence: "0x0000000000000000000000000000000000000041",
+    tsvStylePairedAssetElement: "0x0000000000000000000000000000000000000042",
+    tsvStyleVolumeLimit: "0x0000000000000000000000000000000000000043",
+    rwaToken: "0x0000000000000000000000000000000000000044",
+    quote: "0x0000000000000000000000000000000000000045",
+    poolRwaBalance: "1000000000000000000000"
+  }));
+  const server = createOperatorApi({configPath, artifactPath, manifestPath, index, authToken: "test-token"});
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("operator API did not bind");
@@ -46,6 +60,10 @@ async function main(): Promise<void> {
   if (events.body.events.length !== 1) throw new Error("event index regression");
   const manifest = await get("/api/v1/manifest", "test-token");
   if (manifest.body.status !== 2 || manifest.body.recipeBindingCount !== 2) throw new Error("manifest snapshot regression");
+  const tsvStyle = await get("/api/v1/tsv-style", "test-token");
+  if (!tsvStyle.body.enabled || tsvStyle.body.recipe.id !== 40 || tsvStyle.body.executionEnabled !== false) {
+    throw new Error("TSV-style read-only snapshot regression");
+  }
   const metrics = await get("/metrics", "test-token");
   if (metrics.status !== 200 || !String(metrics.body).includes("corner_store_operator_requests_total")) throw new Error("metrics regression");
   await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -73,7 +91,7 @@ async function main(): Promise<void> {
 }
 
 async function productionRuntimeSmoke(dir: string, configPath: string, manifestPath: string): Promise<void> {
-  const artifactPath = join(dir, "artifact.json");
+  const artifactPath = join(dir, "production-artifact.json");
   const eventsPath = join(dir, "production-events.json");
   const tokenPath = join(dir, "operator-token");
   const secret = "operator-secret-token-that-is-long-enough";

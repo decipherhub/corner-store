@@ -21,6 +21,7 @@ import {MinimumTradeAmount} from "../src/compliance/elements/MinimumTradeAmount.
 import {SurveillanceFlagV2} from "../src/compliance/elements/SurveillanceFlagV2.sol";
 import {Jurisdiction} from "../src/compliance/elements/Jurisdiction.sol";
 import {IdentityUniqueness} from "../src/compliance/elements/IdentityUniqueness.sol";
+import {IdentityUniquenessV2} from "../src/compliance/elements/IdentityUniquenessV2.sol";
 import {UsTaxResident} from "../src/compliance/elements/UsTaxResident.sol";
 import {AssetClassification} from "../src/compliance/elements/AssetClassification.sol";
 import {Erc3643NativeV2} from "../src/compliance/elements/Erc3643NativeV2.sol";
@@ -36,6 +37,10 @@ import {
 } from "../src/compliance/recipes/QualifiedPurchaserMinimumAmountRecipe.sol";
 import {BuidlLikeDemoAsset} from "../src/demo/BuidlLikeDemoAsset.sol";
 import {DemoAmmReferenceRecipe} from "../src/demo/DemoAmmReferenceRecipe.sol";
+import {PairedAssetRestriction} from "../src/demo/tsv/PairedAssetRestriction.sol";
+import {VenueVolumeLimit} from "../src/demo/tsv/VenueVolumeLimit.sol";
+import {TsvStyleReferenceRecipe} from "../src/demo/tsv/TsvStyleReferenceRecipe.sol";
+import {IIdentityEvidenceV2} from "../src/interfaces/compliance/IIdentityEvidenceV2.sol";
 
 import {ExecutionRouter} from "../src/execution/ExecutionRouter.sol";
 import {VenueRegistry} from "../src/execution/VenueRegistry.sol";
@@ -51,7 +56,16 @@ import {IVenueRegistry} from "../src/interfaces/execution/IVenueRegistry.sol";
 import {MockERC20} from "../test/mocks/MockERC20.sol";
 import {MockPool} from "../test/mocks/MockPool.sol";
 
-import {VenueType, EnforcementAction} from "../src/types/ComplianceTypes.sol";
+import {
+    ElementPolicyParameter,
+    EnforcementAction,
+    ManifestCore,
+    ManifestPolicyConfig,
+    PolicyStatus,
+    RecipeBinding,
+    RecipeBindingMode,
+    VenueType
+} from "../src/types/ComplianceTypes.sol";
 import {VenueConfig, CustodyModel} from "../src/types/VenueTypes.sol";
 import {DemoConstants} from "./DemoConstants.sol";
 import {ProductionCoreDeployer} from "./ProductionCoreDeployer.sol";
@@ -96,6 +110,9 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
     LockupV2 internal lockup;
     AttestedAcquisitionSource internal acqSource;
     QualifiedPurchaser internal qualifiedPurchaser;
+    IdentityUniquenessV2 internal tsvIdentityEvidence;
+    PairedAssetRestriction internal tsvPairedAsset;
+    VenueVolumeLimit internal tsvVolumeLimit;
 
     ExecutionRouter internal router;
     VenueRegistry internal venueReg;
@@ -110,6 +127,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
     string internal assetProfile;
     bool internal useBuidlLikeProfile;
     bool internal useRegDV5Profile;
+    bool internal useTsvStyleProfile;
     uint256 internal deployerAccount;
     uint256 internal investorAccount;
     uint256 internal makerAccount;
@@ -125,6 +143,12 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
     bool internal eligibleInvestorBInitialQp;
     bool internal ineligibleInvestorInitialQp;
     bytes32 internal scenarioHash;
+
+    uint16 internal constant TSV_STYLE_RECIPE_ID = 40;
+    uint16 internal constant TSV_STYLE_RECIPE_VERSION = 1;
+    uint256 internal constant TSV_STYLE_PERIOD_LIMIT = 250 ether;
+    bytes32 internal constant TSV_IDENTITY_ISSUER = keccak256("demo-tsv-identity-issuer");
+    bytes32 internal constant TSV_IDENTITY_BASIS = keccak256("demo-tsv-identity-delegation");
 
     // vm.parseJson encodes object fields in lexicographic key order.
     struct ScenarioWallet {
@@ -153,9 +177,10 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         bytes32 profileHash = keccak256(bytes(assetProfile));
         useBuidlLikeProfile = profileHash == keccak256("buidl-like");
         useRegDV5Profile = profileHash == keccak256("reg-d-v5");
+        useTsvStyleProfile = profileHash == keccak256("tsv-style");
         require(
-            useBuidlLikeProfile || useRegDV5Profile || profileHash == keccak256("reg-d"),
-            "ASSET_PROFILE must be buidl-like, reg-d or reg-d-v5"
+            useBuidlLikeProfile || useRegDV5Profile || useTsvStyleProfile || profileHash == keccak256("reg-d"),
+            "ASSET_PROFILE must be buidl-like, reg-d, reg-d-v5 or tsv-style"
         );
 
         vm.startBroadcast(deployerPk);
@@ -163,6 +188,8 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         // 1. REAL ERC-3643 (T-REX) + OnchainID, admin = deployer.
         if (useBuidlLikeProfile) {
             deployTREX(deployer, BuidlLikeDemoAsset.TOKEN_NAME, BuidlLikeDemoAsset.TOKEN_SYMBOL);
+        } else if (useTsvStyleProfile) {
+            deployTREX(deployer, "Demo Tokenized Listed Stock", "tDLS");
         } else {
             deployTREX(deployer);
         }
@@ -196,6 +223,16 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         recipeReg.registerRecipe(
             AMM_REFERENCE_RECIPE_ID, AMM_REFERENCE_RECIPE_VERSION, address(new DemoAmmReferenceRecipe())
         );
+        if (useTsvStyleProfile) {
+            TsvStyleReferenceRecipe tsvRecipe = new TsvStyleReferenceRecipe();
+            recipeReg.registerRecipe(
+                tsvRecipe.ALIAS_HASH(),
+                recipeReg.deriveRecipeKey(tsvRecipe.ALIAS_HASH()),
+                TSV_STYLE_RECIPE_ID,
+                TSV_STYLE_RECIPE_VERSION,
+                address(tsvRecipe)
+            );
+        }
         recipeReg.registerRecipe(SURVEIL_RECIPE_ID, SURVEIL_RECIPE_VERSION, address(new DemoSurveillanceRecipe()));
 
         // 5. Demo-only onboarding helper. The core registries, engine, router
@@ -270,6 +307,11 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         policyReg.setOperator(deployer, true);
         policyReg.transferOwnership(address(factory));
         venueReg.transferOwnership(address(factory));
+
+        // The TSV-style profile is intentionally self-onboarding: unlike the
+        // RFQ stakeholder walkthrough it has no mutable scenario runner. The
+        // resulting artifact is a read-only, demonstrably deployed pool policy.
+        if (useTsvStyleProfile) _onboardTsvStyle(deployer, investor, eligibleInvestorB);
 
         vm.stopBroadcast();
 
@@ -402,6 +444,93 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
                 bytes32("A-12-v2"), address(new RedFlagKnowledgeBarV2()), EnforcementAction.FLAG_ONLY
             );
         }
+        if (useTsvStyleProfile) {
+            tsvIdentityEvidence = new IdentityUniquenessV2();
+            tsvPairedAsset = new PairedAssetRestriction();
+            tsvVolumeLimit = new VenueVolumeLimit();
+            tsvVolumeLimit.setEngine(address(engine));
+            tsvIdentityEvidence.setTrustedIssuer(TSV_IDENTITY_ISSUER, TSV_IDENTITY_BASIS);
+            elementReg.registerElement(bytes32("A-04-v2"), address(tsvIdentityEvidence));
+            elementReg.registerElement(bytes32("TSV-PAIR-v1"), address(tsvPairedAsset));
+            elementReg.registerElement(bytes32("TSV-VOL-v1"), address(tsvVolumeLimit));
+        }
+    }
+
+    function _onboardTsvStyle(address venueOperator, address investor, address secondInvestor) internal {
+        ManifestCore memory manifest;
+        manifest.status = PolicyStatus.ACTIVE;
+        manifest.supportedEngines = ENGINES_AMM;
+        manifest.fullManifestHash =
+            keccak256(abi.encode("corner-store.demo.tsv-style.v1", address(quote), TSV_STYLE_PERIOD_LIMIT));
+
+        RecipeBinding[] memory bindings = new RecipeBinding[](1);
+        bindings[0] =
+            RecipeBinding(TSV_STYLE_RECIPE_ID, TSV_STYLE_RECIPE_VERSION, RecipeBindingMode.REQUIRED_BLOCKING, 0, 100);
+
+        ManifestPolicyConfig memory config;
+        config.schemaVersion = 3;
+        config.elementParameters = new ElementPolicyParameter[](3);
+        config.elementParameters[0] = ElementPolicyParameter({
+            bindingIndex: 0,
+            elementId: bytes32("A-04-v2"),
+            schemaId: tsvIdentityEvidence.PARAMETER_SCHEMA_ID(),
+            schemaVersion: 1,
+            parameters: abi.encode(uint8(2), uint8(1)) // TSV / DIRECT
+        });
+        config.elementParameters[1] = ElementPolicyParameter({
+            bindingIndex: 0,
+            elementId: bytes32("TSV-PAIR-v1"),
+            schemaId: tsvPairedAsset.PARAMETER_SCHEMA_ID(),
+            schemaVersion: 1,
+            parameters: abi.encode(
+                address(quote), uint8(PairedAssetRestriction.PairedAssetCategory.NON_SECURITY_CRYPTO_ASSET)
+            )
+        });
+        config.elementParameters[2] = ElementPolicyParameter({
+            bindingIndex: 0,
+            elementId: bytes32("TSV-VOL-v1"),
+            schemaId: tsvVolumeLimit.PARAMETER_SCHEMA_ID(),
+            schemaVersion: 1,
+            parameters: abi.encode(TSV_STYLE_PERIOD_LIMIT)
+        });
+
+        factory.registerRWATokenWithConfig(
+            address(rwaToken),
+            manifest,
+            bindings,
+            config,
+            address(pool),
+            VenueConfig({
+                venueType: VenueType.AMM,
+                adapter: address(ammAdapter),
+                target: address(pool),
+                operator: venueOperator,
+                custody: CustodyModel.POOL,
+                active: true
+            })
+        );
+        _admitTsvParticipant(investor);
+        _admitTsvParticipant(secondInvestor);
+    }
+
+    function _admitTsvParticipant(address participant) internal {
+        bytes32 identityId = keccak256(abi.encode("demo-tsv-participant", participant));
+        uint64 issuedAt = uint64(block.timestamp);
+        uint64 expiresAt = issuedAt + 7 days;
+        tsvIdentityEvidence.bindIdentity(participant, identityId);
+        tsvIdentityEvidence.acceptEvidence(
+            participant,
+            address(rwaToken),
+            IIdentityEvidenceV2.Evidence({
+                identityId: identityId,
+                issuerId: TSV_IDENTITY_ISSUER,
+                trustBasisHash: TSV_IDENTITY_BASIS,
+                evidenceHash: keccak256(abi.encode("demo-tsv-evidence", participant, expiresAt)),
+                issuedAt: issuedAt,
+                expiresAt: expiresAt,
+                attestationType: 3
+            })
+        );
     }
 
     /// @dev Full investor-side engine attestations for the 9-element recipe.
@@ -455,6 +584,7 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         vm.serializeAddress(k, "rwaToken", address(rwaToken));
         vm.serializeAddress(k, "quote", address(quote));
         vm.serializeAddress(k, "pool", address(pool));
+        vm.serializeUint(k, "poolRwaBalance", poolRwaBalance);
         vm.serializeAddress(k, "rfqVenue", RFQ_VENUE);
         vm.serializeAddress(k, "elementReg", address(elementReg));
         vm.serializeAddress(k, "recipeReg", address(recipeReg));
@@ -470,6 +600,14 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         vm.serializeAddress(k, "factory", address(factory));
         vm.serializeAddress(k, "jurisdiction", address(jurisdiction));
         vm.serializeAddress(k, "qualifiedPurchaser", address(qualifiedPurchaser));
+        vm.serializeBool(k, "tsvStyleEnabled", useTsvStyleProfile);
+        vm.serializeUint(k, "tsvStyleRecipeId", TSV_STYLE_RECIPE_ID);
+        vm.serializeUint(k, "tsvStyleRecipeVersion", TSV_STYLE_RECIPE_VERSION);
+        vm.serializeUint(k, "tsvStylePeriodLimit", TSV_STYLE_PERIOD_LIMIT);
+        vm.serializeAddress(k, "tsvStyleVenue", useTsvStyleProfile ? address(pool) : address(0));
+        vm.serializeAddress(k, "tsvStyleIdentityEvidence", address(tsvIdentityEvidence));
+        vm.serializeAddress(k, "tsvStylePairedAssetElement", address(tsvPairedAsset));
+        vm.serializeAddress(k, "tsvStyleVolumeLimit", address(tsvVolumeLimit));
         string memory json = vm.serializeAddress(k, "surveillance", address(surveillance));
         vm.writeJson(json, ARTIFACT_PATH);
     }

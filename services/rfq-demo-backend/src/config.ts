@@ -9,7 +9,7 @@ export const DEFAULT_CHAIN_ID = 31337;
 export const DEFAULT_PORT = 8787;
 
 export interface Artifact {
-  assetProfile: "buidl-like" | "reg-d";
+  assetProfile: "buidl-like" | "reg-d" | "tsv-style";
   coreDeployment?: string;
   activationMode?: string;
   productionDeployment?: boolean;

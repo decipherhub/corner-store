@@ -31,9 +31,12 @@ export interface DemoServer {
 export async function startDemoServer(config: DemoBackendConfig): Promise<DemoServer> {
   const pricing = createDemoPricing(config);
   const quoteService = await createDemoQuoteService(config, pricing);
-  const settlement = config.demoSettlement.enabled ? new DemoSettlementService(config, quoteService, pricing) : undefined;
+  const readOnlyTsv = config.artifact.assetProfile === "tsv-style" && !config.demoSettlement.enabled;
+  const settlement = config.demoSettlement.enabled || readOnlyTsv
+    ? new DemoSettlementService(config, quoteService, pricing)
+    : undefined;
   const server = createServer((req, res) => {
-    void handleRequest(req, res, config, quoteService, settlement);
+    void handleRequest(req, res, config, quoteService, settlement, readOnlyTsv);
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -61,7 +64,8 @@ async function handleRequest(
   res: ServerResponse,
   config: DemoBackendConfig,
   quoteService: RFQBackendSDK,
-  settlement?: DemoSettlementService
+  settlement?: DemoSettlementService,
+  readOnlyTsv = false
 ): Promise<void> {
   try {
     setDemoCors(req, res);
@@ -81,7 +85,16 @@ async function handleRequest(
         tokenIn: config.artifact.quote,
         tokenOut: config.artifact.rwaToken,
         taker: config.artifact.investor,
-        demoSettlementEnabled: Boolean(settlement)
+        demoSettlementEnabled: config.demoSettlement.enabled,
+        readOnlyTsv
+      });
+      return;
+    }
+
+    if (readOnlyTsv && req.method !== "GET") {
+      sendJson(res, 403, {
+        error: "tsv_style_read_only",
+        message: "TSV-style browser execution is disabled; use the verified local E2E command"
       });
       return;
     }

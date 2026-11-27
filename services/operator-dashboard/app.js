@@ -75,7 +75,9 @@ function renderTsvVenue() {
   const tsv = chainState.tsvStyle;
   const connected = Boolean(tsv?.enabled);
   const sourceBadge = $("tsvSourceBadge");
-  sourceBadge.textContent = connected ? "Runtime evidence" : "Runtime not connected";
+  sourceBadge.textContent = connected
+    ? (tsv.source === "deployment-artifact" ? "Deployment evidence" : "Runtime evidence")
+    : "Runtime not connected";
   sourceBadge.className = `status-pill ${connected ? "live" : "neutral"}`;
   $("tsvVenueAddress").textContent = optionalAddress(tsv?.venue);
   $("tsvAssetName").textContent = tsv?.asset?.name || "Orrin Systems common stock";
@@ -84,26 +86,34 @@ function renderTsvVenue() {
   $("tsvQuoteAddress").textContent = optionalAddress(tsv?.quoteAsset?.address);
   $("tsvLiquidity").textContent = optionalAmount(tsv?.liquidity, tsv?.asset?.symbol ? ` ${tsv.asset.symbol}` : "");
   $("tsvRecentFills").textContent = connected ? String(tsv.tradeLog?.length || 0) : "Unavailable";
-  $("tsvSettlementState").textContent = connected ? "Measured AMM settlement" : "Preview only";
+  $("tsvSettlementState").textContent = connected
+    ? (tsv.executionEnabled ? "Measured AMM settlement" : "Deployed · read-only evidence")
+    : "Preview only";
   const poolStatus = $("tsvPoolStatus");
-  poolStatus.textContent = connected ? (tsv.halted ? "Halted" : "Runtime evidence") : "Runtime not connected";
-  poolStatus.className = `status-pill ${connected ? (tsv.halted ? "warning" : "live") : "neutral"}`;
+  const haltMeasured = typeof tsv?.halted === "boolean";
+  poolStatus.textContent = connected
+    ? (haltMeasured ? (tsv.halted ? "Halted" : "Trading active") : "Deployed · live status unavailable")
+    : "Runtime not connected";
+  poolStatus.className = `status-pill ${connected && haltMeasured ? (tsv.halted ? "warning" : "live") : "neutral"}`;
 
   const used = Number(tsv?.periodVolume || 0);
   const limit = Number(tsv?.periodLimit || 0);
-  const ratio = connected && limit > 0 ? Math.min(100, Math.round(used / limit * 100)) : 0;
-  $("tsvVolumeLabel").textContent = connected && limit > 0 ? `${used.toLocaleString()} / ${limit.toLocaleString()} demo shares` : "Unavailable";
+  const volumeMeasured = tsv?.periodVolume !== undefined && tsv?.periodVolume !== null;
+  const ratio = connected && volumeMeasured && limit > 0 ? Math.min(100, Math.round(used / limit * 100)) : 0;
+  $("tsvVolumeLabel").textContent = connected && volumeMeasured && limit > 0
+    ? `${used.toLocaleString()} / ${limit.toLocaleString()} demo shares`
+    : (connected && limit > 0 ? `Live counter unavailable · limit ${limit.toLocaleString()} demo shares` : "Unavailable");
   $("tsvVolumeBar").style.width = `${ratio}%`;
   $("tsvVolumeBar").parentElement.setAttribute("aria-valuenow", String(ratio));
-  $("tsvVenuePause").textContent = connected ? (tsv.halted ? "Paused" : "Active") : "Unavailable";
+  $("tsvVenuePause").textContent = connected && haltMeasured ? (tsv.halted ? "Paused" : "Active") : "Unavailable";
   $("tsvPrimaryHalt").textContent = connected && tsv.primaryMarketHalt !== undefined
     ? (tsv.primaryMarketHalt ? "Simulated halt received" : "No simulated halt")
     : "Simulated input not connected";
   const haltBadge = $("tsvHaltBadge");
-  haltBadge.textContent = connected ? (tsv.halted ? "Trading halted" : "Trading active") : "Not connected";
-  haltBadge.className = `status-pill ${connected ? (tsv.halted ? "warning" : "live") : "neutral"}`;
+  haltBadge.textContent = connected && haltMeasured ? (tsv.halted ? "Trading halted" : "Trading active") : "Live state not connected";
+  haltBadge.className = `status-pill ${connected && haltMeasured ? (tsv.halted ? "warning" : "live") : "neutral"}`;
   const rows = Array.isArray(tsv?.tradeLog) ? tsv.tradeLog : [];
-  $("tsvTradeRows").innerHTML = rows.length ? rows.map((trade) => `<tr><td><code>${escapeHtml(shortAddress(trade.executionId))}</code></td><td>${escapeHtml(trade.asset || tsv?.asset?.symbol || "—")}</td><td>${escapeHtml(trade.amount ?? "—")}</td><td><code>${escapeHtml(shortAddress(trade.policyId))}</code></td><td>${escapeHtml(trade.blockNumber ?? "—")}</td></tr>`).join("") : '<tr><td colspan="5"><div class="empty-row">No TSV-style runtime is connected.</div></td></tr>';
+  $("tsvTradeRows").innerHTML = rows.length ? rows.map((trade) => `<tr><td><code>${escapeHtml(shortAddress(trade.executionId))}</code></td><td>${escapeHtml(trade.asset || tsv?.asset?.symbol || "—")}</td><td>${escapeHtml(trade.amount ?? "—")}</td><td><code>${escapeHtml(shortAddress(trade.policyId))}</code></td><td>${escapeHtml(trade.blockNumber ?? "—")}</td></tr>`).join("") : `<tr><td colspan="5"><div class="empty-row">${connected ? "No browser fills are recorded; execution remains disabled in this view." : "No TSV-style runtime is connected."}</div></td></tr>`;
 }
 function renderTokenizer() {
   if (!chainState) return;
@@ -261,19 +271,57 @@ function selectedWallet() {
 }
 
 async function loadState() {
-  [chainState, marketHistory] = await Promise.all([api("/demo/state"), api("/demo/market-history")]);
+  const tsvStyle = await operatorApi("/api/v1/tsv-style").catch(() => ({enabled: false, source: "unavailable"}));
+  try {
+    const [baseState, history] = await Promise.all([api("/demo/state"), api("/demo/market-history")]);
+    chainState = {...baseState, tsvStyle};
+    marketHistory = history;
+  } catch (error) {
+    if (!tsvStyle.enabled) throw error;
+    chainState = tsvReadOnlyState(tsvStyle);
+    marketHistory = {spreadBps: 0, oracle: [], indicative: [], fills: [], current: {lastMove: "initial", lastImpactBps: 0}};
+  }
   stateLoadedAt = Date.now();
   for (const wallet of chainState.wallets || []) profiles[wallet.id] = {...wallet, role: "user"};
   configurePresentation();
-  currentProfile = profiles[$("walletSelector").value] || profiles[chainState.wallets[0]?.id] || profiles.admin;
+  currentProfile = profiles[$("walletSelector").value] || profiles[chainState.wallets[0]?.id] || profiles.venueB;
   $("walletAddress").textContent = profileAddress(currentProfile);
   return chainState;
+}
+function tsvReadOnlyState(tsvStyle) {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    ready: true,
+    assetProfile: "tsv-style",
+    deployment: {coreImplementation: "DeployProductionCore.deployCore", activationMode: "local-demo-fixtures", productionDeployment: false},
+    requiresQualifiedPurchaser: false,
+    makerApproved: false,
+    chainTimestamp: now,
+    chainId: 31337,
+    maker: tsvStyle.venue,
+    makerInventory: {rwaBalance: "0", quoteBalance: "0"},
+    wallets: [],
+    marketPrice: {numerator: "1", denominator: "1", lastMove: "initial", lastImpactBps: 0},
+    suggestedTradeAmounts: {buyAmountIn: "0", sellAmountIn: "0", bufferBps: 0},
+    presentation: {
+      schemaVersion: 2,
+      asset: {...tsvStyle.asset, minimumAmountBaseUnits: "1", decimals: 18},
+      quoteAsset: {...tsvStyle.quoteAsset, decimals: 18},
+      execution: {venueType: "AMM", defaultQuoteTtlSeconds: 0, pricing: {provider: "disabled-for-tsv-style"}},
+      maker: {label: "RFQ disabled for TSV-style profile"},
+      previewQuotes: [],
+      temporalEligibility: {walletId: "", freshnessSeconds: 0, quoteTtlSeconds: 0}
+    },
+    tsvStyle
+  };
 }
 function configurePresentation() {
   const selected = $("walletSelector").value;
   const firstLoad = !presentationInitialized;
   $("walletSelector").innerHTML = `<optgroup label="Investor">${chainState.wallets.map((wallet) => `<option value="${escapeHtml(wallet.id)}">${escapeHtml(wallet.label)}</option>`).join("")}</optgroup><optgroup label="Venue"><option value="venueA">Venue A · broker-dealer ATS · RFQ</option><option value="venueB">Venue B · TSV-style operator · AMM</option></optgroup><optgroup label="Issuer / transfer agent"><option value="tokenizer">Tokenizer · asset and investor records</option></optgroup><optgroup label="Demo administration"><option value="admin">Admin</option></optgroup>`;
-  $("walletSelector").value = presentationInitialized && profiles[selected] ? selected : chainState.wallets[0].id;
+  $("walletSelector").value = presentationInitialized && profiles[selected]
+    ? selected
+    : (chainState.wallets[0]?.id || "venueB");
   presentationInitialized = true;
   const asset = chainState.presentation.asset;
   const minimum = formatBaseUnits(asset.minimumAmountBaseUnits);

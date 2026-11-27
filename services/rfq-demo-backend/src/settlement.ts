@@ -201,7 +201,9 @@ export class DemoSettlementService {
     private readonly quotes: RFQBackendSDK,
     private readonly pricing: DemoMarketPricing
   ) {
-    if (!config.demoSettlement.enabled) throw new Error("demo settlement is disabled");
+    if (!config.demoSettlement.enabled && config.artifact.assetProfile !== "tsv-style") {
+      throw new Error("demo settlement is disabled");
+    }
     if (config.chainId !== 31337) throw new Error("demo settlement is restricted to Anvil chain id 31337");
 
     this.provider = new JsonRpcProvider(config.rpcUrl, config.chainId);
@@ -222,7 +224,7 @@ export class DemoSettlementService {
 
   async state(): Promise<{
     ready: boolean;
-    assetProfile: "buidl-like" | "reg-d";
+    assetProfile: "buidl-like" | "reg-d" | "tsv-style";
     deployment: {
       coreImplementation: string;
       activationMode: string;
