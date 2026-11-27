@@ -544,10 +544,13 @@ select { appearance: auto; }
   #tokenizerNav { grid-template-columns: repeat(3, 1fr); }
   .nav-item { flex-direction: column; gap: 2px; font-size: 9px !important; padding: 6px 3px; }
   .nav-item span { font-size: 15px; }
-  .topbar { min-height: 78px; padding: 15px 18px; }
+  .topbar { min-height: 78px; gap: 12px; padding: 15px 18px; }
+  .topbar > div:first-child { min-width: 110px; }
   .topbar h1 { font-size: 22px; }
-  .wallet { min-width: 155px; margin-left: 0; padding-left: 8px; }
-  .wallet-select select { width: 135px; font-size: 10px; }
+  #notificationButton { display: none; }
+  .top-actions { gap: 6px; }
+  .wallet { min-width: 135px; margin-left: 0; padding-left: 6px; }
+  .wallet-select select { width: 112px; font-size: 10px; }
   .wallet-select strong { display: none; }
   .notification-panel { right: 18px; top: 66px; }
   .content { padding: 20px 15px 95px; }

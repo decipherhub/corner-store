@@ -315,6 +315,7 @@ function configurePresentation() {
     ? selected
     : (tsvProfile ? "venueB" : (chainState.wallets[0]?.id || "venueA"));
   $("tokenizerInvestorRecordsNav").classList.toggle("hidden", tsvProfile);
+  $("tokenizerHoldersNav").querySelector("span").textContent = tsvProfile ? "02" : "03";
   presentationInitialized = true;
   const asset = chainState.presentation.asset;
   const minimum = formatBaseUnits(asset.minimumAmountBaseUnits);
