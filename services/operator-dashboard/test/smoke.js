@@ -6,14 +6,38 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 const server = fs.readFileSync(path.join(root, "server.js"), "utf8");
+const {composeDashboardRuntime} = require(path.join(root, "runtime-state.js"));
 
 new Function(app);
+const composed = composeDashboardRuntime(
+  {ready: true, presentation: {}, wallets: []},
+  {oracle: [], fills: []},
+  {enabled: true, source: "deployment-artifact"}
+);
+if (!composed.chainState.tsvStyle.enabled) throw new Error("TSV deployment evidence composition regression");
+for (const unavailable of [undefined, {ready: false}, {ready: true, presentation: {}}]) {
+  let rejected = false;
+  try { composeDashboardRuntime(unavailable, {oracle: [], fills: []}, {enabled: true}); }
+  catch { rejected = true; }
+  if (!rejected) throw new Error("unavailable runtime was presented as ready");
+}
 
 for (const marker of [
   'id="walletSelector"', "Admin", 'id="ribbonCore"', 'id="ribbonAsset"', 'id="ribbonActivation"', 'id="dashboardHolding"',
   'id="deploymentCore"', 'id="deploymentActivation"', 'id="deploymentRouter"',
   'id="userNav"', 'id="adminNav"', 'id="dashboardView"', 'id="createView"', 'id="rfqsView"',
   'id="portfolioView"', 'id="adminDashboardView"', 'id="adminUsersView"', 'id="adminMakerView"',
+  'id="venueANav"', 'id="venueBNav"', 'id="tsvInvestorNav"', "Broker-dealer ATS · RFQ", "TSV-style operator · AMM",
+  'id="tokenizerNav"', "Issuer / transfer-agent facts", 'id="tokenizerAssetView"',
+  'id="tokenizerHoldersView"', 'id="tokenizerHolderRows"', 'id="tokenizerIdentityTrack"',
+  'id="tokenizerInvestorRecordsNav"', 'id="tokenizerHoldersNav"', "B-02-v2",
+  'id="venueBOnboardingView"', 'id="venueBPoolView"', 'id="venueBLimitsView"', 'id="venueBLogView"',
+  'id="venueIntegrationView"', 'id="tsvReceiptView"', 'id="tsvReceiptBanner"', 'id="tsvBlockedProbe"',
+  'id="tsvSourceBadge"', 'id="tsvVolumeBar"', 'id="tsvLimitStatus"', 'id="tsvTradeRows"', 'id="tsvLimitTradeRows"',
+  'id="tsvAssetComparison"', "The bound rule set decides the permitted venue type", "AMM binding rejected",
+  "Illustrative rule set", "Order Book remains <strong>not implemented</strong>", "ExternalSettlementGate v1",
+  "One test key stands in for the venue operator", "Corner Store does not perform or certify them",
+  "issuer-sponsored token (demo)", "Limits and stoppages", "Stoppage controls",
   'id="adminEnforcementView"', 'id="caseType"', 'id="caseWallet"', 'id="caseCreate"',
   'id="casePrepare"', 'id="caseQuote"', 'id="caseMutate"', 'id="caseExecute"', 'id="caseRestore"',
   'id="caseTimeline"', 'id="caseResult"', "Element", "ExecutionRouter", "Adapter 직접 호출",
@@ -24,7 +48,7 @@ for (const marker of [
   'id="marketChart"', 'id="marketCurrent"', 'id="marketVolume"', "Indicative RFQ mid",
   "market-range-label", "전체 기간", 'id="marketLastFill"', 'id="marketFillTape"',
   'id="confirmDialog"', 'id="demoGuide"', 'aria-modal="true"',
-  '<link rel="stylesheet" href="/styles.css">', '<script src="/app.js"></script>'
+  '<link rel="stylesheet" href="/styles.css">', '<script src="/runtime-state.js"></script>', '<script src="/app.js"></script>'
 ]) {
   if (!html.includes(marker)) throw new Error(`role compliance dashboard marker missing: ${marker}`);
 }
@@ -35,6 +59,15 @@ for (const marker of [
   "/demo/admin/temporal/prepare", "/demo/admin/temporal/advance", "Qualified Purchaser claim missing",
   "/demo/enforcement/adapter-boundary", "/demo/enforcement/restore",
   "selectedWallet", "runPrecheck", "switchProfile", "requiresQualifiedPurchaser", "quoteConsumed",
+  "renderTsvVenue", "renderTsvReceipt", "chainState.tsvStyle", "/api/v1/tsv-style", "executionEnabled",
+  "composeDashboardRuntime", 'role === "venueA"', 'role === "venueB"', 'role === "tsvInvestor"',
+  "renderTokenizer", 'role === "tokenizer"', "The Tokenizer records issuer and transfer-agent facts",
+  'chainState?.assetProfile === "tsv-style"', "Venue A · launch --profile buidl-like or reg-d",
+  '$("tokenizerHoldersNav").querySelector("span").textContent = tsvProfile ? "02" : "03"',
+  "Per-wallet A-04-v2 acceptance is not exposed by the demo API.",
+  'tsvProfile ? "AMM"', 'chainState.tsvStyle?.asset',
+  "Runtime not connected", "Preview only", "No TSV-style runtime is connected", "Settlement evidence",
+  "Runner evidence only · no on-chain decision record", "TSV-VOL period limit",
   "configurePresentation", "chainNow", "quote.taker", "Router가 체결을 거부했습니다",
   "DeployProductionCore.deployCore", "deployment.coreImplementation", "deployment.activationMode",
   "Scenario fixture", "Live · executable", "refreshAdmin", "saveClaim", "setMaker"
@@ -52,6 +85,10 @@ for (const marker of [
   "attemptedTransaction", "balanceEvidence", "Asset movement prevented"
 ]) {
   if (!app.includes(marker)) throw new Error(`dashboard API/state marker missing: ${marker}`);
+}
+
+if (app.includes("Qualified-purchaser demo claim active")) {
+  throw new Error("TSV Tokenizer must not present qualified-purchaser state as A-04-v2 identity evidence");
 }
 
 for (const [control, handler] of [
@@ -74,13 +111,16 @@ for (const marker of [
   "--blue:", ".app-shell", ".sidebar", ".hero-balance", ".quote-grid", ".precheck-card", ".market-chart",
   ".market-range-label", ".fill-point", ".market-fill-tape", ".fill-ticket", ".deployment-lineage",
   ".architecture-strip", ".coverage-table", ".enforcement-layout", ".case-timeline", ".evidence-result",
-  ".role-banner", ".modal-backdrop", "@media (max-width: 720px)", "@media (prefers-reduced-motion: reduce)"
+  ".nav-context", ".policy-layout", ".onboarding-grid", ".policy-stack", ".pool-pair", ".limits-layout", ".volume-meter",
+  ".integration-flow", ".integration-layout", ".integration-code", ".demo-disclaimer",
+  ".asset-record-layout", ".asset-path-table", ".receipt-layout", ".blocked-probe", ".ownership-list", "#tokenizerNav",
+  ".role-banner", ".modal-backdrop", "@media (max-width: 720px)", "@media (prefers-reduced-motion: no-preference)"
 ]) {
   if (!css.includes(marker)) throw new Error(`dashboard style marker missing: ${marker}`);
 }
 
 for (const marker of [
-  '"/styles.css"', '"/app.js"', "CORNER_STORE_OPERATOR_API", "CORNER_STORE_RFQ_BACKEND",
+  '"/styles.css"', '"/runtime-state.js"', '"/app.js"', "CORNER_STORE_OPERATOR_API", "CORNER_STORE_RFQ_BACKEND",
   'path.startsWith("/rfq-api/")', "proxyRfqBackend"
 ]) {
   if (!server.includes(marker)) throw new Error(`dashboard server marker missing: ${marker}`);

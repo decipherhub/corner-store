@@ -1,5 +1,61 @@
 # Progress
 
+## 2026-11-27 Session: DEMO-017 Illustrative TSV-style AMM Scenario
+
+DEMO-017 is passing under issue #176. The implementation adds a separate illustrative
+TSV-style venue Recipe (`40/v1`, alias `demo:tsv-style-amm`) without changing the
+existing broker-dealer ATS/RFQ profiles. The Recipe uses `A-04-v2` with an explicit
+`TSV`/`DIRECT` identity policy and has no `C-01-*` holding-period element. Paired
+asset/category and fixed-period volume limit values are compiled from
+`ManifestPolicyConfig`; changing the paired asset goes through the delayed Manifest
+update and changes the policy identity.
+
+The Foundry scenario covers an admitted participant without accredited-investor
+status, missing and expired identity evidence, sanctions rejection, paired-asset
+rejection, fixed demo volume exhaustion, venue suspension and the existing D020
+rejection of a holding-period asset on AMM. Recipe ID 40/canonical alias collision
+and exact halt/timelock errors are also covered. Verification passed all 28 TSV
+Foundry tests (15 unit and 13 integration) and 131 other integration tests, plus
+targeted formatting and `git diff --check`.
+
+The dedicated `tsv-style` profile now deploys the Recipe, identity evidence,
+Manifest parameters and AMM venue. `scripts/e2e-tsv-style.sh` executed a real
+`Router -> AMM` settlement, observed both the recipient balance and period volume
+increase, exposed read-only runtime evidence and rejected browser/RFQ mutation.
+`scripts/demo.sh --profile tsv-style` composes that profile with the Operator API
+and dashboard. The UI separates Investor, Venue A/RFQ, Venue B/AMM and Tokenizer
+responsibilities and fails closed when the TSV runtime snapshot is unavailable.
+
+Fresh verification passed all 28 TSV Foundry tests, Operator API, RFQ demo backend
+and dashboard tests, the real TSV Router/AMM E2E, and the existing `buidl-like` and
+`reg-d` RFQ Anvil E2E profiles. `scripts/check.sh` passed with the repository-pinned
+Foundry 1.7.1 and Node 20 toolchain: 1,261 Foundry tests plus the service/package,
+clean-project conformance, production dry-run/deploy/verify/recovery and vendored
+deploy-v3 gates all completed successfully.
+
+Issue #177 still owns HTTPS publication and post-upgrade verification. The feature
+does not encode SEC eligibility, real market data, tier/ADV calculations,
+affiliated-venue aggregation, public reporting, primary-market halt feeds or
+books/records; #129 remains the legal/applicability decision gate.
+
+The 2026-11-27 delivery refresh was reconciled after implementation. README and
+Venue B now distinguish reverted blocked attempts from settled-trade records,
+use the approved operator-obligation language, label the fictional listed-stock
+fixture as issuer-sponsored, and state that the local single key represents the
+venue operator. The production boundary remains venue-owned with no Corner Store
+control key. Uniswap v4 `beforeSwap` hook integration is explicitly deferred until
+after GASOK; the current demo remains on its existing reference AMM path.
+
+The STEP 8–11 visual delivery is now connected to fresh runtime evidence rather
+than static fixture claims. The runner settles exactly 250 tORRN, confirms that a
+follow-up order reverts without changing balances or the volume counter, and writes
+the successful transaction/policy/block evidence into the local artifact. The
+Operator API exposes that receipt read-only. The dashboard now presents venue
+onboarding, asset-path comparison and pool-binding rejection, an Investor receipt,
+and limits/stoppages with explicit operator/Corner Store/engine ownership. A real
+Chrome run passed all four desktop scenes and the 390×844 receipt layout with no
+horizontal overflow, console errors or page errors.
+
 ## 2026-11-21 Session: SDK-008 External Settlement Gate and OMS Precheck
 
 SDK-008 is passing. Existing ATS/OMS deployments can now use a dedicated

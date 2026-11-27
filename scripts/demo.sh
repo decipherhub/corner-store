@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
     --scenario) SCENARIO_FILE="$2"; shift 2 ;;
     --scenario=*) SCENARIO_FILE="${1#*=}"; shift ;;
     -h|--help)
-      echo "Usage: scripts/demo.sh [--profile buidl-like|reg-d] [--mode rfq|full]"
+      echo "Usage: scripts/demo.sh [--profile buidl-like|reg-d|tsv-style] [--mode rfq|full]"
       echo "       [--port N] [--backend-port N] [--operator-api-port N] [--dashboard-port N]"
       echo "       [--scenario PATH] [--bind-host HOST] [--public-host HOST]"
       exit 0
@@ -102,14 +102,25 @@ require_available_port "$OPERATOR_API_PORT" "Operator API"
 require_available_port "$DASHBOARD_PORT" "Dashboard"
 
 echo "==> Starting Corner Store local demo"
-CORNER_STORE_EVENTS="$EVENTS_FILE" scripts/e2e-anvil.sh --profile "$PROFILE" --mode "$MODE" \
-  --port "$ANVIL_PORT" --backend-port "$BACKEND_PORT" --scenario "$SCENARIO_FILE" \
-  --bind-host "$BIND_HOST" --public-host "$PUBLIC_HOST" --pid-file "$PID_FILE" --keep
+if [ "$PROFILE" = "tsv-style" ]; then
+  if [ "$SCENARIO_FILE" = "services/rfq-demo-backend/config/demo-scenario.json" ]; then
+    SCENARIO_FILE="services/rfq-demo-backend/config/tsv-style-scenario.json"
+  fi
+  scripts/e2e-tsv-style.sh --port "$ANVIL_PORT" --backend-port "$BACKEND_PORT" \
+    --scenario "$SCENARIO_FILE" --bind-host "$BIND_HOST" --public-host "$PUBLIC_HOST" \
+    --pid-file "$PID_FILE" --keep
+else
+  CORNER_STORE_EVENTS="$EVENTS_FILE" scripts/e2e-anvil.sh --profile "$PROFILE" --mode "$MODE" \
+    --port "$ANVIL_PORT" --backend-port "$BACKEND_PORT" --scenario "$SCENARIO_FILE" \
+    --bind-host "$BIND_HOST" --public-host "$PUBLIC_HOST" --pid-file "$PID_FILE" --keep
+fi
 
 echo "==> Starting read-only Operator API"
 npm run build --prefix services/operator-api >/dev/null
 CORNER_STORE_CONFIG="services/toolkit/examples/corner-store.config.json"
-if [ "$PROFILE" = "reg-d" ]; then
+if [ "$PROFILE" = "tsv-style" ]; then
+  CORNER_STORE_CONFIG="services/toolkit/examples/corner-store.tsv-style.config.json"
+elif [ "$PROFILE" = "reg-d" ]; then
   CORNER_STORE_CONFIG="services/toolkit/examples/corner-store.reg-d.config.json"
 fi
 CORNER_STORE_CONFIG="$CORNER_STORE_CONFIG" \

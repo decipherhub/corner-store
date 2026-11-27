@@ -91,3 +91,49 @@ when running the API manually.
 
 Production hosting, authentication, CSRF policy and multisig provider
 integration remain deployment-specific work.
+
+## Venue customer views
+
+The role selector also exposes two venue-customer presentations without changing
+existing Investor or Admin behavior:
+
+- **Venue A · broker-dealer ATS** reuses the executable RFQ operations,
+  enforcement, Maker and trade-log views and links to the external settlement
+  gate integration contract.
+- **Venue B · TSV-style operator** shows the illustrative AMM onboarding, pool,
+  limits/halt and trade-log views. Its STEP 8–11 flow also includes the Tokenizer
+  asset-path comparison and a read-only Investor settlement receipt. The UI reads
+  optional `tsvStyle` fields from
+  `/demo/state`; when that runtime payload is absent it says `Runtime not
+  connected`, leaves controls disabled and never presents fixture values as live
+  settlement evidence.
+
+The TSV-style screen is a demo presentation only. It does not state that a venue
+qualifies for, is registered under, or is approved under an exemption. Fixed
+volume limits, simulated primary-market signals and operator inputs are visibly
+separated from production market data and legal determinations. Order Book remains
+labelled `not implemented`.
+
+For Venue B, one local test key stands in for the venue operator. The venue
+operator owns deployment, governance, parameter, fee and pause authority; Corner
+Store supplies rule-check code and settled-trade policy records and retains no
+venue control key. Blocked attempts revert with a reason code and are not shown as
+fabricated on-chain decision records.
+
+The local TSV runner fills the exact 250-share demo limit and verifies that the
+next order reverts without asset or counter movement. Only the successful fill is
+shown as settlement evidence; the failed probe is labelled as runner evidence.
+
+The selector also exposes a **Tokenizer · issuer / transfer agent** presentation.
+It reuses the current demo asset, investor-record and holder-balance evidence
+without adding a separate issuer workflow. The role records issuer and
+transfer-agent facts; it does not match orders, quote prices or operate either
+venue. Addresses that are not present in `/demo/state` remain visibly labelled
+`Not connected` rather than being filled with preview values.
+
+When launched with `scripts/demo.sh --profile tsv-style`, the dashboard opens on
+Venue B and omits Investor and Admin mutation personas. Venue A is shown only as
+a disabled direction to launch an RFQ profile (`buidl-like` or `reg-d`). The
+Tokenizer holder table does not infer TSV A-04-v2 acceptance from the RFQ
+qualified-purchaser fixture; it labels per-wallet identity acceptance unavailable
+until the connected API exposes that track-specific evidence.

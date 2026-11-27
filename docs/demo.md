@@ -8,6 +8,61 @@ Manifest / Operator) work end-to-end.
 
 This is feature `E2E-001` (see `FEATURES.md`).
 
+## TSV-style Venue Scenario
+
+Feature `DEMO-017` adds a separate illustrative venue-customer scenario under
+issue #176. It does not replace the current `buidl-like` or `reg-d` runners.
+
+- Venue A remains the broker-dealer ATS/RFQ demonstration.
+- Venue B represents a separate TSV-style operator using the protected AMM path.
+- Recipe `40/v1` binds sanctions screening, `A-04-v2` with `TSV`/`DIRECT`
+  identity policy, ERC-3643 enforcement, one Manifest-owned paired asset/category
+  and one fixed-period demo volume limit.
+- The Recipe deliberately has no `C-01-*` element. The existing D020 check still
+  rejects a holding-period asset on AMM.
+
+The fixed one-day share limit is a demo value. The scenario does not implement
+regulatory tier/ADV calculations, affiliated-venue aggregation, public trade
+reporting, primary-market halt feeds or books/records. It does not state that any
+venue qualifies for an exemption. Public HTTPS hosting and post-upgrade checks are
+tracked separately in #177; legal/applicability analysis remains #129.
+
+The TSV-style authority boundary is venue-owned. In this local profile, one Anvil
+test key stands in for the venue operator and therefore performs deployment,
+governance, parameter, pause and wiring calls. It is not a Corner Store production
+key. For an external deployment, the venue supplies the governance and operator
+addresses to `DeployProductionCore`; Corner Store must retain no owner, operator,
+upgrade, pause, fee or parameter-setting key. A future Uniswap v4 integration would
+invoke the same engine from the venue's `beforeSwap` hook, but that hook is not part
+of this GASOK demo and must not be implied by the current v3-shaped reference path.
+
+Run the dedicated local profile with either command:
+
+```sh
+scripts/e2e-tsv-style.sh
+scripts/demo.sh --profile tsv-style
+```
+
+`scripts/e2e-tsv-style.sh` deploys the dedicated profile, settles exactly the
+250-share demo-period limit, then proves the next trade reverts without changing
+the recipient balance or period-volume counter. It stores the successful
+transaction hash, block, policy id and measured volume as local demo evidence and
+starts the backend in read-only mode long enough to prove mutation is rejected.
+`scripts/demo.sh --profile tsv-style` keeps the same loopback-only boundary and
+adds the Operator API and dashboard.
+
+The dashboard uses only the `/api/v1/tsv-style` runtime snapshot for live Venue B
+evidence. If the snapshot is missing or mismatched, it displays an unavailable
+state and disables actions. It never substitutes presentation fixtures for live
+settlement evidence. Venue A/RFQ remains a separate `buidl-like` or `reg-d`
+deployment rather than a second active venue inside the TSV profile.
+
+The role selector exposes the four approved presentation scenes: Venue onboarding
+(STEP 8), Tokenizer asset-path comparison and D020 pool rejection (STEP 9),
+Investor successful-settlement receipt (STEP 10), and Venue limits/stoppages
+(STEP 11). The rejected follow-up is labelled runner evidence because a reverted
+transaction does not create an on-chain decision record.
+
 ## How To Run
 
 ```sh
@@ -16,6 +71,7 @@ scripts/e2e-anvil.sh --profile reg-d
 scripts/e2e-anvil.sh --mode rfq # concise mock TA → SDK/CLI → backend RFQ walkthrough
 scripts/e2e-anvil.sh --port 8600
 scripts/e2e-anvil.sh --keep     # leave Anvil running afterwards (attach a UI / continue interactively)
+scripts/demo.sh --profile tsv-style # dedicated illustrative TSV/AMM dashboard
 ```
 
 - Runs fully offline (`forge script ... --offline` against a local Anvil).

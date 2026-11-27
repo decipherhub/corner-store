@@ -9,6 +9,78 @@
 
 동시에 하나의 feature만 `active` 상태로 둔다.
 
+## DEMO-017 — Illustrative TSV-style AMM Venue Scenario
+
+### Behavior
+
+- Issue #176 adds a separate demo-only venue-customer scenario. Venue A remains
+  the existing broker-dealer ATS/RFQ presentation; Venue B is an illustrative
+  TSV-style operator using the existing protected AMM path. Corner Store supplies
+  rule evaluation and settlement records and does not operate either venue.
+- Recipe `40/v1` (`demo:tsv-style-amm`) contains `A-01-v1`, `A-04-v2`,
+  `B-02-v2`, `TSV-PAIR-v1` and `TSV-VOL-v1`. It contains no `C-01-*` element.
+  `A-04-v2` commits the `TSV`/`DIRECT` identity policy. The paired asset/category
+  and fixed-period volume limit are Manifest-owned parameters, so updates follow
+  the normal delayed Manifest lifecycle and change the policy identity.
+- The scenario proves admitted, missing/expired identity, sanctions, paired-asset,
+  volume-limit, venue-halt and D020 holding-period/AMM behavior. Recipe ID 40 and
+  its canonical alias have collision coverage.
+- The dedicated `tsv-style` profile deploys Recipe 40, its TSV identity evidence,
+  Manifest-owned pair/volume parameters and an AMM venue without changing the
+  existing RFQ profiles. The dashboard presents Investor, Venue and Tokenizer
+  roles and consumes a fail-closed runtime snapshot; unavailable evidence keeps
+  controls disabled and is never replaced with fixture values.
+- The local profile's single test key explicitly stands in for the venue operator.
+  Production TSV integration requires venue-controlled governance/operator
+  addresses; Corner Store retains no deployment, owner/operator, upgrade, pause,
+  fee or parameter-setting key. A venue-owned Uniswap v4 `beforeSwap` hook remains
+  a post-GASOK integration item rather than a claim of this v3-shaped demo.
+- The STEP 8–11 presentation is backed by the same local run: Venue onboarding
+  shows the rule-set/authority split, Tokenizer compares RFQ-only and AMM paths,
+  Investor shows a successful-settlement receipt, and Venue limits shows the
+  exact-limit settlement plus a reverted follow-up attempt. Reverted evidence is
+  explicitly runner evidence and is not presented as an on-chain decision record.
+- This feature does not determine eligibility under an SEC exemption. Real market
+  data, tier/ADV calculations, affiliated-venue aggregation, public trade
+  reporting, primary-market halt feeds, books/records and external hosting remain
+  operator/legal work tracked by #129 and #177.
+
+### Verification
+
+- `forge test --offline --match-path test/unit/demo/TsvStyleElements.t.sol`:
+  15/15 passed.
+- `forge test --offline --match-path test/integration/TsvStylePoolScenario.t.sol`:
+  13/13 passed.
+- Other Foundry integration suites: 131 passed.
+- `forge fmt --check` for the touched Solidity files and `git diff --check`: passed.
+- `scripts/e2e-tsv-style.sh`: passed a real `Router -> AMM` settlement at the
+  exact 250-share demo limit, rejected the next trade without asset movement,
+  persisted the settlement receipt and proved read-only backend mutation rejection.
+- Operator API, RFQ demo backend and dashboard tests: passed.
+- Headless Chrome at 1440×900 and 390×844: STEP 8–11 roles, receipt, limit/revert
+  evidence, responsive layout and zero console/page errors passed.
+- Existing `buidl-like` and `reg-d` RFQ Anvil E2E profiles: passed.
+- `scripts/check.sh`: passed with the repository-pinned Foundry 1.7.1 and Node
+  20 toolchain, including 1,261 Foundry tests, service/package checks,
+  clean-project conformance, production dry-run/deploy/verify/recovery and the
+  vendored deploy-v3 suite.
+
+### State
+
+passing
+
+### Notes
+
+- Repository implementation: #176. External HTTPS publication and post-upgrade
+  verification: #177. SEC applicability/legal research remains #129.
+- Fixed one-day share volume is an explicit demo simplification, not a production
+  TSV limit model or legal conclusion.
+- External HTTPS publication and post-upgrade verification remain #177 operator
+  work and are not required to call the repository-local feature passing.
+- Public wording distinguishes reverted blocked attempts from successful
+  settlements whose policy/check evidence is recorded, and labels the fictional
+  listed-stock fixture as issuer-sponsored.
+
 ## CORE-015: Compliance Reporting and Settlement Reconstruction
 
 ### Behavior

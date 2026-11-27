@@ -15,12 +15,55 @@ import {defaultConfig} from "@corner-store/toolkit";
 async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "corner-store-operator-"));
   const configPath = join(dir, "config.json");
-  writeFileSync(configPath, JSON.stringify(defaultConfig()));
+  const tsvConfig = {
+    ...defaultConfig(),
+    asset: {profile: "tsv-style" as const},
+    venues: {amm: true, rfq: false, orderBook: false}
+  };
+  writeFileSync(configPath, JSON.stringify(tsvConfig));
   const manifestPath = join(dir, "manifest.json");
   writeFileSync(manifestPath, JSON.stringify({configured: true, status: 2, version: 1, recipeBindingCount: 2}));
   const index = new EventIndex();
   index.add({blockNumber: 2, transactionHash: "0xabc", name: "ManifestActivated", args: {token: "0x1"}});
-  const server = createOperatorApi({configPath, manifestPath, index, authToken: "test-token"});
+  const artifactPath = join(dir, "demo-artifact.json");
+  writeFileSync(artifactPath, JSON.stringify({
+    assetProfile: "tsv-style",
+    tsvStyleEnabled: true,
+    tsvStyleVenue: "0x0000000000000000000000000000000000000040",
+    tsvStyleRecipeId: 40,
+    tsvStyleRecipeVersion: 1,
+    tsvStylePeriodLimit: "250000000000000000000",
+    tsvStyleIdentityEvidence: "0x0000000000000000000000000000000000000041",
+    tsvStylePairedAssetElement: "0x0000000000000000000000000000000000000042",
+    tsvStyleVolumeLimit: "0x0000000000000000000000000000000000000043",
+    tsvStyleGovernance: "0x0000000000000000000000000000000000000046",
+    tsvStyleOperator: "0x0000000000000000000000000000000000000046",
+    tsvStyleAuthorityModel: "venue-operator-test-key",
+    tsvStylePeriodVolume: "250000000000000000000",
+    tsvStyleLastSettlement: {
+      transactionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      executionId: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      blockNumber: 42,
+      timestamp: 1795766400,
+      buyer: "0x0000000000000000000000000000000000000047",
+      asset: "tORRN",
+      amount: "250",
+      policyId: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    tsvStyleBlockedProbe: {attemptedAmount: "1", reason: "TSV-VOL period limit exceeded", reverted: true, recordedOnChain: false},
+    rwaToken: "0x0000000000000000000000000000000000000044",
+    quote: "0x0000000000000000000000000000000000000045",
+    poolRwaBalance: "1000000000000000000000"
+  }));
+  const mismatchedConfigPath = join(dir, "mismatched-config.json");
+  writeFileSync(mismatchedConfigPath, JSON.stringify(defaultConfig()));
+  try {
+    createOperatorApi({configPath: mismatchedConfigPath, artifactPath});
+    throw new Error("operator API accepted a mismatched config and deployment profile");
+  } catch (error: any) {
+    if (!String(error.message).includes("does not match deployment artifact")) throw error;
+  }
+  const server = createOperatorApi({configPath, artifactPath, manifestPath, index, authToken: "test-token"});
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("operator API did not bind");
@@ -46,6 +89,16 @@ async function main(): Promise<void> {
   if (events.body.events.length !== 1) throw new Error("event index regression");
   const manifest = await get("/api/v1/manifest", "test-token");
   if (manifest.body.status !== 2 || manifest.body.recipeBindingCount !== 2) throw new Error("manifest snapshot regression");
+  const tsvStyle = await get("/api/v1/tsv-style", "test-token");
+  if (!tsvStyle.body.enabled || tsvStyle.body.recipe.id !== 40 || tsvStyle.body.executionEnabled !== false) {
+    throw new Error("TSV-style read-only snapshot regression");
+  }
+  if (tsvStyle.body.authority.cornerStoreControlsVenue !== false || tsvStyle.body.authority.model !== "venue-operator-test-key") {
+    throw new Error("TSV-style authority boundary regression");
+  }
+  if (tsvStyle.body.periodVolume !== "250" || tsvStyle.body.tradeLog.length !== 1 || !tsvStyle.body.blockedProbe.reverted) {
+    throw new Error("TSV-style settlement evidence regression");
+  }
   const metrics = await get("/metrics", "test-token");
   if (metrics.status !== 200 || !String(metrics.body).includes("corner_store_operator_requests_total")) throw new Error("metrics regression");
   await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -73,7 +126,7 @@ async function main(): Promise<void> {
 }
 
 async function productionRuntimeSmoke(dir: string, configPath: string, manifestPath: string): Promise<void> {
-  const artifactPath = join(dir, "artifact.json");
+  const artifactPath = join(dir, "production-artifact.json");
   const eventsPath = join(dir, "production-events.json");
   const tokenPath = join(dir, "operator-token");
   const secret = "operator-secret-token-that-is-long-enough";

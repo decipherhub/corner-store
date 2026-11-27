@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Corner Store · Compliant RFQ</title>
+  <title>Corner Store · Rule checks at settlement</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div class="demo-ribbon"><strong>LIVE DEMO</strong><span>Local Anvil</span><span id="ribbonCore">Core 확인 중</span><span id="ribbonAsset">Injected ERC-3643 asset</span><span id="ribbonActivation">Demo activation</span><span>체결 시 최신 정책 재검사</span></div>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">C</span><div><strong>Corner Store</strong><small>Compliant markets</small></div></div>
+      <div class="brand"><span class="brand-mark">C</span><div><strong>Corner Store</strong><small>Rule checks at settlement</small></div></div>
       <nav id="userNav" class="side-nav" aria-label="사용자 메뉴">
         <button class="nav-item active" data-view="dashboard"><span>⌂</span>Dashboard</button>
         <button class="nav-item" data-view="create"><span>＋</span>RFQ 거래</button>
@@ -24,6 +25,32 @@
         <button class="nav-item" data-view="adminMaker"><span>◆</span>Maker 승인 시연</button>
         <button class="nav-item" data-view="adminEnforcement"><span>⌁</span>Enforcement Cases</button>
         <button class="nav-item" data-view="adminHistory"><span>≡</span>거래 내역</button>
+      </nav>
+      <nav id="venueANav" class="side-nav hidden" aria-label="Venue A 메뉴">
+        <p class="nav-context"><strong>Venue A</strong><small>Broker-dealer ATS · RFQ</small></p>
+        <button class="nav-item active" data-view="adminDashboard"><span>⌂</span>Operations</button>
+        <button class="nav-item" data-view="adminEnforcement"><span>⌁</span>Enforcement cases</button>
+        <button class="nav-item" data-view="adminMaker"><span>◆</span>Maker</button>
+        <button class="nav-item" data-view="adminHistory"><span>≡</span>Trade log</button>
+        <button class="nav-item" data-view="venueIntegration"><span>⊕</span>Integration</button>
+      </nav>
+      <nav id="venueBNav" class="side-nav hidden" aria-label="Venue B 메뉴">
+        <p class="nav-context"><strong>Venue B</strong><small>TSV-style operator · AMM</small></p>
+        <button class="nav-item active" data-view="venueBOnboarding"><span>01</span>Onboarding</button>
+        <button class="nav-item" data-view="venueBPool"><span>02</span>Pool</button>
+        <button class="nav-item" data-view="venueBLimits"><span>03</span>Limits &amp; stoppages</button>
+        <button class="nav-item" data-view="venueBLog"><span>04</span>Trade log</button>
+        <button class="nav-item" data-view="venueIntegration"><span>⊕</span>Integration</button>
+      </nav>
+      <nav id="tsvInvestorNav" class="side-nav hidden" aria-label="TSV 투자자 메뉴">
+        <p class="nav-context"><strong>Investor</strong><small>TSV-style AMM receipt</small></p>
+        <button class="nav-item active" data-view="tsvReceipt"><span>01</span>Decision receipt</button>
+      </nav>
+      <nav id="tokenizerNav" class="side-nav hidden" aria-label="Tokenizer 메뉴">
+        <p class="nav-context"><strong>Tokenizer</strong><small>Issuer / transfer-agent facts</small></p>
+        <button class="nav-item active" data-view="tokenizerAsset"><span>01</span>Asset &amp; rules</button>
+        <button id="tokenizerInvestorRecordsNav" class="nav-item" data-view="adminUsers"><span>02</span>Investor records</button>
+        <button id="tokenizerHoldersNav" class="nav-item" data-view="tokenizerHolders"><span>03</span>Holders</button>
       </nav>
       <div class="trust-note"><span class="trust-dot"></span><div><strong>Pre-check ≠ guarantee</strong><small>서명 후 정책이 바뀌어도 Router가 fill 시점에 다시 검사합니다.</small></div></div>
     </aside>
@@ -156,12 +183,99 @@
           </div>
         </section>
         <section id="adminHistoryView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>거래 내역</h2><p>실제 체결, maker 변경과 데모 거부 기록을 확인합니다.</p></div><button id="refresh" class="secondary">새로고침</button></div><section class="surface"><div id="eventSummary" class="event-stats"></div><div id="events" class="event-list"></div></section></section>
+
+        <section id="venueBOnboardingView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue · onboarding</p><h2>Venue onboarding</h2><p>The venue type fixes how trades execute and which rule set applies. Each venue is a separate operator and deployment.</p></div><span id="tsvSourceBadge" class="status-pill neutral">Runtime not connected</span></div>
+          <div class="demo-disclaimer"><strong>Illustrative rule set.</strong> This view does not state that a venue qualifies for, is registered under, or is approved under an exemption.</div>
+          <div class="onboarding-grid">
+            <section class="surface venue-choice-card">
+              <p class="kicker">Venue type</p>
+              <article><strong>Broker-dealer ATS</strong><small>Request for quote · restricted securities and private fund interests</small></article>
+              <article class="selected"><strong>TSV operator</strong><small>Permissioned pool · freely tradable tokenized listed stock</small></article>
+              <div class="fact-list"><div><span>Execution</span><strong>AMM pool · fixed by venue type</strong></div><div><span>Paired asset</span><strong>Demo USD (qUSD)</strong></div><div><span>Deployment</span><code id="tsvVenueAddress">Not connected</code></div><div><span>Operator key</span><strong>One test key stands in for the venue operator</strong></div></div>
+            </section>
+            <section class="surface">
+              <div class="section-head"><div><p class="kicker">Rule bundle</p><h3>TSV-style policy (illustrative)</h3></div><span class="fixture-label">No C-01 holding period</span></div>
+              <div class="policy-stack" aria-label="TSV-style demo rule bundle">
+                <article><span>A-01</span><strong>Sanctions screening</strong><small>Sensitive outcomes stay generic.</small></article>
+                <article><span>A-04-v2</span><strong>Venue participant identity</strong><small>TSV track · DIRECT topology.</small></article>
+                <article><span>B-02-v2</span><strong>Asset-native enforcement</strong><small>Issuer transfer restrictions remain binding.</small></article>
+                <article><span>TSV-PAIR</span><strong>Paired-asset restriction</strong><small>Versioned Manifest parameter.</small></article>
+                <article><span>TSV-VOL</span><strong>Venue volume limit</strong><small>Fixed demo value, not market-data logic.</small></article>
+              </div>
+              <p class="boundary-copy">No holding-period rule is present in this rule set, so it can bind to a pool.</p>
+            </section>
+          </div>
+          <aside class="surface operator-obligations"><p class="kicker">Operator's obligations outside the code</p><div><article><strong>Public Notice, at least 30 calendar days before operating</strong><small>Prepared and published by the venue operator</small></article><article><strong>Transaction data, public and updated within ten minutes</strong><small>Hosted by the venue operator</small></article><article><strong>Stopping trading when the primary listing exchange stops</strong><small>Data arrangement held by the venue operator</small></article><article><strong>U.S. person; books and records kept in the United States</strong><small>Met and kept by the venue operator</small></article></div><p class="boundary-copy">These stay with the venue operator. Corner Store does not perform or certify them. SEC Release No. 34-106402, sections II.B, II.C, II.G, II.H, II.L.</p></aside>
+        </section>
+
+        <section id="venueBPoolView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue B · pool</p><h2>Permissioned AMM pool</h2><p>A verified venue participant may swap the demo settlement asset for a tokenized listed-stock fixture.</p></div><span id="tsvPoolStatus" class="status-pill neutral">Runtime not connected</span></div>
+          <div class="pool-hero surface">
+            <div class="pool-pair"><span class="token-mark security">OR</span><div><small>Issuer-sponsored token · demo</small><strong id="tsvAssetName">Orrin Systems, Inc. · common stock, issuer-sponsored token (demo)</strong><code id="tsvAssetAddress">Not connected</code></div><i>/</i><span class="token-mark cash">$</span><div><small>Demo settlement asset</small><strong id="tsvQuoteName">Demo USD</strong><code id="tsvQuoteAddress">Not connected</code></div></div>
+            <div class="pool-stats"><div><span>Liquidity</span><strong id="tsvLiquidity">Unavailable</strong></div><div><span>Recent fills</span><strong id="tsvRecentFills">Unavailable</strong></div><div><span>Settlement gate</span><strong id="tsvSettlementState">Preview only</strong></div></div>
+          </div>
+          <section class="surface execution-contrast"><div><p class="kicker">Execution is policy-bound</p><h3>Different assets, different permitted paths</h3></div><div class="contrast-grid"><article><span class="status-pill warning">RFQ only</span><strong>Restricted security</strong><p>A C-01 holding-period rule makes the asset pool-incompatible under D020.</p></article><article><span class="status-pill live">AMM eligible</span><strong>Listed-stock fixture</strong><p>No holding-period element is present; the venue-specific AMM rules still apply.</p></article></div></section>
+        </section>
+
+        <section id="venueBLimitsView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue B · limits</p><h2>Limits and stoppages</h2><p>Observed state is displayed only when the demo API supplies a TSV runtime payload.</p></div><span id="tsvHaltBadge" class="status-pill neutral">Not connected</span></div>
+          <div class="limits-layout">
+            <section class="surface"><div class="section-head"><div><p class="kicker">Demo period volume</p><h3>Per-stock limit</h3></div><div class="limit-state"><strong id="tsvVolumeLabel">Unavailable</strong><span id="tsvLimitStatus" class="status-pill neutral">Venue-set demo limit</span></div></div><div class="volume-meter" role="progressbar" aria-label="TSV demo period volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="tsvVolumeBar"></i></div><p class="boundary-copy">This is a fixed demo limit. It does not calculate regulatory tiers, market-wide volume or affiliated-venue aggregation.</p></section>
+            <section class="surface"><div class="section-head"><div><p class="kicker">Stoppage controls</p><h3>Operator and primary-market signals</h3></div></div><div class="fact-list"><div><span>Venue pause</span><strong id="tsvVenuePause">Unavailable</strong></div><div><span>Primary exchange signal</span><strong id="tsvPrimaryHalt">Simulated input not connected</strong></div></div><button class="danger full" disabled aria-describedby="tsvControlHelp">Pause trading</button><p id="tsvControlHelp" class="field-help">Control disabled: this UI branch does not submit operator transactions.</p><div class="ownership-list"><p class="kicker">Who holds what</p><div><strong>Venue operator</strong><span>Deployment, pause, limit, fees and paired assets</span></div><div><strong>Corner Store</strong><span>Rule checks and successful-settlement records</span></div><div><strong>Engine only</strong><span>Volume counter written at settlement</span></div></div></section>
+          </div>
+          <section class="surface tsv-limit-log"><div class="section-head"><div><p class="kicker">Settlement and rejection evidence</p><h3>Current demo period</h3></div><span class="fixture-label">Reverts are not on-chain decision records</span></div><table class="data-table"><thead><tr><th>Block</th><th>Wallet</th><th>Result</th><th>Rule and detail</th></tr></thead><tbody id="tsvLimitTradeRows"><tr><td colspan="4"><div class="empty-row">No connected TSV evidence.</div></td></tr></tbody></table></section>
+        </section>
+
+        <section id="venueBLogView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue B · records</p><h2>AMM trade log</h2><p>Successful settlement evidence appears only when supplied by the connected runtime. Reverted decisions are not fabricated as on-chain records.</p></div><span class="fixture-label">PII-free</span></div>
+          <section class="surface table-surface"><table class="data-table"><thead><tr><th>Execution</th><th>Asset</th><th>Amount</th><th>Policy</th><th>Block</th></tr></thead><tbody id="tsvTradeRows"><tr><td colspan="5"><div class="empty-row">No TSV-style runtime is connected.</div></td></tr></tbody></table></section>
+        </section>
+
+        <section id="tsvReceiptView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Investor · receipt</p><h2>Decision receipt</h2><p>A successful settlement records the policy and checks that passed. A reverted attempt is shown only as runner evidence.</p></div><span id="tsvReceiptSource" class="status-pill neutral">Runtime not connected</span></div>
+          <div id="tsvReceiptBanner" class="settlement-banner neutral">No connected settlement evidence.</div>
+          <div class="receipt-layout">
+            <section class="surface"><p class="kicker">Decision</p><div class="fact-list receipt-facts"><div><span>Result</span><strong id="tsvReceiptResult">Unavailable</strong></div><div><span>Policy</span><code id="tsvReceiptPolicy">—</code></div><div><span>Rule set</span><strong>Recipe 40 · v1 · TSV-style (illustrative)</strong></div><div><span>Venue</span><code id="tsvReceiptVenue">—</code></div><div><span>Transaction</span><code id="tsvReceiptTransaction">—</code></div></div><p class="boundary-copy">This receipt states which rules were checked and the result. It is not legal advice.</p></section>
+            <section class="surface"><p class="kicker">Checks applied · 5 of 5 passed</p><div class="receipt-checks"><article><span>✓</span><div><strong>Venue participant</strong><small>Accepted TSV / DIRECT identity evidence</small></div></article><article><span>✓</span><div><strong>Sanctions screening</strong><small>Allowed without exposing restricted details</small></div></article><article><span>✓</span><div><strong>Token standard</strong><small>ERC-3643 wiring checked</small></div></article><article><span>✓</span><div><strong>Paired asset</strong><small>Manifest-recorded category permitted</small></div></article><article><span>✓</span><div><strong>Volume limit</strong><small id="tsvReceiptVolume">Measured at settlement</small></div></article><article class="excluded"><span>□</span><div><strong>Accredited investor</strong><small>Not part of this rule set</small></div></article></div></section>
+          </div>
+          <section id="tsvBlockedProbe" class="blocked-probe hidden"><span>REVERTED</span><div><strong>The next trade exceeded the venue-set demo period limit.</strong><p>The transaction reverted with no asset movement. This runner observation is not presented as an on-chain decision record.</p></div></section>
+        </section>
+
+        <section id="venueIntegrationView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue integration</p><h2>Add rule checks without replacing the venue</h2><p>Matching, custody and venue operation stay with the customer. Corner Store evaluates immediately before settlement and commits measured settlement facts.</p></div><span class="status-pill live">ExternalSettlementGate v1</span></div>
+          <section class="surface integration-flow" aria-label="External settlement gate flow"><article><span>01</span><strong>OMS pre-check</strong><small>Advisory · explicit block</small></article><i>→</i><article><span>02</span><strong>Fresh evaluation</strong><small>Pause · nonce · policy</small></article><i>→</i><article><span>03</span><strong>Customer settlement</strong><small>Gate-only target</small></article><i>→</i><article><span>04</span><strong>Measure &amp; commit</strong><small>Atomic evidence</small></article></section>
+          <div class="integration-layout">
+            <section class="surface"><p class="kicker">Adoption path</p><div class="integration-steps"><article><span>1</span><div><strong>Create</strong><code>corner-store create ./venue --template dex-integration</code></div></article><article><span>2</span><div><strong>Check and plan</strong><code>precheckExternalSettlement(order)</code></div></article><article><span>3</span><div><strong>Verify</strong><code>verifyExternalSettlementActivation(config, reader)</code></div></article></div></section>
+            <section class="surface"><p class="kicker">Customer wrapper</p><pre class="integration-code"><code>function settle(ExecutionRequest calldata req)
+  external onlyGate returns (ExecutionResult memory) {
+  _validateAuthoritativeOrder(req);
+  return _settleExistingVenue(req);
+}</code></pre><p class="boundary-copy">Order Book remains <strong>not implemented</strong>. The supported v1 external path is the settlement gate, not a generic matching engine.</p></section>
+          </div>
+          <p class="integration-links"><a href="https://github.com/decipherhub/corner-store/blob/main/docs/sdk-integration.md">SDK integration guide</a><a href="https://github.com/decipherhub/corner-store/blob/main/docs/product-specs/external-settlement-gate.md">Settlement gate contract</a></p>
+        </section>
+
+        <section id="tokenizerAssetView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Tokenizer · asset</p><h2>Asset and rules</h2><p>Issuer and transfer-agent facts are shown separately from venue execution controls.</p></div><span id="tokenizerAssetBadge" class="status-pill neutral">Loading</span></div>
+          <div class="asset-record-layout">
+            <section class="surface asset-record-card"><span id="tokenizerAssetSymbol" class="asset-symbol">—</span><p class="kicker">Registered demo asset</p><h3 id="tokenizerAssetName">Loading asset</h3><div class="fact-list"><div><span>Token address</span><code id="tokenizerAssetAddress">—</code></div><div><span>Profile</span><strong id="tokenizerAssetProfile">—</strong></div><div><span>Transfer standard</span><strong>ERC-3643</strong></div><div><span>Execution path</span><strong id="tokenizerExecutionPath">—</strong></div></div></section>
+            <section class="surface"><p class="kicker">Policy binding</p><h3>Manifest evidence</h3><div class="fact-list"><div><span>Manifest</span><code id="tokenizerManifest">—</code></div><div><span>Policy registry</span><code id="tokenizerPolicyRegistry">—</code></div><div><span>Router</span><code id="tokenizerRouter">—</code></div><div><span>Activation</span><strong id="tokenizerActivation">—</strong></div></div><p class="boundary-copy">These values come from the current demo artifact. This screen does not let the Tokenizer match orders, quote prices or operate a venue.</p></section>
+          </div>
+          <section id="tsvAssetComparison" class="surface tsv-asset-comparison hidden"><div class="section-head"><div><p class="kicker">Asset paths · illustrative comparison</p><h3>The bound rule set decides the permitted venue type</h3></div><span class="fixture-label">Only Orrin is connected in this profile</span></div><div class="asset-path-table"><div class="asset-path-head"><span>Asset</span><span>Rule set</span><span>Holding period</span><span>Execution</span></div><div><strong>Restricted security fixture<small>Reference profile, not connected</small></strong><span>Reg D reference</span><span>Present</span><b>RFQ only</b></div><div><strong>Private fund fixture<small>Reference profile, not connected</small></strong><span>QP reference</span><span>Present</span><b>RFQ only</b></div><div class="selected"><strong>Orrin Systems, Inc. · common stock<small>Issuer-sponsored token · connected demo asset</small></strong><span>Recipe 40 · v1</span><span>None</span><b>AMM pool</b></div></div><div class="pool-binding-rejection"><span>×</span><div><strong>Not available in a pool</strong><p>A holding-period asset is rejected by the shared D020 compatibility guard and remains on the RFQ path.</p><code>Rule-set check · C-01-* present → AMM binding rejected</code></div></div></section>
+        </section>
+
+        <section id="tokenizerHoldersView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Tokenizer · register</p><h2>Holder evidence</h2><p>Read-only wallet balances from the current demo state. Legal holder-of-record and beneficial-owner determinations remain transfer-agent responsibilities.</p></div><span id="tokenizerIdentityTrack" class="fixture-label">Identity evidence unavailable</span></div>
+          <section class="surface table-surface"><table class="data-table"><thead><tr><th>Participant</th><th>Wallet</th><th>RWA balance</th><th>Identity evidence</th></tr></thead><tbody id="tokenizerHolderRows"><tr><td colspan="4"><div class="empty-row">Loading holder evidence.</div></td></tr></tbody></table></section>
+        </section>
       </main>
     </div>
   </div>
 
   <div id="confirmBackdrop" class="modal-backdrop hidden"><section id="confirmDialog" class="modal" role="dialog" aria-modal="true"><button id="closeConfirm" class="modal-close">×</button><p class="kicker">Final review</p><h2>이 견적을 체결할까요?</h2><div id="review" class="review-card"></div><div id="modalPrecheck" class="precheck-card compact"></div><p class="modal-note">Pre-check 결과와 관계없이 Router의 ComplianceEngine이 fill 시점에 최신 상태를 다시 검사합니다.</p><div class="button-row end"><button id="cancelConfirm" class="secondary">취소</button><button id="executeQuote" class="primary">견적 수락 및 체결</button></div></section></div>
   <div id="guideBackdrop" class="modal-backdrop hidden"><section id="demoGuide" class="modal guide-modal" role="dialog" aria-modal="true"><button id="closeGuide" class="modal-close">×</button><p class="kicker">Presenter runbook</p><h2>규제 RFQ 운영 흐름</h2><div class="guide-grid"><article><span>01</span><h3>환경과 정책 확인</h3><p>Mock TA·Anvil 배지를 고지하고 Admin에서 자산, Manifest와 현재 claim·Maker 상태를 확인합니다.</p></article><article><span>02</span><h3>정상 RFQ 체결</h3><p>적격 투자자로 firm quote를 검토·체결하고 Portfolio와 실제 fill marker가 갱신되는지 확인합니다.</p></article><article><span>03</span><h3>Enforcement Case 열기</h3><p>Admin의 Enforcement Cases에서 우회, claim 만료 또는 Maker 취소 케이스를 생성합니다.</p></article><article><span>04</span><h3>상태와 실행 분리</h3><p>기준 상태, quote 발급, 정책 변경, 실행 제출을 순서대로 수행합니다. 각 단계는 자동으로 합쳐 실행되지 않습니다.</p></article><article><span>05</span><h3>증거 검토</h3><p>실패 transaction, reasonCode, 잔액 불변과 이벤트를 확인합니다. 거부된 요청은 차트와 볼륨에 포함되지 않습니다.</p></article></div><div class="guide-boundary"><strong>중요</strong> Pre-check는 보장이 아니며, quote는 taker 주소에 묶입니다. RFQAdapter는 Router만 호출할 수 있고 Router는 fill 시점에 최신 정책을 다시 검사합니다.</div></section></div>
+  <script src="/runtime-state.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

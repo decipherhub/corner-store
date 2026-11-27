@@ -64,6 +64,11 @@ export interface OperatorApiOptions {
 export function createOperatorApi(options: OperatorApiOptions): Server {
   const config = loadConfig(options.configPath);
   const artifact = options.artifactPath ? JSON.parse(readFileSync(options.artifactPath, "utf8")) : undefined;
+  if (artifact?.assetProfile !== undefined && artifact.assetProfile !== config.asset.profile) {
+    throw new Error(
+      `operator config profile ${config.asset.profile} does not match deployment artifact ${artifact.assetProfile}`
+    );
+  }
   const manifest = options.manifestPath && existsSync(options.manifestPath)
     ? JSON.parse(readFileSync(options.manifestPath, "utf8"))
     : undefined;
@@ -89,10 +94,64 @@ export function createOperatorApi(options: OperatorApiOptions): Server {
     if (path === "/metrics") return sendMetrics(res, metrics.requests, metrics.unauthorized, index.list().length);
     if (path === "/api/v1/config") return send(res, 200, sanitizeConfig(config));
     if (path === "/api/v1/deployment") return send(res, 200, artifact ?? {configured: false});
+    if (path === "/api/v1/tsv-style") return send(res, 200, tsvStyleSnapshot(artifact));
     if (path === "/api/v1/manifest") return send(res, 200, manifest ?? {configured: false});
     if (path === "/api/v1/events") return send(res, 200, {events: index.list(), source: options.eventsPath ? "file-index" : "in-memory-index"});
     return send(res, 404, {error: "not found"});
   });
+}
+
+function tsvStyleSnapshot(artifact: any): Record<string, unknown> {
+  if (!artifact?.tsvStyleEnabled) return {enabled: false, source: "not-configured"};
+  const settlement = artifact.tsvStyleLastSettlement;
+  const tradeLog = settlement ? [{
+    executionId: settlement.executionId,
+    transactionHash: settlement.transactionHash,
+    blockNumber: settlement.blockNumber,
+    timestamp: settlement.timestamp,
+    buyer: settlement.buyer,
+    asset: settlement.asset,
+    amount: settlement.amount,
+    policyId: settlement.policyId
+  }] : [];
+  return {
+    enabled: true,
+    source: "deployment-artifact",
+    readOnly: true,
+    executionEnabled: false,
+    venue: artifact.tsvStyleVenue,
+    recipe: {id: artifact.tsvStyleRecipeId, version: artifact.tsvStyleRecipeVersion},
+    authority: {
+      model: artifact.tsvStyleAuthorityModel,
+      governance: artifact.tsvStyleGovernance,
+      operator: artifact.tsvStyleOperator,
+      cornerStoreControlsVenue: false
+    },
+    asset: {
+      name: "Orrin Systems, Inc. · common stock, issuer-sponsored token (demo)",
+      symbol: "tORRN",
+      address: artifact.rwaToken
+    },
+    quoteAsset: {name: "Demo USD", symbol: "qUSD", address: artifact.quote},
+    liquidity: undefined,
+    periodVolume: formatWholeTokens(artifact.tsvStylePeriodVolume, 18),
+    periodLimit: formatWholeTokens(artifact.tsvStylePeriodLimit, 18),
+    settlement,
+    blockedProbe: artifact.tsvStyleBlockedProbe,
+    tradeLog,
+    evidence: {
+      recipeRegistered: Number(artifact.tsvStyleRecipeId) === 40,
+      identityEvidence: artifact.tsvStyleIdentityEvidence,
+      pairedAssetElement: artifact.tsvStylePairedAssetElement,
+      volumeLimitElement: artifact.tsvStyleVolumeLimit
+    }
+  };
+}
+
+function formatWholeTokens(value: unknown, decimals: number): string | undefined {
+  if (typeof value !== "string" && typeof value !== "number") return undefined;
+  const raw = BigInt(value);
+  return String(raw / (10n ** BigInt(decimals)));
 }
 
 function authorized(req: IncomingMessage, expected: string): boolean {

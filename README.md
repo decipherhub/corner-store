@@ -1,7 +1,10 @@
 # Corner Store
 
+**A compliance engine that re-checks a tokenized security's rules every time it trades.**
+
 Corner Store is a Solidity SDK and reference execution system for DEX-level
-compliance of tokenized assets. The SDK models market access with reusable
+compliance of tokenized assets. A blocked execution reverts with a reason code;
+a completed execution records the policy and checks that passed. The SDK models market access with reusable
 Element, Recipe, Manifest, and Operator boundaries. The Corner Store reference
 DEX proves the model across AMM, RFQ, and future Order Book adapters.
 

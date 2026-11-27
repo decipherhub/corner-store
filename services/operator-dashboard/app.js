@@ -1,10 +1,24 @@
 const $ = (id) => document.getElementById(id);
-const profiles = {admin: {id: "admin", label: "Admin", role: "admin", address: null}};
+const profiles = {
+  admin: {id: "admin", label: "Admin", role: "admin", address: null},
+  tsvInvestor: {id: "tsvInvestor", label: "Investor · TSV receipt", role: "tsvInvestor", address: null},
+  venueA: {id: "venueA", label: "Venue A · broker-dealer ATS", role: "venueA", address: null},
+  venueB: {id: "venueB", label: "Venue B · TSV-style operator", role: "venueB", address: null},
+  tokenizer: {id: "tokenizer", label: "Tokenizer · issuer / transfer agent", role: "tokenizer", address: null}
+};
 const viewMeta = {
   dashboard: ["Overview", "Dashboard"], create: ["New request", "RFQ 거래"], rfqs: ["Requests & quotes", "My RFQs"],
   portfolio: ["Holdings", "Portfolio"], adminDashboard: ["Admin", "Dashboard"], adminMonitoring: ["Admin", "RFQ 모니터링"],
   adminUsers: ["Admin", "사용자 / 화이트리스트"], adminMaker: ["Admin", "Maker 승인 시연"],
-  adminEnforcement: ["Compliance operations", "Enforcement Cases"], adminHistory: ["Admin", "거래 내역"]
+  adminEnforcement: ["Compliance operations", "Enforcement Cases"], adminHistory: ["Admin", "거래 내역"],
+  venueBOnboarding: ["Venue B · onboarding", "Venue onboarding"],
+  venueBPool: ["Venue B · pool", "Permissioned AMM pool"],
+  venueBLimits: ["Venue B · limits", "Limits and stoppages"],
+  venueBLog: ["Venue B · records", "AMM trade log"],
+  tsvReceipt: ["Investor · receipt", "Decision receipt"],
+  venueIntegration: ["Venue integration", "External settlement gate"],
+  tokenizerAsset: ["Tokenizer · asset", "Asset and rules"],
+  tokenizerHolders: ["Tokenizer · register", "Holder evidence"]
 };
 let currentProfile = profiles.admin;
 let chainState = null;
@@ -44,7 +58,135 @@ async function operatorApi(path) {
 }
 function post(path, value) { return api(path, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(value)}); }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function shortAddress(value) { return value ? `${value.slice(0, 6)}…${value.slice(-4)}` : "—"; }
+function shortAddress(value) { return typeof value === "string" && value ? `${value.slice(0, 6)}…${value.slice(-4)}` : "—"; }
+function profileAddress(profile) {
+  if (!chainState) return "연결 중…";
+  if (profile.role === "admin") return shortAddress(chainState.maker);
+  if (profile.role === "venueA") return shortAddress(chainState.deployment?.router || chainState.maker);
+  if (profile.role === "venueB") return shortAddress(chainState.tsvStyle?.venue);
+  if (profile.role === "tsvInvestor") return shortAddress(chainState.tsvStyle?.settlement?.buyer);
+  if (profile.role === "tokenizer") return shortAddress(chainState.presentation?.asset?.address);
+  return shortAddress(profile.address);
+}
+function optionalAddress(value) { return typeof value === "string" && value ? shortAddress(value) : "Not connected"; }
+function optionalAmount(value, suffix = "") {
+  if (value === undefined || value === null || value === "") return "Unavailable";
+  return `${value}${suffix}`;
+}
+function isTsvStyleProfile() { return chainState?.assetProfile === "tsv-style"; }
+function renderTsvVenue() {
+  if (!chainState) return;
+  const tsv = chainState.tsvStyle;
+  const connected = Boolean(tsv?.enabled);
+  const sourceBadge = $("tsvSourceBadge");
+  sourceBadge.textContent = connected
+    ? (tsv.source === "deployment-artifact" ? "Deployment evidence" : "Runtime evidence")
+    : "Runtime not connected";
+  sourceBadge.className = `status-pill ${connected ? "live" : "neutral"}`;
+  $("tsvVenueAddress").textContent = optionalAddress(tsv?.venue);
+  $("tsvAssetName").textContent = tsv?.asset?.name || "Orrin Systems, Inc. · common stock, issuer-sponsored token (demo)";
+  $("tsvAssetAddress").textContent = optionalAddress(tsv?.asset?.address);
+  $("tsvQuoteName").textContent = tsv?.quoteAsset?.name || "Demo USD";
+  $("tsvQuoteAddress").textContent = optionalAddress(tsv?.quoteAsset?.address);
+  $("tsvLiquidity").textContent = optionalAmount(tsv?.liquidity, tsv?.asset?.symbol ? ` ${tsv.asset.symbol}` : "");
+  $("tsvRecentFills").textContent = connected ? String(tsv.tradeLog?.length || 0) : "Unavailable";
+  $("tsvSettlementState").textContent = connected
+    ? (tsv.executionEnabled ? "Measured AMM settlement" : "Deployed · read-only evidence")
+    : "Preview only";
+  const poolStatus = $("tsvPoolStatus");
+  const haltMeasured = typeof tsv?.halted === "boolean";
+  poolStatus.textContent = connected
+    ? (haltMeasured ? (tsv.halted ? "Halted" : "Trading active") : "Deployed · live status unavailable")
+    : "Runtime not connected";
+  poolStatus.className = `status-pill ${connected && haltMeasured ? (tsv.halted ? "warning" : "live") : "neutral"}`;
+
+  const used = Number(tsv?.periodVolume || 0);
+  const limit = Number(tsv?.periodLimit || 0);
+  const volumeMeasured = tsv?.periodVolume !== undefined && tsv?.periodVolume !== null;
+  const ratio = connected && volumeMeasured && limit > 0 ? Math.min(100, Math.round(used / limit * 100)) : 0;
+  $("tsvVolumeLabel").textContent = connected && volumeMeasured && limit > 0
+    ? `${used.toLocaleString()} / ${limit.toLocaleString()} demo shares`
+    : (connected && limit > 0 ? `Live counter unavailable · limit ${limit.toLocaleString()} demo shares` : "Unavailable");
+  $("tsvLimitStatus").textContent = connected && volumeMeasured && ratio >= 100 ? "Limit reached" : "Venue-set demo limit";
+  $("tsvLimitStatus").className = `status-pill ${connected && volumeMeasured && ratio >= 100 ? "warning" : "neutral"}`;
+  $("tsvVolumeBar").style.width = `${ratio}%`;
+  $("tsvVolumeBar").parentElement.setAttribute("aria-valuenow", String(ratio));
+  $("tsvVenuePause").textContent = connected && haltMeasured ? (tsv.halted ? "Paused" : "Active") : "Unavailable";
+  $("tsvPrimaryHalt").textContent = connected && tsv.primaryMarketHalt !== undefined
+    ? (tsv.primaryMarketHalt ? "Simulated halt received" : "No simulated halt")
+    : "Simulated input not connected";
+  const haltBadge = $("tsvHaltBadge");
+  haltBadge.textContent = connected && haltMeasured
+    ? (tsv.halted ? "Trading halted" : "Trading active")
+    : (connected ? "Settlement evidence connected" : "Live state not connected");
+  haltBadge.className = `status-pill ${connected && haltMeasured ? (tsv.halted ? "warning" : "live") : "neutral"}`;
+  const rows = Array.isArray(tsv?.tradeLog) ? tsv.tradeLog : [];
+  $("tsvTradeRows").innerHTML = rows.length ? rows.map((trade) => `<tr><td><code>${escapeHtml(shortAddress(trade.executionId))}</code></td><td>${escapeHtml(trade.asset || tsv?.asset?.symbol || "—")}</td><td>${escapeHtml(trade.amount ?? "—")}</td><td><code>${escapeHtml(shortAddress(trade.policyId))}</code></td><td>${escapeHtml(trade.blockNumber ?? "—")}</td></tr>`).join("") : `<tr><td colspan="5"><div class="empty-row">${connected ? "No completed settlement evidence is available." : "No TSV-style runtime is connected."}</div></td></tr>`;
+  const settledRows = rows.map((trade) => `<tr><td>${escapeHtml(trade.blockNumber ?? "—")}</td><td><code>${escapeHtml(shortAddress(trade.buyer))}</code></td><td><span class="status-pill live">Settled</span></td><td><strong>Recipe 40 · v1</strong><small>${escapeHtml(trade.amount ?? "—")} ${escapeHtml(trade.asset || tsv?.asset?.symbol || "")}</small></td></tr>`);
+  const blockedRow = tsv?.blockedProbe?.reverted
+    ? `<tr><td>—</td><td><code>${escapeHtml(shortAddress(tsv?.settlement?.buyer))}</code></td><td><span class="status-pill warning">Reverted</span></td><td><strong>TSV-VOL period limit</strong><small>Runner evidence only · no on-chain decision record</small></td></tr>`
+    : "";
+  $("tsvLimitTradeRows").innerHTML = settledRows.length || blockedRow
+    ? `${blockedRow}${settledRows.join("")}`
+    : '<tr><td colspan="4"><div class="empty-row">No connected TSV evidence.</div></td></tr>';
+  renderTsvReceipt();
+}
+function renderTsvReceipt() {
+  if (!chainState) return;
+  const tsv = chainState.tsvStyle;
+  const settlement = tsv?.settlement;
+  const connected = Boolean(tsv?.enabled && settlement?.transactionHash);
+  const source = $("tsvReceiptSource");
+  source.textContent = connected ? "Settlement evidence" : "Runtime not connected";
+  source.className = `status-pill ${connected ? "live" : "neutral"}`;
+  $("tsvReceiptBanner").textContent = connected
+    ? `SETTLED · Bought ${settlement.amount} ${settlement.asset || tsv.asset?.symbol || "tokens"} · block ${settlement.blockNumber}`
+    : "No connected settlement evidence.";
+  $("tsvReceiptBanner").className = `settlement-banner ${connected ? "live" : "neutral"}`;
+  $("tsvReceiptResult").textContent = connected ? "PASS · checked at settlement" : "Unavailable";
+  $("tsvReceiptPolicy").textContent = connected ? shortAddress(settlement.policyId) : "—";
+  $("tsvReceiptVenue").textContent = connected ? shortAddress(tsv.venue) : "—";
+  $("tsvReceiptTransaction").textContent = connected ? shortAddress(settlement.transactionHash) : "—";
+  $("tsvReceiptVolume").textContent = connected
+    ? `${tsv.periodVolume || settlement.amount} of ${tsv.periodLimit || "—"} demo shares this period`
+    : "Measured at settlement";
+  $("tsvBlockedProbe").classList.toggle("hidden", !tsv?.blockedProbe?.reverted);
+}
+function renderTokenizer() {
+  if (!chainState) return;
+  const tsvProfile = isTsvStyleProfile();
+  const asset = tsvProfile && chainState.tsvStyle?.asset
+    ? {...chainState.presentation.asset, ...chainState.tsvStyle.asset}
+    : chainState.presentation.asset;
+  const deployment = chainState.deployment || {};
+  $("tokenizerAssetSymbol").textContent = asset.symbol;
+  $("tokenizerAssetName").textContent = asset.name;
+  $("tokenizerAssetAddress").textContent = optionalAddress(asset.address);
+  $("tokenizerAssetProfile").textContent = chainState.assetProfile || "—";
+  $("tokenizerExecutionPath").textContent = `${tsvProfile ? "AMM" : (chainState.presentation.execution?.venueType || "RFQ")} · settlement-time checks`;
+  $("tokenizerManifest").textContent = optionalAddress(deployment.manifest || chainState.manifest);
+  $("tokenizerPolicyRegistry").textContent = optionalAddress(deployment.policyRegistry);
+  $("tokenizerRouter").textContent = optionalAddress(deployment.router);
+  $("tokenizerActivation").textContent = deployment.activationMode || (deployment.productionDeployment ? "Production" : "Demo fixtures");
+  const assetBadge = $("tokenizerAssetBadge");
+  assetBadge.textContent = "Current demo state";
+  assetBadge.className = "status-pill neutral";
+  $("tsvAssetComparison").classList.toggle("hidden", !tsvProfile);
+  const tsvTrack = tsvProfile;
+  const evidenceRegistry = tsvTrack ? chainState.tsvStyle?.evidence?.identityEvidence : undefined;
+  $("tokenizerIdentityTrack").textContent = tsvTrack
+    ? `A-04-v2 · TSV / DIRECT · registry ${optionalAddress(evidenceRegistry)}`
+    : "Accepted identity evidence not exposed";
+  $("tokenizerHolderRows").innerHTML = (chainState.wallets || []).map((wallet) => {
+    const participantDetail = tsvTrack
+      ? "TSV profile participant · balance evidence only"
+      : (wallet.qualifiedPurchaser ? "RFQ qualified-purchaser fixture active" : escapeHtml(wallet.eligibilityReason || "RFQ fixture needs review"));
+    const identityDetail = tsvTrack
+      ? "Per-wallet A-04-v2 acceptance is not exposed by the demo API."
+      : "Per-wallet accepted identity evidence is not exposed by the demo API.";
+    return `<tr><td><strong>${escapeHtml(wallet.label)}</strong><small>${participantDetail}</small></td><td><code>${escapeHtml(shortAddress(wallet.address))}</code></td><td>${escapeHtml(formatBaseUnits(wallet.rwaBalance))} ${escapeHtml(asset.symbol)}</td><td><span class="status-pill neutral">Unavailable</span><small>${identityDetail}</small></td></tr>`;
+  }).join("") || '<tr><td colspan="4"><div class="empty-row">No holder balances or accepted identity evidence are available.</div></td></tr>';
+}
 function activeInputAsset() {
   return tradeSide === "buy" ? chainState?.presentation.quoteAsset : chainState?.presentation.asset;
 }
@@ -129,7 +271,7 @@ function selectedRfqRecord() {
   return session.rfqs.find((record) => record.id === session.selectedRfqId) || null;
 }
 function visibleRfqRecords() {
-  if (currentProfile.role === "admin") return session.rfqs;
+  if (["admin", "venueA"].includes(currentProfile.role)) return session.rfqs;
   const address = currentProfile.address?.toLowerCase();
   return session.rfqs.filter((record) => record.signedQuote.quote.taker.toLowerCase() === address);
 }
@@ -169,11 +311,17 @@ function updateSummary() {
   $("rfqNavCount").textContent = String(visible.length);
 }
 function showView(view) {
+  if (isTsvStyleProfile() && (view.startsWith("admin") || ["dashboard", "create", "rfqs", "portfolio"].includes(view))) {
+    view = currentProfile.role === "tokenizer" ? "tokenizerHolders" : "venueBOnboarding";
+  }
   document.querySelectorAll(".view").forEach((node) => node.classList.toggle("hidden", node.id !== `${view}View`));
   document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   const [kicker, title] = viewMeta[view] || viewMeta.dashboard;
   $("pageKicker").textContent = kicker; $("pageTitle").textContent = title;
   if (view.startsWith("admin")) refreshAdmin();
+  if (view.startsWith("venueB")) renderTsvVenue();
+  if (view === "tsvReceipt") renderTsvReceipt();
+  if (view.startsWith("tokenizer")) renderTokenizer();
 }
 function selectedWallet() {
   if (currentProfile.role !== "user" || !currentProfile.address) throw Error("사용자 지갑을 선택하세요.");
@@ -181,19 +329,34 @@ function selectedWallet() {
 }
 
 async function loadState() {
-  [chainState, marketHistory] = await Promise.all([api("/demo/state"), api("/demo/market-history")]);
+  const [baseState, history, tsvStyle] = await Promise.all([
+    api("/demo/state"),
+    api("/demo/market-history"),
+    operatorApi("/api/v1/tsv-style").catch(() => ({enabled: false, source: "unavailable"}))
+  ]);
+  ({chainState, marketHistory} = composeDashboardRuntime(baseState, history, tsvStyle));
   stateLoadedAt = Date.now();
   for (const wallet of chainState.wallets || []) profiles[wallet.id] = {...wallet, role: "user"};
   configurePresentation();
-  currentProfile = profiles[$("walletSelector").value] || profiles[chainState.wallets[0]?.id] || profiles.admin;
-  $("walletAddress").textContent = currentProfile.role === "admin" ? shortAddress(chainState.maker) : shortAddress(currentProfile.address);
+  currentProfile = profiles[$("walletSelector").value] || profiles[chainState.wallets[0]?.id] || profiles.venueB;
+  $("walletAddress").textContent = profileAddress(currentProfile);
   return chainState;
 }
 function configurePresentation() {
   const selected = $("walletSelector").value;
   const firstLoad = !presentationInitialized;
-  $("walletSelector").innerHTML = `<option value="admin">Admin</option>${chainState.wallets.map((wallet) => `<option value="${escapeHtml(wallet.id)}">${escapeHtml(wallet.label)}</option>`).join("")}`;
-  $("walletSelector").value = presentationInitialized && profiles[selected] ? selected : chainState.wallets[0].id;
+  const tsvProfile = isTsvStyleProfile();
+  const rfqRoles = `<optgroup label="Investor">${chainState.wallets.map((wallet) => `<option value="${escapeHtml(wallet.id)}">${escapeHtml(wallet.label)}</option>`).join("")}</optgroup><optgroup label="Demo administration"><option value="admin">Admin</option></optgroup>`;
+  const venueRoles = tsvProfile
+    ? '<optgroup label="Investor"><option value="tsvInvestor">Investor · connected AMM receipt</option></optgroup><optgroup label="Venue"><option value="venueB">Venue B · TSV-style operator · AMM</option><option value="venueA" disabled>Venue A · launch --profile buidl-like or reg-d</option></optgroup>'
+    : '<optgroup label="Venue"><option value="venueA">Venue A · broker-dealer ATS · RFQ</option><option value="venueB">Venue B · TSV-style operator · AMM</option></optgroup>';
+  $("walletSelector").innerHTML = `${tsvProfile ? "" : rfqRoles}${venueRoles}<optgroup label="Issuer / transfer agent"><option value="tokenizer">Tokenizer · asset and investor records</option></optgroup>`;
+  const selectedAllowed = profiles[selected] && (!tsvProfile || ["tsvInvestor", "venueB", "tokenizer"].includes(profiles[selected].role));
+  $("walletSelector").value = presentationInitialized && selectedAllowed
+    ? selected
+    : (tsvProfile ? "venueB" : (chainState.wallets[0]?.id || "venueA"));
+  $("tokenizerInvestorRecordsNav").classList.toggle("hidden", tsvProfile);
+  $("tokenizerHoldersNav").querySelector("span").textContent = tsvProfile ? "02" : "03";
   presentationInitialized = true;
   const asset = chainState.presentation.asset;
   const minimum = formatBaseUnits(asset.minimumAmountBaseUnits);
@@ -354,16 +517,51 @@ function renderWalletBalances() {
   $("quoteHolding").textContent = `${formatBaseUnits(currentProfile.quoteBalance, chainState.presentation.quoteAsset.decimals)} ${chainState.presentation.quoteAsset.symbol}`;
 }
 async function switchProfile() {
-  currentProfile = profiles[$("walletSelector").value];
+  const requestedProfile = profiles[$("walletSelector").value] || profiles.admin;
+  currentProfile = isTsvStyleProfile() && !["tsvInvestor", "venueB", "tokenizer"].includes(requestedProfile.role)
+    ? profiles.venueB
+    : requestedProfile;
+  $("walletSelector").value = currentProfile.id;
   const admin = currentProfile.role === "admin";
+  const venueA = currentProfile.role === "venueA";
+  const venueB = currentProfile.role === "venueB";
+  const tsvInvestor = currentProfile.role === "tsvInvestor";
+  const tokenizer = currentProfile.role === "tokenizer";
+  const user = currentProfile.role === "user";
   const qpRequired = chainState?.requiresQualifiedPurchaser;
-  $("userNav").classList.toggle("hidden", admin);
+  $("userNav").classList.toggle("hidden", !user);
   $("adminNav").classList.toggle("hidden", !admin);
-  $("walletAddress").textContent = admin ? shortAddress(chainState?.maker) : shortAddress(currentProfile.address);
-  $("roleBanner").classList.toggle("hidden", admin || !qpRequired || currentProfile.qualifiedPurchaser);
-  $("roleBanner").innerHTML = admin ? "" : `<strong>현재 지갑은 적격투자자가 아닙니다.</strong> ${escapeHtml(currentProfile.eligibilityReason || "Qualified Purchaser claim missing")}`;
+  $("venueANav").classList.toggle("hidden", !venueA);
+  $("venueBNav").classList.toggle("hidden", !venueB);
+  $("tsvInvestorNav").classList.toggle("hidden", !tsvInvestor);
+  $("tokenizerNav").classList.toggle("hidden", !tokenizer);
+  $("walletAddress").textContent = profileAddress(currentProfile);
+  const userBlocked = user && qpRequired && !currentProfile.qualifiedPurchaser;
+  $("roleBanner").classList.toggle("hidden", !(userBlocked || venueA || venueB || tokenizer));
+  $("roleBanner").innerHTML = userBlocked
+    ? `<strong>현재 지갑은 적격투자자가 아닙니다.</strong> ${escapeHtml(currentProfile.eligibilityReason || "Qualified Purchaser claim missing")}`
+    : venueA
+      ? "<strong>Venue A · broker-dealer ATS (demo).</strong> Matching and venue operation stay with the customer; Corner Store supplies settlement-time rule checks."
+      : venueB
+        ? `<strong>Venue B · TSV-style operator (illustrative).</strong> This demo does not state that the venue qualifies for an exemption.${isTsvStyleProfile() ? " Launch an RFQ profile for Venue A and RFQ mutation controls." : ""}`
+        : tokenizer
+          ? "<strong>Tokenizer · issuer / transfer-agent facts.</strong> The Tokenizer records issuer and transfer-agent facts; it does not match orders, quote prices or operate either venue."
+          : "";
   if (admin) showView("adminDashboard");
-  else {
+  else if (tsvInvestor) {
+    renderTsvReceipt();
+    showView("tsvReceipt");
+  }
+  else if (venueA) {
+    showView("adminDashboard");
+    await refreshAdmin();
+  } else if (venueB) {
+    renderTsvVenue();
+    showView("venueBOnboarding");
+  } else if (tokenizer) {
+    renderTokenizer();
+    showView("tokenizerAsset");
+  } else {
     const selected = selectedRfqRecord();
     if (selected && selected.signedQuote.quote.taker.toLowerCase() !== currentProfile.address.toLowerCase()) {
       live = null;
@@ -603,7 +801,7 @@ async function proveCompliance() {
 }
 
 async function refreshAdmin() {
-  if (currentProfile.role !== "admin") return;
+  if (!["admin", "venueA", "tokenizer"].includes(currentProfile.role)) return;
   try {
     await loadState();
     const eventsPayload = await operatorApi("/api/v1/events").catch(() => ({events: []}));
