@@ -118,3 +118,10 @@ without adding a separate issuer workflow. The role records issuer and
 transfer-agent facts; it does not match orders, quote prices or operate either
 venue. Addresses that are not present in `/demo/state` remain visibly labelled
 `Not connected` rather than being filled with preview values.
+
+When launched with `scripts/demo.sh --profile tsv-style`, the dashboard opens on
+Venue B and omits Investor and Admin mutation personas. Venue A is shown only as
+a disabled direction to launch an RFQ profile (`buidl-like` or `reg-d`). The
+Tokenizer holder table does not infer TSV A-04-v2 acceptance from the RFQ
+qualified-purchaser fixture; it labels per-wallet identity acceptance unavailable
+until the connected API exposes that track-specific evidence.

@@ -44,7 +44,7 @@
       <nav id="tokenizerNav" class="side-nav hidden" aria-label="Tokenizer 메뉴">
         <p class="nav-context"><strong>Tokenizer</strong><small>Issuer / transfer-agent facts</small></p>
         <button class="nav-item active" data-view="tokenizerAsset"><span>01</span>Asset &amp; rules</button>
-        <button class="nav-item" data-view="adminUsers"><span>02</span>Investor records</button>
+        <button id="tokenizerInvestorRecordsNav" class="nav-item" data-view="adminUsers"><span>02</span>Investor records</button>
         <button class="nav-item" data-view="tokenizerHolders"><span>03</span>Holders</button>
       </nav>
       <div class="trust-note"><span class="trust-dot"></span><div><strong>Pre-check ≠ guarantee</strong><small>서명 후 정책이 바뀌어도 Router가 fill 시점에 다시 검사합니다.</small></div></div>
@@ -248,7 +248,7 @@
         </section>
 
         <section id="tokenizerHoldersView" class="view hidden">
-          <div class="page-intro"><div><p class="kicker">Tokenizer · register</p><h2>Holder evidence</h2><p>Read-only wallet balances from the current demo state. Legal holder-of-record and beneficial-owner determinations remain transfer-agent responsibilities.</p></div><span class="fixture-label">Live demo balances</span></div>
+          <div class="page-intro"><div><p class="kicker">Tokenizer · register</p><h2>Holder evidence</h2><p>Read-only wallet balances from the current demo state. Legal holder-of-record and beneficial-owner determinations remain transfer-agent responsibilities.</p></div><span id="tokenizerIdentityTrack" class="fixture-label">Identity evidence unavailable</span></div>
           <section class="surface table-surface"><table class="data-table"><thead><tr><th>Participant</th><th>Wallet</th><th>RWA balance</th><th>Identity evidence</th></tr></thead><tbody id="tokenizerHolderRows"><tr><td colspan="4"><div class="empty-row">Loading holder evidence.</div></td></tr></tbody></table></section>
         </section>
       </main>

@@ -16,7 +16,8 @@ for (const marker of [
   'id="portfolioView"', 'id="adminDashboardView"', 'id="adminUsersView"', 'id="adminMakerView"',
   'id="venueANav"', 'id="venueBNav"', "Broker-dealer ATS · RFQ", "TSV-style operator · AMM",
   'id="tokenizerNav"', "Issuer / transfer-agent facts", 'id="tokenizerAssetView"',
-  'id="tokenizerHoldersView"', 'id="tokenizerHolderRows"', "B-02-v2",
+  'id="tokenizerHoldersView"', 'id="tokenizerHolderRows"', 'id="tokenizerIdentityTrack"',
+  'id="tokenizerInvestorRecordsNav"', "B-02-v2",
   'id="venueBOnboardingView"', 'id="venueBPoolView"', 'id="venueBLimitsView"', 'id="venueBLogView"',
   'id="venueIntegrationView"', 'id="tsvSourceBadge"', 'id="tsvVolumeBar"', 'id="tsvTradeRows"',
   "Illustrative rule set", "Order Book remains <strong>not implemented</strong>", "ExternalSettlementGate v1",
@@ -44,6 +45,8 @@ for (const marker of [
   "renderTsvVenue", "chainState.tsvStyle", "/api/v1/tsv-style", "executionEnabled", "tsvReadOnlyState",
   "disabled-for-tsv-style", 'role === "venueA"', 'role === "venueB"',
   "renderTokenizer", 'role === "tokenizer"', "The Tokenizer records issuer and transfer-agent facts",
+  'chainState?.assetProfile === "tsv-style"', "Venue A · launch --profile buidl-like or reg-d",
+  "Per-wallet A-04-v2 acceptance is not exposed by the demo API.",
   "Runtime not connected", "Preview only", "No TSV-style runtime is connected",
   "configurePresentation", "chainNow", "quote.taker", "Router가 체결을 거부했습니다",
   "DeployProductionCore.deployCore", "deployment.coreImplementation", "deployment.activationMode",
@@ -62,6 +65,10 @@ for (const marker of [
   "attemptedTransaction", "balanceEvidence", "Asset movement prevented"
 ]) {
   if (!app.includes(marker)) throw new Error(`dashboard API/state marker missing: ${marker}`);
+}
+
+if (app.includes("Qualified-purchaser demo claim active")) {
+  throw new Error("TSV Tokenizer must not present qualified-purchaser state as A-04-v2 identity evidence");
 }
 
 for (const [control, handler] of [

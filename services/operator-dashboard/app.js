@@ -70,6 +70,7 @@ function optionalAmount(value, suffix = "") {
   if (value === undefined || value === null || value === "") return "Unavailable";
   return `${value}${suffix}`;
 }
+function isTsvStyleProfile() { return chainState?.assetProfile === "tsv-style"; }
 function renderTsvVenue() {
   if (!chainState) return;
   const tsv = chainState.tsvStyle;
@@ -131,7 +132,20 @@ function renderTokenizer() {
   const assetBadge = $("tokenizerAssetBadge");
   assetBadge.textContent = "Current demo state";
   assetBadge.className = "status-pill neutral";
-  $("tokenizerHolderRows").innerHTML = (chainState.wallets || []).map((wallet) => `<tr><td><strong>${escapeHtml(wallet.label)}</strong><small>${wallet.qualifiedPurchaser ? "Qualified-purchaser demo claim active" : escapeHtml(wallet.eligibilityReason || "Demo claim needs review")}</small></td><td><code>${escapeHtml(shortAddress(wallet.address))}</code></td><td>${escapeHtml(formatBaseUnits(wallet.rwaBalance))} ${escapeHtml(asset.symbol)}</td><td><span class="status-pill ${wallet.qualifiedPurchaser ? "live" : "warning"}">${wallet.qualifiedPurchaser ? "On record" : "Review"}</span></td></tr>`).join("") || '<tr><td colspan="4"><div class="empty-row">No holder evidence is available.</div></td></tr>';
+  const tsvTrack = isTsvStyleProfile();
+  const evidenceRegistry = tsvTrack ? chainState.tsvStyle?.evidence?.identityEvidence : undefined;
+  $("tokenizerIdentityTrack").textContent = tsvTrack
+    ? `A-04-v2 · TSV / DIRECT · registry ${optionalAddress(evidenceRegistry)}`
+    : "Accepted identity evidence not exposed";
+  $("tokenizerHolderRows").innerHTML = (chainState.wallets || []).map((wallet) => {
+    const participantDetail = tsvTrack
+      ? "TSV profile participant · balance evidence only"
+      : (wallet.qualifiedPurchaser ? "RFQ qualified-purchaser fixture active" : escapeHtml(wallet.eligibilityReason || "RFQ fixture needs review"));
+    const identityDetail = tsvTrack
+      ? "Per-wallet A-04-v2 acceptance is not exposed by the demo API."
+      : "Per-wallet accepted identity evidence is not exposed by the demo API.";
+    return `<tr><td><strong>${escapeHtml(wallet.label)}</strong><small>${participantDetail}</small></td><td><code>${escapeHtml(shortAddress(wallet.address))}</code></td><td>${escapeHtml(formatBaseUnits(wallet.rwaBalance))} ${escapeHtml(asset.symbol)}</td><td><span class="status-pill neutral">Unavailable</span><small>${identityDetail}</small></td></tr>`;
+  }).join("") || '<tr><td colspan="4"><div class="empty-row">No holder balances or accepted identity evidence are available.</div></td></tr>';
 }
 function activeInputAsset() {
   return tradeSide === "buy" ? chainState?.presentation.quoteAsset : chainState?.presentation.asset;
@@ -257,6 +271,9 @@ function updateSummary() {
   $("rfqNavCount").textContent = String(visible.length);
 }
 function showView(view) {
+  if (isTsvStyleProfile() && (view.startsWith("admin") || ["dashboard", "create", "rfqs", "portfolio"].includes(view))) {
+    view = currentProfile.role === "tokenizer" ? "tokenizerHolders" : "venueBOnboarding";
+  }
   document.querySelectorAll(".view").forEach((node) => node.classList.toggle("hidden", node.id !== `${view}View`));
   document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   const [kicker, title] = viewMeta[view] || viewMeta.dashboard;
@@ -318,10 +335,17 @@ function tsvReadOnlyState(tsvStyle) {
 function configurePresentation() {
   const selected = $("walletSelector").value;
   const firstLoad = !presentationInitialized;
-  $("walletSelector").innerHTML = `<optgroup label="Investor">${chainState.wallets.map((wallet) => `<option value="${escapeHtml(wallet.id)}">${escapeHtml(wallet.label)}</option>`).join("")}</optgroup><optgroup label="Venue"><option value="venueA">Venue A · broker-dealer ATS · RFQ</option><option value="venueB">Venue B · TSV-style operator · AMM</option></optgroup><optgroup label="Issuer / transfer agent"><option value="tokenizer">Tokenizer · asset and investor records</option></optgroup><optgroup label="Demo administration"><option value="admin">Admin</option></optgroup>`;
-  $("walletSelector").value = presentationInitialized && profiles[selected]
+  const tsvProfile = isTsvStyleProfile();
+  const rfqRoles = `<optgroup label="Investor">${chainState.wallets.map((wallet) => `<option value="${escapeHtml(wallet.id)}">${escapeHtml(wallet.label)}</option>`).join("")}</optgroup><optgroup label="Demo administration"><option value="admin">Admin</option></optgroup>`;
+  const venueRoles = tsvProfile
+    ? '<optgroup label="Venue"><option value="venueB">Venue B · TSV-style operator · AMM</option><option value="venueA" disabled>Venue A · launch --profile buidl-like or reg-d</option></optgroup>'
+    : '<optgroup label="Venue"><option value="venueA">Venue A · broker-dealer ATS · RFQ</option><option value="venueB">Venue B · TSV-style operator · AMM</option></optgroup>';
+  $("walletSelector").innerHTML = `${tsvProfile ? "" : rfqRoles}${venueRoles}<optgroup label="Issuer / transfer agent"><option value="tokenizer">Tokenizer · asset and investor records</option></optgroup>`;
+  const selectedAllowed = profiles[selected] && (!tsvProfile || ["venueB", "tokenizer"].includes(profiles[selected].role));
+  $("walletSelector").value = presentationInitialized && selectedAllowed
     ? selected
-    : (chainState.wallets[0]?.id || "venueB");
+    : (tsvProfile ? "venueB" : (chainState.wallets[0]?.id || "venueA"));
+  $("tokenizerInvestorRecordsNav").classList.toggle("hidden", tsvProfile);
   presentationInitialized = true;
   const asset = chainState.presentation.asset;
   const minimum = formatBaseUnits(asset.minimumAmountBaseUnits);
@@ -482,7 +506,11 @@ function renderWalletBalances() {
   $("quoteHolding").textContent = `${formatBaseUnits(currentProfile.quoteBalance, chainState.presentation.quoteAsset.decimals)} ${chainState.presentation.quoteAsset.symbol}`;
 }
 async function switchProfile() {
-  currentProfile = profiles[$("walletSelector").value] || profiles.admin;
+  const requestedProfile = profiles[$("walletSelector").value] || profiles.admin;
+  currentProfile = isTsvStyleProfile() && !["venueB", "tokenizer"].includes(requestedProfile.role)
+    ? profiles.venueB
+    : requestedProfile;
+  $("walletSelector").value = currentProfile.id;
   const admin = currentProfile.role === "admin";
   const venueA = currentProfile.role === "venueA";
   const venueB = currentProfile.role === "venueB";
@@ -502,7 +530,7 @@ async function switchProfile() {
     : venueA
       ? "<strong>Venue A · broker-dealer ATS (demo).</strong> Matching and venue operation stay with the customer; Corner Store supplies settlement-time rule checks."
       : venueB
-        ? "<strong>Venue B · TSV-style operator (illustrative).</strong> This demo does not state that the venue qualifies for an exemption."
+        ? `<strong>Venue B · TSV-style operator (illustrative).</strong> This demo does not state that the venue qualifies for an exemption.${isTsvStyleProfile() ? " Launch an RFQ profile for Venue A and RFQ mutation controls." : ""}`
         : tokenizer
           ? "<strong>Tokenizer · issuer / transfer-agent facts.</strong> The Tokenizer records issuer and transfer-agent facts; it does not match orders, quote prices or operate either venue."
           : "";
