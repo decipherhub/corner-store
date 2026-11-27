@@ -15,13 +15,19 @@ import {defaultConfig} from "@corner-store/toolkit";
 async function main(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "corner-store-operator-"));
   const configPath = join(dir, "config.json");
-  writeFileSync(configPath, JSON.stringify(defaultConfig()));
+  const tsvConfig = {
+    ...defaultConfig(),
+    asset: {profile: "tsv-style" as const},
+    venues: {amm: true, rfq: false, orderBook: false}
+  };
+  writeFileSync(configPath, JSON.stringify(tsvConfig));
   const manifestPath = join(dir, "manifest.json");
   writeFileSync(manifestPath, JSON.stringify({configured: true, status: 2, version: 1, recipeBindingCount: 2}));
   const index = new EventIndex();
   index.add({blockNumber: 2, transactionHash: "0xabc", name: "ManifestActivated", args: {token: "0x1"}});
   const artifactPath = join(dir, "demo-artifact.json");
   writeFileSync(artifactPath, JSON.stringify({
+    assetProfile: "tsv-style",
     tsvStyleEnabled: true,
     tsvStyleVenue: "0x0000000000000000000000000000000000000040",
     tsvStyleRecipeId: 40,
@@ -34,6 +40,14 @@ async function main(): Promise<void> {
     quote: "0x0000000000000000000000000000000000000045",
     poolRwaBalance: "1000000000000000000000"
   }));
+  const mismatchedConfigPath = join(dir, "mismatched-config.json");
+  writeFileSync(mismatchedConfigPath, JSON.stringify(defaultConfig()));
+  try {
+    createOperatorApi({configPath: mismatchedConfigPath, artifactPath});
+    throw new Error("operator API accepted a mismatched config and deployment profile");
+  } catch (error: any) {
+    if (!String(error.message).includes("does not match deployment artifact")) throw error;
+  }
   const server = createOperatorApi({configPath, artifactPath, manifestPath, index, authToken: "test-token"});
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();

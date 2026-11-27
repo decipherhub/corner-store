@@ -64,6 +64,11 @@ export interface OperatorApiOptions {
 export function createOperatorApi(options: OperatorApiOptions): Server {
   const config = loadConfig(options.configPath);
   const artifact = options.artifactPath ? JSON.parse(readFileSync(options.artifactPath, "utf8")) : undefined;
+  if (artifact?.assetProfile !== undefined && artifact.assetProfile !== config.asset.profile) {
+    throw new Error(
+      `operator config profile ${config.asset.profile} does not match deployment artifact ${artifact.assetProfile}`
+    );
+  }
   const manifest = options.manifestPath && existsSync(options.manifestPath)
     ? JSON.parse(readFileSync(options.manifestPath, "utf8"))
     : undefined;

@@ -2,7 +2,7 @@ import {readFileSync, writeFileSync} from "fs";
 import {assertProfileVenueCompatibility} from "./policy-compatibility";
 
 export const TOOLKIT_SCHEMA_VERSION = 1;
-export type AssetProfile = "buidl-like" | "reg-d";
+export type AssetProfile = "buidl-like" | "reg-d" | "tsv-style";
 
 export interface ToolkitConfig {
   schemaVersion: number;
@@ -38,8 +38,8 @@ export function validateConfig(value: unknown): ToolkitConfig {
   if (!c.deployment || typeof c.deployment.artifact !== "string" || typeof c.deployment.network !== "string") {
     throw new Error("deployment.artifact and deployment.network are required strings");
   }
-  if (!c.asset || (c.asset.profile !== "buidl-like" && c.asset.profile !== "reg-d")) {
-    throw new Error('asset.profile must be "buidl-like" or "reg-d"');
+  if (!c.asset || !["buidl-like", "reg-d", "tsv-style"].includes(String(c.asset.profile))) {
+    throw new Error('asset.profile must be "buidl-like", "reg-d", or "tsv-style"');
   }
   if (!c.venues || typeof c.venues.amm !== "boolean" || typeof c.venues.rfq !== "boolean" || typeof c.venues.orderBook !== "boolean") {
     throw new Error("venues.amm, venues.rfq, and venues.orderBook must be booleans");

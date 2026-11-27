@@ -77,6 +77,12 @@ const config = loadConfig(path);
 if (config.asset.profile !== "buidl-like" || !config.venues.rfq) throw new Error("default config regression");
 if (JSON.parse(readFileSync(path, "utf8")).schemaVersion !== 1) throw new Error("version missing");
 validateConfig({...defaultConfig(), asset: {profile: "reg-d"}});
+const tsvStyleConfig = validateConfig({
+  ...defaultConfig(),
+  asset: {profile: "tsv-style"},
+  venues: {amm: true, rfq: false, orderBook: false}
+});
+if (enabledEngineSpec(tsvStyleConfig) !== "amm") throw new Error("TSV-style Toolkit config regression");
 assertProfileVenueCompatibility("reg-d-v5", false);
 assertThrows(
   () => assertProfileVenueCompatibility("reg-d-v5", true),

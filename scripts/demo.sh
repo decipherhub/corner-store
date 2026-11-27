@@ -118,7 +118,9 @@ fi
 echo "==> Starting read-only Operator API"
 npm run build --prefix services/operator-api >/dev/null
 CORNER_STORE_CONFIG="services/toolkit/examples/corner-store.config.json"
-if [ "$PROFILE" = "reg-d" ] || [ "$PROFILE" = "tsv-style" ]; then
+if [ "$PROFILE" = "tsv-style" ]; then
+  CORNER_STORE_CONFIG="services/toolkit/examples/corner-store.tsv-style.config.json"
+elif [ "$PROFILE" = "reg-d" ]; then
   CORNER_STORE_CONFIG="services/toolkit/examples/corner-store.reg-d.config.json"
 fi
 CORNER_STORE_CONFIG="$CORNER_STORE_CONFIG" \

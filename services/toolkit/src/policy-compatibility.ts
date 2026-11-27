@@ -22,8 +22,14 @@ const REG_D_V3_ELEMENTS = [
   "E-01-v1"
 ].map(asciiBytes32);
 const FUND_V2_ELEMENTS = ["A-13-v1", "MIN-AMOUNT-v1"].map(asciiBytes32);
+const TSV_STYLE_V1_ELEMENTS = ["A-01-v1", "A-04-v2", "B-02-v2", "TSV-PAIR-v1", "TSV-VOL-v1"]
+  .map(asciiBytes32);
 
 const PROFILE_RECIPES: Record<string, {bindings: RecipeBindingDefinition[]; recipes: RecipeDefinition[]}> = {
+  "tsv-style": {
+    bindings: [{recipeId: 40, recipeVersion: 1}],
+    recipes: [{recipeId: 40, version: 1, requiredElements: TSV_STYLE_V1_ELEMENTS}]
+  },
   "reg-d-v5": {
     bindings: [{recipeId: 1, recipeVersion: 5}],
     recipes: [{recipeId: 1, version: 5, requiredElements: [...REG_D_V3_ELEMENTS, asciiBytes32("A-12-v2")]}]
