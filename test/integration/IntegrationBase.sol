@@ -231,8 +231,13 @@ abstract contract IntegrationBase is TREXSuite {
         adapter.setRouter(address(router));
         surveillance.setEngine(address(engine));
 
+        // Scenario hook: register additional elements/recipes before the asset
+        // Manifest is compiled. No-op for the shared fixtures.
+        _registerScenarioPolicy();
+
         // 6. quote token (UNREGULATED manifest) + pool (token0=QUOTE, token1=RWA)
         quote = new MockERC20("Quote USD", "qUSD");
+        config = _configureScenarioPolicy(config);
         pool = new MockPool(IERC20(address(quote)), IERC20(address(rwaToken)));
 
         // 7. manifests: onboarding goes through the lifecycle (propose -> approve).
@@ -276,6 +281,21 @@ abstract contract IntegrationBase is TREXSuite {
             vm.warp(uint256(LOCKUP_SECONDS) + 1);
         }
         acqSource.setAcquiredAt(address(pool), address(rwaToken), uint64(1));
+    }
+
+    /// @dev Override to register scenario-specific elements and recipes. Runs
+    ///      after the engine exists and before the asset Manifest is registered.
+    function _registerScenarioPolicy() internal virtual {}
+
+    /// @dev Override when scenario parameters depend on assets deployed by the
+    ///      shared fixture (for example a Manifest-owned paired cash asset).
+    function _configureScenarioPolicy(ManifestPolicyConfig memory config)
+        internal
+        view
+        virtual
+        returns (ManifestPolicyConfig memory)
+    {
+        return config;
     }
 
     /// @dev Convenience overload: C-01-free AMM reference policy, no fund recipe.
