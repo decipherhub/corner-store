@@ -30,6 +30,11 @@
   existing RFQ profiles. The dashboard presents Investor, Venue and Tokenizer
   roles and consumes a fail-closed runtime snapshot; unavailable evidence keeps
   controls disabled and is never replaced with fixture values.
+- The local profile's single test key explicitly stands in for the venue operator.
+  Production TSV integration requires venue-controlled governance/operator
+  addresses; Corner Store retains no deployment, owner/operator, upgrade, pause,
+  fee or parameter-setting key. A venue-owned Uniswap v4 `beforeSwap` hook remains
+  a post-GASOK integration item rather than a claim of this v3-shaped demo.
 - This feature does not determine eligibility under an SEC exemption. Real market
   data, tier/ADV calculations, affiliated-venue aggregation, public trade
   reporting, primary-market halt feeds, books/records and external hosting remain
@@ -64,6 +69,9 @@ passing
   TSV limit model or legal conclusion.
 - External HTTPS publication and post-upgrade verification remain #177 operator
   work and are not required to call the repository-local feature passing.
+- Public wording distinguishes reverted blocked attempts from successful
+  settlements whose policy/check evidence is recorded, and labels the fictional
+  listed-stock fixture as issuer-sponsored.
 
 ## CORE-015: Compliance Reporting and Settlement Reconstruction
 

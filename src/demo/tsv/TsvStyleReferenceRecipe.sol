@@ -4,11 +4,13 @@ pragma solidity 0.8.17;
 import {BaseRecipe} from "../../compliance/recipes/BaseRecipe.sol";
 
 /// @title TsvStyleReferenceRecipe (recipe 40 v1, demo)
-/// @notice Illustrative rule set for a tokenized listed stock traded in a
+/// @notice Illustrative rule set for a freely tradable tokenized listed stock traded in a
 ///         permissioned pool operated by a venue customer.
 /// @dev Demo/illustrative only. Not a legal policy and not a statement that any
 ///      venue qualifies for, is registered under, or is approved under any
 ///      exemption. It deliberately contains no C-01 family element.
+///      Restricted shares of a listed issuer can still carry a holding period
+///      and do not belong under this rule set.
 ///
 ///      Elements:
 ///        A-01-v1      sanctions-list screen of both parties

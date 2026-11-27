@@ -112,6 +112,12 @@ volume limits, simulated primary-market signals and operator inputs are visibly
 separated from production market data and legal determinations. Order Book remains
 labelled `not implemented`.
 
+For Venue B, one local test key stands in for the venue operator. The venue
+operator owns deployment, governance, parameter, fee and pause authority; Corner
+Store supplies rule-check code and settled-trade policy records and retains no
+venue control key. Blocked attempts revert with a reason code and are not shown as
+fabricated on-chain decision records.
+
 The selector also exposes a **Tokenizer · issuer / transfer agent** presentation.
 It reuses the current demo asset, investor-record and holder-balance evidence
 without adding a separate issuer workflow. The role records issuer and

@@ -38,7 +38,7 @@
         <p class="nav-context"><strong>Venue B</strong><small>TSV-style operator · AMM</small></p>
         <button class="nav-item active" data-view="venueBOnboarding"><span>01</span>Onboarding</button>
         <button class="nav-item" data-view="venueBPool"><span>02</span>Pool</button>
-        <button class="nav-item" data-view="venueBLimits"><span>03</span>Limits &amp; halts</button>
+        <button class="nav-item" data-view="venueBLimits"><span>03</span>Limits &amp; stoppages</button>
         <button class="nav-item" data-view="venueBLog"><span>04</span>Trade log</button>
         <button class="nav-item" data-view="venueIntegration"><span>⊕</span>Integration</button>
       </nav>
@@ -181,13 +181,13 @@
         <section id="adminHistoryView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>거래 내역</h2><p>실제 체결, maker 변경과 데모 거부 기록을 확인합니다.</p></div><button id="refresh" class="secondary">새로고침</button></div><section class="surface"><div id="eventSummary" class="event-stats"></div><div id="events" class="event-list"></div></section></section>
 
         <section id="venueBOnboardingView" class="view hidden">
-          <div class="page-intro"><div><p class="kicker">Venue B · onboarding</p><h2>TSV-style AMM venue</h2><p>The venue operator provides the pool and operational inputs. Corner Store supplies rule checks and settlement records.</p></div><span id="tsvSourceBadge" class="status-pill neutral">Runtime not connected</span></div>
+          <div class="page-intro"><div><p class="kicker">Venue B · onboarding</p><h2>TSV-style AMM venue</h2><p>The venue operator deploys and designates the pool, sets its parameters and fees, and can pause trading. Corner Store supplies the rule-check code and the decision records. It does not deploy, configure or pause the pool.</p></div><span id="tsvSourceBadge" class="status-pill neutral">Runtime not connected</span></div>
           <div class="demo-disclaimer"><strong>Illustrative rule set.</strong> This view does not state that a venue qualifies for, is registered under, or is approved under an exemption.</div>
           <section class="surface venue-identity">
             <div><span>Venue</span><strong>Venue B · TSV-style operator (demo)</strong></div>
             <div><span>Execution</span><strong>Permissioned AMM pool</strong></div>
             <div><span>Deployment</span><code id="tsvVenueAddress">Not connected</code></div>
-            <div><span>Operator key</span><strong>One test key in this demo</strong></div>
+            <div><span>Operator key</span><strong>One test key stands in for the venue operator</strong></div>
           </section>
           <div class="policy-layout">
             <section class="surface">
@@ -200,24 +200,24 @@
                 <article><span>TSV-VOL</span><strong>Venue volume limit</strong><small>Fixed demo value, not market-data logic.</small></article>
               </div>
             </section>
-            <aside class="surface operator-boundary"><p class="kicker">Outside the SDK</p><h3>Operator-owned obligations</h3><ul><li>Venue eligibility and legal determinations</li><li>Public notice and trade publication</li><li>Primary-market halt data</li><li>Market-data contracts and volume inputs</li><li>Books, records and incident response</li></ul></aside>
+            <aside class="surface operator-boundary"><p class="kicker">Outside the SDK</p><h3>Operator-owned obligations</h3><ul><li>Public notice, at least 30 calendar days before operating</li><li>Transaction data, public and updated within ten minutes</li><li>Stopping trading when the primary listing exchange stops</li><li>U.S. person; books and records kept in the United States</li></ul><p class="boundary-copy">These stay with the venue operator. Corner Store does not perform or certify them. SEC Release No. 34-106402, sections II.B, II.C, II.G, II.H, II.L.</p></aside>
           </div>
         </section>
 
         <section id="venueBPoolView" class="view hidden">
           <div class="page-intro"><div><p class="kicker">Venue B · pool</p><h2>Permissioned AMM pool</h2><p>A verified venue participant may swap the demo settlement asset for a tokenized listed-stock fixture.</p></div><span id="tsvPoolStatus" class="status-pill neutral">Runtime not connected</span></div>
           <div class="pool-hero surface">
-            <div class="pool-pair"><span class="token-mark security">OR</span><div><small>Tokenized listed stock · demo</small><strong id="tsvAssetName">Orrin Systems common stock</strong><code id="tsvAssetAddress">Not connected</code></div><i>/</i><span class="token-mark cash">$</span><div><small>Demo settlement asset</small><strong id="tsvQuoteName">Demo USD</strong><code id="tsvQuoteAddress">Not connected</code></div></div>
+            <div class="pool-pair"><span class="token-mark security">OR</span><div><small>Issuer-sponsored token · demo</small><strong id="tsvAssetName">Orrin Systems, Inc. · common stock, issuer-sponsored token (demo)</strong><code id="tsvAssetAddress">Not connected</code></div><i>/</i><span class="token-mark cash">$</span><div><small>Demo settlement asset</small><strong id="tsvQuoteName">Demo USD</strong><code id="tsvQuoteAddress">Not connected</code></div></div>
             <div class="pool-stats"><div><span>Liquidity</span><strong id="tsvLiquidity">Unavailable</strong></div><div><span>Recent fills</span><strong id="tsvRecentFills">Unavailable</strong></div><div><span>Settlement gate</span><strong id="tsvSettlementState">Preview only</strong></div></div>
           </div>
           <section class="surface execution-contrast"><div><p class="kicker">Execution is policy-bound</p><h3>Different assets, different permitted paths</h3></div><div class="contrast-grid"><article><span class="status-pill warning">RFQ only</span><strong>Restricted security</strong><p>A C-01 holding-period rule makes the asset pool-incompatible under D020.</p></article><article><span class="status-pill live">AMM eligible</span><strong>Listed-stock fixture</strong><p>No holding-period element is present; the venue-specific AMM rules still apply.</p></article></div></section>
         </section>
 
         <section id="venueBLimitsView" class="view hidden">
-          <div class="page-intro"><div><p class="kicker">Venue B · limits</p><h2>Limits and halts</h2><p>Observed state is displayed only when the demo API supplies a TSV runtime payload.</p></div><span id="tsvHaltBadge" class="status-pill neutral">Not connected</span></div>
+          <div class="page-intro"><div><p class="kicker">Venue B · limits</p><h2>Limits and stoppages</h2><p>Observed state is displayed only when the demo API supplies a TSV runtime payload.</p></div><span id="tsvHaltBadge" class="status-pill neutral">Not connected</span></div>
           <div class="limits-layout">
             <section class="surface"><div class="section-head"><div><p class="kicker">Demo period volume</p><h3>Per-stock limit</h3></div><strong id="tsvVolumeLabel">Unavailable</strong></div><div class="volume-meter" role="progressbar" aria-label="TSV demo period volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="tsvVolumeBar"></i></div><p class="boundary-copy">This is a fixed demo limit. It does not calculate regulatory tiers, market-wide volume or affiliated-venue aggregation.</p></section>
-            <section class="surface"><div class="section-head"><div><p class="kicker">Venue halt</p><h3>Operator and primary-market signals</h3></div></div><div class="fact-list"><div><span>Venue pause</span><strong id="tsvVenuePause">Unavailable</strong></div><div><span>Primary exchange signal</span><strong id="tsvPrimaryHalt">Simulated input not connected</strong></div></div><button class="danger full" disabled aria-describedby="tsvControlHelp">Pause trading</button><p id="tsvControlHelp" class="field-help">Control disabled: this UI branch does not submit operator transactions.</p></section>
+            <section class="surface"><div class="section-head"><div><p class="kicker">Stoppage controls</p><h3>Operator and primary-market signals</h3></div></div><div class="fact-list"><div><span>Venue pause</span><strong id="tsvVenuePause">Unavailable</strong></div><div><span>Primary exchange signal</span><strong id="tsvPrimaryHalt">Simulated input not connected</strong></div></div><button class="danger full" disabled aria-describedby="tsvControlHelp">Pause trading</button><p id="tsvControlHelp" class="field-help">Control disabled: this UI branch does not submit operator transactions.</p></section>
           </div>
         </section>
 

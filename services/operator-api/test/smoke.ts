@@ -36,6 +36,9 @@ async function main(): Promise<void> {
     tsvStyleIdentityEvidence: "0x0000000000000000000000000000000000000041",
     tsvStylePairedAssetElement: "0x0000000000000000000000000000000000000042",
     tsvStyleVolumeLimit: "0x0000000000000000000000000000000000000043",
+    tsvStyleGovernance: "0x0000000000000000000000000000000000000046",
+    tsvStyleOperator: "0x0000000000000000000000000000000000000046",
+    tsvStyleAuthorityModel: "venue-operator-test-key",
     rwaToken: "0x0000000000000000000000000000000000000044",
     quote: "0x0000000000000000000000000000000000000045",
     poolRwaBalance: "1000000000000000000000"
@@ -77,6 +80,9 @@ async function main(): Promise<void> {
   const tsvStyle = await get("/api/v1/tsv-style", "test-token");
   if (!tsvStyle.body.enabled || tsvStyle.body.recipe.id !== 40 || tsvStyle.body.executionEnabled !== false) {
     throw new Error("TSV-style read-only snapshot regression");
+  }
+  if (tsvStyle.body.authority.cornerStoreControlsVenue !== false || tsvStyle.body.authority.model !== "venue-operator-test-key") {
+    throw new Error("TSV-style authority boundary regression");
   }
   const metrics = await get("/metrics", "test-token");
   if (metrics.status !== 200 || !String(metrics.body).includes("corner_store_operator_requests_total")) throw new Error("metrics regression");

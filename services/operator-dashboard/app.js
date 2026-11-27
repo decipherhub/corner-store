@@ -12,7 +12,7 @@ const viewMeta = {
   adminEnforcement: ["Compliance operations", "Enforcement Cases"], adminHistory: ["Admin", "거래 내역"],
   venueBOnboarding: ["Venue B · onboarding", "TSV-style AMM venue"],
   venueBPool: ["Venue B · pool", "Permissioned AMM pool"],
-  venueBLimits: ["Venue B · limits", "Limits and halts"],
+  venueBLimits: ["Venue B · limits", "Limits and stoppages"],
   venueBLog: ["Venue B · records", "AMM trade log"],
   venueIntegration: ["Venue integration", "External settlement gate"],
   tokenizerAsset: ["Tokenizer · asset", "Asset and rules"],
@@ -81,7 +81,7 @@ function renderTsvVenue() {
     : "Runtime not connected";
   sourceBadge.className = `status-pill ${connected ? "live" : "neutral"}`;
   $("tsvVenueAddress").textContent = optionalAddress(tsv?.venue);
-  $("tsvAssetName").textContent = tsv?.asset?.name || "Orrin Systems common stock";
+  $("tsvAssetName").textContent = tsv?.asset?.name || "Orrin Systems, Inc. · common stock, issuer-sponsored token (demo)";
   $("tsvAssetAddress").textContent = optionalAddress(tsv?.asset?.address);
   $("tsvQuoteName").textContent = tsv?.quoteAsset?.name || "Demo USD";
   $("tsvQuoteAddress").textContent = optionalAddress(tsv?.quoteAsset?.address);
@@ -118,13 +118,16 @@ function renderTsvVenue() {
 }
 function renderTokenizer() {
   if (!chainState) return;
-  const asset = chainState.presentation.asset;
+  const tsvProfile = isTsvStyleProfile();
+  const asset = tsvProfile && chainState.tsvStyle?.asset
+    ? {...chainState.presentation.asset, ...chainState.tsvStyle.asset}
+    : chainState.presentation.asset;
   const deployment = chainState.deployment || {};
   $("tokenizerAssetSymbol").textContent = asset.symbol;
   $("tokenizerAssetName").textContent = asset.name;
   $("tokenizerAssetAddress").textContent = optionalAddress(asset.address);
   $("tokenizerAssetProfile").textContent = chainState.assetProfile || "—";
-  $("tokenizerExecutionPath").textContent = `${chainState.presentation.execution?.venueType || "RFQ"} · settlement-time checks`;
+  $("tokenizerExecutionPath").textContent = `${tsvProfile ? "AMM" : (chainState.presentation.execution?.venueType || "RFQ")} · settlement-time checks`;
   $("tokenizerManifest").textContent = optionalAddress(deployment.manifest || chainState.manifest);
   $("tokenizerPolicyRegistry").textContent = optionalAddress(deployment.policyRegistry);
   $("tokenizerRouter").textContent = optionalAddress(deployment.router);
@@ -132,7 +135,7 @@ function renderTokenizer() {
   const assetBadge = $("tokenizerAssetBadge");
   assetBadge.textContent = "Current demo state";
   assetBadge.className = "status-pill neutral";
-  const tsvTrack = isTsvStyleProfile();
+  const tsvTrack = tsvProfile;
   const evidenceRegistry = tsvTrack ? chainState.tsvStyle?.evidence?.identityEvidence : undefined;
   $("tokenizerIdentityTrack").textContent = tsvTrack
     ? `A-04-v2 · TSV / DIRECT · registry ${optionalAddress(evidenceRegistry)}`

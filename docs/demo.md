@@ -27,6 +27,15 @@ reporting, primary-market halt feeds or books/records. It does not state that an
 venue qualifies for an exemption. Public HTTPS hosting and post-upgrade checks are
 tracked separately in #177; legal/applicability analysis remains #129.
 
+The TSV-style authority boundary is venue-owned. In this local profile, one Anvil
+test key stands in for the venue operator and therefore performs deployment,
+governance, parameter, pause and wiring calls. It is not a Corner Store production
+key. For an external deployment, the venue supplies the governance and operator
+addresses to `DeployProductionCore`; Corner Store must retain no owner, operator,
+upgrade, pause, fee or parameter-setting key. A future Uniswap v4 integration would
+invoke the same engine from the venue's `beforeSwap` hook, but that hook is not part
+of this GASOK demo and must not be implied by the current v3-shaped reference path.
+
 Run the dedicated local profile with either command:
 
 ```sh

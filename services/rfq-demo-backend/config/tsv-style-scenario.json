@@ -32,8 +32,8 @@
     "defaultQuoteTtlSeconds": 900
   },
   "asset": {
-    "name": "Demo Tokenized Listed Stock",
-    "symbol": "tDLS",
+    "name": "Orrin Systems, Inc. · common stock, issuer-sponsored token (demo)",
+    "symbol": "tORRN",
     "minimumAmountBaseUnits": "1000000000000000000",
     "decimals": 18
   },

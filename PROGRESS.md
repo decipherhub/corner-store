@@ -38,6 +38,14 @@ does not encode SEC eligibility, real market data, tier/ADV calculations,
 affiliated-venue aggregation, public reporting, primary-market halt feeds or
 books/records; #129 remains the legal/applicability decision gate.
 
+The 2026-11-27 delivery refresh was reconciled after implementation. README and
+Venue B now distinguish reverted blocked attempts from settled-trade records,
+use the approved operator-obligation language, label the fictional listed-stock
+fixture as issuer-sponsored, and state that the local single key represents the
+venue operator. The production boundary remains venue-owned with no Corner Store
+control key. Uniswap v4 `beforeSwap` hook integration is explicitly deferred until
+after GASOK; the current demo remains on its existing reference AMM path.
+
 ## 2026-11-21 Session: SDK-008 External Settlement Gate and OMS Precheck
 
 SDK-008 is passing. Existing ATS/OMS deployments can now use a dedicated

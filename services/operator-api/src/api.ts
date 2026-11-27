@@ -110,9 +110,15 @@ function tsvStyleSnapshot(artifact: any): Record<string, unknown> {
     executionEnabled: false,
     venue: artifact.tsvStyleVenue,
     recipe: {id: artifact.tsvStyleRecipeId, version: artifact.tsvStyleRecipeVersion},
+    authority: {
+      model: artifact.tsvStyleAuthorityModel,
+      governance: artifact.tsvStyleGovernance,
+      operator: artifact.tsvStyleOperator,
+      cornerStoreControlsVenue: false
+    },
     asset: {
-      name: "Demo Tokenized Listed Stock",
-      symbol: "tDLS",
+      name: "Orrin Systems, Inc. · common stock, issuer-sponsored token (demo)",
+      symbol: "tORRN",
       address: artifact.rwaToken
     },
     quoteAsset: {name: "Demo USD", symbol: "qUSD", address: artifact.quote},

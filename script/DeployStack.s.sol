@@ -79,6 +79,9 @@ import {ProductionCoreDeployer} from "./ProductionCoreDeployer.sol";
 /// OnchainID deployment. Everything is broadcast by the deployer (Anvil account
 /// 0) except the two per-account token approvals, which must originate from the
 /// investor and the RFQ maker (Anvil accounts 1 and 2).
+/// For the local TSV-style profile, that one test deployer key stands in for the
+/// venue operator. It is not a Corner Store production key. Production TSV
+/// deployments must supply venue-controlled governance and operator addresses.
 ///
 /// ONBOARDING IS INTENTIONALLY LEFT TO {DemoScenarios}: this script does NOT
 /// register the RWA manifest or its AMM venue — scenario 1 demonstrates that
@@ -189,14 +192,16 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         if (useBuidlLikeProfile) {
             deployTREX(deployer, BuidlLikeDemoAsset.TOKEN_NAME, BuidlLikeDemoAsset.TOKEN_SYMBOL);
         } else if (useTsvStyleProfile) {
-            deployTREX(deployer, "Demo Tokenized Listed Stock", "tDLS");
+            deployTREX(deployer, "Orrin Systems, Inc. common stock (demo)", "tORRN");
         } else {
             deployTREX(deployer);
         }
 
         // 2. Deploy the exact production core implementation seam. Governance
         //    and operator are the deterministic local deployer only for this
-        //    Anvil rehearsal. The remaining steps are explicitly demo-only.
+        //    Anvil rehearsal. In the TSV profile that key represents the venue
+        //    operator; Corner Store retains no deployment or control key. The
+        //    remaining steps are explicitly demo-only.
         Deployment memory core = deployCore(deployer, deployer, true, true);
         elementReg = ElementRegistry(core.elementReg);
         recipeReg = RecipeRegistry(core.recipeReg);
@@ -605,6 +610,11 @@ contract DeployStack is Script, TREXCore, DemoConstants, ProductionCoreDeployer 
         vm.serializeUint(k, "tsvStyleRecipeVersion", TSV_STYLE_RECIPE_VERSION);
         vm.serializeUint(k, "tsvStylePeriodLimit", TSV_STYLE_PERIOD_LIMIT);
         vm.serializeAddress(k, "tsvStyleVenue", useTsvStyleProfile ? address(pool) : address(0));
+        vm.serializeAddress(k, "tsvStyleGovernance", useTsvStyleProfile ? deployer : address(0));
+        vm.serializeAddress(k, "tsvStyleOperator", useTsvStyleProfile ? deployer : address(0));
+        vm.serializeString(
+            k, "tsvStyleAuthorityModel", useTsvStyleProfile ? "venue-operator-test-key" : "not-applicable"
+        );
         vm.serializeAddress(k, "tsvStyleIdentityEvidence", address(tsvIdentityEvidence));
         vm.serializeAddress(k, "tsvStylePairedAssetElement", address(tsvPairedAsset));
         vm.serializeAddress(k, "tsvStyleVolumeLimit", address(tsvVolumeLimit));

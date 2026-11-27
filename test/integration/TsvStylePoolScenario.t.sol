@@ -77,7 +77,9 @@ contract TsvStylePoolScenarioTest is IntegrationBase {
 
         ManifestPolicyConfig memory config;
         config.schemaVersion = 3;
-        deployStackWithManifestAndConfig("Orrin Systems common stock (demo)", "tORRN", manifest, _tsvBindings(), config);
+        deployStackWithManifestAndConfig(
+            "Orrin Systems, Inc. common stock (demo)", "tORRN", manifest, _tsvBindings(), config
+        );
 
         policyReg.setOperator(venueOperator, true);
         fundPoolRWA(1_000 ether);
