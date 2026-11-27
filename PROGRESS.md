@@ -1,5 +1,31 @@
 # Progress
 
+## 2026-11-27 Session: DEMO-017 Illustrative TSV-style AMM Scenario
+
+DEMO-017 is active under issue #176. The core slice adds a separate illustrative
+TSV-style venue Recipe (`40/v1`, alias `demo:tsv-style-amm`) without changing the
+existing broker-dealer ATS/RFQ profiles. The Recipe uses `A-04-v2` with an explicit
+`TSV`/`DIRECT` identity policy and has no `C-01-*` holding-period element. Paired
+asset/category and fixed-period volume limit values are compiled from
+`ManifestPolicyConfig`; changing the paired asset goes through the delayed Manifest
+update and changes the policy identity.
+
+The Foundry scenario covers an admitted participant without accredited-investor
+status, missing and expired identity evidence, sanctions rejection, paired-asset
+rejection, fixed demo volume exhaustion, venue suspension and the existing D020
+rejection of a holding-period asset on AMM. Recipe ID 40/canonical alias collision
+and exact halt/timelock errors are also covered. Verification passed 15/15 unit,
+13/13 TSV integration and 131 other integration tests, plus targeted formatting
+and `git diff --check`. `RealUniswapV3` did not start in the clean worktree because
+the vendored npm artifacts were absent.
+
+The runtime and dashboard lanes are still being integrated, so this entry does
+not claim a runnable public TSV venue or full repository verification. Issue #177
+owns HTTPS publication and post-upgrade verification. The feature does not encode
+SEC eligibility, real market data, tier/ADV calculations, affiliated-venue
+aggregation, public reporting, primary-market halt feeds or books/records; #129
+remains the legal/applicability decision gate.
+
 ## 2026-11-21 Session: SDK-008 External Settlement Gate and OMS Precheck
 
 SDK-008 is passing. Existing ATS/OMS deployments can now use a dedicated

@@ -8,6 +8,29 @@ Manifest / Operator) work end-to-end.
 
 This is feature `E2E-001` (see `FEATURES.md`).
 
+## TSV-style Venue Scenario (In Progress)
+
+Feature `DEMO-017` adds a separate illustrative venue-customer scenario under
+issue #176. It does not replace the current `buidl-like` or `reg-d` runners.
+
+- Venue A remains the broker-dealer ATS/RFQ demonstration.
+- Venue B represents a separate TSV-style operator using the protected AMM path.
+- Recipe `40/v1` binds sanctions screening, `A-04-v2` with `TSV`/`DIRECT`
+  identity policy, ERC-3643 enforcement, one Manifest-owned paired asset/category
+  and one fixed-period demo volume limit.
+- The Recipe deliberately has no `C-01-*` element. The existing D020 check still
+  rejects a holding-period asset on AMM.
+
+The fixed one-day share limit is a demo value. The scenario does not implement
+regulatory tier/ADV calculations, affiliated-venue aggregation, public trade
+reporting, primary-market halt feeds or books/records. It does not state that any
+venue qualifies for an exemption. Public HTTPS hosting and post-upgrade checks are
+tracked separately in #177; legal/applicability analysis remains #129.
+
+At this stage only the Foundry policy/scenario slice has verified evidence. Do not
+present the TSV dashboard as live unless the connected runtime supplies deployment
+and settlement state.
+
 ## How To Run
 
 ```sh

@@ -189,6 +189,17 @@ venue/adapter에만 실행을 위임하며, 성공 후 stateful compliance `comm
   delayed Manifest update도 pending compiled plan을 검사해 같은 invariant를 유지한다.
 - 테스트·데모에서 AMM이 필요하면 명시적인 C-01-free demo Recipe를 사용한다. 이를
   Reg D/BUIDL 법률 정책으로 표시하거나 production activation에 재사용하지 않는다.
+- DEMO-017의 Recipe `40/v1`은 이 원칙을 따르는 illustrative-only profile이다.
+  `A-04-v2`의 `TSV`/`DIRECT` track, exact paired asset/category와 fixed-period
+  volume limit를 Manifest parameter에 고정한다. paired asset 변경은 mutable Element
+  setter가 아니라 delayed Manifest update를 사용하고 policy identity를 바꾼다.
+- paired-asset category와 volume limit는 venue/operator가 제공한 demo input이다.
+  이 입력은 법적 분류, SEC 면제 적격성, market-wide ADV/tier, affiliated-venue
+  aggregation 또는 primary-market halt 사실을 스스로 증명하지 않는다. 해당 입력이
+  unavailable하거나 production 근거가 없으면 fail-closed하거나 활성화하지 않는다.
+- dashboard는 연결된 runtime evidence가 없을 때 TSV values/actions를 live로 표시하지
+  않는다. external hosting은 unauthenticated local `scripts/demo.sh`의 loopback guard를
+  제거하는 방식으로 제공하지 않는다; 공개 배포와 사후 검증은 #177의 operator task다.
 
 - Uniswap-style callback은 등록되었거나 계산으로 검증한 pool에서만 수락한다.
   callback `data`가 payer/token을 포함하더라도 callback origin 검증 없이 신뢰하지

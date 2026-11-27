@@ -311,6 +311,26 @@ scripts/e2e-anvil.sh --keep     # 이후 Anvil을 계속 실행(인터랙티브 
 - AMM + C-01-v2와 future `C-01-*` version은 Engine에서 거절되고, AMM + C-01 없는
   Recipe 및 RFQ + C-01 Recipe는 허용된다.
 
+DEMO-017의 별도 TSV-style Foundry coverage는 다음을 검증한다.
+
+```sh
+forge test --offline --match-path test/unit/demo/TsvStyleElements.t.sol
+forge test --offline --match-path test/integration/TsvStylePoolScenario.t.sol
+```
+
+- Recipe `40/v1` canonical alias와 ID 충돌 방지
+- `A-04-v2`의 `TSV`/`DIRECT` Manifest parameter, missing/expired evidence 거절
+- paired asset/category와 fixed demo volume limit의 Manifest-owned parameter
+- paired-asset 변경이 delayed activation을 거쳐 policy identity를 바꾸는 성질
+- sanctions, volume exhaustion, venue halt와 정확한 reason/error
+- admitted non-accredited participant의 AMM settlement
+- `C-01-*` holding-period asset의 기존 D020 AMM hard rejection
+
+이 테스트는 SEC 면제 적격성, 실제 market-data/tier 계산, affiliated venue 합산,
+공개 거래 보고, primary-market halt feed 또는 외부 호스팅을 검증하지 않는다.
+canonical Uniswap v3 테스트는 vendored `tools/deploy-v3` 설치물이 준비된 환경에서
+별도로 실행해야 한다.
+
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패
 - canonical `recipeKey + exact version` 조회와 새 catalog version 등록 후에도 기존
