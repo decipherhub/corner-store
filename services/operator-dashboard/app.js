@@ -288,49 +288,18 @@ function selectedWallet() {
 }
 
 async function loadState() {
-  const tsvStyle = await operatorApi("/api/v1/tsv-style").catch(() => ({enabled: false, source: "unavailable"}));
-  try {
-    const [baseState, history] = await Promise.all([api("/demo/state"), api("/demo/market-history")]);
-    chainState = {...baseState, tsvStyle};
-    marketHistory = history;
-  } catch (error) {
-    if (!tsvStyle.enabled) throw error;
-    chainState = tsvReadOnlyState(tsvStyle);
-    marketHistory = {spreadBps: 0, oracle: [], indicative: [], fills: [], current: {lastMove: "initial", lastImpactBps: 0}};
-  }
+  const [baseState, history, tsvStyle] = await Promise.all([
+    api("/demo/state"),
+    api("/demo/market-history"),
+    operatorApi("/api/v1/tsv-style").catch(() => ({enabled: false, source: "unavailable"}))
+  ]);
+  ({chainState, marketHistory} = composeDashboardRuntime(baseState, history, tsvStyle));
   stateLoadedAt = Date.now();
   for (const wallet of chainState.wallets || []) profiles[wallet.id] = {...wallet, role: "user"};
   configurePresentation();
   currentProfile = profiles[$("walletSelector").value] || profiles[chainState.wallets[0]?.id] || profiles.venueB;
   $("walletAddress").textContent = profileAddress(currentProfile);
   return chainState;
-}
-function tsvReadOnlyState(tsvStyle) {
-  const now = Math.floor(Date.now() / 1000);
-  return {
-    ready: true,
-    assetProfile: "tsv-style",
-    deployment: {coreImplementation: "DeployProductionCore.deployCore", activationMode: "local-demo-fixtures", productionDeployment: false},
-    requiresQualifiedPurchaser: false,
-    makerApproved: false,
-    chainTimestamp: now,
-    chainId: 31337,
-    maker: tsvStyle.venue,
-    makerInventory: {rwaBalance: "0", quoteBalance: "0"},
-    wallets: [],
-    marketPrice: {numerator: "1", denominator: "1", lastMove: "initial", lastImpactBps: 0},
-    suggestedTradeAmounts: {buyAmountIn: "0", sellAmountIn: "0", bufferBps: 0},
-    presentation: {
-      schemaVersion: 2,
-      asset: {...tsvStyle.asset, minimumAmountBaseUnits: "1", decimals: 18},
-      quoteAsset: {...tsvStyle.quoteAsset, decimals: 18},
-      execution: {venueType: "AMM", defaultQuoteTtlSeconds: 0, pricing: {provider: "disabled-for-tsv-style"}},
-      maker: {label: "RFQ disabled for TSV-style profile"},
-      previewQuotes: [],
-      temporalEligibility: {walletId: "", freshnessSeconds: 0, quoteTtlSeconds: 0}
-    },
-    tsvStyle
-  };
 }
 function configurePresentation() {
   const selected = $("walletSelector").value;

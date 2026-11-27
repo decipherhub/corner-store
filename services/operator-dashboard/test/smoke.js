@@ -6,8 +6,21 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 const server = fs.readFileSync(path.join(root, "server.js"), "utf8");
+const {composeDashboardRuntime} = require(path.join(root, "runtime-state.js"));
 
 new Function(app);
+const composed = composeDashboardRuntime(
+  {ready: true, presentation: {}, wallets: []},
+  {oracle: [], fills: []},
+  {enabled: true, source: "deployment-artifact"}
+);
+if (!composed.chainState.tsvStyle.enabled) throw new Error("TSV deployment evidence composition regression");
+for (const unavailable of [undefined, {ready: false}, {ready: true, presentation: {}}]) {
+  let rejected = false;
+  try { composeDashboardRuntime(unavailable, {oracle: [], fills: []}, {enabled: true}); }
+  catch { rejected = true; }
+  if (!rejected) throw new Error("unavailable runtime was presented as ready");
+}
 
 for (const marker of [
   'id="walletSelector"', "Admin", 'id="ribbonCore"', 'id="ribbonAsset"', 'id="ribbonActivation"', 'id="dashboardHolding"',
@@ -31,7 +44,7 @@ for (const marker of [
   'id="marketChart"', 'id="marketCurrent"', 'id="marketVolume"', "Indicative RFQ mid",
   "market-range-label", "전체 기간", 'id="marketLastFill"', 'id="marketFillTape"',
   'id="confirmDialog"', 'id="demoGuide"', 'aria-modal="true"',
-  '<link rel="stylesheet" href="/styles.css">', '<script src="/app.js"></script>'
+  '<link rel="stylesheet" href="/styles.css">', '<script src="/runtime-state.js"></script>', '<script src="/app.js"></script>'
 ]) {
   if (!html.includes(marker)) throw new Error(`role compliance dashboard marker missing: ${marker}`);
 }
@@ -42,8 +55,8 @@ for (const marker of [
   "/demo/admin/temporal/prepare", "/demo/admin/temporal/advance", "Qualified Purchaser claim missing",
   "/demo/enforcement/adapter-boundary", "/demo/enforcement/restore",
   "selectedWallet", "runPrecheck", "switchProfile", "requiresQualifiedPurchaser", "quoteConsumed",
-  "renderTsvVenue", "chainState.tsvStyle", "/api/v1/tsv-style", "executionEnabled", "tsvReadOnlyState",
-  "disabled-for-tsv-style", 'role === "venueA"', 'role === "venueB"',
+  "renderTsvVenue", "chainState.tsvStyle", "/api/v1/tsv-style", "executionEnabled",
+  "composeDashboardRuntime", 'role === "venueA"', 'role === "venueB"',
   "renderTokenizer", 'role === "tokenizer"', "The Tokenizer records issuer and transfer-agent facts",
   'chainState?.assetProfile === "tsv-style"', "Venue A · launch --profile buidl-like or reg-d",
   "Per-wallet A-04-v2 acceptance is not exposed by the demo API.",
@@ -100,7 +113,7 @@ for (const marker of [
 }
 
 for (const marker of [
-  '"/styles.css"', '"/app.js"', "CORNER_STORE_OPERATOR_API", "CORNER_STORE_RFQ_BACKEND",
+  '"/styles.css"', '"/runtime-state.js"', '"/app.js"', "CORNER_STORE_OPERATOR_API", "CORNER_STORE_RFQ_BACKEND",
   'path.startsWith("/rfq-api/")', "proxyRfqBackend"
 ]) {
   if (!server.includes(marker)) throw new Error(`dashboard server marker missing: ${marker}`);
