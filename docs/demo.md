@@ -8,7 +8,7 @@ Manifest / Operator) work end-to-end.
 
 This is feature `E2E-001` (see `FEATURES.md`).
 
-## TSV-style Venue Scenario (In Progress)
+## TSV-style Venue Scenario
 
 Feature `DEMO-017` adds a separate illustrative venue-customer scenario under
 issue #176. It does not replace the current `buidl-like` or `reg-d` runners.
@@ -27,9 +27,24 @@ reporting, primary-market halt feeds or books/records. It does not state that an
 venue qualifies for an exemption. Public HTTPS hosting and post-upgrade checks are
 tracked separately in #177; legal/applicability analysis remains #129.
 
-At this stage only the Foundry policy/scenario slice has verified evidence. Do not
-present the TSV dashboard as live unless the connected runtime supplies deployment
-and settlement state.
+Run the dedicated local profile with either command:
+
+```sh
+scripts/e2e-tsv-style.sh
+scripts/demo.sh --profile tsv-style
+```
+
+`scripts/e2e-tsv-style.sh` deploys the dedicated profile, executes one real
+`Router -> AMM` settlement, verifies the recipient balance and period-volume
+counter, and starts the backend in read-only mode long enough to prove mutation
+is rejected. `scripts/demo.sh --profile tsv-style` keeps the same loopback-only
+boundary and adds the Operator API and dashboard.
+
+The dashboard uses only the `/api/v1/tsv-style` runtime snapshot for live Venue B
+evidence. If the snapshot is missing or mismatched, it displays an unavailable
+state and disables actions. It never substitutes presentation fixtures for live
+settlement evidence. Venue A/RFQ remains a separate `buidl-like` or `reg-d`
+deployment rather than a second active venue inside the TSV profile.
 
 ## How To Run
 
@@ -39,6 +54,7 @@ scripts/e2e-anvil.sh --profile reg-d
 scripts/e2e-anvil.sh --mode rfq # concise mock TA → SDK/CLI → backend RFQ walkthrough
 scripts/e2e-anvil.sh --port 8600
 scripts/e2e-anvil.sh --keep     # leave Anvil running afterwards (attach a UI / continue interactively)
+scripts/demo.sh --profile tsv-style # dedicated illustrative TSV/AMM dashboard
 ```
 
 - Runs fully offline (`forge script ... --offline` against a local Anvil).

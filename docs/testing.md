@@ -316,6 +316,7 @@ DEMO-017의 별도 TSV-style Foundry coverage는 다음을 검증한다.
 ```sh
 forge test --offline --match-path test/unit/demo/TsvStyleElements.t.sol
 forge test --offline --match-path test/integration/TsvStylePoolScenario.t.sol
+scripts/e2e-tsv-style.sh
 ```
 
 - Recipe `40/v1` canonical alias와 ID 충돌 방지
@@ -325,11 +326,21 @@ forge test --offline --match-path test/integration/TsvStylePoolScenario.t.sol
 - sanctions, volume exhaustion, venue halt와 정확한 reason/error
 - admitted non-accredited participant의 AMM settlement
 - `C-01-*` holding-period asset의 기존 D020 AMM hard rejection
+- dedicated `tsv-style` artifact/config/profile coherence
+- real `Router -> AMM` settlement 후 recipient balance와 period volume 증가
+- read-only TSV backend의 mutation fail-closed, Operator API runtime snapshot과
+  dashboard unavailable-state handling
 
 이 테스트는 SEC 면제 적격성, 실제 market-data/tier 계산, affiliated venue 합산,
 공개 거래 보고, primary-market halt feed 또는 외부 호스팅을 검증하지 않는다.
 canonical Uniswap v3 테스트는 vendored `tools/deploy-v3` 설치물이 준비된 환경에서
 별도로 실행해야 한다.
+
+DEMO-017 검증에서는 28개 TSV Foundry 테스트, Operator API/RFQ demo
+backend/dashboard 테스트, TSV Router/AMM E2E와 기존 `buidl-like`/`reg-d` RFQ
+E2E가 통과했다. `scripts/check.sh`의 기능 gate도 통과했지만 production-evidence
+version check는 pinned Forge 1.7.1을 요구하고 현재 base environment는 Forge 1.4
+nightly이므로, 이 환경에서 전체 check가 green이라고 기록하지 않는다.
 
 - 허용된 거래의 실행 성공
 - applicable Recipe 중 하나의 Element 거부에 따른 원자적 실패

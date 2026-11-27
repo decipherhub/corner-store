@@ -25,10 +25,11 @@
 - The scenario proves admitted, missing/expired identity, sanctions, paired-asset,
   volume-limit, venue-halt and D020 holding-period/AMM behavior. Recipe ID 40 and
   its canonical alias have collision coverage.
-- The dashboard work presents separate venue roles and an integration summary.
-  Runtime/UI wiring and full repository verification remain in progress; views
-  without runtime evidence must remain visibly read-only and must not fabricate
-  live settlement results.
+- The dedicated `tsv-style` profile deploys Recipe 40, its TSV identity evidence,
+  Manifest-owned pair/volume parameters and an AMM venue without changing the
+  existing RFQ profiles. The dashboard presents Investor, Venue and Tokenizer
+  roles and consumes a fail-closed runtime snapshot; unavailable evidence keeps
+  controls disabled and is never replaced with fixture values.
 - This feature does not determine eligibility under an SEC exemption. Real market
   data, tier/ADV calculations, affiliated-venue aggregation, public trade
   reporting, primary-market halt feeds, books/records and external hosting remain
@@ -42,13 +43,18 @@
   13/13 passed.
 - Other Foundry integration suites: 131 passed.
 - `forge fmt --check` for the touched Solidity files and `git diff --check`: passed.
-- `RealUniswapV3` was not run in the clean worktree because the vendored
-  `tools/deploy-v3` npm artifacts were absent. Runtime/UI tests, existing Anvil
-  profiles and `scripts/check.sh` remain pending.
+- `scripts/e2e-tsv-style.sh`: passed a real `Router -> AMM` settlement, recipient
+  balance/period-volume increase and read-only backend mutation rejection.
+- Operator API, RFQ demo backend and dashboard tests: passed.
+- Existing `buidl-like` and `reg-d` RFQ Anvil E2E profiles: passed.
+- `scripts/check.sh` reached and passed the functional repository/service/E2E
+  gates. Its production-evidence version assertion did not accept the current
+  environment's Forge 1.4 nightly because that gate requires pinned Forge 1.7.1;
+  a complete pinned-toolchain check is therefore not claimed.
 
 ### State
 
-active
+passing
 
 ### Notes
 
@@ -56,6 +62,8 @@ active
   verification: #177. SEC applicability/legal research remains #129.
 - Fixed one-day share volume is an explicit demo simplification, not a production
   TSV limit model or legal conclusion.
+- External HTTPS publication and post-upgrade verification remain #177 operator
+  work and are not required to call the repository-local feature passing.
 
 ## CORE-015: Compliance Reporting and Settlement Reconstruction
 
