@@ -15,6 +15,8 @@ for (const marker of [
   'id="userNav"', 'id="adminNav"', 'id="dashboardView"', 'id="createView"', 'id="rfqsView"',
   'id="portfolioView"', 'id="adminDashboardView"', 'id="adminUsersView"', 'id="adminMakerView"',
   'id="venueANav"', 'id="venueBNav"', "Broker-dealer ATS · RFQ", "TSV-style operator · AMM",
+  'id="tokenizerNav"', "Issuer / transfer-agent facts", 'id="tokenizerAssetView"',
+  'id="tokenizerHoldersView"', 'id="tokenizerHolderRows"', "B-02-v2",
   'id="venueBOnboardingView"', 'id="venueBPoolView"', 'id="venueBLimitsView"', 'id="venueBLogView"',
   'id="venueIntegrationView"', 'id="tsvSourceBadge"', 'id="tsvVolumeBar"', 'id="tsvTradeRows"',
   "Illustrative rule set", "Order Book remains <strong>not implemented</strong>", "ExternalSettlementGate v1",
@@ -40,6 +42,7 @@ for (const marker of [
   "/demo/enforcement/adapter-boundary", "/demo/enforcement/restore",
   "selectedWallet", "runPrecheck", "switchProfile", "requiresQualifiedPurchaser", "quoteConsumed",
   "renderTsvVenue", "chainState.tsvStyle", 'role === "venueA"', 'role === "venueB"',
+  "renderTokenizer", 'role === "tokenizer"', "The Tokenizer records issuer and transfer-agent facts",
   "Runtime not connected", "Preview only", "No TSV-style runtime is connected",
   "configurePresentation", "chainNow", "quote.taker", "Router가 체결을 거부했습니다",
   "DeployProductionCore.deployCore", "deployment.coreImplementation", "deployment.activationMode",
@@ -82,6 +85,7 @@ for (const marker of [
   ".architecture-strip", ".coverage-table", ".enforcement-layout", ".case-timeline", ".evidence-result",
   ".nav-context", ".policy-layout", ".policy-stack", ".pool-pair", ".limits-layout", ".volume-meter",
   ".integration-flow", ".integration-layout", ".integration-code", ".demo-disclaimer",
+  ".asset-record-layout", "#tokenizerNav",
   ".role-banner", ".modal-backdrop", "@media (max-width: 720px)", "@media (prefers-reduced-motion: reduce)"
 ]) {
   if (!css.includes(marker)) throw new Error(`dashboard style marker missing: ${marker}`);

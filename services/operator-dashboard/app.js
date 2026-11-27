@@ -2,7 +2,8 @@ const $ = (id) => document.getElementById(id);
 const profiles = {
   admin: {id: "admin", label: "Admin", role: "admin", address: null},
   venueA: {id: "venueA", label: "Venue A · broker-dealer ATS", role: "venueA", address: null},
-  venueB: {id: "venueB", label: "Venue B · TSV-style operator", role: "venueB", address: null}
+  venueB: {id: "venueB", label: "Venue B · TSV-style operator", role: "venueB", address: null},
+  tokenizer: {id: "tokenizer", label: "Tokenizer · issuer / transfer agent", role: "tokenizer", address: null}
 };
 const viewMeta = {
   dashboard: ["Overview", "Dashboard"], create: ["New request", "RFQ 거래"], rfqs: ["Requests & quotes", "My RFQs"],
@@ -13,7 +14,9 @@ const viewMeta = {
   venueBPool: ["Venue B · pool", "Permissioned AMM pool"],
   venueBLimits: ["Venue B · limits", "Limits and halts"],
   venueBLog: ["Venue B · records", "AMM trade log"],
-  venueIntegration: ["Venue integration", "External settlement gate"]
+  venueIntegration: ["Venue integration", "External settlement gate"],
+  tokenizerAsset: ["Tokenizer · asset", "Asset and rules"],
+  tokenizerHolders: ["Tokenizer · register", "Holder evidence"]
 };
 let currentProfile = profiles.admin;
 let chainState = null;
@@ -53,15 +56,16 @@ async function operatorApi(path) {
 }
 function post(path, value) { return api(path, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(value)}); }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function shortAddress(value) { return value ? `${value.slice(0, 6)}…${value.slice(-4)}` : "—"; }
+function shortAddress(value) { return typeof value === "string" && value ? `${value.slice(0, 6)}…${value.slice(-4)}` : "—"; }
 function profileAddress(profile) {
   if (!chainState) return "연결 중…";
   if (profile.role === "admin") return shortAddress(chainState.maker);
   if (profile.role === "venueA") return shortAddress(chainState.deployment?.router || chainState.maker);
   if (profile.role === "venueB") return shortAddress(chainState.tsvStyle?.venue);
+  if (profile.role === "tokenizer") return shortAddress(chainState.presentation?.asset?.address);
   return shortAddress(profile.address);
 }
-function optionalAddress(value) { return value ? shortAddress(value) : "Not connected"; }
+function optionalAddress(value) { return typeof value === "string" && value ? shortAddress(value) : "Not connected"; }
 function optionalAmount(value, suffix = "") {
   if (value === undefined || value === null || value === "") return "Unavailable";
   return `${value}${suffix}`;
@@ -100,6 +104,24 @@ function renderTsvVenue() {
   haltBadge.className = `status-pill ${connected ? (tsv.halted ? "warning" : "live") : "neutral"}`;
   const rows = Array.isArray(tsv?.tradeLog) ? tsv.tradeLog : [];
   $("tsvTradeRows").innerHTML = rows.length ? rows.map((trade) => `<tr><td><code>${escapeHtml(shortAddress(trade.executionId))}</code></td><td>${escapeHtml(trade.asset || tsv?.asset?.symbol || "—")}</td><td>${escapeHtml(trade.amount ?? "—")}</td><td><code>${escapeHtml(shortAddress(trade.policyId))}</code></td><td>${escapeHtml(trade.blockNumber ?? "—")}</td></tr>`).join("") : '<tr><td colspan="5"><div class="empty-row">No TSV-style runtime is connected.</div></td></tr>';
+}
+function renderTokenizer() {
+  if (!chainState) return;
+  const asset = chainState.presentation.asset;
+  const deployment = chainState.deployment || {};
+  $("tokenizerAssetSymbol").textContent = asset.symbol;
+  $("tokenizerAssetName").textContent = asset.name;
+  $("tokenizerAssetAddress").textContent = optionalAddress(asset.address);
+  $("tokenizerAssetProfile").textContent = chainState.assetProfile || "—";
+  $("tokenizerExecutionPath").textContent = `${chainState.presentation.execution?.venueType || "RFQ"} · settlement-time checks`;
+  $("tokenizerManifest").textContent = optionalAddress(deployment.manifest || chainState.manifest);
+  $("tokenizerPolicyRegistry").textContent = optionalAddress(deployment.policyRegistry);
+  $("tokenizerRouter").textContent = optionalAddress(deployment.router);
+  $("tokenizerActivation").textContent = deployment.activationMode || (deployment.productionDeployment ? "Production" : "Demo fixtures");
+  const assetBadge = $("tokenizerAssetBadge");
+  assetBadge.textContent = "Current demo state";
+  assetBadge.className = "status-pill neutral";
+  $("tokenizerHolderRows").innerHTML = (chainState.wallets || []).map((wallet) => `<tr><td><strong>${escapeHtml(wallet.label)}</strong><small>${wallet.qualifiedPurchaser ? "Qualified-purchaser demo claim active" : escapeHtml(wallet.eligibilityReason || "Demo claim needs review")}</small></td><td><code>${escapeHtml(shortAddress(wallet.address))}</code></td><td>${escapeHtml(formatBaseUnits(wallet.rwaBalance))} ${escapeHtml(asset.symbol)}</td><td><span class="status-pill ${wallet.qualifiedPurchaser ? "live" : "warning"}">${wallet.qualifiedPurchaser ? "On record" : "Review"}</span></td></tr>`).join("") || '<tr><td colspan="4"><div class="empty-row">No holder evidence is available.</div></td></tr>';
 }
 function activeInputAsset() {
   return tradeSide === "buy" ? chainState?.presentation.quoteAsset : chainState?.presentation.asset;
@@ -231,6 +253,7 @@ function showView(view) {
   $("pageKicker").textContent = kicker; $("pageTitle").textContent = title;
   if (view.startsWith("admin")) refreshAdmin();
   if (view.startsWith("venueB")) renderTsvVenue();
+  if (view.startsWith("tokenizer")) renderTokenizer();
 }
 function selectedWallet() {
   if (currentProfile.role !== "user" || !currentProfile.address) throw Error("사용자 지갑을 선택하세요.");
@@ -249,7 +272,7 @@ async function loadState() {
 function configurePresentation() {
   const selected = $("walletSelector").value;
   const firstLoad = !presentationInitialized;
-  $("walletSelector").innerHTML = `<optgroup label="Investor">${chainState.wallets.map((wallet) => `<option value="${escapeHtml(wallet.id)}">${escapeHtml(wallet.label)}</option>`).join("")}</optgroup><optgroup label="Venue"><option value="venueA">Venue A · broker-dealer ATS · RFQ</option><option value="venueB">Venue B · TSV-style operator · AMM</option></optgroup><optgroup label="Demo administration"><option value="admin">Admin</option></optgroup>`;
+  $("walletSelector").innerHTML = `<optgroup label="Investor">${chainState.wallets.map((wallet) => `<option value="${escapeHtml(wallet.id)}">${escapeHtml(wallet.label)}</option>`).join("")}</optgroup><optgroup label="Venue"><option value="venueA">Venue A · broker-dealer ATS · RFQ</option><option value="venueB">Venue B · TSV-style operator · AMM</option></optgroup><optgroup label="Issuer / transfer agent"><option value="tokenizer">Tokenizer · asset and investor records</option></optgroup><optgroup label="Demo administration"><option value="admin">Admin</option></optgroup>`;
   $("walletSelector").value = presentationInitialized && profiles[selected] ? selected : chainState.wallets[0].id;
   presentationInitialized = true;
   const asset = chainState.presentation.asset;
@@ -415,22 +438,26 @@ async function switchProfile() {
   const admin = currentProfile.role === "admin";
   const venueA = currentProfile.role === "venueA";
   const venueB = currentProfile.role === "venueB";
+  const tokenizer = currentProfile.role === "tokenizer";
   const user = currentProfile.role === "user";
   const qpRequired = chainState?.requiresQualifiedPurchaser;
   $("userNav").classList.toggle("hidden", !user);
   $("adminNav").classList.toggle("hidden", !admin);
   $("venueANav").classList.toggle("hidden", !venueA);
   $("venueBNav").classList.toggle("hidden", !venueB);
+  $("tokenizerNav").classList.toggle("hidden", !tokenizer);
   $("walletAddress").textContent = profileAddress(currentProfile);
   const userBlocked = user && qpRequired && !currentProfile.qualifiedPurchaser;
-  $("roleBanner").classList.toggle("hidden", !(userBlocked || venueA || venueB));
+  $("roleBanner").classList.toggle("hidden", !(userBlocked || venueA || venueB || tokenizer));
   $("roleBanner").innerHTML = userBlocked
     ? `<strong>현재 지갑은 적격투자자가 아닙니다.</strong> ${escapeHtml(currentProfile.eligibilityReason || "Qualified Purchaser claim missing")}`
     : venueA
       ? "<strong>Venue A · broker-dealer ATS (demo).</strong> Matching and venue operation stay with the customer; Corner Store supplies settlement-time rule checks."
       : venueB
         ? "<strong>Venue B · TSV-style operator (illustrative).</strong> This demo does not state that the venue qualifies for an exemption."
-        : "";
+        : tokenizer
+          ? "<strong>Tokenizer · issuer / transfer-agent facts.</strong> The Tokenizer records issuer and transfer-agent facts; it does not match orders, quote prices or operate either venue."
+          : "";
   if (admin) showView("adminDashboard");
   else if (venueA) {
     showView("adminDashboard");
@@ -438,6 +465,9 @@ async function switchProfile() {
   } else if (venueB) {
     renderTsvVenue();
     showView("venueBOnboarding");
+  } else if (tokenizer) {
+    renderTokenizer();
+    showView("tokenizerAsset");
   } else {
     const selected = selectedRfqRecord();
     if (selected && selected.signedQuote.quote.taker.toLowerCase() !== currentProfile.address.toLowerCase()) {
@@ -678,7 +708,7 @@ async function proveCompliance() {
 }
 
 async function refreshAdmin() {
-  if (!["admin", "venueA"].includes(currentProfile.role)) return;
+  if (!["admin", "venueA", "tokenizer"].includes(currentProfile.role)) return;
   try {
     await loadState();
     const eventsPayload = await operatorApi("/api/v1/events").catch(() => ({events: []}));

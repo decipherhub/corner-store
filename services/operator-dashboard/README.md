@@ -111,3 +111,10 @@ qualifies for, is registered under, or is approved under an exemption. Fixed
 volume limits, simulated primary-market signals and operator inputs are visibly
 separated from production market data and legal determinations. Order Book remains
 labelled `not implemented`.
+
+The selector also exposes a **Tokenizer · issuer / transfer agent** presentation.
+It reuses the current demo asset, investor-record and holder-balance evidence
+without adding a separate issuer workflow. The role records issuer and
+transfer-agent facts; it does not match orders, quote prices or operate either
+venue. Addresses that are not present in `/demo/state` remain visibly labelled
+`Not connected` rather than being filled with preview values.

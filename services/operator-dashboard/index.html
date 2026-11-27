@@ -41,6 +41,12 @@
         <button class="nav-item" data-view="venueBLog"><span>04</span>Trade log</button>
         <button class="nav-item" data-view="venueIntegration"><span>⊕</span>Integration</button>
       </nav>
+      <nav id="tokenizerNav" class="side-nav hidden" aria-label="Tokenizer 메뉴">
+        <p class="nav-context"><strong>Tokenizer</strong><small>Issuer / transfer-agent facts</small></p>
+        <button class="nav-item active" data-view="tokenizerAsset"><span>01</span>Asset &amp; rules</button>
+        <button class="nav-item" data-view="adminUsers"><span>02</span>Investor records</button>
+        <button class="nav-item" data-view="tokenizerHolders"><span>03</span>Holders</button>
+      </nav>
       <div class="trust-note"><span class="trust-dot"></span><div><strong>Pre-check ≠ guarantee</strong><small>서명 후 정책이 바뀌어도 Router가 fill 시점에 다시 검사합니다.</small></div></div>
     </aside>
 
@@ -188,7 +194,7 @@
               <div class="policy-stack" aria-label="TSV-style demo rule bundle">
                 <article><span>A-01</span><strong>Sanctions screening</strong><small>Sensitive outcomes stay generic.</small></article>
                 <article><span>A-04-v2</span><strong>Venue participant identity</strong><small>TSV track · DIRECT topology.</small></article>
-                <article><span>B-02-v3</span><strong>Asset-native enforcement</strong><small>Issuer transfer restrictions remain binding.</small></article>
+                <article><span>B-02-v2</span><strong>Asset-native enforcement</strong><small>Issuer transfer restrictions remain binding.</small></article>
                 <article><span>TSV-PAIR</span><strong>Paired-asset restriction</strong><small>Versioned Manifest parameter.</small></article>
                 <article><span>TSV-VOL</span><strong>Venue volume limit</strong><small>Fixed demo value, not market-data logic.</small></article>
               </div>
@@ -231,6 +237,19 @@
 }</code></pre><p class="boundary-copy">Order Book remains <strong>not implemented</strong>. The supported v1 external path is the settlement gate, not a generic matching engine.</p></section>
           </div>
           <p class="integration-links"><a href="https://github.com/decipherhub/corner-store/blob/main/docs/sdk-integration.md">SDK integration guide</a><a href="https://github.com/decipherhub/corner-store/blob/main/docs/product-specs/external-settlement-gate.md">Settlement gate contract</a></p>
+        </section>
+
+        <section id="tokenizerAssetView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Tokenizer · asset</p><h2>Asset and rules</h2><p>Issuer and transfer-agent facts are shown separately from venue execution controls.</p></div><span id="tokenizerAssetBadge" class="status-pill neutral">Loading</span></div>
+          <div class="asset-record-layout">
+            <section class="surface asset-record-card"><span id="tokenizerAssetSymbol" class="asset-symbol">—</span><p class="kicker">Registered demo asset</p><h3 id="tokenizerAssetName">Loading asset</h3><div class="fact-list"><div><span>Token address</span><code id="tokenizerAssetAddress">—</code></div><div><span>Profile</span><strong id="tokenizerAssetProfile">—</strong></div><div><span>Transfer standard</span><strong>ERC-3643</strong></div><div><span>Execution path</span><strong id="tokenizerExecutionPath">—</strong></div></div></section>
+            <section class="surface"><p class="kicker">Policy binding</p><h3>Manifest evidence</h3><div class="fact-list"><div><span>Manifest</span><code id="tokenizerManifest">—</code></div><div><span>Policy registry</span><code id="tokenizerPolicyRegistry">—</code></div><div><span>Router</span><code id="tokenizerRouter">—</code></div><div><span>Activation</span><strong id="tokenizerActivation">—</strong></div></div><p class="boundary-copy">These values come from the current demo artifact. This screen does not let the Tokenizer match orders, quote prices or operate a venue.</p></section>
+          </div>
+        </section>
+
+        <section id="tokenizerHoldersView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Tokenizer · register</p><h2>Holder evidence</h2><p>Read-only wallet balances from the current demo state. Legal holder-of-record and beneficial-owner determinations remain transfer-agent responsibilities.</p></div><span class="fixture-label">Live demo balances</span></div>
+          <section class="surface table-surface"><table class="data-table"><thead><tr><th>Participant</th><th>Wallet</th><th>RWA balance</th><th>Identity evidence</th></tr></thead><tbody id="tokenizerHolderRows"><tr><td colspan="4"><div class="empty-row">Loading holder evidence.</div></td></tr></tbody></table></section>
         </section>
       </main>
     </div>
