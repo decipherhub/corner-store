@@ -108,7 +108,7 @@ for (const marker of [
   ".nav-context", ".policy-layout", ".policy-stack", ".pool-pair", ".limits-layout", ".volume-meter",
   ".integration-flow", ".integration-layout", ".integration-code", ".demo-disclaimer",
   ".asset-record-layout", "#tokenizerNav",
-  ".role-banner", ".modal-backdrop", "@media (max-width: 720px)", "@media (prefers-reduced-motion: reduce)"
+  ".role-banner", ".modal-backdrop", "@media (max-width: 720px)", "@media (prefers-reduced-motion: no-preference)"
 ]) {
   if (!css.includes(marker)) throw new Error(`dashboard style marker missing: ${marker}`);
 }
