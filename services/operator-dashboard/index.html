@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Corner Store · Compliant RFQ</title>
+  <title>Corner Store · Rule checks at settlement</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div class="demo-ribbon"><strong>LIVE DEMO</strong><span>Local Anvil</span><span id="ribbonCore">Core 확인 중</span><span id="ribbonAsset">Injected ERC-3643 asset</span><span id="ribbonActivation">Demo activation</span><span>체결 시 최신 정책 재검사</span></div>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">C</span><div><strong>Corner Store</strong><small>Compliant markets</small></div></div>
+      <div class="brand"><span class="brand-mark">C</span><div><strong>Corner Store</strong><small>Rule checks at settlement</small></div></div>
       <nav id="userNav" class="side-nav" aria-label="사용자 메뉴">
         <button class="nav-item active" data-view="dashboard"><span>⌂</span>Dashboard</button>
         <button class="nav-item" data-view="create"><span>＋</span>RFQ 거래</button>
@@ -24,6 +24,22 @@
         <button class="nav-item" data-view="adminMaker"><span>◆</span>Maker 승인 시연</button>
         <button class="nav-item" data-view="adminEnforcement"><span>⌁</span>Enforcement Cases</button>
         <button class="nav-item" data-view="adminHistory"><span>≡</span>거래 내역</button>
+      </nav>
+      <nav id="venueANav" class="side-nav hidden" aria-label="Venue A 메뉴">
+        <p class="nav-context"><strong>Venue A</strong><small>Broker-dealer ATS · RFQ</small></p>
+        <button class="nav-item active" data-view="adminDashboard"><span>⌂</span>Operations</button>
+        <button class="nav-item" data-view="adminEnforcement"><span>⌁</span>Enforcement cases</button>
+        <button class="nav-item" data-view="adminMaker"><span>◆</span>Maker</button>
+        <button class="nav-item" data-view="adminHistory"><span>≡</span>Trade log</button>
+        <button class="nav-item" data-view="venueIntegration"><span>⊕</span>Integration</button>
+      </nav>
+      <nav id="venueBNav" class="side-nav hidden" aria-label="Venue B 메뉴">
+        <p class="nav-context"><strong>Venue B</strong><small>TSV-style operator · AMM</small></p>
+        <button class="nav-item active" data-view="venueBOnboarding"><span>01</span>Onboarding</button>
+        <button class="nav-item" data-view="venueBPool"><span>02</span>Pool</button>
+        <button class="nav-item" data-view="venueBLimits"><span>03</span>Limits &amp; halts</button>
+        <button class="nav-item" data-view="venueBLog"><span>04</span>Trade log</button>
+        <button class="nav-item" data-view="venueIntegration"><span>⊕</span>Integration</button>
       </nav>
       <div class="trust-note"><span class="trust-dot"></span><div><strong>Pre-check ≠ guarantee</strong><small>서명 후 정책이 바뀌어도 Router가 fill 시점에 다시 검사합니다.</small></div></div>
     </aside>
@@ -156,6 +172,66 @@
           </div>
         </section>
         <section id="adminHistoryView" class="view hidden"><div class="page-intro"><div><p class="kicker">Admin</p><h2>거래 내역</h2><p>실제 체결, maker 변경과 데모 거부 기록을 확인합니다.</p></div><button id="refresh" class="secondary">새로고침</button></div><section class="surface"><div id="eventSummary" class="event-stats"></div><div id="events" class="event-list"></div></section></section>
+
+        <section id="venueBOnboardingView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue B · onboarding</p><h2>TSV-style AMM venue</h2><p>The venue operator provides the pool and operational inputs. Corner Store supplies rule checks and settlement records.</p></div><span id="tsvSourceBadge" class="status-pill neutral">Runtime not connected</span></div>
+          <div class="demo-disclaimer"><strong>Illustrative rule set.</strong> This view does not state that a venue qualifies for, is registered under, or is approved under an exemption.</div>
+          <section class="surface venue-identity">
+            <div><span>Venue</span><strong>Venue B · TSV-style operator (demo)</strong></div>
+            <div><span>Execution</span><strong>Permissioned AMM pool</strong></div>
+            <div><span>Deployment</span><code id="tsvVenueAddress">Not connected</code></div>
+            <div><span>Operator key</span><strong>One test key in this demo</strong></div>
+          </section>
+          <div class="policy-layout">
+            <section class="surface">
+              <div class="section-head"><div><p class="kicker">Rule bundle</p><h3>TSV-style policy (illustrative)</h3></div><span class="fixture-label">No C-01 holding period</span></div>
+              <div class="policy-stack" aria-label="TSV-style demo rule bundle">
+                <article><span>A-01</span><strong>Sanctions screening</strong><small>Sensitive outcomes stay generic.</small></article>
+                <article><span>A-04-v2</span><strong>Venue participant identity</strong><small>TSV track · DIRECT topology.</small></article>
+                <article><span>B-02-v3</span><strong>Asset-native enforcement</strong><small>Issuer transfer restrictions remain binding.</small></article>
+                <article><span>TSV-PAIR</span><strong>Paired-asset restriction</strong><small>Versioned Manifest parameter.</small></article>
+                <article><span>TSV-VOL</span><strong>Venue volume limit</strong><small>Fixed demo value, not market-data logic.</small></article>
+              </div>
+            </section>
+            <aside class="surface operator-boundary"><p class="kicker">Outside the SDK</p><h3>Operator-owned obligations</h3><ul><li>Venue eligibility and legal determinations</li><li>Public notice and trade publication</li><li>Primary-market halt data</li><li>Market-data contracts and volume inputs</li><li>Books, records and incident response</li></ul></aside>
+          </div>
+        </section>
+
+        <section id="venueBPoolView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue B · pool</p><h2>Permissioned AMM pool</h2><p>A verified venue participant may swap the demo settlement asset for a tokenized listed-stock fixture.</p></div><span id="tsvPoolStatus" class="status-pill neutral">Runtime not connected</span></div>
+          <div class="pool-hero surface">
+            <div class="pool-pair"><span class="token-mark security">OR</span><div><small>Tokenized listed stock · demo</small><strong id="tsvAssetName">Orrin Systems common stock</strong><code id="tsvAssetAddress">Not connected</code></div><i>/</i><span class="token-mark cash">$</span><div><small>Demo settlement asset</small><strong id="tsvQuoteName">Demo USD</strong><code id="tsvQuoteAddress">Not connected</code></div></div>
+            <div class="pool-stats"><div><span>Liquidity</span><strong id="tsvLiquidity">Unavailable</strong></div><div><span>Recent fills</span><strong id="tsvRecentFills">Unavailable</strong></div><div><span>Settlement gate</span><strong id="tsvSettlementState">Preview only</strong></div></div>
+          </div>
+          <section class="surface execution-contrast"><div><p class="kicker">Execution is policy-bound</p><h3>Different assets, different permitted paths</h3></div><div class="contrast-grid"><article><span class="status-pill warning">RFQ only</span><strong>Restricted security</strong><p>A C-01 holding-period rule makes the asset pool-incompatible under D020.</p></article><article><span class="status-pill live">AMM eligible</span><strong>Listed-stock fixture</strong><p>No holding-period element is present; the venue-specific AMM rules still apply.</p></article></div></section>
+        </section>
+
+        <section id="venueBLimitsView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue B · limits</p><h2>Limits and halts</h2><p>Observed state is displayed only when the demo API supplies a TSV runtime payload.</p></div><span id="tsvHaltBadge" class="status-pill neutral">Not connected</span></div>
+          <div class="limits-layout">
+            <section class="surface"><div class="section-head"><div><p class="kicker">Demo period volume</p><h3>Per-stock limit</h3></div><strong id="tsvVolumeLabel">Unavailable</strong></div><div class="volume-meter" role="progressbar" aria-label="TSV demo period volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="tsvVolumeBar"></i></div><p class="boundary-copy">This is a fixed demo limit. It does not calculate regulatory tiers, market-wide volume or affiliated-venue aggregation.</p></section>
+            <section class="surface"><div class="section-head"><div><p class="kicker">Venue halt</p><h3>Operator and primary-market signals</h3></div></div><div class="fact-list"><div><span>Venue pause</span><strong id="tsvVenuePause">Unavailable</strong></div><div><span>Primary exchange signal</span><strong id="tsvPrimaryHalt">Simulated input not connected</strong></div></div><button class="danger full" disabled aria-describedby="tsvControlHelp">Pause trading</button><p id="tsvControlHelp" class="field-help">Control disabled: this UI branch does not submit operator transactions.</p></section>
+          </div>
+        </section>
+
+        <section id="venueBLogView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue B · records</p><h2>AMM trade log</h2><p>Successful settlement evidence appears only when supplied by the connected runtime. Reverted decisions are not fabricated as on-chain records.</p></div><span class="fixture-label">PII-free</span></div>
+          <section class="surface table-surface"><table class="data-table"><thead><tr><th>Execution</th><th>Asset</th><th>Amount</th><th>Policy</th><th>Block</th></tr></thead><tbody id="tsvTradeRows"><tr><td colspan="5"><div class="empty-row">No TSV-style runtime is connected.</div></td></tr></tbody></table></section>
+        </section>
+
+        <section id="venueIntegrationView" class="view hidden">
+          <div class="page-intro"><div><p class="kicker">Venue integration</p><h2>Add rule checks without replacing the venue</h2><p>Matching, custody and venue operation stay with the customer. Corner Store evaluates immediately before settlement and commits measured settlement facts.</p></div><span class="status-pill live">ExternalSettlementGate v1</span></div>
+          <section class="surface integration-flow" aria-label="External settlement gate flow"><article><span>01</span><strong>OMS pre-check</strong><small>Advisory · explicit block</small></article><i>→</i><article><span>02</span><strong>Fresh evaluation</strong><small>Pause · nonce · policy</small></article><i>→</i><article><span>03</span><strong>Customer settlement</strong><small>Gate-only target</small></article><i>→</i><article><span>04</span><strong>Measure &amp; commit</strong><small>Atomic evidence</small></article></section>
+          <div class="integration-layout">
+            <section class="surface"><p class="kicker">Adoption path</p><div class="integration-steps"><article><span>1</span><div><strong>Create</strong><code>corner-store create ./venue --template dex-integration</code></div></article><article><span>2</span><div><strong>Check and plan</strong><code>precheckExternalSettlement(order)</code></div></article><article><span>3</span><div><strong>Verify</strong><code>verifyExternalSettlementActivation(config, reader)</code></div></article></div></section>
+            <section class="surface"><p class="kicker">Customer wrapper</p><pre class="integration-code"><code>function settle(ExecutionRequest calldata req)
+  external onlyGate returns (ExecutionResult memory) {
+  _validateAuthoritativeOrder(req);
+  return _settleExistingVenue(req);
+}</code></pre><p class="boundary-copy">Order Book remains <strong>not implemented</strong>. The supported v1 external path is the settlement gate, not a generic matching engine.</p></section>
+          </div>
+          <p class="integration-links"><a href="https://github.com/decipherhub/corner-store/blob/main/docs/sdk-integration.md">SDK integration guide</a><a href="https://github.com/decipherhub/corner-store/blob/main/docs/product-specs/external-settlement-gate.md">Settlement gate contract</a></p>
+        </section>
       </main>
     </div>
   </div>

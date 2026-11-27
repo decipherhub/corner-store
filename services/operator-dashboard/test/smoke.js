@@ -14,6 +14,10 @@ for (const marker of [
   'id="deploymentCore"', 'id="deploymentActivation"', 'id="deploymentRouter"',
   'id="userNav"', 'id="adminNav"', 'id="dashboardView"', 'id="createView"', 'id="rfqsView"',
   'id="portfolioView"', 'id="adminDashboardView"', 'id="adminUsersView"', 'id="adminMakerView"',
+  'id="venueANav"', 'id="venueBNav"', "Broker-dealer ATS · RFQ", "TSV-style operator · AMM",
+  'id="venueBOnboardingView"', 'id="venueBPoolView"', 'id="venueBLimitsView"', 'id="venueBLogView"',
+  'id="venueIntegrationView"', 'id="tsvSourceBadge"', 'id="tsvVolumeBar"', 'id="tsvTradeRows"',
+  "Illustrative rule set", "Order Book remains <strong>not implemented</strong>", "ExternalSettlementGate v1",
   'id="adminEnforcementView"', 'id="caseType"', 'id="caseWallet"', 'id="caseCreate"',
   'id="casePrepare"', 'id="caseQuote"', 'id="caseMutate"', 'id="caseExecute"', 'id="caseRestore"',
   'id="caseTimeline"', 'id="caseResult"', "Element", "ExecutionRouter", "Adapter 직접 호출",
@@ -35,6 +39,8 @@ for (const marker of [
   "/demo/admin/temporal/prepare", "/demo/admin/temporal/advance", "Qualified Purchaser claim missing",
   "/demo/enforcement/adapter-boundary", "/demo/enforcement/restore",
   "selectedWallet", "runPrecheck", "switchProfile", "requiresQualifiedPurchaser", "quoteConsumed",
+  "renderTsvVenue", "chainState.tsvStyle", 'role === "venueA"', 'role === "venueB"',
+  "Runtime not connected", "Preview only", "No TSV-style runtime is connected",
   "configurePresentation", "chainNow", "quote.taker", "Router가 체결을 거부했습니다",
   "DeployProductionCore.deployCore", "deployment.coreImplementation", "deployment.activationMode",
   "Scenario fixture", "Live · executable", "refreshAdmin", "saveClaim", "setMaker"
@@ -74,6 +80,8 @@ for (const marker of [
   "--blue:", ".app-shell", ".sidebar", ".hero-balance", ".quote-grid", ".precheck-card", ".market-chart",
   ".market-range-label", ".fill-point", ".market-fill-tape", ".fill-ticket", ".deployment-lineage",
   ".architecture-strip", ".coverage-table", ".enforcement-layout", ".case-timeline", ".evidence-result",
+  ".nav-context", ".policy-layout", ".policy-stack", ".pool-pair", ".limits-layout", ".volume-meter",
+  ".integration-flow", ".integration-layout", ".integration-code", ".demo-disclaimer",
   ".role-banner", ".modal-backdrop", "@media (max-width: 720px)", "@media (prefers-reduced-motion: reduce)"
 ]) {
   if (!css.includes(marker)) throw new Error(`dashboard style marker missing: ${marker}`);

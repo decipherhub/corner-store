@@ -91,3 +91,23 @@ when running the API manually.
 
 Production hosting, authentication, CSRF policy and multisig provider
 integration remain deployment-specific work.
+
+## Venue customer views
+
+The role selector also exposes two venue-customer presentations without changing
+existing Investor or Admin behavior:
+
+- **Venue A · broker-dealer ATS** reuses the executable RFQ operations,
+  enforcement, Maker and trade-log views and links to the external settlement
+  gate integration contract.
+- **Venue B · TSV-style operator** shows the illustrative AMM onboarding, pool,
+  limits/halt and trade-log views. The UI reads optional `tsvStyle` fields from
+  `/demo/state`; when that runtime payload is absent it says `Runtime not
+  connected`, leaves controls disabled and never presents fixture values as live
+  settlement evidence.
+
+The TSV-style screen is a demo presentation only. It does not state that a venue
+qualifies for, is registered under, or is approved under an exemption. Fixed
+volume limits, simulated primary-market signals and operator inputs are visibly
+separated from production market data and legal determinations. Order Book remains
+labelled `not implemented`.
